@@ -1,6 +1,25 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
-import { Building2, TrendingUp, Package, ExternalLink, ArrowRight, LayoutDashboard, LogOut, Shield, RefreshCw } from "lucide-react";
+import { 
+  Building2, 
+  TrendingUp, 
+  Package, 
+  ExternalLink, 
+  ArrowRight, 
+  LayoutDashboard, 
+  LogOut, 
+  Shield, 
+  RefreshCw,
+  Sparkles,
+  CheckCircle2,
+  AlertTriangle,
+  Crown,
+  MessageCircle,
+  DollarSign,
+  Users,
+  Wallet,
+  Calendar
+} from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,10 +33,21 @@ import {
   setActiveTenant,
   setSession,
   logout,
+  getGastos,
+  getMovimientos,
+  getEmpleados,
+  getCajas,
   type Tenant,
   type Plan 
 } from "@/lib/storage";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/dashboard-admin")({
   head: () => ({ meta: [{ title: "Mis Lavanderías — Klynn" }] }),
@@ -42,13 +72,14 @@ function DashboardAdminPage() {
 
       let totalIngresos = 0, totalOrdenesCount = 0, activasCount = 0;
       const tStats: Record<string, { count: number; total: number }> = {};
-        for (const t of tenants) {
-          const ords = await getOrdenes(t.id);
-          const ordsArr = Array.isArray(ords) ? ords : [];
-          const ingr = ordsArr.reduce((s, o) => s + (o.total || 0), 0);
-          tStats[t.id] = { count: ordsArr.length, total: ingr };
-          totalIngresos += ingr;
-          totalOrdenesCount += ordsArr.length;
+      for (const t of tenants) {
+        const ords = await getOrdenes(t.id);
+        const ordsArr = Array.isArray(ords) ? ords : [];
+        const activeOrds = ordsArr.filter((o: any) => o.estado !== "ANULADA");
+        const ingr = activeOrds.reduce((s, o) => s + (o.total || 0), 0);
+        tStats[t.id] = { count: activeOrds.length, total: ingr };
+        totalIngresos += ingr;
+        totalOrdenesCount += activeOrds.length;
         if (t.estado !== "CANCELADO") activasCount++;
       }
       setTenantStats(tStats);
@@ -59,16 +90,286 @@ function DashboardAdminPage() {
     getPlans().then(setPlans);
   }, [auth?.empleado.email]);
 
-  const canAddMore = useMemo(() => {
-    if (loading) return true;
-    // Si no tiene ninguna sucursal todavía, permitimos la primera
-    if (myTenants.length === 0) return true;
-    // Si tiene al menos una sucursal, revisamos si alguna de ellas tiene el módulo multisucursal activo en su plan
-    return myTenants.some(t => {
-      const p = plans.find(plan => plan.id === t.plan_id);
-      return p?.modulos.multisucursal;
+  const [showBranchModal, setShowBranchModal] = useState(false);
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [selectedInspectTenant, setSelectedInspectTenant] = useState<Tenant | null>(null);
+  const [inspectLoading, setInspectLoading] = useState(false);
+  const [inspectData, setInspectData] = useState<{
+    ordenes: any[];
+    gastos: any[];
+    empleados: any[];
+    movimientos: any[];
+    cajas: any[];
+  } | null>(null);
+
+  useEffect(() => {
+    async function loadInspect() {
+      if (!selectedInspectTenant) {
+        setInspectData(null);
+        return;
+      }
+      setInspectLoading(true);
+      try {
+        const [oList, gList, eList, mList, cList] = await Promise.all([
+          getOrdenes(selectedInspectTenant.id),
+          getGastos(selectedInspectTenant.id),
+          getEmpleados(selectedInspectTenant.id),
+          getMovimientos(selectedInspectTenant.id),
+          getCajas(selectedInspectTenant.id)
+        ]);
+        setInspectData({
+          ordenes: (oList || []).filter((o: any) => o.estado !== "ANULADA"),
+          gastos: gList || [],
+          empleados: eList || [],
+          movimientos: mList || [],
+          cajas: cList || []
+        });
+      } catch (err) {
+        console.error("Error loading inspect data:", err);
+        toast.error("Error al cargar estadísticas de la sucursal");
+      } finally {
+        setInspectLoading(false);
+      }
+    }
+    loadInspect();
+  }, [selectedInspectTenant]);
+
+  const inspectStats = useMemo(() => {
+    if (!inspectData) return null;
+    const { ordenes, gastos, movimientos, cajas } = inspectData;
+
+    const totalVentas = ordenes.reduce((s, o) => s + (o.total || 0), 0);
+    const totalITBIS = ordenes.reduce((s, o) => s + (o.itbis || 0), 0);
+    
+    // Gastos manuales + caja chica
+    const gastosManuales = gastos.filter(g => !g.is_caja_chica).reduce((s, g) => s + g.monto, 0);
+    const gastosCajaChica = movimientos.filter(m => m.tipo === "GASTO_CAJA_CHICA").reduce((s, m) => s + m.monto, 0);
+    const totalGastos = gastosManuales + gastosCajaChica;
+
+    const rentabilidad = totalVentas - totalGastos;
+    const ticketPromedio = ordenes.length > 0 ? totalVentas / ordenes.length : 0;
+
+    // Métodos de Pago
+    const porMetodo = ordenes.reduce((m, o) => { 
+      m[o.metodo_pago] = (m[o.metodo_pago] || 0) + (o.total || 0); 
+      return m; 
+    }, {} as Record<string, number>);
+
+    // Gastos por Categoría
+    const porCategoria = gastos.reduce((m, g) => {
+      const cat = g.categoria || "Otros";
+      m[cat] = (m[cat] || 0) + g.monto;
+      return m;
+    }, {} as Record<string, number>);
+
+    // Estados de Órdenes
+    const porEstado = ordenes.reduce((m, o) => {
+      m[o.estado] = (m[o.estado] || 0) + 1;
+      return m;
+    }, {} as Record<string, number>);
+
+    // Cierres de caja (últimos 5)
+    const cierresCaja = [...cajas]
+      .filter((c: any) => c.estado === "CERRADA")
+      .sort((a, b) => new Date(b.cerrada_en || 0).getTime() - new Date(a.cerrada_en || 0).getTime())
+      .slice(0, 5);
+
+    // Actividad Reciente en las últimas 48 horas (unificada)
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    const feedItems: any[] = [];
+
+    // 1. Órdenes
+    ordenes.forEach(o => {
+      feedItems.push({
+        id: `ord-${o.id}`,
+        titulo: `Orden Recibida`,
+        desc: `Orden ${o.numero} creada`,
+        monto: o.total,
+        fecha: o.creado_en,
+        badgeText: "PEDIDO",
+        color: "bg-blue-50 text-blue-700 border-blue-100"
+      });
     });
-  }, [myTenants, plans, loading]);
+
+    // 2. Movimientos de caja (aperturas, cierres, abonos, ventas)
+    movimientos.forEach(m => {
+      const conceptoLower = (m.concepto || "").toLowerCase();
+      let titulo = "Movimiento de Caja";
+      let color = "bg-slate-50 text-slate-700 border-slate-100";
+      let badgeText = "CAJA";
+
+      if (conceptoLower.includes("apertura")) {
+        titulo = "Apertura de Caja";
+        color = "bg-emerald-50 text-emerald-700 border-emerald-100";
+        badgeText = "APERTURA";
+      } else if (conceptoLower.includes("cierre")) {
+        titulo = "Cierre de Caja";
+        color = "bg-amber-50 text-amber-700 border-amber-100";
+        badgeText = "CIERRE";
+      } else if (m.tipo === "GASTO_CAJA_CHICA") {
+        titulo = "Gasto Caja Chica";
+        color = "bg-rose-50 text-rose-700 border-rose-100";
+        badgeText = "EGRESO CAJA CHICA";
+      } else if (m.tipo === "VENTA" || m.tipo === "ABONO") {
+        titulo = m.tipo === "VENTA" ? "Cobro Recibido" : "Abono Registrado";
+        color = "bg-green-50 text-green-700 border-green-100";
+        badgeText = "COBRO";
+      } else if (m.tipo === "EGRESO" || m.tipo === "RETIRO") {
+        titulo = m.tipo === "RETIRO" ? "Retiro de Efectivo" : "Egreso de Caja";
+        color = "bg-rose-50 text-rose-700 border-rose-100";
+        badgeText = "RETIRO";
+      }
+
+      feedItems.push({
+        id: `mov-${m.id}`,
+        titulo,
+        desc: m.concepto,
+        monto: m.monto,
+        fecha: m.creado_en,
+        badgeText,
+        color
+      });
+    });
+
+    // 3. Gastos manuales
+    gastos.filter(g => !g.is_caja_chica).forEach(g => {
+      feedItems.push({
+        id: `gas-${g.id}`,
+        titulo: `Gasto: ${g.categoria}`,
+        desc: g.descripcion || "Egreso bancario",
+        monto: g.monto,
+        fecha: g.fecha,
+        badgeText: "GASTO BANCARIO",
+        color: "bg-rose-100 text-rose-800 border-rose-200"
+      });
+    });
+
+    // Filtrar a las últimas 48 horas
+    let recientes = feedItems.filter(item => new Date(item.fecha).getTime() >= cutoff);
+
+    // Fallback: si no hay actividades en las últimas 48 horas, mostrar las últimas 5 generales
+    if (recientes.length === 0) {
+      recientes = [...feedItems];
+    }
+
+    recientes = recientes
+      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
+      .slice(0, 10); // Límite de 10
+
+    // --- 1. Top de Servicios Más Vendidos ---
+    const serviceCounts: Record<string, { count: number; total: number }> = {};
+    ordenes.forEach(o => {
+      if (Array.isArray(o.items)) {
+        o.items.forEach((item: any) => {
+          const desc = item.descripcion || "Otros";
+          const qty = item.cantidad || 1;
+          const sub = (item.precio_unitario || 0) * qty;
+          if (!serviceCounts[desc]) {
+            serviceCounts[desc] = { count: 0, total: 0 };
+          }
+          serviceCounts[desc].count += qty;
+          serviceCounts[desc].total += sub;
+        });
+      }
+    });
+
+    const topServicios = Object.entries(serviceCounts)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+
+    // --- 2. Canal de Entrega ---
+    const totalOrds = ordenes.length || 1;
+    const ordsDomicilio = ordenes.filter(o => o.entrega_domicilio).length;
+    const ordsLocal = totalOrds - ordsDomicilio;
+    const pctDomicilio = Math.round((ordsDomicilio / totalOrds) * 100);
+    const pctLocal = 100 - pctDomicilio;
+
+    // --- 3. Tasa de Urgencia ---
+    const ordsUrgentes = ordenes.filter(o => o.es_urgente).length;
+    const pctUrgencia = Math.round((ordsUrgentes / totalOrds) * 100);
+
+    // --- 4. Desglose Avanzado de Delivery ---
+    const deliveryEntregados = ordenes.filter(o => o.entrega_domicilio && o.estado === "ENTREGADA").length;
+    const deliveryCancelados = ordenes.filter(o => o.entrega_domicilio && o.estado === "ANULADA").length;
+    const deliveryPendientes = ordenes.filter(o => o.entrega_domicilio && o.estado !== "ENTREGADA" && o.estado !== "ANULADA").length;
+
+    // --- 5. Créditos y Deudas de Clientes ---
+    const activeOrds = ordenes.filter(o => o.estado !== "ANULADA");
+    const totalDeuda = activeOrds.reduce((s, o) => s + (o.saldo || 0), 0);
+    const cantidadDeudas = activeOrds.filter(o => (o.saldo || 0) > 0).length;
+    const totalAbonado = activeOrds.filter(o => (o.saldo || 0) > 0).reduce((s, o) => s + (o.pagado || 0), 0);
+
+    // Buscar abonos reales en los movimientos de caja
+    const realAbonosMovs = movimientos.filter(m => m.concepto?.toLowerCase().includes("abono"));
+    const totalAbonosCaja = realAbonosMovs.reduce((s, m) => s + m.monto, 0);
+
+    return {
+      totalVentas,
+      totalITBIS,
+      totalGastos,
+      rentabilidad,
+      ticketPromedio,
+      porMetodo,
+      porCategoria,
+      porEstado,
+      cierresCaja,
+      recientes,
+      topServicios,
+      ordsDomicilio,
+      ordsLocal,
+      pctDomicilio,
+      pctLocal,
+      ordsUrgentes,
+      pctUrgencia,
+      deliveryEntregados,
+      deliveryCancelados,
+      deliveryPendientes,
+      totalDeuda,
+      cantidadDeudas,
+      totalAbonado,
+      totalAbonosCaja
+    };
+  }, [inspectData]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment_success") === "true") {
+      setShowSuccessModal(true);
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
+
+  const mainTenant = myTenants[0];
+  const sucursalesCreadas = myTenants.length;
+  
+  const plan = useMemo(() => {
+    if (!mainTenant) return null;
+    return plans.find(p => p.id === mainTenant.plan_id) || plans[0] || PLANS[0];
+  }, [mainTenant, plans]);
+
+  // Si no hay límite de sucursales en la columna max_sucursales, buscar en config o por defecto 1 (la base)
+  const maxSucursalesContratadas = mainTenant?.max_sucursales || mainTenant?.config?.max_sucursales || 1;
+
+  // Límite de adicionales según el plan
+  const limiteAdicionalesPlan = useMemo(() => {
+    if (!plan) return 3; // default
+    if (plan.limite_sucursales_adicionales !== undefined) return plan.limite_sucursales_adicionales;
+    return plan.id === "basico" ? 1 : plan.id === "pro" ? 3 : 5;
+  }, [plan]);
+
+  const totalMaxSucursalesPlan = 1 + limiteAdicionalesPlan;
+  const tieneCuposLibres = sucursalesCreadas < maxSucursalesContratadas;
+  const puedeComprarMas = maxSucursalesContratadas < totalMaxSucursalesPlan;
+  
+  const precioAdicional = useMemo(() => {
+    if (!plan) return 1200;
+    if (plan.precio_sucursal_adicional !== undefined) return plan.precio_sucursal_adicional;
+    return plan.id === "basico" ? 1000 : plan.id === "pro" ? 1200 : 1500;
+  }, [plan]);
+
+  const polarSucursalUrl = plan?.polar_sucursal_url || "";
 
   function handleManage(tenantId: string, slug: string) {
     setSession({ empleado_id: auth?.empleado.id || 'admin', tenant_id: tenantId, iniciado_en: new Date().toISOString() });
@@ -114,21 +415,12 @@ function DashboardAdminPage() {
             <h1 className="font-display text-4xl tracking-tight">Panel central de Propietario</h1>
             <p className="mt-1 text-muted-foreground">Administra tus lavanderías registradas en Klynn.</p>
           </div>
-          {canAddMore ? (
-            <Link to="/nueva-sucursal">
-              <Button className="bg-primary text-white hover:bg-primary/90 h-9 px-5 rounded-lg shadow-md transition-all active:scale-95 font-bold">
-                <Building2 className="mr-2 h-4 w-4" /> Registrar nueva sucursal
-              </Button>
-            </Link>
-          ) : (
-            <Button 
-              disabled 
-              className="bg-muted text-muted-foreground h-9 px-5 rounded-lg shadow-none font-bold"
-              title="Tu plan actual no permite múltiples sucursales"
-            >
-              <Building2 className="mr-2 h-4 w-4" /> Registrar nueva sucursal (Plan Superior)
-            </Button>
-          )}
+          <Button 
+            onClick={() => setShowBranchModal(true)}
+            className="bg-primary text-white hover:bg-primary/90 h-9 px-5 rounded-lg shadow-md transition-all active:scale-95 font-bold"
+          >
+            <Building2 className="mr-2 h-4 w-4" /> Registrar nueva sucursal
+          </Button>
         </div>
 
         {/* KPIs replicados de admin.tsx */}
@@ -180,7 +472,7 @@ function DashboardAdminPage() {
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            onClick={() => handleManage(t.id, t.slug)}
+                            onClick={() => setSelectedInspectTenant(t)}
                             className="h-9 px-4 rounded-lg border-primary/20 text-primary hover:bg-primary hover:text-white transition-all group font-bold"
                           >
                             Ver sucursal <ArrowRight className="ml-2 h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
@@ -202,6 +494,735 @@ function DashboardAdminPage() {
           </div>
         </Card>
       </main>
+
+      {/* Modal centralizado de Sucursales */}
+      <Dialog open={showBranchModal} onOpenChange={setShowBranchModal}>
+        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-card p-6 bg-white overflow-hidden">
+          <DialogHeader className="text-center pb-2">
+            <DialogTitle className="flex flex-col items-center gap-3 text-2xl font-bold tracking-tight">
+              {tieneCuposLibres ? (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 shadow-sm">
+                  <CheckCircle2 className="h-6 w-6" />
+                </div>
+              ) : puedeComprarMas ? (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 shadow-sm animate-pulse">
+                  <Sparkles className="h-6 w-6" />
+                </div>
+              ) : (
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600 shadow-sm">
+                  <Crown className="h-6 w-6" />
+                </div>
+              )}
+              {tieneCuposLibres ? "¡Cupo disponible!" : puedeComprarMas ? "Desbloquear nueva sucursal" : "Límite máximo alcanzado"}
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2 text-center text-slate-800">
+            {tieneCuposLibres ? (
+              <>
+                <p className="text-sm text-muted-foreground text-balance">
+                  Tienes espacio disponible en tu cuenta para registrar tu nueva sucursal de inmediato sin costos adicionales.
+                </p>
+                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3.5 text-xs text-emerald-800 font-semibold flex items-center justify-between">
+                  <span>Sucursales creadas:</span>
+                  <span className="text-sm font-bold">{sucursalesCreadas} de {maxSucursalesContratadas} permitidas</span>
+                </div>
+                <div className="pt-2 flex flex-col gap-2">
+                  <Link to="/nueva-sucursal">
+                    <Button onClick={() => setShowBranchModal(false)} className="w-full bg-primary text-white font-bold h-11 rounded-xl shadow-glow">
+                      Continuar a registro <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </Link>
+                  <Button variant="ghost" onClick={() => setShowBranchModal(false)} className="h-10 rounded-xl text-slate-500 font-bold">
+                    Cerrar
+                  </Button>
+                </div>
+              </>
+            ) : puedeComprarMas ? (
+              <>
+                <p className="text-sm text-muted-foreground text-balance">
+                  Tu plan actual <strong className="font-bold text-slate-900">{plan?.nombre}</strong> te permite agregar hasta <strong className="font-bold text-slate-900">{limiteAdicionalesPlan}</strong> sucursales adicionales para expandir tu negocio.
+                </p>
+                
+                <div className="rounded-2xl border border-border p-4 bg-slate-50 space-y-3.5 text-left text-xs text-slate-700">
+                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
+                    <span className="font-semibold text-slate-500">Plan actual:</span>
+                    <Badge variant="outline" className="font-bold text-[10px] bg-white uppercase text-primary border-primary/20">{plan?.nombre}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="font-semibold text-slate-500">Cupos activos:</span>
+                    <span className="font-bold text-slate-900">{maxSucursalesContratadas} sucursal(es)</span>
+                  </div>
+                  <div className="flex justify-between items-center text-primary">
+                    <span className="font-bold">Sucursal adicional:</span>
+                    <span className="font-extrabold text-sm">{formatRD(precioAdicional).replace("DOP", "RD$")}/mes</span>
+                  </div>
+                </div>
+
+                <div className="pt-3 flex flex-col gap-2">
+                  {polarSucursalUrl ? (
+                    <a href={polarSucursalUrl} target="_blank" rel="noreferrer">
+                      <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold h-11 rounded-xl shadow-md hover:opacity-95 flex items-center justify-center gap-2">
+                        <Sparkles className="h-4 w-4" /> Desbloquear sucursal extra
+                      </Button>
+                    </a>
+                  ) : (
+                    <Button disabled className="w-full bg-slate-200 text-slate-500 font-bold h-11 rounded-xl">
+                      Enlace de pago no disponible
+                    </Button>
+                  )}
+                  
+                  <div className="mt-2.5 flex items-center justify-center gap-2 text-sm text-slate-600 font-medium">
+                    <span>¿Prefieres pago manual?</span>
+                    <a 
+                      href={`https://wa.me/18299881122?text=Hola%20Klynn,%20me%20gustaria%20activar%20una%20sucursal%20adicional%20para%20mi%20lavanderia%20${encodeURIComponent(mainTenant?.nombre || "")}`} 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="font-bold text-primary hover:underline flex items-center gap-1.5"
+                    >
+                      <MessageCircle className="h-4 w-4 fill-primary/10" /> Habla con soporte
+                    </a>
+                  </div>
+                  
+                  <Button variant="ghost" onClick={() => setShowBranchModal(false)} className="h-10 rounded-xl text-slate-500 font-bold mt-1">
+                    Cancelar
+                  </Button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-sm text-muted-foreground text-balance">
+                  Has alcanzado el límite máximo de sucursales permitido para el <strong className="font-bold text-slate-900">Plan {plan?.nombre}</strong> (<strong className="font-bold text-slate-900">{totalMaxSucursalesPlan}</strong> sucursales).
+                </p>
+                <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-3.5 text-xs text-rose-800 font-semibold text-center">
+                  Límite alcanzado: {sucursalesCreadas} de {totalMaxSucursalesPlan} contratadas.
+                </div>
+                <div className="pt-3 flex flex-col gap-2">
+                  <a 
+                    href={`https://wa.me/18299881122?text=Hola%20Klynn,%20he%20alcanzado%20el%20limite%20de%20sucursales%20en%20el%20plan%20${plan?.nombre}%20y%20me%20gustaria%20actualizar%20a%20un%20plan%20corporativo%20personalizado.`} 
+                    target="_blank" 
+                    rel="noreferrer"
+                  >
+                    <Button className="w-full bg-primary text-white font-bold h-11 rounded-xl shadow-glow flex items-center justify-center gap-2">
+                      <Crown className="h-4 w-4" /> Solicitar plan corporativo
+                    </Button>
+                  </a>
+                  <Button variant="ghost" onClick={() => setShowBranchModal(false)} className="h-10 rounded-xl text-slate-500 font-bold">
+                    Cerrar
+                  </Button>
+                </div>
+              </>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL DE PAGO CONFIRMADO AUTOMATICO */}
+      <Dialog open={showSuccessModal} onOpenChange={setShowSuccessModal}>
+        <DialogContent className="rounded-2xl border-none shadow-card max-w-md text-center p-6 bg-white dark:bg-slate-900">
+          <div className="mx-auto my-3 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-950/50 text-emerald-600 dark:text-emerald-400 animate-bounce">
+            <CheckCircle2 className="h-10 w-10" />
+          </div>
+          <DialogHeader>
+            <DialogTitle className="font-display text-2xl text-center text-slate-800 dark:text-slate-100">
+              ¡Pago Recibido con Éxito!
+            </DialogTitle>
+            <DialogDescription className="text-center text-slate-500 dark:text-slate-400 text-sm mt-2">
+              Hemos confirmado tu pago en Polar. Tu nuevo cupo de sucursal adicional ha sido desbloqueado al instante. Ya puedes registrarla y empezar a expandir tu negocio.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="pt-6 flex flex-col gap-2">
+            <Link to="/nueva-sucursal">
+              <Button onClick={() => setShowSuccessModal(false)} className="w-full bg-gradient-primary text-white font-bold h-11 rounded-xl shadow-glow">
+                Registrar sucursal ahora
+              </Button>
+            </Link>
+            <Button variant="ghost" onClick={() => setShowSuccessModal(false)} className="h-10 rounded-xl text-slate-500 font-bold">
+              Hacerlo más tarde
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+      {/* MODAL DETALLADO DE ESTADÍSTICAS Y RENDIMIENTO DE SUCURSAL */}
+      <Dialog open={!!selectedInspectTenant} onOpenChange={(open) => { if (!open) setSelectedInspectTenant(null); }}>
+        <DialogContent className="max-w-5xl rounded-[1.5rem] border-none shadow-elegant p-0 overflow-y-auto max-h-[90vh] bg-slate-50">
+          {selectedInspectTenant && (
+            <div>
+              {/* Encabezado Principal y Botón de Acción Centrado */}
+              <div 
+                className="p-6 text-white relative overflow-hidden flex flex-col items-center justify-center text-center gap-2 transition-all duration-300"
+                style={{ 
+                  background: `linear-gradient(135deg, ${selectedInspectTenant.color_primario || '#0F4C81'}, ${selectedInspectTenant.color_secundario || '#0D9488'})`
+                }}
+              >
+                <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" />
+                <div className="relative z-10 flex flex-col items-center">
+                  <span className="text-[9px] font-bold uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
+                    Rendimiento de Sucursal
+                  </span>
+                  <h2 className="text-3xl font-display mt-2 leading-none">{selectedInspectTenant.nombre}</h2>
+                  <p className="text-[10px] text-white/80 mt-1 font-mono">klynn.com.do/t/{selectedInspectTenant.slug}</p>
+                  
+                  <Button 
+                    onClick={() => handleManage(selectedInspectTenant.id, selectedInspectTenant.slug)}
+                    size="sm"
+                    className="mt-3 bg-white hover:bg-white/95 text-slate-900 font-bold h-8 text-[11px] rounded-lg shadow-sm border-none transition-colors px-4 flex items-center gap-1.5"
+                  >
+                    Gestionar Sucursal <ArrowRight className="h-3.5 w-3.5" style={{ color: selectedInspectTenant.color_primario }} />
+                  </Button>
+                </div>
+              </div>
+
+              {inspectLoading ? (
+                <div className="py-24 flex flex-col items-center justify-center gap-3">
+                  <RefreshCw className="h-8 w-8 animate-spin text-primary" style={{ color: selectedInspectTenant.color_primario }} />
+                  <p className="text-sm font-semibold text-muted-foreground animate-pulse">Procesando datos en tiempo real...</p>
+                </div>
+              ) : inspectStats ? (
+                <div className="p-6 space-y-6">
+                  {/* Fila 1: KPIs Financieros */}
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <TrendingUp className="h-3.5 w-3.5 text-primary" style={{ color: selectedInspectTenant.color_primario }} /> Ingresos Totales
+                      </div>
+                      <div className="text-xl font-display font-bold mt-1 text-slate-800">
+                        {formatRD(inspectStats.totalVentas)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-1">Suma total facturada</div>
+                    </Card>
+
+                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <DollarSign className="h-3.5 w-3.5 text-rose-500" /> Gastos Totales
+                      </div>
+                      <div className="text-xl font-display font-bold mt-1 text-rose-600">
+                        {formatRD(inspectStats.totalGastos)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-1">Manuales + caja chica</div>
+                    </Card>
+
+                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow border-l-4 border-l-emerald-500">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Wallet className="h-3.5 w-3.5 text-emerald-500" /> Rentabilidad Neta
+                      </div>
+                      <div className={`text-xl font-display font-bold mt-1 ${inspectStats.rentabilidad >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
+                        {formatRD(inspectStats.rentabilidad)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-1">Beneficio neto real</div>
+                    </Card>
+
+                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Shield className="h-3.5 w-3.5 text-blue-500" /> ITBIS Recaudado
+                      </div>
+                      <div className="text-xl font-display font-bold mt-1 text-blue-600">
+                        {formatRD(inspectStats.totalITBIS)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-1">Declaración DGII</div>
+                    </Card>
+
+                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
+                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Ticket Promedio
+                      </div>
+                      <div className="text-xl font-display font-bold mt-1 text-slate-800">
+                        {formatRD(inspectStats.ticketPromedio)}
+                      </div>
+                      <div className="text-[9px] text-muted-foreground mt-1">Gasto medio por orden</div>
+                    </Card>
+                  </div>
+
+                  {/* Doble Columna Principal */}
+                  <div className="grid gap-6 lg:grid-cols-2">
+                    {/* Columna Izquierda: Gráficos y Desgloses */}
+                    <div className="space-y-6">
+                      {/* Estado de las Órdenes */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          📋 Estado de las Órdenes
+                        </h3>
+                        <div className="space-y-4">
+                          {[
+                            { state: "RECIBIDA", label: "Recibidas", color: "bg-blue-500" },
+                            { state: "EN_PROCESO", label: "En Proceso", color: "bg-indigo-500" },
+                            { state: "LISTA", label: "Listas para Entrega", color: "bg-emerald-500" },
+                            { state: "ENTREGADA", label: "Entregadas/Completadas", color: "bg-slate-500" },
+                          ].map((item) => {
+                            const count = inspectStats.porEstado[item.state] || 0;
+                            const total = inspectData?.ordenes.length || 1;
+                            const pct = Math.round((count / total) * 100);
+                            return (
+                              <div key={item.state} className="space-y-1">
+                                <div className="flex justify-between text-xs font-semibold text-slate-700">
+                                  <span>{item.label}</span>
+                                  <span>{count} órdenes ({pct}%)</span>
+                                </div>
+                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                                  <div className={`h-full ${item.color}`} style={{ width: `${pct}%` }} />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+
+                      {/* Métodos de Pago Preferidos */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          💳 Métodos de Pago
+                        </h3>
+                        <div className="space-y-3">
+                          {["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"].map((m) => {
+                            const v = inspectStats.porMetodo[m] || 0;
+                            const pct = inspectStats.totalVentas > 0 ? (v / inspectStats.totalVentas) * 100 : 0;
+                            const icons: Record<string, string> = {
+                              EFECTIVO: "💵",
+                              TARJETA: "💳",
+                              TRANSFERENCIA: "🏦",
+                              MIXTO: "💰"
+                            };
+                            return (
+                              <div key={m}>
+                                <div className="mb-1 flex justify-between text-xs font-semibold text-slate-700">
+                                  <span className="flex items-center gap-1.5">
+                                    <span>{icons[m] || "💰"}</span> {m}
+                                  </span>
+                                  <span>{formatRD(v)} ({Math.round(pct)}%)</span>
+                                </div>
+                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                  <div 
+                                    className="h-full bg-primary" 
+                                    style={{ 
+                                      width: `${pct}%`,
+                                      backgroundColor: selectedInspectTenant.color_primario 
+                                    }} 
+                                  />
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </Card>
+
+                      {/* Gastos por Categoría */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          🏷️ Gastos por Categoría
+                        </h3>
+                        <div className="space-y-3">
+                          {Object.entries(inspectStats.porCategoria).length > 0 ? (
+                            Object.entries(inspectStats.porCategoria).map(([cat, val]) => {
+                              const pct = inspectStats.totalGastos > 0 ? (val / inspectStats.totalGastos) * 100 : 0;
+                              return (
+                                <div key={cat}>
+                                  <div className="mb-1 flex justify-between text-xs font-semibold text-slate-700">
+                                    <span className="capitalize">{cat.toLowerCase()}</span>
+                                    <span>{formatRD(val)} ({Math.round(pct)}%)</span>
+                                  </div>
+                                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                    <div className="h-full bg-rose-500" style={{ width: `${pct}%` }} />
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-center text-xs text-muted-foreground py-6">
+                              Sin gastos registrados en este período.
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* Servicios Más Populares */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          🧺 Servicios Más Populares
+                        </h3>
+                        <div className="space-y-3">
+                          {inspectStats.topServicios.length > 0 ? (
+                            (() => {
+                              const maxQty = Math.max(...inspectStats.topServicios.map(s => s.count), 1);
+                              return inspectStats.topServicios.map((srv: any) => {
+                                const pct = (srv.count / maxQty) * 100;
+                                return (
+                                  <div key={srv.name} className="space-y-1">
+                                    <div className="flex justify-between text-xs font-semibold text-slate-700">
+                                      <span className="truncate max-w-[180px]">{srv.name}</span>
+                                      <span className="text-[10px] text-muted-foreground shrink-0">
+                                        {srv.count} cant. ({formatRD(srv.total)})
+                                      </span>
+                                    </div>
+                                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                      <div 
+                                        className="h-full bg-indigo-500" 
+                                        style={{ 
+                                          width: `${pct}%`,
+                                          backgroundColor: selectedInspectTenant.color_primario 
+                                        }} 
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()
+                          ) : (
+                            <div className="text-center text-xs text-muted-foreground py-6">
+                              Sin servicios registrados en las órdenes de este período.
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* Cierres de Caja Recientes */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          📦 Cierres de Caja Recientes
+                        </h3>
+                        <div className="space-y-3">
+                          {inspectStats.cierresCaja.length > 0 ? (
+                            inspectStats.cierresCaja.map((c: any) => {
+                              const dif = c.diferencia || 0;
+                              const statusColor = dif === 0 
+                                ? "text-emerald-600 bg-emerald-50 border-emerald-100" 
+                                : dif > 0 
+                                  ? "text-blue-600 bg-blue-50 border-blue-100" 
+                                  : "text-rose-600 bg-rose-50 border-rose-100";
+                              const statusText = dif === 0 
+                                ? "Cuadrada" 
+                                : dif > 0 
+                                  ? `Sobrante: ${formatRD(dif)}` 
+                                  : `Faltante: ${formatRD(dif)}`;
+
+                              return (
+                                <div key={c.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-2 text-xs">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-bold text-slate-800">
+                                      Cierre de Caja
+                                    </span>
+                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
+                                      <Calendar className="h-3 w-3" />
+                                      {c.cerrada_en ? new Date(c.cerrada_en).toLocaleDateString("es-DO") : ""}
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-3 gap-2 text-[9px] pt-1.5 border-t border-slate-100 text-slate-600">
+                                    <div>
+                                      <span className="block text-muted-foreground">Monto Inicial</span>
+                                      <strong className="font-bold text-slate-800">{formatRD(c.monto_inicial)}</strong>
+                                    </div>
+                                    <div>
+                                      <span className="block text-muted-foreground">Efectivo Real</span>
+                                      <strong className="font-bold text-slate-800">{formatRD(c.monto_contado_efectivo || 0)}</strong>
+                                    </div>
+                                    <div className="text-right">
+                                      <span className="block text-muted-foreground text-center">Cuadre</span>
+                                      <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase ${statusColor}`}>
+                                        {statusText}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  {c.notas_cierre && (
+                                    <p className="text-[9px] text-slate-500 italic mt-0.5 border-t border-dashed border-slate-100 pt-1">
+                                      "{c.notas_cierre}"
+                                    </p>
+                                  )}
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-center text-xs text-muted-foreground py-8">
+                              No se han registrado cierres de caja aún.
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+                    </div>
+
+                    {/* Columna Derecha: Feed en Vivo y Personal */}
+                    <div className="space-y-6">
+                      {/* Actividad Reciente */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <div className="flex justify-between items-center mb-4">
+                          <h3 className="font-display text-lg text-slate-800 flex items-center gap-2">
+                            🔔 Actividad Reciente (48h)
+                          </h3>
+                          <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
+                            Autolimpieza activa
+                          </span>
+                        </div>
+                        <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+                          {inspectStats.recientes.length > 0 ? (
+                            inspectStats.recientes.map((act: any) => {
+                              return (
+                                <div key={act.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100/50 hover:bg-slate-100/50 transition-colors">
+                                  <div className="min-w-0 flex-1 pr-2">
+                                    <div className="font-semibold text-xs text-slate-800 truncate">{act.titulo}</div>
+                                    <div className="text-[10px] text-muted-foreground truncate">{act.desc}</div>
+                                    <div className="text-[8px] text-slate-400 flex items-center gap-1 mt-1">
+                                      <Calendar className="h-2.5 w-2.5" />
+                                      {new Date(act.fecha).toLocaleString("es-DO", { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' })}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2.5 shrink-0">
+                                    {act.monto !== undefined && act.monto > 0 && (
+                                      <div className="font-bold text-xs text-slate-800">{formatRD(act.monto)}</div>
+                                    )}
+                                    <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${act.color}`}>
+                                      {act.badgeText}
+                                    </span>
+                                  </div>
+                                </div>
+                              );
+                            })
+                          ) : (
+                            <div className="text-center text-xs text-muted-foreground py-8">
+                              Sin actividades registradas en las últimas 48 horas.
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* Equipo Registrado */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          👥 Equipo de Trabajo
+                        </h3>
+                        <div className="space-y-3">
+                          {inspectData.empleados.length > 0 ? (
+                            inspectData.empleados.map((emp) => (
+                              <div key={emp.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100/50">
+                                <div className="flex items-center gap-2.5">
+                                  <div 
+                                    className="h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
+                                    style={{ backgroundColor: selectedInspectTenant.color_primario }}
+                                  >
+                                    {emp.nombre.charAt(0)}
+                                  </div>
+                                  <div>
+                                    <div className="font-semibold text-xs text-slate-800">{emp.nombre} {emp.apellido || ""}</div>
+                                    <div className="text-[9px] text-muted-foreground">{emp.email}</div>
+                                  </div>
+                                </div>
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
+                                  {emp.rol}
+                                </span>
+                              </div>
+                            ))
+                          ) : (
+                            <div className="text-center text-xs text-muted-foreground py-8">
+                              No hay empleados configurados en esta sucursal.
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* Ventas por Empleado */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          📊 Ventas por Empleado
+                        </h3>
+                        <div className="space-y-3">
+                          {inspectData.empleados.length > 0 ? (
+                            (() => {
+                              const empData = inspectData.empleados.map(emp => {
+                                const empOrds = inspectData.ordenes.filter(o => o.empleado_id === emp.id);
+                                const total = empOrds.reduce((s, o) => s + (o.total || 0), 0);
+                                const count = empOrds.length;
+                                return { emp, total, count };
+                              });
+
+                              const maxVentas = Math.max(...empData.map(d => d.total), 1);
+
+                              return empData.map(({ emp, total, count }) => {
+                                const pct = (total / maxVentas) * 100;
+                                return (
+                                  <div key={emp.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-2">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-2">
+                                        <div 
+                                          className="h-6 w-6 rounded-full flex items-center justify-center text-white font-bold text-[10px]"
+                                          style={{ backgroundColor: selectedInspectTenant.color_primario }}
+                                        >
+                                          {emp.nombre.charAt(0)}
+                                        </div>
+                                        <span className="font-semibold text-xs text-slate-800">{emp.nombre} {emp.apellido || ""}</span>
+                                      </div>
+                                      <span className="text-[10px] text-muted-foreground font-semibold">
+                                        {count} {count === 1 ? "orden" : "órdenes"}
+                                      </span>
+                                    </div>
+                                    <div>
+                                      <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
+                                        <span>Total Ventas</span>
+                                        <span>{formatRD(total)}</span>
+                                      </div>
+                                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                                        <div 
+                                          className="h-full rounded-full transition-all duration-500" 
+                                          style={{ 
+                                            width: `${pct}%`,
+                                            backgroundColor: selectedInspectTenant.color_primario 
+                                          }} 
+                                        />
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              });
+                            })()
+                          ) : (
+                            <div className="text-center text-xs text-muted-foreground py-8">
+                              No hay empleados registrados.
+                            </div>
+                          )}
+                        </div>
+                      </Card>
+
+                      {/* Logística y Eficiencia Operativa */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          ⚡ Logística y Eficiencia
+                        </h3>
+                        <div className="space-y-4">
+                          {/* Canal de Entrega */}
+                          <div className="space-y-1.5">
+                            <div className="flex justify-between text-xs font-semibold text-slate-700">
+                              <span>Canal de Entrega</span>
+                              <span className="text-[10px] text-muted-foreground">
+                                {inspectStats.ordsDomicilio} delivery vs {inspectStats.ordsLocal} local
+                              </span>
+                            </div>
+                            <div className="h-3 overflow-hidden rounded-full bg-slate-100 flex">
+                              <div 
+                                className="h-full text-[8px] font-bold text-white flex items-center justify-center transition-all" 
+                                style={{ 
+                                  width: `${inspectStats.pctDomicilio}%`,
+                                  backgroundColor: selectedInspectTenant.color_primario || '#0F4C81'
+                                }} 
+                                title={`Delivery: ${inspectStats.pctDomicilio}%`}
+                              >
+                                {inspectStats.pctDomicilio >= 15 && `${inspectStats.pctDomicilio}% 🚚`}
+                              </div>
+                              <div 
+                                className="h-full text-[8px] font-bold text-white flex items-center justify-center bg-slate-400 transition-all" 
+                                style={{ 
+                                  width: `${inspectStats.pctLocal}%`
+                                }} 
+                                title={`En Local: ${inspectStats.pctLocal}%`}
+                              >
+                                {inspectStats.pctLocal >= 15 && `${inspectStats.pctLocal}% 🧺`}
+                              </div>
+                            </div>
+                            <div className="flex justify-between text-[8px] text-muted-foreground px-1">
+                              <span>🚚 Delivery ({inspectStats.pctDomicilio}%)</span>
+                              <span>🧺 En Local ({inspectStats.pctLocal}%)</span>
+                            </div>
+                          </div>
+
+                          {/* Desglose de Delivery a Domicilio */}
+                          <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-dashed border-slate-100 text-[10px] text-slate-600">
+                            <div className="bg-emerald-50/70 p-2 rounded-xl border border-emerald-100 flex flex-col justify-between">
+                              <span className="text-[9px] text-emerald-800 font-medium">Entregados 🚚</span>
+                              <strong className="text-emerald-700 font-bold text-xs mt-1">{inspectStats.deliveryEntregados}</strong>
+                            </div>
+                            <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100 flex flex-col justify-between">
+                              <span className="text-[9px] text-amber-800 font-medium">En Ruta 📍</span>
+                              <strong className="text-amber-700 font-bold text-xs mt-1">{inspectStats.deliveryPendientes}</strong>
+                            </div>
+                            <div className="bg-rose-50/70 p-2 rounded-xl border border-rose-100 flex flex-col justify-between">
+                              <span className="text-[9px] text-rose-800 font-medium">Cancelados ❌</span>
+                              <strong className="text-rose-700 font-bold text-xs mt-1">{inspectStats.deliveryCancelados}</strong>
+                            </div>
+                          </div>
+
+                          {/* Tasa de Urgencia */}
+                          <div className="pt-3 border-t border-slate-100 space-y-1.5">
+                            <div className="flex justify-between text-xs font-semibold text-slate-700">
+                              <span>Tasa de Órdenes Express / Urgentes</span>
+                              <span className={`text-[10px] font-bold ${inspectStats.pctUrgencia > 20 ? 'text-amber-600' : 'text-slate-500'}`}>
+                                {inspectStats.ordsUrgentes} urgentes
+                              </span>
+                            </div>
+                            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
+                              <div 
+                                className="h-full rounded-full transition-all duration-500" 
+                                style={{ 
+                                  width: `${inspectStats.pctUrgencia}%`,
+                                  backgroundColor: inspectStats.pctUrgencia > 20 ? '#D97706' : (selectedInspectTenant.color_primario || '#0F4C81')
+                                }} 
+                              />
+                            </div>
+                            <div className="flex justify-between items-center text-[9px] text-muted-foreground pt-0.5">
+                              <span>⚡ Prioridad Express: {inspectStats.pctUrgencia}%</span>
+                              <span>
+                                {inspectStats.pctUrgencia > 20 ? (
+                                  <span className="text-amber-600 font-medium">⚠️ Alta demanda express</span>
+                                ) : (
+                                  <span className="text-emerald-600 font-medium">🟢 Carga de trabajo stable</span>
+                                )}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      </Card>
+
+                      {/* Créditos, Deudas y Abonos de Clientes */}
+                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+                          🏦 Créditos y Cuentas por Cobrar
+                        </h3>
+                        <div className="space-y-3">
+                          {/* Deuda Pendiente */}
+                          <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-100/50 flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] text-rose-800 font-bold uppercase tracking-wider block">Deuda Pendiente (Por Cobrar)</span>
+                              <div className="text-2xl font-display font-bold text-rose-600 mt-1">
+                                {formatRD(inspectStats.totalDeuda)}
+                              </div>
+                            </div>
+                            <span className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[10px] font-extrabold rounded-lg">
+                              {inspectStats.cantidadDeudas} {inspectStats.cantidadDeudas === 1 ? "factura" : "facturas"}
+                            </span>
+                          </div>
+
+                          {/* Abonos y Parciales */}
+                          <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100/50 flex items-center justify-between">
+                            <div>
+                              <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider block">Abonos y Pagos Recibidos</span>
+                              <div className="text-2xl font-display font-bold text-emerald-600 mt-1">
+                                {formatRD(inspectStats.totalAbonado + inspectStats.totalAbonosCaja)}
+                              </div>
+                            </div>
+                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded-lg">
+                              Abonos Activos
+                            </span>
+                          </div>
+
+                          {/* Nota aclaratoria con estilo */}
+                          <div className="text-[9px] text-slate-500 bg-slate-50 border border-slate-100/80 p-2.5 rounded-xl text-center leading-normal">
+                            ℹ️ <strong>Cuentas por cobrar:</strong> Representa los saldos pendientes de pago de tus clientes. Los abonos reflejan pagos parciales aplicados a órdenes vigentes.
+                          </div>
+                        </div>
+                      </Card>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              {/* Botón de Cierre */}
+              <div className="p-4 bg-slate-100 border-t flex justify-end">
+                <Button 
+                  onClick={() => setSelectedInspectTenant(null)}
+                  className="rounded-xl font-bold h-10 px-6"
+                  variant="outline"
+                >
+                  Cerrar panel
+                </Button>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

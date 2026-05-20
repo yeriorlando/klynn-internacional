@@ -21,6 +21,9 @@ export interface Plan {
   destacado?: boolean;
   polar_product_monthly_url?: string;
   polar_product_yearly_url?: string;
+  precio_sucursal_adicional?: number;
+  polar_sucursal_url?: string;
+  limite_sucursales_adicionales?: number;
 }
 
 export interface BankDetails {
@@ -76,6 +79,7 @@ export interface Tenant {
   whatsapp_last_reset?: string;
   monto_caja_chica?: number;
   monto_actual_caja_chica?: number;
+  max_sucursales?: number;
 }
 
 export interface TenantConfig {
@@ -101,6 +105,7 @@ export interface TenantConfig {
   // Alertas de Secuencias NCF/e-CF
   alerta_ncf_limite?: number;
   alerta_ncf_telefono?: string;
+  max_sucursales?: number;
 }
 
 export interface WhatsAppConfig {
@@ -375,6 +380,9 @@ export interface Plan {
   destacado?: boolean;
   polar_product_monthly_url?: string;
   polar_product_yearly_url?: string;
+  precio_sucursal_adicional?: number;
+  polar_sucursal_url?: string;
+  limite_sucursales_adicionales?: number;
 }
 
 export const PLANS: Plan[] = [
@@ -387,6 +395,9 @@ export const PLANS: Plan[] = [
     limite_ordenes_mes: 300,
     limite_whatsapp_mes: 300,
     modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false },
+    precio_sucursal_adicional: 1000,
+    limite_sucursales_adicionales: 1,
+    polar_sucursal_url: "",
   },
   {
     id: "pro",
@@ -398,6 +409,9 @@ export const PLANS: Plan[] = [
     limite_whatsapp_mes: 1000,
     modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true },
     destacado: true,
+    precio_sucursal_adicional: 1200,
+    limite_sucursales_adicionales: 3,
+    polar_sucursal_url: "",
   },
   {
     id: "enterprise",
@@ -408,6 +422,9 @@ export const PLANS: Plan[] = [
     limite_ordenes_mes: null,
     limite_whatsapp_mes: 5000,
     modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true },
+    precio_sucursal_adicional: 1500,
+    limite_sucursales_adicionales: 5,
+    polar_sucursal_url: "",
   },
 ];
 
@@ -595,7 +612,10 @@ export async function getPlans(): Promise<Plan[]> {
         limite_whatsapp_mes: p.limite_whatsapp_mes || 0,
         destacado: !!p.destacado,
         polar_product_monthly_url: p.polar_product_monthly_url,
-        polar_product_yearly_url: p.polar_product_yearly_url
+        polar_product_yearly_url: p.polar_product_yearly_url,
+        precio_sucursal_adicional: p.precio_sucursal_adicional !== undefined ? p.precio_sucursal_adicional : (PLANS.find(sp => sp.id === p.id)?.precio_sucursal_adicional || 0),
+        polar_sucursal_url: p.polar_sucursal_url !== undefined ? p.polar_sucursal_url : (PLANS.find(sp => sp.id === p.id)?.polar_sucursal_url || ""),
+        limite_sucursales_adicionales: p.limite_sucursales_adicionales !== undefined ? p.limite_sucursales_adicionales : (PLANS.find(sp => sp.id === p.id)?.limite_sucursales_adicionales || 0),
       }));
     }
   } catch (e) {
@@ -806,6 +826,19 @@ export async function updateTenantPlan(tenantId: string, planId: PlanId) {
 export async function updateTenantStatus(tenantId: string, status: "TRIAL" | "ACTIVO" | "SUSPENDIDO" | "CANCELADO") {
   const { error } = await supabase.from('tenants').update({ estado: status }).eq('id', tenantId);
   return !error;
+}
+
+export async function updateTenantMaxSucursales(tenantId: string, maxSucursales: number) {
+  const { error } = await supabase
+    .from('tenants')
+    .update({ max_sucursales: maxSucursales })
+    .eq('id', tenantId);
+
+  if (error) {
+    console.error("Error updating tenant max_sucursales column:", error);
+    return false;
+  }
+  return true;
 }
 
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
@@ -1285,6 +1318,7 @@ export async function deleteServicio(id: string) {
 // ============ Plans CRUD ============
 export async function savePlan(p: Plan) {
   try {
+    // Guardar defensivamente en Supabase para evitar fallos si las columnas aún no están migradas en la nube
     const { error } = await supabase.from('planes').upsert({
       id: p.id,
       nombre: p.nombre,
@@ -1299,9 +1333,30 @@ export async function savePlan(p: Plan) {
       limite_whatsapp_mes: p.limite_whatsapp_mes,
       destacado: p.destacado,
       polar_product_monthly_url: p.polar_product_monthly_url,
-      polar_product_yearly_url: p.polar_product_yearly_url
+      polar_product_yearly_url: p.polar_product_yearly_url,
+      precio_sucursal_adicional: p.precio_sucursal_adicional,
+      polar_sucursal_url: p.polar_sucursal_url,
+      limite_sucursales_adicionales: p.limite_sucursales_adicionales,
     });
-    if (error) console.error("Error saving plan to Supabase:", error);
+    if (error) {
+      console.warn("Fallo al guardar columnas extendidas en Supabase (posiblemente falta migrar). Reintentando con campos base:", error);
+      await supabase.from('planes').upsert({
+        id: p.id,
+        nombre: p.nombre,
+        precio_mensual: p.precio_mensual,
+        precio_anual: p.precio_anual,
+        limite_empleados: p.limite_empleados,
+        limite_ordenes_mes: p.limite_ordenes_mes,
+        whatsapp: p.modulos.whatsapp,
+        facturacion_fiscal: p.modulos.facturacion_fiscal,
+        multisucursal: p.modulos.multisucursal,
+        logistica: p.modulos.logistica,
+        limite_whatsapp_mes: p.limite_whatsapp_mes,
+        destacado: p.destacado,
+        polar_product_monthly_url: p.polar_product_monthly_url,
+        polar_product_yearly_url: p.polar_product_yearly_url,
+      });
+    }
   } catch (e) {
     console.error("Error saving plan:", e);
   }

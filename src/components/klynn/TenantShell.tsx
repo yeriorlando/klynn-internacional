@@ -2,7 +2,7 @@ import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-route
 import { useMemo, useState } from "react";
 import {
   LayoutDashboard, FilePlus2, Receipt, Wallet, Users, UserCog, Truck, FileBarChart,
-  Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle
+  Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -52,6 +52,7 @@ export function TenantShell() {
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [showSoporteModal, setShowSoporteModal] = useState(false);
 
   const { data: cajaData } = useCajaAbierta(user?.tenant?.id || '');
   const cajaAbierta = !!cajaData;
@@ -88,6 +89,7 @@ export function TenantShell() {
 
   const { tenant, empleado } = user;
   const trialDays = Math.max(0, Math.ceil((new Date(tenant.trial_hasta).getTime() - Date.now()) / 86400000));
+  const isTrialExpired = tenant.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now();
 
   function onLogout() {
     logout();
@@ -162,6 +164,116 @@ export function TenantShell() {
               </div>
             </div>
           </motion.div>
+        </div>
+      )}
+
+      {/* Overlay de Prueba Vencida Premium */}
+      {isTrialExpired && !pathname.endsWith("/configuracion") && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/20 backdrop-blur-sm p-4">
+          <motion.div 
+            initial={{ scale: 0.98, opacity: 0, y: 10 }}
+            animate={{ scale: 1, opacity: 1, y: 0 }}
+            className="w-full max-w-md overflow-hidden rounded-[2rem] border border-white/40 bg-white/90 shadow-[0_20px_50px_rgba(0,0,0,0.1)] backdrop-blur-xl"
+          >
+            <div className="relative p-6 pt-8 text-center">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-xl ring-2 ring-white">
+                <Shield className="h-6 w-6 animate-pulse" />
+              </div>
+              
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-3 border border-amber-500/20">
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-amber-500"></span>
+                </span>
+                Prueba Expirada
+              </div>
+
+              <h2 className="font-display text-2xl font-black text-slate-900 tracking-tight leading-none mb-2">
+                Periodo de Prueba Finalizado
+              </h2>
+              
+              <p className="mx-auto max-w-[320px] text-[13px] font-medium leading-relaxed text-slate-500 mb-6">
+                Tu período de prueba gratuito para <span className="text-slate-900 font-bold">{tenant.nombre}</span> ha expirado. Debes adquirir un plan activo para seguir utilizando Klynn.
+              </p>
+
+              <div className="space-y-4 mb-4">
+                <div className="grid grid-cols-2 gap-3">
+                  <Button 
+                    className="h-11 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                    onClick={() => setShowSoporteModal(true)}
+                  >
+                    <MessageCircle className="h-4 w-4" /> Contactar soporte
+                  </Button>
+                  
+                  <Button 
+                    className="h-11 w-full rounded-xl bg-primary hover:bg-primary/95 text-white text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                    onClick={() => navigate({ to: `/t/${tenant.slug}/configuracion?tab=plan&expired=true` })}
+                  >
+                    <CreditCard className="h-4 w-4" /> Ver planes
+                  </Button>
+                </div>
+
+                <div className="flex justify-center">
+                  <Button 
+                    variant="outline" 
+                    className="h-11 w-32 rounded-xl text-slate-600 text-sm font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-2"
+                    onClick={onLogout}
+                  >
+                    <LogOut className="h-3.5 w-3.5" /> Salir
+                  </Button>
+                </div>
+              </div>
+
+              <div className="text-center pt-3">
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Klynn · ID: {tenant.id.slice(0, 8)}</p>
+              </div>
+            </div>
+          </motion.div>
+        </div>
+      )}
+
+      {/* Modal Soporte */}
+      {showSoporteModal && (
+        <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-slate-950/40 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-sm overflow-hidden rounded-[2rem] border border-white/40 bg-white/95 shadow-[0_20px_50px_rgba(0,0,0,0.15)] backdrop-blur-xl p-6 space-y-5">
+            <div className="text-center">
+              <h3 className="font-display text-xl font-black text-slate-900 mb-1">
+                Para contactar con Soporte:
+              </h3>
+              <p className="text-xs text-slate-500">
+                Elige la opción que prefieras para contactarnos.
+              </p>
+            </div>
+
+            <div className="grid gap-3">
+              {/* Tarjeta 1: Llamar */}
+              <div className="p-4 rounded-2xl bg-slate-50 border border-slate-100 flex flex-col items-center gap-1 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                  <Phone className="h-3 w-3" /> Llámanos al:
+                </span>
+                <span className="text-lg font-bold text-slate-900">+1 (829) 941-6546</span>
+              </div>
+
+              {/* Tarjeta 2: WhatsApp */}
+              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-100 flex flex-col items-center gap-3 text-center">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Contacta por WhatsApp</span>
+                <Button 
+                  className="h-9 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2"
+                  onClick={() => window.open(`https://wa.me/18299416546?text=Hola Klynn, la prueba gratis de mi lavandería ${tenant.nombre} ha expirado. Quisiera más información sobre los planes pagos.`, "_blank")}
+                >
+                  <MessageCircle className="h-3.5 w-3.5" /> Abrir WhatsApp
+                </Button>
+              </div>
+            </div>
+
+            <Button 
+              variant="ghost" 
+              className="h-10 w-full rounded-xl text-slate-600 text-sm font-bold hover:bg-slate-100 transition-all active:scale-95"
+              onClick={() => setShowSoporteModal(false)}
+            >
+              Cerrar
+            </Button>
+          </div>
         </div>
       )}
 

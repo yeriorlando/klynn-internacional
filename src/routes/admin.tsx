@@ -31,6 +31,7 @@ import {
   updateTenantAdmin,
   updateTenantPlan,
   updateTenantStatus,
+  updateTenantMaxSucursales,
   getGlobalConfig,
   saveGlobalConfig,
   ADMIN_EMAILS,
@@ -112,6 +113,7 @@ function AdminPage() {
   const [newPassword, setNewPassword] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState<PlanId>("basico");
   const [newStatus, setNewStatus] = useState<any>("ACTIVO");
+  const [newMaxSucursales, setNewMaxSucursales] = useState<number>(1);
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -147,6 +149,7 @@ function AdminPage() {
       await updateTenantAdmin(editingTenant.id, newEmail, newPassword || undefined);
       await updateTenantPlan(editingTenant.id, selectedPlanId);
       await updateTenantStatus(editingTenant.id, newStatus);
+      await updateTenantMaxSucursales(editingTenant.id, newMaxSucursales);
       toast.success("Información de lavandería actualizada");
       setOpenEditModal(false);
       setTick(t => t + 1);
@@ -266,6 +269,7 @@ function AdminPage() {
                                       setNewPassword("");
                                       setSelectedPlanId(t.plan_id);
                                       setNewStatus(t.estado);
+                                      setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
                                       setOpenEditModal(true);
                                     }}
                                   >
@@ -490,78 +494,164 @@ function AdminPage() {
 
         {/* Modal para editar Credenciales de Lavandería */}
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-          <DialogContent className="rounded-2xl border-none shadow-card max-w-md">
+          <DialogContent className="rounded-2xl border-none shadow-card max-w-4xl">
             <DialogHeader>
               <DialogTitle className="font-display text-2xl flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" /> Editar Credenciales
               </DialogTitle>
               <DialogDescription>
-                Actualiza el acceso y estado para <strong>{editingTenant?.nombre}</strong>
+                Actualiza el acceso, suscripción y cupo de sucursales para <strong>{editingTenant?.nombre}</strong>
               </DialogDescription>
             </DialogHeader>
 
-            <div className="space-y-5 py-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-email">Correo Administrativo</Label>
-                <div className="relative">
-                  <Users className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="edit-email" 
-                    type="email" 
-                    className="pl-10 rounded-xl" 
-                    value={newEmail} 
-                    onChange={(e) => setNewEmail(e.target.value)} 
-                  />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
+              {/* COLUMNA IZQUIERDA: ACCESO Y PLAN */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-email">Correo Administrativo</Label>
+                  <div className="relative">
+                    <Users className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="edit-email" 
+                      type="email" 
+                      className="pl-10 rounded-xl h-11" 
+                      value={newEmail} 
+                      onChange={(e) => setNewEmail(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-pass">Nueva Contraseña (opcional)</Label>
+                  <div className="relative">
+                    <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="edit-pass" 
+                      type="password" 
+                      className="pl-10 rounded-xl h-11" 
+                      placeholder="Dejar en blanco para no cambiar"
+                      value={newPassword} 
+                      onChange={(e) => setNewPassword(e.target.value)} 
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-plan">Plan de Suscripción</Label>
+                  <Select value={selectedPlanId} onValueChange={(v: PlanId) => setSelectedPlanId(v)}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Seleccionar plan" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-elegant">
+                      {plans.map((p) => (
+                        <SelectItem key={p.id} value={p.id} className="rounded-lg">
+                          <div className="flex items-center justify-between w-full gap-4">
+                            <span className="font-semibold">{p.nombre}</span>
+                            <span className="text-xs text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-pass">Nueva Contraseña (opcional)</Label>
-                <div className="relative">
-                  <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                  <Input 
-                    id="edit-pass" 
-                    type="password" 
-                    className="pl-10 rounded-xl" 
-                    placeholder="Dejar en blanco para no cambiar"
-                    value={newPassword} 
-                    onChange={(e) => setNewPassword(e.target.value)} 
-                  />
+              {/* COLUMNA DERECHA: ESTADO Y SUCURSALES */}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-status">Estado de la Lavandería</Label>
+                  <Select value={newStatus} onValueChange={(v: any) => setNewStatus(v)}>
+                    <SelectTrigger className="h-11 rounded-xl">
+                      <SelectValue placeholder="Seleccionar estado" />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl shadow-elegant">
+                      <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
+                      <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
+                      <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
+                      <SelectItem value="CANCELADO" className="rounded-lg text-destructive">Cancelado</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-plan">Plan de Suscripción</Label>
-                <Select value={selectedPlanId} onValueChange={(v: PlanId) => setSelectedPlanId(v)}>
-                  <SelectTrigger className="h-11 rounded-xl">
-                    <SelectValue placeholder="Seleccionar plan" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl shadow-elegant">
-                    {plans.map((p) => (
-                      <SelectItem key={p.id} value={p.id} className="rounded-lg">
-                        <div className="flex items-center justify-between w-full gap-4">
-                          <span className="font-semibold">{p.nombre}</span>
-                          <span className="text-xs text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+                <div className="space-y-3">
+                  <Label className="text-slate-700 dark:text-slate-300 font-semibold block">
+                    Sucursales Habilitadas (Cupo Total)
+                  </Label>
 
-              <div className="space-y-2">
-                <Label htmlFor="edit-status">Estado de la Lavandería</Label>
-                <Select value={newStatus} onValueChange={(v: any) => setNewStatus(v)}>
-                  <SelectTrigger className="h-11 rounded-xl">
-                    <SelectValue placeholder="Seleccionar estado" />
-                  </SelectTrigger>
-                  <SelectContent className="rounded-xl shadow-elegant">
-                    <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
-                    <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
-                    <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
-                    <SelectItem value="CANCELADO" className="rounded-lg text-destructive">Cancelado</SelectItem>
-                  </SelectContent>
-                </Select>
+                  {/* Accesos rápidos con sub-labels aclaratorios */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <Button 
+                      type="button"
+                      variant={newMaxSucursales === 1 ? "default" : "outline"}
+                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
+                      onClick={() => setNewMaxSucursales(1)}
+                    >
+                      <span className="text-sm">1</span>
+                      <span className="text-[10px] opacity-75 font-normal">Base</span>
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={newMaxSucursales === 2 ? "default" : "outline"}
+                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
+                      onClick={() => setNewMaxSucursales(2)}
+                    >
+                      <span className="text-sm">2</span>
+                      <span className="text-[10px] opacity-75 font-normal">+1 Extra</span>
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={newMaxSucursales === 3 ? "default" : "outline"}
+                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
+                      onClick={() => setNewMaxSucursales(3)}
+                    >
+                      <span className="text-sm">3</span>
+                      <span className="text-[10px] opacity-75 font-normal">+2 Extra</span>
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={newMaxSucursales === 4 ? "default" : "outline"}
+                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
+                      onClick={() => setNewMaxSucursales(4)}
+                    >
+                      <span className="text-sm">4</span>
+                      <span className="text-[10px] opacity-75 font-normal">+3 Extra</span>
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={newMaxSucursales === 5 ? "default" : "outline"}
+                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
+                      onClick={() => setNewMaxSucursales(5)}
+                    >
+                      <span className="text-sm">5</span>
+                      <span className="text-[10px] opacity-75 font-normal">+4 Extra</span>
+                    </Button>
+                    <Button 
+                      type="button"
+                      variant={newMaxSucursales === 6 ? "default" : "outline"}
+                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
+                      onClick={() => setNewMaxSucursales(6)}
+                    >
+                      <span className="text-sm">6</span>
+                      <span className="text-[10px] opacity-75 font-normal font-normal">+5 Extra</span>
+                    </Button>
+                  </div>
+
+                  {/* Entrada personalizada pequeña */}
+                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                    <span className="text-xs text-muted-foreground font-medium">Cantidad personalizada:</span>
+                    <div className="relative w-28">
+                      <Building2 className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input 
+                        id="edit-max-sucursales" 
+                        type="number" 
+                        className="pl-8 pr-2 rounded-xl h-9 text-center font-bold text-sm" 
+                        min={1}
+                        value={newMaxSucursales} 
+                        onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)} 
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -624,6 +714,9 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       destacado: f.destacado,
       polar_product_monthly_url: f.polar_product_monthly_url?.trim() || undefined,
       polar_product_yearly_url: f.polar_product_yearly_url?.trim() || undefined,
+      precio_sucursal_adicional: Number(f.precio_sucursal_adicional) || 0,
+      polar_sucursal_url: f.polar_sucursal_url?.trim() || undefined,
+      limite_sucursales_adicionales: Number(f.limite_sucursales_adicionales) || 0,
     };
     await savePlan(plan);
     toast.success("Plan guardado");
@@ -669,10 +762,50 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
               </div>
             </div>
 
-            <label className="flex items-center gap-2 text-sm mt-2">
+            <label className="flex items-center gap-2 text-sm mt-2 mb-2">
               <Switch checked={!!f.destacado} onCheckedChange={(v) => setF({ ...f, destacado: v })} />
               Marcar como plan destacado / popular
             </label>
+
+            {/* Campos adicionales para el modelo Pay-per-Branch */}
+            <div className="rounded-2xl border border-border p-4 bg-slate-50 space-y-3 mt-4">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
+                Configuración Sucursales Adicionales
+              </Label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold text-slate-600">Precio Sucursal Extra (RD$)</Label>
+                  <Input 
+                    type="number"
+                    value={f.precio_sucursal_adicional ?? ""} 
+                    onChange={(e) => setF({ ...f, precio_sucursal_adicional: Number(e.target.value) || 0 })} 
+                    placeholder="1200" 
+                    className="h-9 rounded-lg text-xs"
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label className="text-[11px] font-bold text-slate-600">Límite de Extras</Label>
+                  <Input 
+                    type="number"
+                    value={f.limite_sucursales_adicionales ?? ""} 
+                    onChange={(e) => setF({ ...f, limite_sucursales_adicionales: Number(e.target.value) || 0 })} 
+                    placeholder="3" 
+                    className="h-9 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
+                  <ExternalLink className="h-3 w-3 text-primary" /> Polar Sucursal Checkout Link
+                </Label>
+                <Input 
+                  value={f.polar_sucursal_url || ""} 
+                  onChange={(e) => setF({ ...f, polar_sucursal_url: e.target.value })} 
+                  placeholder="https://buy.polar.sh/..." 
+                  className="h-9 rounded-lg text-xs"
+                />
+              </div>
+            </div>
           </div>
 
           {/* Columna Derecha: Módulos y Enlaces */}
@@ -718,6 +851,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                   className="h-10 rounded-xl"
                 />
               </div>
+
             </div>
           </div>
         </div>

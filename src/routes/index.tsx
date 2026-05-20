@@ -575,7 +575,13 @@ function LandingPage() {
                     <Feature on>Caja, clientes, gastos, reportes</Feature>
                     <Feature on={plan.modulos.whatsapp}>Notificaciones WhatsApp</Feature>
                     <Feature on={plan.modulos.facturacion_fiscal}>Facturación Electrónica</Feature>
-                    <Feature on={plan.modulos.multisucursal}>Multi-sucursal</Feature>
+                    <Feature on={plan.modulos.multisucursal}>
+                      Multi-sucursal {plan.modulos.multisucursal && (
+                        <span className="text-[10px] font-bold text-primary ml-1 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                          Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
+                        </span>
+                      )}
+                    </Feature>
                     <Feature on={plan.modulos.logistica}>Logística y Repartidores</Feature>
                   </ul>
 

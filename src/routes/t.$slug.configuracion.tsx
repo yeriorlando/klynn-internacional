@@ -149,6 +149,10 @@ function ConfigPage() {
     await saveCfg({ whatsapp: { ...wa, ...w } });
   }
 
+  const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
+  const isForcedExpired = params.get('expired') === 'true';
+  const isTrialExpired = isForcedExpired || (tenant?.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now());
+
   return (
     <div>
       <PageHeader title="Configuración" description="Personaliza tu lavandería." />
@@ -166,7 +170,8 @@ function ConfigPage() {
             <TabsTrigger 
               key={t.id}
               value={t.id}
-              className="rounded-xl py-2 font-bold transition-all data-[state=active]:text-white data-[state=active]:shadow-lg border border-transparent data-[state=inactive]:border-border data-[state=inactive]:bg-white flex items-center gap-2"
+              disabled={isTrialExpired && t.id !== 'plan'}
+              className="rounded-xl py-2 font-bold transition-all data-[state=active]:text-white data-[state=active]:shadow-lg border border-transparent data-[state=inactive]:border-border data-[state=inactive]:bg-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               style={{ 
                 backgroundColor: activeTab === t.id ? tenant.color_primario : undefined
               }}
@@ -493,9 +498,22 @@ function ConfigPage() {
                       <div className="text-xs flex items-center gap-2 font-medium text-blue-600">✅ {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes</div>
                       {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((k) => {
                         const v = p.modulos?.[k as keyof typeof p.modulos];
+                        
+                        let label = "";
+                        if (k === "logistica") label = "Logística y Repartidores";
+                        else if (k === "facturacion_fiscal") label = "Facturación Electrónica";
+                        else if (k === "whatsapp") label = "WhatsApp";
+                        else if (k === "multisucursal") label = "Multi-sucursal";
+                        else label = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
+
                         return (
                           <div key={k} className={`text-xs flex items-center gap-2 ${v ? "text-foreground" : "text-muted-foreground opacity-50"}`}>
-                             {v ? "✅" : "❌"} {k === "logistica" ? "Logística y Repartidores" : k === "facturacion_fiscal" ? "Facturación Electrónica" : k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ")}
+                             {v ? "✅" : "❌"} <span>{label}</span>
+                             {k === "multisucursal" && v && (
+                               <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
+                                 Hasta {1 + (p.limite_sucursales_adicionales || 0)}
+                               </span>
+                             )}
                           </div>
                         );
                       })}

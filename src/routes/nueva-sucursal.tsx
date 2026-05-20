@@ -33,8 +33,7 @@ export const Route = createFileRoute("/nueva-sucursal")({
 const STEPS = [
   { id: 1, label: "Empresa", icon: Building2 },
   { id: 2, label: "Marca", icon: Palette },
-  { id: 3, label: "Plan", icon: Package },
-  { id: 4, label: "Listo", icon: PartyPopper },
+  { id: 3, label: "Listo", icon: PartyPopper },
 ];
 
 interface FormState {
@@ -124,10 +123,7 @@ function NuevaSucursalPage() {
     }
   }
 
-  const filteredSteps = useMemo(() => {
-    if (globalConfig.requirePlanOnRegistration) return STEPS;
-    return STEPS.filter(s => s.id !== 3);
-  }, [globalConfig.requirePlanOnRegistration]);
+  // Se eliminó la lógica de filteredSteps de Plan ya que las sucursales heredan el plan del Tenant principal.
 
   const slugOk = useMemo(
     () => form.slug.length >= 3 && /^[a-z0-9]+$/.test(form.slug) && isSlugAvailable(form.slug),
@@ -176,9 +172,9 @@ function NuevaSucursalPage() {
       logo_url: form.logo_url || undefined,
       color_primario: form.color_primario,
       color_secundario: form.color_secundario,
-      plan_id: form.plan_id,
-      estado: "TRIAL",
-      trial_hasta: new Date(Date.now() + globalConfig.trialDays * 86400000).toISOString(),
+      plan_id: auth.tenant.plan_id,
+      estado: auth.tenant.estado,
+      trial_hasta: auth.tenant.trial_hasta,
       creado_en: new Date().toISOString(),
       config,
     };
@@ -225,7 +221,7 @@ function NuevaSucursalPage() {
           clearInterval(interval);
           setTimeout(() => {
             setIsProvisioning(false);
-            setStep(4); // "Listo"
+            setStep(3); // "Listo"
           }, 800);
         }
       }, 1200);
@@ -247,22 +243,15 @@ function NuevaSucursalPage() {
 
   function next() {
     if (!validateStep()) return;
-    let nextStep = step + 1;
-    if (nextStep === 3 && !globalConfig.requirePlanOnRegistration) {
-      nextStep = 4;
-    }
-    if (nextStep <= 3) setStep(nextStep);
-    else if (step === 3 || (step === 2 && !globalConfig.requirePlanOnRegistration)) {
+    if (step === 1) {
+      setStep(2);
+    } else if (step === 2) {
       handleFinalize();
     }
   }
 
   function prev() { 
-    let prevStep = step - 1;
-    if (prevStep === 3 && !globalConfig.requirePlanOnRegistration) {
-      prevStep = 2;
-    }
-    setStep((s) => Math.max(1, prevStep)); 
+    setStep((s) => Math.max(1, s - 1)); 
   }
 
   if (!auth || auth.empleado.id === '__loading__') return null;
@@ -280,7 +269,7 @@ function NuevaSucursalPage() {
       <main className="container mx-auto pb-20 pt-10">
         <div className="mx-auto mb-12 max-w-2xl px-4">
           <div className="flex items-center gap-2 rounded-full border border-border bg-white/50 p-1.5 shadow-sm">
-            {filteredSteps.map((s) => {
+            {STEPS.map((s) => {
               const done = step > s.id;
               const current = step === s.id;
               return (
@@ -439,59 +428,14 @@ function NuevaSucursalPage() {
                 </>
               )}
 
-              {step === 3 && (
-                <>
-                  <h1 className="mb-2 text-3xl font-bold">Elige el plan para esta sucursal</h1>
-                  <p className="mb-8 text-muted-foreground">Puedes gestionar diferentes planes por sucursal.</p>
-                  <div className="grid gap-4">
-                    {PLANS.map((p) => {
-                      const sel = form.plan_id === p.id;
-                      return (
-                        <button
-                          key={p.id}
-                          type="button"
-                          onClick={() => update("plan_id", p.id)}
-                          className={`text-left rounded-2xl border-2 p-5 transition-all duration-300 ${sel ? "border-primary bg-primary/5 shadow-sm" : "border-slate-100 bg-white hover:border-slate-200"}`}
-                        >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xl font-bold text-slate-900">{p.nombre}</span>
-                                {p.id === "pro" && (
-                                  <span className="rounded-md bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600 uppercase tracking-tighter">
-                                    Popular
-                                  </span>
-                                )}
-                              </div>
-                              <div className="mt-1 text-sm text-slate-500">
-                                {p.limite_empleados} empleados · {p.limite_ordenes_mes ? `${p.limite_ordenes_mes} órdenes/mes` : "órdenes ilimitadas"}
-                              </div>
-                            </div>
-                            <div className="flex items-center gap-8">
-                              <div className="text-right">
-                                <div className="text-2xl font-bold text-slate-900">{formatRD(p.precio_mensual).replace("DOP", "RD$")}</div>
-                                <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">/mes</div>
-                              </div>
-                              <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all ${sel ? "border-primary bg-primary text-white shadow-[0_0_0_4px_rgba(15,76,129,0.1)]" : "border-slate-200 bg-white"}`}>
-                                {sel && <Check className="h-5 w-5" strokeWidth={3} />}
-                              </div>
-                            </div>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                </>
-              )}
-
-              {step === 4 && createdTenant && (
+              {step === 3 && createdTenant && (
                 <SuccessCard tenant={createdTenant} adminNombre={auth.empleado.nombre} onEnter={() => navigate({ to: `/t/${createdTenant.slug}` })} />
               )}
             </motion.div>
           </AnimatePresence>
         )}
 
-          {step < 4 && !isProvisioning && (
+          {step < 3 && !isProvisioning && (
             <div className="mt-10 flex items-center justify-between border-t border-border pt-8">
               <Button 
                 variant="outline" 
@@ -506,7 +450,7 @@ function NuevaSucursalPage() {
                 size="sm"
                 className="bg-primary text-white shadow-glow hover:opacity-95 font-bold h-9 px-6"
               >
-                {step === 3 ? "Crear sucursal" : "Continuar"} <ArrowRight className="ml-1 h-4 w-4" />
+                {step === 2 ? "Crear sucursal" : "Continuar"} <ArrowRight className="ml-1 h-4 w-4" />
               </Button>
             </div>
           )}
@@ -560,8 +504,10 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
               <div className="mt-0.5 font-bold text-lg">{planNombre}</div>
             </div>
             <div className="px-4 py-3 bg-slate-50/30">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Prueba Gratuita</div>
-              <div className="mt-0.5 font-bold text-lg text-success">Activa</div>
+              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Estado de Cuenta</div>
+              <div className="mt-0.5 font-bold text-lg text-success">
+                {tenant.estado === "TRIAL" ? "Prueba Activa" : "Suscripción Activa"}
+              </div>
             </div>
           </div>
         </div>
