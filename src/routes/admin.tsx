@@ -226,7 +226,18 @@ function AdminPage() {
                         <tr key={t.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                           <td className="px-6 py-4">
                             <div className="flex items-center gap-3">
-                              <span className="h-9 w-9 rounded-xl shadow-sm" style={{ background: `linear-gradient(135deg, ${t.color_primario}, ${t.color_secundario})` }} />
+                              <div 
+                                className="h-9 w-9 rounded-xl overflow-hidden flex items-center justify-center border border-slate-100 shadow-sm shrink-0 bg-white" 
+                                style={{ 
+                                  background: t.logo_url ? "white" : `linear-gradient(135deg, ${t.color_primario}, ${t.color_secundario})` 
+                                }} 
+                              >
+                                {t.logo_url ? (
+                                  <img src={t.logo_url} alt="Logo" className="h-full w-full object-cover" />
+                                ) : (
+                                  <span className="text-[10px] font-bold text-white uppercase">{t.nombre.charAt(0)}</span>
+                                )}
+                              </div>
                               <div>
                                 <div className="font-bold text-foreground">{t.nombre}</div>
                                 <div className="text-xs text-muted-foreground/80">{t.email}</div>

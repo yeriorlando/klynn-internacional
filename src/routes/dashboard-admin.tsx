@@ -451,31 +451,43 @@ function DashboardAdminPage() {
                 {myTenants.map((t) => {
                   const ts = tenantStats[t.id] || { count: 0, total: 0 };
                   return (
-                    <tr key={t.id} className="border-b border-border/50">
+                    <tr 
+                      key={t.id} 
+                      onClick={() => setSelectedInspectTenant(t)}
+                      className="border-b border-border/50 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                    >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
-                          <span 
-                            className="h-7 w-7 rounded-md" 
-                            style={{ background: `linear-gradient(135deg, ${t.color_primario}, ${t.color_secundario})` }} 
-                          />
+                          <div 
+                            className="h-8 w-8 rounded-full overflow-hidden flex items-center justify-center border border-slate-100 shadow-sm shrink-0" 
+                            style={{ 
+                              background: t.logo_url ? "white" : `linear-gradient(135deg, ${t.color_primario}, ${t.color_secundario})` 
+                            }} 
+                          >
+                            {t.logo_url ? (
+                              <img src={t.logo_url} alt="Logo" className="h-full w-full object-cover" />
+                            ) : (
+                              <span className="text-[10px] font-bold text-white uppercase">{t.nombre.charAt(0)}</span>
+                            )}
+                          </div>
                           <div>
-                            <div className="font-medium">{t.nombre}</div>
+                            <div className="font-medium text-slate-900">{t.nombre}</div>
                             <div className="text-xs text-muted-foreground">{t.email}</div>
                           </div>
                         </div>
                       </td>
                       <td className="px-4 py-3 font-mono text-xs text-primary">klynn.com.do/t/{t.slug}</td>
-                      <td className="px-4 py-3 text-right">{ts.count}</td>
-                      <td className="px-4 py-3 text-right font-medium">{formatRD(ts.total)}</td>
-                      <td className="px-4 py-3">
+                      <td className="px-4 py-3 text-right text-slate-700">{ts.count}</td>
+                      <td className="px-4 py-3 text-right font-medium text-slate-900">{formatRD(ts.total)}</td>
+                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <div className="flex justify-end gap-1">
                           <Button 
                             size="sm" 
                             variant="outline" 
-                            onClick={() => setSelectedInspectTenant(t)}
+                            onClick={() => handleManage(t.id, t.slug)}
                             className="h-9 px-4 rounded-lg border-primary/20 text-primary hover:bg-primary hover:text-white transition-all group font-bold"
                           >
-                            Ver sucursal <ArrowRight className="ml-2 h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
+                            Gestionar sucursal <ArrowRight className="ml-2 h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
                           </Button>
                         </div>
                       </td>
@@ -657,9 +669,17 @@ function DashboardAdminPage() {
               >
                 <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" />
                 <div className="relative z-10 flex flex-col items-center">
-                  <span className="text-[9px] font-bold uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
-                    Rendimiento de Sucursal
-                  </span>
+                  {selectedInspectTenant.logo_url ? (
+                    <img 
+                      src={selectedInspectTenant.logo_url} 
+                      alt="Logo" 
+                      className="h-16 w-16 rounded-full object-cover border-2 border-white/40 shadow-md mb-2.5 bg-white p-1" 
+                    />
+                  ) : (
+                    <span className="text-[9px] font-bold uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
+                      Rendimiento de Sucursal
+                    </span>
+                  )}
                   <h2 className="text-3xl font-display mt-2 leading-none">{selectedInspectTenant.nombre}</h2>
                   <p className="text-[10px] text-white/80 mt-1 font-mono">klynn.com.do/t/{selectedInspectTenant.slug}</p>
                   

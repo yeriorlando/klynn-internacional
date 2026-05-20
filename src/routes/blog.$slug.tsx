@@ -31,7 +31,7 @@ function BlogPostView() {
       <style dangerouslySetInnerHTML={{ __html: `
         .blog-content h3 { 
           margin-top: 2.5rem !important; 
-          margin-bottom: 1rem !important; 
+          margin-bottom: 1.25rem !important; 
           display: block !important;
           color: hsl(var(--primary)) !important;
           font-weight: 700 !important;
@@ -40,6 +40,28 @@ function BlogPostView() {
         .blog-content p { 
           margin-bottom: 1.5rem !important; 
           line-height: 1.75 !important;
+        }
+        .blog-content ul {
+          list-style-type: disc !important;
+          padding-left: 1.5rem !important;
+          margin-bottom: 1.5rem !important;
+          display: block !important;
+        }
+        .blog-content ol {
+          list-style-type: decimal !important;
+          padding-left: 1.5rem !important;
+          margin-bottom: 1.5rem !important;
+          display: block !important;
+        }
+        .blog-content li {
+          margin-bottom: 1rem !important;
+          line-height: 1.75 !important;
+        }
+        .blog-content li::marker {
+          color: hsl(var(--primary)) !important;
+        }
+        .blog-content li strong {
+          color: hsl(var(--foreground)) !important;
         }
       `}} />
       <LandingNavbar />
