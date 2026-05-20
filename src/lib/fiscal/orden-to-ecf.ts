@@ -121,7 +121,7 @@ export function ordenToECFPayload(
   };
 
   if (orden.itbis > 0) {
-    totals.itbisRate1  = itbisRate;
+    totals.itbisRate1  = config.itbis_porcentaje; // Usar 18 (entero) en vez de 0.18
     totals.totalITBIS  = orden.itbis;
   }
 
@@ -134,14 +134,16 @@ export function ordenToECFPayload(
 
   // 6. Payload final — usar "buyer" según la documentación oficial de Pronesoft
   const payload: ECFPayload = {
-    version:      '1.0',
     invoiceType,
     issueDate:    orden.creado_en || new Date().toISOString(),
-    incomeType:   '01', // Ingresos por operaciones (Default DGII)
     paymentForms,
     items,
     totals,
   };
+
+  if (orden.ncf) {
+    payload.invoiceNumber = orden.ncf;
+  }
 
   if (buyer) payload.buyer = buyer;
 

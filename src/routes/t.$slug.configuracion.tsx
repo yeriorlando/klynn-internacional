@@ -1001,15 +1001,15 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
         created_at: config?.created_at || new Date().toISOString(),
       } as ECFConfig);
 
-      // 2. Si es electrónico y no tiene ID de Pronesoft, registrar
+      // 2. Si es electrónico y no tiene ID de Pronesoft (o tiene el temporal de sandbox), registrar
       let pTenantId = config?.pronesoft_tenant_id;
-      if (activeValue && !pTenantId) {
+      if (activeValue && (!pTenantId || pTenantId === 'sandbox-tenant')) {
         toast.info("Registrando negocio en el servidor de certificación...");
         pTenantId = await registerTenantInPronesoft(tenant.id);
       }
 
-      // 3. Si hay un certificado nuevo para subir
-      if (activeValue && draft.certificate_data && draft.certificate_password) {
+      // 3. Si hay un certificado nuevo para subir (Solo en producción, Sandbox no lo requiere)
+      if (activeValue && draft.ambiente === 'produccion' && draft.certificate_data && draft.certificate_password) {
         toast.info("Sincronizando certificado digital...");
         await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, draft.certificate_password);
         // Limpiar la data del certificado del estado (ya se subió)
@@ -1275,38 +1275,47 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                 <h3 className="text-lg font-display mb-4 flex items-center gap-2">
                   <Key className="h-5 w-5 text-primary" /> Certificado Digital (.p12)
                 </h3>
-                <div className="space-y-4">
-                  {draft.certificate_data || config?.certificate_data ? (
-                    <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-                      <div className="flex items-center gap-3 text-emerald-700 font-bold mb-1">
-                        <CheckCircle2 className="h-5 w-5" /> Cargado y Listo
+                {draft.ambiente === 'pruebas' ? (
+                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+                    <p className="text-sm text-emerald-700">
+                      <strong>No necesitas subir un certificado P12 real.</strong><br/>
+                      El entorno de Pruebas (Sandbox) de Pronesoft genera uno internamente de forma automática.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {draft.certificate_data || config?.certificate_data ? (
+                      <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
+                        <div className="flex items-center gap-3 text-emerald-700 font-bold mb-1">
+                          <CheckCircle2 className="h-5 w-5" /> Cargado y Listo
+                        </div>
+                        <p className="text-[10px] text-emerald-600">Certificado P12 adjunto.</p>
                       </div>
-                      <p className="text-[10px] text-emerald-600">Certificado P12 adjunto.</p>
-                    </div>
-                  ) : (
-                    <div className="p-4 rounded-xl border border-dashed border-amber-200 bg-amber-50 text-center">
-                      <p className="text-xs text-amber-700">Pendiente de subir certificado.</p>
-                    </div>
-                  )}
-                  <Field label="Contraseña del .p12">
-                    <Input type="password" className={FIELD} value={draft.certificate_password || ""} onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} />
-                  </Field>
-                  <input type="file" id="cert-upload" className="hidden" accept=".p12,.pfx" onChange={async (e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      const reader = new FileReader();
-                      reader.onload = (ev) => {
-                        const base64 = ev.target?.result?.toString().split(',')[1];
-                        setDraft({ ...draft, certificate_data: base64 });
-                        toast.success("Certificado listo");
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }} />
-                  <Button variant="outline" className="w-full h-11 rounded-xl" onClick={() => document.getElementById('cert-upload')?.click()}>
-                    <Upload className="mr-2 h-4 w-4" /> Subir Archivo
-                  </Button>
-                </div>
+                    ) : (
+                      <div className="p-4 rounded-xl border border-dashed border-amber-200 bg-amber-50 text-center">
+                        <p className="text-xs text-amber-700">Pendiente de subir certificado.</p>
+                      </div>
+                    )}
+                    <Field label="Contraseña del .p12">
+                      <Input type="password" className={FIELD} value={draft.certificate_password || ""} onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} />
+                    </Field>
+                    <input type="file" id="cert-upload" className="hidden" accept=".p12,.pfx" onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          const base64 = ev.target?.result?.toString().split(',')[1];
+                          setDraft({ ...draft, certificate_data: base64 });
+                          toast.success("Certificado listo");
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }} />
+                    <Button variant="outline" className="w-full h-11 rounded-xl" onClick={() => document.getElementById('cert-upload')?.click()}>
+                      <Upload className="mr-2 h-4 w-4" /> Subir Archivo
+                    </Button>
+                  </div>
+                )}
               </Card>
             )}
           </div>

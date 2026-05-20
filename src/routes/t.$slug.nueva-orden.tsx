@@ -519,14 +519,20 @@ function NuevaOrdenPage() {
       let ordenActualizada = { ...orden };
       if (isElectronic && activeTipo) {
         try {
-          // Obtener el próximo número y la fecha de vencimiento de la secuencia activa
-          const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
-          ncfVencimiento = expiration_date;
+          let nextNCF: string | undefined = undefined;
+
+          // En Sandbox de Pronesoft, las secuencias se generan automáticamente.
+          // En Producción, gestionamos las secuencias localmente en Klynn.
+          if (fiscalConfig?.ambiente === 'produccion') {
+            const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
+            nextNCF = ncf;
+            ncfVencimiento = expiration_date;
+          }
 
           const result = await emitirECF(
-            { ...orden, ncf: nextNCF },
+            { ...orden, ncf: nextNCF }, // Pasamos el NCF generado (o undefined en Sandbox)
             cliente,
-            fiscalConfig.pronesoft_tenant_id,
+            fiscalConfig?.pronesoft_tenant_id,
             cfg,
             tenant,
             activeTipo

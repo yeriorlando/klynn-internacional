@@ -155,20 +155,17 @@ export async function registerTenantInPronesoft(tenantId: string): Promise<strin
 
   const companyName = config.razon_social || tenantData?.nombre || "Lavanderia Klynn";
 
-  // 2. Registrar en Pronesoft (solo si es producción)
+  // 2. Registrar en Pronesoft (Tanto en Sandbox como en Producción)
   try {
-    let pronesoftTenantId = "sandbox-tenant";
+    let pronesoftTenantId = "";
 
-    if (config.ambiente === 'produccion') {
-      const res = await client.createAssociatedCompany({
-        rnc: config.rnc_emisor,
-        name: companyName,
-        environment: 'production'
-      });
+    const res = await client.createAssociatedCompany({
+      rnc: config.rnc_emisor,
+      name: companyName
+    });
 
-      if (!res.id) throw new Error("Pronesoft no devolvió un ID de empresa");
-      pronesoftTenantId = res.id;
-    }
+    if (!res.id) throw new Error("Pronesoft no devolvió un ID de empresa");
+    pronesoftTenantId = res.id;
 
     // 3. Actualizar configuración en Supabase
     await updateECFConfig(tenantId, {

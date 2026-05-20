@@ -8,18 +8,18 @@ import { supabase } from '@/lib/supabase';
 
 // ─── URLs por ambiente ──────────────────────────────────────────────────────
 const PRONESOFT_BASE_URLS = {
-  sandbox:    'https://api.ecf.sandbox.pronesoft.com/api/v1',
+  sandbox: 'https://api.ecf.sandbox.pronesoft.com/api/v1',
   production: 'https://api.ecf.pronesoft.com/api/v1',
 };
 
 const ECF_ENV = {
-  sandbox:    'TesteCF',
+  sandbox: 'TesteCF',
   homologacion: 'CerteCF',
   production: 'eCF',
 };
 
 export interface ProneSoftConfig {
-  clientId:     string;
+  clientId: string;
   clientSecret: string;
   env: 'sandbox' | 'production';
   tenantId?: string;
@@ -31,62 +31,63 @@ export interface PaymentForm {
 }
 
 export interface ECFItem {
-  lineNumber:       number;
-  name:             string;
-  type:             '1' | '2';
+  lineNumber: number;
+  name: string;
+  type: '1' | '2';
   billingIndicator: '0' | '1' | '2' | '3' | '4';
-  quantity:         number;
-  unitPrice:        number;
-  amount:           number;
-  discount?:        number;
+  quantity: number;
+  unitPrice: number;
+  amount: number;
+  discount?: number;
 }
 
 export interface ECFBuyer {
-  name:   string;
+  name: string;
   taxId?: string; // eNCF requirement
   email?: string;
 }
 
 export interface ECFTotals {
-  taxableAmount:  number;
-  itbisRate1?:    number;
-  totalITBIS?:    number;
-  totalAmount:    number;
+  taxableAmount: number;
+  itbisRate1?: number;
+  totalITBIS?: number;
+  totalAmount: number;
   discountAmount?: number;
 }
 
 export interface ECFPayload {
-  version:       string;
-  invoiceType:   '31' | '32' | '33' | '34' | '41' | '43' | '44' | '45' | '46' | '47';
-  issueDate:     string;
+  version?: string;
+  invoiceType: '31' | '32' | '33' | '34' | '41' | '43' | '44' | '45' | '46' | '47';
+  issueDate: string;
   invoiceNumber?: string;
-  incomeType?:   string; // e.g., "01"
-  paymentForms:  PaymentForm[];
-  buyer?:        ECFBuyer;
-  items:         ECFItem[];
-  totals:        ECFTotals;
+  incomeType?: string; // e.g., "01"
+  paymentForms: PaymentForm[];
+  buyer?: ECFBuyer;
+  items: ECFItem[];
+  totals: ECFTotals;
+  environment?: 'TesteCF' | 'CerteCF' | 'eCF';
   creditNoteIndicator?: '0' | '1'; // Required for Type 34
   referenceInfo?: {
     modifiedInvoiceNumber: string;
-    modifiedInvoiceDate:   string; // YYYY-MM-DD
-    modificationCode:      string; // 01-05
+    modifiedInvoiceDate: string; // YYYY-MM-DD
+    modificationCode: string; // 01-05
   };
 }
 
 export interface ECFSubmitResponse {
-  id:                   string;
-  stampDate:            string;
-  status:               'REGISTERED' | 'TO_SEND' | 'WAITING_RESPONSE' | 'FINISHED' | 'ERROR';
-  legalStatus?:         'ACCEPTED' | 'ACCEPTED_WITH_OBSERVATIONS' | 'REJECTED';
+  id: string;
+  stampDate: string;
+  status: 'REGISTERED' | 'TO_SEND' | 'WAITING_RESPONSE' | 'FINISHED' | 'ERROR';
+  legalStatus?: 'ACCEPTED' | 'ACCEPTED_WITH_OBSERVATIONS' | 'REJECTED';
   companyIdentification: string;
-  encf:                 string;
-  contingencyMode:      boolean;
-  documentStampUrl:     string;
-  pdf:                  string;
-  xmlUrl:               string;
-  signatureDate:        string;
-  securityCode:         string;
-  sequenceConsumed:     boolean;
+  encf: string;
+  contingencyMode: boolean;
+  documentStampUrl: string;
+  pdf: string;
+  xmlUrl: string;
+  signatureDate: string;
+  securityCode: string;
+  sequenceConsumed: boolean;
 }
 
 export interface ECFStatusResponse extends ECFSubmitResponse {
@@ -95,26 +96,21 @@ export interface ECFStatusResponse extends ECFSubmitResponse {
 }
 
 export interface AssociatedCompany {
-  id:   string;
+  id: string;
   name: string;
-  rnc:  string;
+  rnc: string;
 }
 
 export class ProneSoftClient {
-  private config:   ProneSoftConfig;
-  private baseUrl:  string;
-  private ecfEnv:   string;
+  private config: ProneSoftConfig;
+  private baseUrl: string;
+  private ecfEnv: string;
 
   constructor(config: ProneSoftConfig) {
-    this.config  = config;
-    
-    // Si la credencial es 'live', forzamos el uso del servidor de producción como base,
-    // ya que las llaves live solo se reconocen en el host de producción,
-    // pero aún así podemos enviar al ambiente de pruebas ('TesteCF') en dicho host!
-    const isLiveKey = config.clientId.includes('live') || config.clientSecret.includes('live');
-    
-    this.baseUrl = isLiveKey ? PRONESOFT_BASE_URLS.production : PRONESOFT_BASE_URLS[config.env];
-    this.ecfEnv  = config.env === 'sandbox' ? ECF_ENV.sandbox : ECF_ENV.production;
+    this.config = config;
+
+    this.baseUrl = PRONESOFT_BASE_URLS[config.env];
+    this.ecfEnv = config.env === 'sandbox' ? ECF_ENV.sandbox : ECF_ENV.production;
   }
 
   private async callProxy(action: string, payload: any): Promise<any> {
@@ -123,11 +119,11 @@ export class ProneSoftClient {
         action,
         payload,
         config: {
-          baseUrl:      this.baseUrl,
-          ecfEnv:       this.ecfEnv,
-          clientId:     this.config.clientId,
+          baseUrl: this.baseUrl,
+          ecfEnv: this.ecfEnv,
+          clientId: this.config.clientId,
           clientSecret: this.config.clientSecret,
-          tenantId:     this.config.tenantId,
+          tenantId: this.config.tenantId,
         }
       }
     });
@@ -136,7 +132,7 @@ export class ProneSoftClient {
       console.error("Proxy Error:", error);
       throw new Error(`Error en Proxy Pronesoft: ${error.message || 'Error desconocido'}`);
     }
-    
+
     if (data?.error) {
       throw new Error(data.error);
     }
@@ -153,7 +149,14 @@ export class ProneSoftClient {
   }
 
   async submitDocument(payload: ECFPayload): Promise<ECFSubmitResponse> {
-    return this.callProxy('submit', payload);
+    const cleanPayload = {
+      version: '1.0',
+      ...payload
+    };
+    // El campo environment NO debe ir en el body del payload (genera error 400),
+    // se maneja a nivel de path/SDK en el proxy.
+    delete (cleanPayload as any).environment;
+    return this.callProxy('submit', cleanPayload);
   }
 
   async createAssociatedCompany(data: { rnc: string; name: string }): Promise<AssociatedCompany> {
@@ -175,7 +178,7 @@ export class ProneSoftClient {
 export function getProneSoftClient(tenantId?: string, forceEnv?: 'sandbox' | 'production'): ProneSoftClient {
   const env = forceEnv || (import.meta.env.VITE_PRONESOFT_ENV as 'sandbox' | 'production') || 'sandbox';
   return new ProneSoftClient({
-    clientId:     import.meta.env.VITE_PRONESOFT_CLIENT_ID     ?? '',
+    clientId: import.meta.env.VITE_PRONESOFT_CLIENT_ID ?? '',
     clientSecret: import.meta.env.VITE_PRONESOFT_CLIENT_SECRET ?? '',
     env,
     tenantId,

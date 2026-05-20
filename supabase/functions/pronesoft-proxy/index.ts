@@ -54,6 +54,11 @@ serve(async (req) => {
     if (action === 'submit') {
       console.log("[pronesoft-proxy] 📤 Enviando eCF a DGII con el SDK...");
       
+      // Convertir issueDate a Date object porque el SDK espera Date y nosotros recibimos string en el JSON
+      if (payload.issueDate) {
+        payload.issueDate = new Date(payload.issueDate);
+      }
+      
       result = await client.ecfSubmission.submitEcf({
         environment: environmentValue,
         electronicDocument: payload
