@@ -323,6 +323,17 @@ function ConversationsPage() {
   };
 
   useEffect(() => {
+    if (selectedConvId) {
+      localStorage.setItem('klynn_active_chat_id', selectedConvId);
+    } else {
+      localStorage.removeItem('klynn_active_chat_id');
+    }
+    return () => {
+      localStorage.removeItem('klynn_active_chat_id');
+    };
+  }, [selectedConvId]);
+
+  useEffect(() => {
     if (!selectedConvId || !tenantId) return;
     fetchMessages(selectedConvId);
 
@@ -344,17 +355,26 @@ function ConversationsPage() {
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMsg = payload.new as DBMessage;
-          if (newMsg && newMsg.tenant_id === tenantId) {
-            if (newMsg.role === 'user') {
-              playNotificationSoundDebounced();
+            if (newMsg && newMsg.tenant_id === tenantId) {
+              const activeChatId = localStorage.getItem('klynn_active_chat_id');
+              if (newMsg.role === 'user' && newMsg.conversation_id !== selectedConvId && newMsg.conversation_id !== activeChatId) {
+                playNotificationSoundDebounced();
+              }
+              if (newMsg.conversation_id === selectedConvId) {
+                setMessages(prev => {
+                  if (prev.some(m => m.id === newMsg.id)) return prev;
+                  return [...prev, newMsg];
+                });
+                
+                // Reset unread count immediately in DB and state for the active chat
+                supabase
+                  .from('conversations')
+                  .update({ unread: 0 })
+                  .eq('id', selectedConvId)
+                  .then();
+                setConversations(prev => prev.map(c => c.id === selectedConvId ? { ...c, unread: 0 } : c));
+              }
             }
-            if (newMsg.conversation_id === selectedConvId) {
-              setMessages(prev => {
-                if (prev.some(m => m.id === newMsg.id)) return prev;
-                return [...prev, newMsg];
-              });
-            }
-          }
         }
       )
       .subscribe();

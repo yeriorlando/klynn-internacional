@@ -68,7 +68,7 @@ export function TenantShell() {
   useEffect(() => {
     if (!tenantId || tenantId === '__loading__') return;
 
-    const fetchUnreadCount = async () => {
+    const fetchUnreadCount = async (changedConvId?: string) => {
       const { data, error } = await supabase
         .from('conversations')
         .select('unread')
@@ -79,7 +79,14 @@ export function TenantShell() {
         
         // Play sound only when unread count increased (skip initial load)
         if (prevUnreadRef.current >= 0 && total > prevUnreadRef.current) {
-          playNotificationSoundDebounced();
+          const activeChatId = localStorage.getItem('klynn_active_chat_id');
+          if (changedConvId && changedConvId === activeChatId) {
+            // Do not play sound in any tab if it corresponds to the active chat
+          } else if (window.location.pathname.includes("/conversations")) {
+            // Omit in global shell if user is already on the chat page (let conversations.tsx play it)
+          } else {
+            playNotificationSoundDebounced();
+          }
         }
         prevUnreadRef.current = total;
         setUnreadCount(total);
@@ -101,7 +108,7 @@ export function TenantShell() {
         (payload) => {
           const row = (payload.new || payload.old) as any;
           if (row && row.tenant_id === tenantId) {
-            fetchUnreadCount();
+            fetchUnreadCount(row.id);
           }
         }
       )
