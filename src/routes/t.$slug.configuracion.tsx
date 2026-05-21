@@ -157,7 +157,7 @@ function ConfigPage() {
     <div>
       <PageHeader title="Configuración" description="Personaliza tu lavandería." />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-6 h-auto bg-accent/20 p-1.5 rounded-2xl gap-1.5 border border-border">
+        <TabsList className="flex flex-wrap md:flex-nowrap w-full h-auto bg-accent/20 p-1.5 rounded-2xl gap-1.5 border border-border">
           {[
             { id: 'perfil', label: 'Perfil', icon: User },
             { id: 'apariencia', label: 'Apariencia', icon: Palette },
@@ -171,12 +171,12 @@ function ConfigPage() {
               key={t.id}
               value={t.id}
               disabled={isTrialExpired && t.id !== 'plan'}
-              className="rounded-xl py-2 font-bold transition-all data-[state=active]:text-white data-[state=active]:shadow-lg border border-transparent data-[state=inactive]:border-border data-[state=inactive]:bg-white flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rounded-xl py-2 px-2 md:px-3 text-xs md:text-[13px] font-bold transition-all data-[state=active]:text-white data-[state=active]:shadow-lg border border-transparent data-[state=inactive]:border-border data-[state=inactive]:bg-white flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-auto"
               style={{ 
                 backgroundColor: activeTab === t.id ? tenant.color_primario : undefined
               }}
             >
-              <t.icon className="h-4 w-4" />
+              <t.icon className="h-3.5 w-3.5" />
               <span className="hidden md:inline">{t.label}</span>
             </TabsTrigger>
           ))}
@@ -686,6 +686,41 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
           <Field label="Base URL (Servidor)">
             <Input className={FIELD} placeholder="https://wasenderapi.com" value={draft.base_url || ""} onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} />
           </Field>
+        </div>
+
+        {/* Webhook Configuration for Incoming Messages */}
+        <div className="mt-6 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-3">
+          <div className="flex items-center gap-2.5">
+            <div className="h-7 w-7 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-600">
+              <CheckCircle2 className="h-4 w-4" />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Enlace de Webhook para Mensajes Entrantes</h4>
+              <p className="text-[11px] text-muted-foreground font-sans">Configura este enlace en tu panel de WASenderAPI para recibir los mensajes entrantes de tus clientes.</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-border rounded-xl p-2.5 shadow-sm">
+            <code className="flex-1 text-[11px] font-mono break-all text-slate-600 dark:text-slate-400 select-all leading-normal px-1">
+              {`${import.meta.env.VITE_SUPABASE_URL || "https://lqtjwcphidbwiwrnqbac.supabase.co"}/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`}
+            </code>
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="h-8 w-8 rounded-lg shrink-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 border-slate-200/80"
+              onClick={() => {
+                const urlStr = `${import.meta.env.VITE_SUPABASE_URL || "https://lqtjwcphidbwiwrnqbac.supabase.co"}/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`;
+                navigator.clipboard.writeText(urlStr);
+                toast.success("¡Enlace de Webhook copiado!");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 leading-normal font-sans">
+            <strong>Instrucciones:</strong> Ve a tu sesión en wasenderapi.com, edítala, activa la casilla de "Webhook" y pega este enlace. Asegúrate de habilitar los eventos <code className="bg-emerald-100 dark:bg-emerald-950 px-1 rounded font-mono">messages.received</code> o <code className="bg-emerald-100 dark:bg-emerald-950 px-1 rounded font-mono">messages.upsert</code>.
+          </p>
         </div>
 
         <div className="mt-8">

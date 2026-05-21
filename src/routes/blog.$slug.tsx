@@ -131,8 +131,8 @@ function BlogPostView() {
                   Probar Klynn Gratis
                 </Button>
               </Link>
-              <a href="https://wa.link/vxstq4">
-                <Button variant="outline" className="bg-white/10 border-white/20 hover:bg-white/20 text-white font-bold h-12 px-8 gap-2">
+              <a href="https://wa.link/vxstq4" target="_blank" rel="noreferrer">
+                <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-none font-bold h-12 px-8 gap-2 shadow-lg hover:shadow-xl transition-all">
                   <MessageCircle className="h-5 w-5" />
                   Hablar con un experto
                 </Button>

@@ -610,7 +610,7 @@ function NuevaOrdenPage() {
   }
 
   return (
-    <div className={`mx-auto ${isPosMode ? "max-w-none h-[calc(100vh-100px)] flex flex-col" : "max-w-5xl"}`}>
+    <div className={`mx-auto w-full px-4 md:px-6 ${isPosMode ? "max-w-none h-[calc(100vh-100px)] flex flex-col" : "max-w-6xl"}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4 flex-1">
           <PageHeader title={isPosMode ? "Terminal POS" : "Nueva orden"} description={isPosMode ? "Venta rápida" : `Paso ${step} de 5`} />
@@ -1299,8 +1299,8 @@ function NuevaOrdenPage() {
         <>
           <Stepper step={step} />
 
-          <Card className="mt-6 p-6 md:p-8">
-            <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }}>
+          <Card className="w-full mt-6 p-6 md:p-8">
+            <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="w-full">
               {step === 1 && (
                 <>
                   <h2 className="mb-1 text-2xl font-display">Cliente</h2>
@@ -1581,7 +1581,7 @@ function NuevaOrdenPage() {
                     </div>
                   </div>
 
-                  <div className="mt-5 grid gap-5 md:grid-cols-2">
+                  <div className="mt-5 grid gap-5 grid-cols-1 lg:grid-cols-2">
                     <div className="space-y-3">
                       <Field label="Fecha de entrega"><DatePicker date={fechaEntrega} setDate={setFechaEntrega} /></Field>
                       <Field label="Notas">

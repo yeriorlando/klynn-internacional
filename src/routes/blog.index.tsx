@@ -92,14 +92,18 @@ function BlogIndex() {
               Klynn te ayuda a aplicar estos consejos y más con tecnología diseñada específicamente para el mercado de lavanderías en RD.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center">
-              <Button size="lg" variant="secondary" className="font-bold gap-2 px-8 shadow-lg hover:shadow-xl transition-all">
-                <Rocket className="h-5 w-5" />
-                Probar Klynn Gratis
-              </Button>
-              <Button size="lg" variant="outline" className="bg-white/10 border-white/20 hover:bg-white/20 text-white font-bold gap-2 px-8">
-                <MessageCircle className="h-5 w-5" />
-                Hablar con un experto
-              </Button>
+              <Link to="/registro">
+                <Button size="lg" variant="secondary" className="font-bold gap-2 px-8 shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
+                  <Rocket className="h-5 w-5" />
+                  Probar Klynn Gratis
+                </Button>
+              </Link>
+              <a href="https://wa.link/vxstq4" target="_blank" rel="noreferrer">
+                <Button size="lg" className="bg-emerald-600 hover:bg-emerald-700 text-white border-none font-bold gap-2 px-8 shadow-lg hover:shadow-xl transition-all w-full sm:w-auto">
+                  <MessageCircle className="h-5 w-5" />
+                  Hablar con un experto
+                </Button>
+              </a>
             </div>
           </div>
         </div>

@@ -1,5 +1,7 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef } from "react";
+import { supabase } from "@/lib/supabase";
+import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import {
   LayoutDashboard, FilePlus2, Receipt, Wallet, Users, UserCog, Truck, FileBarChart,
   Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone
@@ -34,6 +36,7 @@ interface NavItem {
 }
 
 const NAV: (slug: string) => NavItem[] = (slug) => [
+  { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
   { to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard" },
   { to: `/t/${slug}/nueva-orden`, label: "Nueva orden", icon: FilePlus2, highlight: true, permission: "nueva-orden" },
   { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: Receipt, permission: "ordenes" },
@@ -56,6 +59,58 @@ export function TenantShell() {
 
   const { data: cajaData } = useCajaAbierta(user?.tenant?.id || '');
   const cajaAbierta = !!cajaData;
+
+  // UNREAD COUNT BADGE & GLOBAL REAL-TIME NOTIFICATIONS
+  const [unreadCount, setUnreadCount] = useState(0);
+  const prevUnreadRef = useRef(-1);
+  const tenantId = user?.tenant?.id;
+
+  useEffect(() => {
+    if (!tenantId || tenantId === '__loading__') return;
+
+    const fetchUnreadCount = async () => {
+      const { data, error } = await supabase
+        .from('conversations')
+        .select('unread')
+        .eq('tenant_id', tenantId);
+
+      if (!error && data) {
+        const total = data.reduce((acc, current) => acc + (current.unread || 0), 0);
+        
+        // Play sound only when unread count increased (skip initial load)
+        if (prevUnreadRef.current >= 0 && total > prevUnreadRef.current) {
+          playNotificationSoundDebounced();
+        }
+        prevUnreadRef.current = total;
+        setUnreadCount(total);
+      }
+    };
+
+    fetchUnreadCount();
+
+    // Subscribe to real-time updates for unread badge
+    const channel = supabase
+      .channel('conversations-unread-badge-shell')
+      .on(
+        'postgres_changes',
+        { 
+          event: '*', 
+          schema: 'public', 
+          table: 'conversations'
+        },
+        (payload) => {
+          const row = (payload.new || payload.old) as any;
+          if (row && row.tenant_id === tenantId) {
+            fetchUnreadCount();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [tenantId]);
 
   // Protección de rutas — DEBE estar antes del return condicional
   useEffect(() => {
@@ -101,7 +156,7 @@ export function TenantShell() {
 
 
   return (
-    <div className="min-h-screen bg-background print:hidden">
+    <div className={`bg-background print:hidden ${pathname.endsWith('/conversations') ? 'h-full overflow-hidden' : 'min-h-screen'}`}>
       <BrandStyle tenant={tenant} />
       {tenant.estado !== "SUSPENDIDO" && tenant.estado !== "CANCELADO" && <TourManager userId={empleado.id} />}
 
@@ -279,7 +334,7 @@ export function TenantShell() {
 
       {/* Sidebar desktop */}
       <aside id="tour-sidebar" className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out">
-        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} />
+        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} />
       </aside>
 
       {/* Sidebar móvil */}
@@ -287,14 +342,14 @@ export function TenantShell() {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-72 bg-surface shadow-elegant flex flex-col">
-            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} onNavigate={() => setMobileOpen(false)} />
           </aside>
         </div>
       )}
 
-      <div className="main-content-wrapper lg:pl-64 transition-all duration-500 ease-in-out">
+      <div className={`main-content-wrapper lg:pl-64 transition-all duration-500 ease-in-out ${pathname.endsWith('/conversations') ? 'h-full flex flex-col overflow-hidden' : ''}`}>
         {/* Header */}
-        <header className="main-header sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-surface/80 px-4 backdrop-blur-xl md:px-6 transition-all duration-500 ease-in-out">
+        <header className="main-header sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-surface/80 px-4 backdrop-blur-xl md:px-6 transition-all duration-500 ease-in-out shrink-0">
           <button onClick={() => setMobileOpen(true)} className="rounded-md p-2 hover:bg-accent lg:hidden" aria-label="Menú">
             <Menu className="h-5 w-5" />
           </button>
@@ -328,7 +383,7 @@ export function TenantShell() {
           <UserMenu nombre={empleado.nombre} rol={empleado.rol} empleadoId={empleado.id} onLogout={onLogout} />
         </header>
 
-        <main className="min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8">
+        <main className={`flex flex-col ${pathname.endsWith('/conversations') ? 'flex-1 overflow-hidden p-0' : 'min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8'}`}>
           <Outlet />
         </main>
       </div>
@@ -337,12 +392,13 @@ export function TenantShell() {
 }
 
 function SidebarContent({
-  tenant, empleado, pathname, isActive, onNavigate,
+  tenant, empleado, pathname, isActive, unreadCount, onNavigate,
 }: {
   tenant: { id: string; nombre: string; slug: string; color_primario: string; color_secundario: string; logo_url?: string };
   empleado: any;
   pathname: string;
   isActive: (to: string, exact?: boolean) => boolean;
+  unreadCount: number;
   onNavigate?: () => void;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
@@ -361,6 +417,7 @@ function SidebarContent({
   const allowedNav = useMemo(() => {
     let base = NAV(tenant.slug);
     if (!hasLogistica) base = base.filter(i => i.permission !== "logistica");
+    base = base.filter(i => i.permission !== "nueva-orden");
     return base.filter(item => !item.permission || can(empleado, item.permission));
   }, [tenant.slug, empleado, hasLogistica]);
 
@@ -472,29 +529,55 @@ function SidebarContent({
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-3">
-        {allowedNav.map((item) => {
-          const active = isActive(item.to, item.exact);
-          return (
+      <nav className="flex-1 overflow-y-auto p-3 space-y-3.5">
+        {/* Main Centered Green Call-to-Action for New Order */}
+        {can(empleado, "nueva-orden") && (
+          <div className="px-1.5 pb-3 border-b border-border/40 flex justify-center">
             <Link
-              key={item.to}
-              to={item.to}
-              id={`tour-nav-${item.permission}`}
+              to={`/t/${tenant.slug}/nueva-orden`}
+              id="tour-nav-nueva-orden"
               onClick={onNavigate}
-              onMouseEnter={() => item.permission && prefetch(item.permission)}
-              className={`mb-0.5 flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                active
-                  ? "bg-gradient-primary text-white shadow-card"
-                  : item.highlight
-                    ? "text-primary hover:bg-accent"
-                    : "text-foreground/80 hover:bg-accent hover:text-foreground"
-              }`}
+              onMouseEnter={() => prefetch('nueva-orden')}
+              className="w-full h-10 px-4 rounded-xl text-white shadow-md flex items-center justify-center gap-2 font-bold text-[13.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
             >
-              <item.icon className="h-4 w-4 shrink-0" />
-              {item.label}
+              <PlusCircle className="h-5 w-5 shrink-0" strokeWidth={2.5} />
+              <span>Nueva orden</span>
             </Link>
-          );
-        })}
+          </div>
+        )}
+
+        <div className="space-y-0.5">
+          {allowedNav.map((item) => {
+            const active = isActive(item.to, item.exact);
+            const isConversations = item.permission === "conversations";
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                id={`tour-nav-${item.permission}`}
+                onClick={onNavigate}
+                onMouseEnter={() => item.permission && prefetch(item.permission)}
+                className={`mb-0.5 flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
+                  active
+                    ? "bg-gradient-primary text-white shadow-card animate-in duration-300"
+                    : "text-foreground/80 hover:bg-accent hover:text-foreground"
+                }`}
+              >
+                <div className="flex items-center gap-3">
+                  <item.icon className="h-4 w-4 shrink-0" />
+                  <span>{item.label}</span>
+                </div>
+                {isConversations && unreadCount > 0 && (
+                  <Badge className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
+                    active ? "bg-white text-primary" : "bg-primary text-primary-foreground"
+                  }`}>
+                    {unreadCount}
+                  </Badge>
+                )}
+              </Link>
+            );
+          })}
+        </div>
       </nav>
 
       {empleado.rol === "ADMIN" && (

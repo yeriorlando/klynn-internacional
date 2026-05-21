@@ -153,6 +153,7 @@
     -webkit-font-smoothing: antialiased; 
     background-color: var(--color-background);
     zoom: 0.9; /* Zoom predeterminado al 90% solicitado */
+    height: 100%;
   }
   body {
     background-color: var(--color-background);
@@ -160,6 +161,10 @@
     font-family: var(--font-sans);
     font-feature-settings: "cv11", "ss01", "ss03";
     font-size: 0.9375rem;
+    height: 100%;
+  }
+  #root {
+    height: 100%;
   }
   h1, h2, h3 {
     font-family: var(--font-display);
