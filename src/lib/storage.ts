@@ -80,6 +80,7 @@ export interface Tenant {
   monto_caja_chica?: number;
   monto_actual_caja_chica?: number;
   max_sucursales?: number;
+  limite_credito_dias?: number;
 }
 
 export interface TenantConfig {
@@ -1222,20 +1223,24 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
     return [];
   }
 
+  // Normaliza tildes/acentos para comparación robusta
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
   // Desduplicar: Si existe una versión del tenant, ocultar la versión 'admin' (global)
   const results: CatalogoItem[] = data || [];
   const finalItems: CatalogoItem[] = [];
-  const namesSet = new Set();
+  const namesSet = new Set<string>();
 
   // Primero añadimos los del tenant
   results.filter(i => i.tenant_id !== 'admin').forEach(i => {
     finalItems.push(i);
-    namesSet.add(i.nombre.toLowerCase());
+    namesSet.add(normalize(i.nombre));
   });
 
-  // Luego añadimos los admin solo si no hay uno del tenant con el mismo nombre
+  // Luego añadimos los admin solo si no hay uno del tenant con el mismo nombre (normalizado)
   results.filter(i => i.tenant_id === 'admin').forEach(i => {
-    if (!namesSet.has(i.nombre.toLowerCase())) {
+    if (!namesSet.has(normalize(i.nombre))) {
       finalItems.push(i);
     }
   });
@@ -1244,6 +1249,11 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
 }
 
 export async function saveCatalogoItem(item: CatalogoItem) {
+  // Guard: never save with an invalid tenant_id
+  if (!item.tenant_id || item.tenant_id === '__loading__') {
+    console.error('saveCatalogoItem: tenant_id inválido, abortando.', item.tenant_id);
+    throw new Error('tenant_id inválido');
+  }
   try {
     const { error } = await supabase.from('catalogo_items').upsert(item);
     if (error) throw error;
@@ -1279,18 +1289,22 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
     return [];
   }
 
+  // Normaliza tildes/acentos para comparación robusta
+  const normalize = (s: string) =>
+    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
   // Desduplicar: Priorizar los servicios del propio tenant
   const results: Servicio[] = data || [];
   const finalItems: Servicio[] = [];
-  const namesSet = new Set();
+  const namesSet = new Set<string>();
 
   results.filter(s => s.tenant_id !== 'admin').forEach(s => {
     finalItems.push(s);
-    namesSet.add(s.nombre.toLowerCase());
+    namesSet.add(normalize(s.nombre));
   });
 
   results.filter(s => s.tenant_id === 'admin').forEach(s => {
-    if (!namesSet.has(s.nombre.toLowerCase())) {
+    if (!namesSet.has(normalize(s.nombre))) {
       finalItems.push(s);
     }
   });
@@ -1299,6 +1313,11 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
 }
 
 export async function saveServicio(s: Servicio) {
+  // Guard: never save with an invalid tenant_id
+  if (!s.tenant_id || s.tenant_id === '__loading__') {
+    console.error('saveServicio: tenant_id inválido, abortando.', s.tenant_id);
+    throw new Error('tenant_id inválido');
+  }
   const { error } = await supabase
     .from('servicios')
     .upsert(s);

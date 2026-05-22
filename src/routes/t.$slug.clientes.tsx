@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { Search, UserPlus, Phone, Mail, MapPin, Trash2 } from "lucide-react";
+import { Search, UserPlus, Phone, Mail, MapPin, Trash2, Users } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { ExportAndPrintButtons } from "@/components/klynn/ExportAndPrintButtons";
@@ -113,7 +113,20 @@ function ClientesPage() {
             </Card>
           );
         })}
-        {filt.length === 0 && <div className="col-span-full py-12 text-center text-muted-foreground">Sin clientes.</div>}
+        {filt.length === 0 && (
+          <Card className="col-span-full p-12 text-center border border-dashed border-border/60 bg-surface/30 backdrop-blur-md rounded-2xl py-16 flex flex-col items-center justify-center">
+            <div className="rounded-2xl bg-blue-50 p-4 mb-4 text-blue-600 shadow-sm">
+              <Users className="h-10 w-10" />
+            </div>
+            <h3 className="font-display text-xl font-bold text-foreground">¡Aún no hay clientes!</h3>
+            <p className="text-sm text-muted-foreground max-w-md mt-2 leading-relaxed">
+              Registra a tus clientes recurrentes para llevar el control de sus pedidos, saldos y recordatorios de pago de forma organizada.
+            </p>
+            <Button onClick={() => setShowNew(true)} className="mt-6 bg-gradient-primary text-white font-bold transition-all duration-200 active:scale-95 shadow-md">
+              <UserPlus className="mr-1.5 h-4 w-4" /> Registrar primer cliente
+            </Button>
+          </Card>
+        )}
       </div>
  
       <ClienteDialog 

@@ -1,7 +1,7 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins } from "lucide-react";
+import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -34,6 +34,7 @@ export const Route = createFileRoute("/t/$slug/caja")({
 
 function CajaPage() {
   const user = useRequireAuth();
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const tenant = user?.tenant;
   const empleado = user?.empleado;
@@ -123,6 +124,13 @@ function CajaPage() {
     <div>
       <PageHeader title="Caja" description="Apertura, movimientos del turno y cierre con cuadre.">
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => navigate({ to: "/t/$slug/cxc", params: { slug: user.tenant.slug } })}
+            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold gap-1.5 shadow-sm"
+          >
+            <CreditCard className="h-4 w-4" />
+            Cuentas x Cobrar
+          </Button>
           <Button 
             onClick={() => setShowCajaChica(true)} 
             className="bg-gradient-primary text-white font-bold gap-1.5"

@@ -112,7 +112,7 @@ function CatalogoPage() {
   const categorias = Array.from(new Set(filteredItems.map((i) => i.categoria))).sort();
 
   return (
-    <div className="mx-auto max-w-6xl">
+    <div className="w-full mx-auto max-w-6xl">
       <PageHeader
         title="Catálogo"
         description="Gestiona prendas, precios y servicios disponibles para tu lavandería."

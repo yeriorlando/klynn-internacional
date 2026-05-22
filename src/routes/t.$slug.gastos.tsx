@@ -188,7 +188,24 @@ function GastosPage() {
                       </td>
                     </tr>
                   ))}
-                  {manualGastos.length === 0 && <tr><td colSpan={7} className="py-20 text-center text-muted-foreground">Sin gastos registrados</td></tr>}
+                  {manualGastos.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="py-12 text-center">
+                        <div className="flex flex-col items-center justify-center py-10 max-w-md mx-auto px-4">
+                          <div className="rounded-2xl bg-destructive/10 p-4 mb-4 text-destructive shadow-sm">
+                            <Receipt className="h-10 w-10" />
+                          </div>
+                          <h3 className="font-display text-lg font-bold text-foreground">¡Sin gastos manuales!</h3>
+                          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                            Registra los egresos operativos ordinarios de tu lavandería (renta, luz, nómina) para mantener un balance financiero exacto.
+                          </p>
+                          <Button onClick={() => setShow(true)} className="mt-6 bg-gradient-primary text-white font-bold shadow-md">
+                            <Plus className="mr-1.5 h-4 w-4" /> Registrar primer gasto
+                          </Button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
@@ -218,7 +235,21 @@ function GastosPage() {
                       <td className="px-4 py-3 text-right font-bold text-destructive">{formatRD(g.monto)}</td>
                     </tr>
                   ))}
-                  {cajaChicaGastos.length === 0 && <tr><td colSpan={5} className="py-20 text-center text-muted-foreground">No hay gastos de caja chica registrados</td></tr>}
+                  {cajaChicaGastos.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-12 text-center">
+                        <div className="flex flex-col items-center justify-center py-10 max-w-md mx-auto px-4">
+                          <div className="rounded-2xl bg-primary/10 p-4 mb-4 text-primary shadow-sm">
+                            <PiggyBank className="h-10 w-10" />
+                          </div>
+                          <h3 className="font-display text-lg font-bold text-foreground">¡Sin egresos de caja chica!</h3>
+                          <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                            Aquí aparecerán los gastos menores o compras de menor cuantía que se descuenten directamente del fondo de caja chica.
+                          </p>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>

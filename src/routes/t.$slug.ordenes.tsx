@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, ArrowUpCircle } from "lucide-react";
+import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, ArrowUpCircle, FileText } from "lucide-react";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -424,7 +424,21 @@ function OrdenesPage() {
                   </tr>
                 );
               })}
-              {filt.length === 0 && <tr><td colSpan={8} className="py-12 text-center text-muted-foreground">Sin órdenes</td></tr>}
+              {filt.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="py-16 text-center">
+                    <div className="flex flex-col items-center justify-center py-10 max-w-md mx-auto px-4">
+                      <div className="rounded-2xl bg-primary/10 p-4 mb-4 text-primary shadow-sm">
+                        <FileText className="h-10 w-10" />
+                      </div>
+                      <h3 className="font-display text-lg font-bold text-foreground">¡No hay órdenes registradas!</h3>
+                      <p className="text-sm text-muted-foreground mt-2 leading-relaxed">
+                        Aquí verás las órdenes de servicios de lavandería creadas por tus operadores, su estado de lavado, entrega y pago en tiempo real.
+                      </p>
+                    </div>
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
