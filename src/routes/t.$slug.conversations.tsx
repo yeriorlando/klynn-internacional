@@ -587,7 +587,7 @@ function ConversationsPage() {
     if (type === 'text') {
       setMessageText('');
       if (textareaRef.current) {
-        textareaRef.current.style.height = '24px';
+        textareaRef.current.style.height = '36px';
       }
     }
     setReplyingTo(null);
@@ -948,7 +948,7 @@ function ConversationsPage() {
                   return (
                     <div key={msg.id} className={`flex ${isSentByMe ? "justify-end" : "justify-start"} mb-[2px] group animate-in fade-in-20 duration-150`}>
                       <div
-                        className={`max-w-[65%] relative rounded-lg px-2 py-1 text-[13.5px] shadow-[0_1px_1px_rgba(0,0,0,0.06)] ${
+                        className={`max-w-[65%] relative rounded-lg px-2 py-1 text-[15.5px] shadow-[0_1px_1px_rgba(0,0,0,0.06)] ${
                           isSentByMe
                             ? "bg-[#d9fdd3] dark:bg-[#005c4b] text-[#111b21] dark:text-[#e9edef] rounded-tr-none"
                             : "bg-white dark:bg-[#202c33] text-[#111b21] dark:text-[#e9edef] rounded-tl-none"
@@ -1061,7 +1061,7 @@ function ConversationsPage() {
                               )}
                             </div>
                           ) : (
-                            <p className="leading-snug whitespace-pre-wrap">{msg.content}</p>
+                            <p className="text-[15.5px] leading-snug whitespace-pre-wrap">{msg.content}</p>
                           )}
                         </div>
 
@@ -1109,7 +1109,7 @@ function ConversationsPage() {
                 </div>
               )}
 
-              <div className="flex items-end gap-2">
+              <div className="flex items-center gap-2">
                 <div className="flex-1 flex items-end gap-1.5 bg-muted/40 dark:bg-[#2a3942] rounded-2xl px-3.5 border border-border/40 min-h-11.5 h-auto py-1.5">
                   {/* Emoji Picker Popover */}
                   <Popover>
@@ -1172,12 +1172,13 @@ function ConversationsPage() {
                   />
 
                   {/* Textarea Input field */}
-                  <div className="flex-1 relative flex items-center py-0.5">
+                  <div className="flex-1 relative">
                     <textarea
                       ref={textareaRef}
                       placeholder="Escribe un mensaje..."
                       rows={1}
-                      className="flex-1 max-h-[120px] min-h-[24px] h-[24px] py-0.5 text-[14.2px] border-none focus:outline-none focus:ring-0 bg-transparent px-1 placeholder:text-muted-foreground/60 w-full resize-none overflow-y-auto scrollbar-none dark:text-white"
+                      className="flex-1 max-h-[120px] text-[17px] leading-[1.45] border-none focus:outline-none focus:ring-0 bg-transparent px-2 placeholder:text-muted-foreground/60 w-full resize-none overflow-hidden dark:text-white block"
+                      style={{ height: '36px', paddingTop: '8px', paddingBottom: '8px', boxSizing: 'border-box' }}
                       value={messageText}
                       onChange={(e) => {
                         const textarea = e.target;
@@ -1203,7 +1204,7 @@ function ConversationsPage() {
                 </div>
 
                 {/* Rectangular premium send button */}
-                <div className="shrink-0 mb-0.5">
+                <div className="shrink-0">
                   <Button 
                     className="h-11.5 px-5 rounded-2xl bg-primary hover:bg-primary/90 text-primary-foreground shadow-md flex items-center gap-2 font-bold transition-all active:scale-95 border-0" 
                     onClick={() => handleSend('text')}
