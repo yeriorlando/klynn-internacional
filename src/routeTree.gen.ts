@@ -19,6 +19,7 @@ import { Route as RecuperarRouteImport } from './routes/recuperar'
 import { Route as PrivacidadRouteImport } from './routes/privacidad'
 import { Route as NuevaSucursalRouteImport } from './routes/nueva-sucursal'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as DescargarRouteImport } from './routes/descargar'
 import { Route as DashboardAdminRouteImport } from './routes/dashboard-admin'
 import { Route as CookiesRouteImport } from './routes/cookies'
 import { Route as AdminRouteImport } from './routes/admin'
@@ -92,6 +93,11 @@ const NuevaSucursalRoute = NuevaSucursalRouteImport.update({
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DescargarRoute = DescargarRouteImport.update({
+  id: '/descargar',
+  path: '/descargar',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardAdminRoute = DashboardAdminRouteImport.update({
@@ -205,6 +211,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRoute
   '/cookies': typeof CookiesRoute
   '/dashboard-admin': typeof DashboardAdminRoute
+  '/descargar': typeof DescargarRoute
   '/login': typeof LoginRoute
   '/nueva-sucursal': typeof NuevaSucursalRoute
   '/privacidad': typeof PrivacidadRoute
@@ -238,6 +245,7 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminRoute
   '/cookies': typeof CookiesRoute
   '/dashboard-admin': typeof DashboardAdminRoute
+  '/descargar': typeof DescargarRoute
   '/login': typeof LoginRoute
   '/nueva-sucursal': typeof NuevaSucursalRoute
   '/privacidad': typeof PrivacidadRoute
@@ -271,6 +279,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRoute
   '/cookies': typeof CookiesRoute
   '/dashboard-admin': typeof DashboardAdminRoute
+  '/descargar': typeof DescargarRoute
   '/login': typeof LoginRoute
   '/nueva-sucursal': typeof NuevaSucursalRoute
   '/privacidad': typeof PrivacidadRoute
@@ -306,6 +315,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/cookies'
     | '/dashboard-admin'
+    | '/descargar'
     | '/login'
     | '/nueva-sucursal'
     | '/privacidad'
@@ -339,6 +349,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/cookies'
     | '/dashboard-admin'
+    | '/descargar'
     | '/login'
     | '/nueva-sucursal'
     | '/privacidad'
@@ -371,6 +382,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/cookies'
     | '/dashboard-admin'
+    | '/descargar'
     | '/login'
     | '/nueva-sucursal'
     | '/privacidad'
@@ -405,6 +417,7 @@ export interface RootRouteChildren {
   AdminRoute: typeof AdminRoute
   CookiesRoute: typeof CookiesRoute
   DashboardAdminRoute: typeof DashboardAdminRoute
+  DescargarRoute: typeof DescargarRoute
   LoginRoute: typeof LoginRoute
   NuevaSucursalRoute: typeof NuevaSucursalRoute
   PrivacidadRoute: typeof PrivacidadRoute
@@ -490,6 +503,13 @@ declare module '@tanstack/react-router' {
       path: '/login'
       fullPath: '/login'
       preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/descargar': {
+      id: '/descargar'
+      path: '/descargar'
+      fullPath: '/descargar'
+      preLoaderRoute: typeof DescargarRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard-admin': {
@@ -683,6 +703,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRoute: AdminRoute,
   CookiesRoute: CookiesRoute,
   DashboardAdminRoute: DashboardAdminRoute,
+  DescargarRoute: DescargarRoute,
   LoginRoute: LoginRoute,
   NuevaSucursalRoute: NuevaSucursalRoute,
   PrivacidadRoute: PrivacidadRoute,

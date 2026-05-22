@@ -34,6 +34,10 @@ import {
   Menu,
   X,
   Droplets,
+  Download,
+  Monitor,
+  HardDrive,
+  Wifi,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -376,6 +380,122 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* KLYNN DESKTOP */}
+      <section id="desktop" className="mx-auto max-w-7xl px-6 py-24">
+        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-primary/10 p-10 shadow-elegant lg:p-16">
+          {/* Background glow */}
+          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-primary/10 blur-2xl" />
+
+          <div className="relative grid gap-12 lg:grid-cols-2 lg:items-center">
+            <div>
+              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                ¡Nuevo! Versión Desktop
+              </div>
+              <h2 className="text-balance text-4xl md:text-5xl">
+                Klynn <span className="text-primary">Desktop</span>
+              </h2>
+              <p className="mt-5 text-lg text-muted-foreground">
+                Toda la potencia de Klynn instalada directamente en tu computadora Windows.
+                Sin internet, sin suscripción mensual, con acceso ilimitado a tus datos.
+              </p>
+              <ul className="mt-6 space-y-3">
+                {[
+                  { icon: Wifi, t: "Funciona 100% sin internet", d: "Ideal para zonas con señal inestable o apagones." },
+                  { icon: HardDrive, t: "Datos en tu equipo", d: "Tu información se guarda localmente, tú la controlas." },
+                  { icon: Printer, t: "Impresoras térmicas ESC/POS", d: "57mm y 80mm. Plug & play igual que la versión cloud." },
+                  { icon: Zap, t: "Rendimiento ultra rápido", d: "Sin latencia de red. Respuesta instantánea en cada acción." },
+                ].map((item) => (
+                  <li key={item.t} className="flex items-start gap-3">
+                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                      <item.icon className="h-3.5 w-3.5 text-primary" />
+                    </div>
+                    <div>
+                      <span className="text-sm font-semibold text-foreground">{item.t}</span>
+                      <span className="ml-2 text-sm text-muted-foreground">{item.d}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+              <div className="mt-10 flex flex-wrap gap-4">
+                <Link to="/descargar" search={{ autostart: true }}>
+                  <button
+                    id="btn-descargar-klynn-desktop"
+                    className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-8 text-base font-bold text-white shadow-glow transition hover:opacity-90 active:scale-95"
+                  >
+                    <Download className="h-5 w-5" />
+                    Descargar gratis
+                  </button>
+                </Link>
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Check className="h-4 w-4 text-success" />
+                  Windows 10 / 11 · 174 MB
+                </div>
+              </div>
+            </div>
+
+            {/* Visual */}
+            <motion.div
+              initial={{ opacity: 0, x: 30 }}
+              whileInView={{ opacity: 1, x: 0 }}
+              viewport={{ once: true, margin: "-80px" }}
+              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+              className="flex items-center justify-center"
+            >
+              <div className="relative">
+                {/* Window chrome */}
+                <div className="w-[340px] rounded-2xl border border-border bg-surface shadow-elegant overflow-hidden">
+                  {/* Title bar */}
+                  <div className="flex items-center gap-2 border-b border-border bg-surface-elevated px-4 py-3">
+                    <div className="flex gap-1.5">
+                      <div className="h-3 w-3 rounded-full bg-red-400" />
+                      <div className="h-3 w-3 rounded-full bg-yellow-400" />
+                      <div className="h-3 w-3 rounded-full bg-green-400" />
+                    </div>
+                    <div className="flex-1 text-center">
+                      <span className="text-xs text-muted-foreground font-medium">Klynn Desktop</span>
+                    </div>
+                    <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
+                  </div>
+                  {/* App content preview */}
+                  <div className="p-5 space-y-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
+                        <Receipt className="h-4 w-4 text-primary" />
+                      </div>
+                      <div>
+                        <div className="h-2.5 w-32 rounded-full bg-foreground/20" />
+                        <div className="mt-1.5 h-2 w-20 rounded-full bg-foreground/10" />
+                      </div>
+                      <div className="ml-auto h-6 w-16 rounded-lg bg-primary/20" />
+                    </div>
+                    {[1, 2, 3].map((i) => (
+                      <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-3">
+                        <div className="h-7 w-7 rounded-lg bg-surface-elevated" />
+                        <div className="flex-1 space-y-1.5">
+                          <div className={`h-2 rounded-full bg-foreground/15 w-${i === 1 ? '28' : i === 2 ? '20' : '24'}`} />
+                          <div className="h-1.5 w-12 rounded-full bg-foreground/10" />
+                        </div>
+                        <div className="h-5 w-14 rounded-md bg-primary/10" />
+                      </div>
+                    ))}
+                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-center gap-2">
+                      <Check className="h-4 w-4 text-success" />
+                      <span className="text-xs font-medium text-foreground">Caja cerrada · RD$ 48,230.00</span>
+                    </div>
+                  </div>
+                </div>
+                {/* Badge */}
+                <div className="absolute -bottom-3 -right-3 rounded-full bg-success px-3 py-1.5 text-xs font-bold text-white shadow-elegant">
+                  Sin internet ✓
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
       {/* PROBLEMA / SOLUCIÓN */}
       <section className="mx-auto max-w-7xl px-6 py-24">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
@@ -467,6 +587,7 @@ function LandingPage() {
           ))}
         </div>
       </section>
+
 
       {/* PARA QUIÉN */}
       <section id="sectores" className="border-y border-border bg-surface-elevated">
@@ -690,6 +811,7 @@ function LandingPage() {
               <ul className="space-y-2 text-xs text-muted-foreground">
                 <li><a href="#features" className="hover:text-foreground">Funciones</a></li>
                 <li><a href="#planes" className="hover:text-foreground">Planes y precios</a></li>
+                <li><a href="#desktop" className="hover:text-foreground">Klynn Desktop</a></li>
                 <li><a href="https://wa.link/vxstq4" className="hover:text-foreground">Solicitar demo</a></li>
                 <li><Link to="/registro" className="hover:text-foreground">Crear cuenta</Link></li>
               </ul>
