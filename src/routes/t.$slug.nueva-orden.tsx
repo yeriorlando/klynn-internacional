@@ -5,7 +5,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
   Printer, Phone, Shirt, Truck, Maximize2, Minimize2, LayoutGrid, List,
-  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building
+  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -41,6 +41,15 @@ import { toast } from "sonner";
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
 });
+
+const OPCIONES_CREDITO = [
+  { dias: 10, label: "10 días" },
+  { dias: 15, label: "15 días" },
+  { dias: 30, label: "30 días" },
+  { dias: 45, label: "45 días" },
+  { dias: 60, label: "60 días" },
+  { dias: 90, label: "90 días" },
+];
 
 function NuevaOrdenPage() {
   const user = useRequireAuth();
@@ -161,6 +170,29 @@ function NuevaOrdenPage() {
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(0);
   const [abonoCredito, setAbonoCredito] = useState<number>(0);
+
+  const [limiteDiasSel, setLimiteDiasSel] = useState<number>(30);
+
+  useEffect(() => {
+    if (user?.tenant?.limite_credito_dias) {
+      setLimiteDiasSel(user.tenant.limite_credito_dias);
+    }
+  }, [user?.tenant?.limite_credito_dias]);
+
+  async function actualizarLimiteDias(dias: number) {
+    setLimiteDiasSel(dias);
+    try {
+      const { error } = await supabase
+        .from("tenants")
+        .update({ limite_credito_dias: dias })
+        .eq("id", tenantId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ["activeTenant"] });
+      toast.success(`Plazo de crédito asignado a ${dias} días ✅`);
+    } catch (e) {
+      console.error("Error al guardar plazo de crédito:", e);
+    }
+  }
 
   const [creada, setCreada] = useState<Orden | null>(null);
   const [showTicket, setShowTicket] = useState(false);
@@ -854,6 +886,40 @@ function NuevaOrdenPage() {
                         <div>
                           <strong className="block text-lg">Venta a crédito</strong>
                           Se registrará en el balance de <span className="font-bold">{cliente?.nombre}</span>.
+                        </div>
+                      </div>
+
+                      {/* --- CREDIT LIMIT CARD --- */}
+                      <div className="rounded-[1.75rem] border border-amber-200 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+                          <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800">
+                            PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-6 gap-2.5">
+                          {OPCIONES_CREDITO.map((op) => (
+                            <button
+                              key={op.dias}
+                              type="button"
+                              onClick={() => actualizarLimiteDias(op.dias)}
+                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+                                limiteDiasSel === op.dias
+                                  ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                                  : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                              }`}
+                            >
+                              <span className={`text-xl font-display font-black leading-none mb-1 ${
+                                limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                              }`}>{op.dias}</span>
+                              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                                limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
+                              }`}>DÍAS</span>
+                              {limiteDiasSel === op.dias && (
+                                <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
+                              )}
+                            </button>
+                          ))}
                         </div>
                       </div>
 
@@ -1794,6 +1860,40 @@ function NuevaOrdenPage() {
                           Esta orden se registrará como pendiente de cobro en el balance de <strong>{cliente?.nombre}</strong>.
                         </div>
                       </motion.div>
+
+                      {/* --- CREDIT LIMIT CARD --- */}
+                      <div className="rounded-[1.75rem] border border-amber-200 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                        <div className="flex items-center gap-2 mb-4">
+                          <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+                          <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800">
+                            PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-6 gap-2.5">
+                          {OPCIONES_CREDITO.map((op) => (
+                            <button
+                              key={op.dias}
+                              type="button"
+                              onClick={() => actualizarLimiteDias(op.dias)}
+                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+                                limiteDiasSel === op.dias
+                                  ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                                  : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                              }`}
+                            >
+                              <span className={`text-xl font-display font-black leading-none mb-1 ${
+                                limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                              }`}>{op.dias}</span>
+                              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                                limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
+                              }`}>DÍAS</span>
+                              {limiteDiasSel === op.dias && (
+                                <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
+                              )}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
 
                       <div className="rounded-3xl border-2 border-warning/20 bg-warning/5 p-5 animate-in fade-in slide-in-from-top-1 duration-200">
                         <Label className="mb-2 block text-xs font-black uppercase tracking-widest text-amber-600">

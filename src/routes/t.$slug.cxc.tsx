@@ -45,15 +45,12 @@ const MORA_CONFIG = {
 };
 
 const OPCIONES_LIMITE = [
-  { dias: 7,   label: "7 días" },
   { dias: 10,  label: "10 días" },
   { dias: 15,  label: "15 días" },
-  { dias: 20,  label: "20 días" },
-  { dias: 30,  label: "1 mes" },
+  { dias: 30,  label: "30 días" },
   { dias: 45,  label: "45 días" },
-  { dias: 60,  label: "2 meses" },
-  { dias: 90,  label: "3 meses" },
-  { dias: 180, label: "6 meses" },
+  { dias: 60,  label: "60 días" },
+  { dias: 90,  label: "90 días" },
 ];
 
 function diasAntiguedad(fecha: string) {
