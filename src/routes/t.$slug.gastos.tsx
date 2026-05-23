@@ -1,9 +1,16 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { Plus, Trash2, Download, Printer, FileSpreadsheet } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
-import { ExportAndPrintButtons } from "@/components/klynn/ExportAndPrintButtons";
+import { createPortal } from "react-dom";
+import { exportToCsv } from "@/lib/export";
+import { 
+  DropdownMenu, 
+  DropdownMenuContent, 
+  DropdownMenuItem, 
+  DropdownMenuTrigger 
+} from "@/components/ui/dropdown-menu";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,6 +50,7 @@ function GastosPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("manual");
   const [isElectronic, setIsElectronic] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
 
   const tenant = user?.tenant;
   const tenantId = tenant?.id || '';
@@ -69,35 +77,98 @@ function GastosPage() {
   }, [tenantId, refresh]);
 
   const { data: plans = [] } = usePlans();
-  const plan = plans.find(p => p.id === user.tenant.plan_id) || getTenantPlan(user.tenant);
-  const canSeeFiscal = plan.modulos.facturacion_fiscal;
+  const plan = plans.find(p => p.id === user?.tenant?.plan_id) || (user ? getTenantPlan(user.tenant) : null);
+  const canSeeFiscal = plan?.modulos?.facturacion_fiscal;
+
+  const manualGastos = useMemo(() => gastos.filter(g => !g.is_caja_chica), [gastos]);
+  const cajaChicaGastos = useMemo(() => gastos.filter(g => g.is_caja_chica), [gastos]);
+
+  const exportData = useMemo(() => {
+    if (activeTab === "manual") {
+      return {
+        filename: "Gastos_Manuales",
+        columns: ["Fecha", "Categoría", "Descripción", "Proveedor", "Método de Pago", "Monto"],
+        data: manualGastos.map(g => [
+          formatDateRD(g.fecha),
+          g.categoria,
+          g.descripcion,
+          g.proveedor || "—",
+          g.metodo_pago,
+          formatRD(g.monto)
+        ])
+      };
+    } else if (activeTab === "caja-chica") {
+      return {
+        filename: "Gastos_Caja_Chica",
+        columns: ["Fecha", "Categoría", "Descripción", "Método de Pago", "Monto"],
+        data: cajaChicaGastos.map(g => [
+          formatDateRD(g.fecha),
+          g.categoria,
+          g.descripcion,
+          g.metodo_pago,
+          formatRD(g.monto)
+        ])
+      };
+    } else {
+      return {
+        filename: "Facturas_Fiscales_Recibidas",
+        columns: ["Recepción", "Tipo e-CF", "Emisor (RNC)", "Nombre Emisor", "e-NCF", "Estado Comercial", "Monto Total"],
+        data: recibidos.map(d => [
+          formatDateRD(d.creado_en),
+          d.tipo_ecf,
+          d.rnc_emisor,
+          d.nombre_emisor || "—",
+          d.encf,
+          d.estado_comercial,
+          formatRD(d.monto_total)
+        ])
+      };
+    }
+  }, [activeTab, manualGastos, cajaChicaGastos, recibidos]);
 
   if (!user || user.tenant.id === '__loading__') return null;
 
   const total = gastos.reduce((s, g) => s + g.monto, 0);
-  
-  const manualGastos = gastos.filter(g => !g.is_caja_chica);
-  const cajaChicaGastos = gastos.filter(g => g.is_caja_chica);
 
   const porCategoria = manualGastos.reduce((m, g) => { m[g.categoria] = (m[g.categoria] || 0) + g.monto; return m; }, {} as Record<string, number>);
 
   return (
     <div>
-      <PageHeader title="Gastos" description={`${gastos.length} gastos · ${formatRD(total)}`}>
-        <ExportAndPrintButtons 
-          filename="Gastos" 
-          tenant={user.tenant}
-          columns={["Fecha", "Categoría", "Descripción", "Proveedor", "Método de Pago", "Monto"]}
-          data={gastos.map(g => [
-            formatDateRD(g.fecha),
-            g.categoria,
-            g.descripcion,
-            g.proveedor || "—",
-            g.metodo_pago,
-            formatRD(g.monto)
-          ])}
-        />
-        <Button onClick={() => setShow(true)} className="bg-gradient-primary text-white"><Plus className="mr-1.5 h-4 w-4" /> Nuevo gasto</Button>
+      <PageHeader 
+        title="Gastos" 
+        description={`${activeTab === "manual" ? manualGastos.length : activeTab === "caja-chica" ? cajaChicaGastos.length : recibidos.length} egresos · ${formatRD(activeTab === "manual" ? manualGastos.reduce((s,g)=>s+g.monto,0) : activeTab === "caja-chica" ? cajaChicaGastos.reduce((s,g)=>s+g.monto,0) : recibidos.reduce((s,g)=>s+g.monto_total,0))}`}
+      >
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-sm border-0 transition-all duration-200 active:scale-95">
+                <Download className="h-4 w-4" /> Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-elegant">
+              <DropdownMenuItem 
+                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                onClick={() => exportToCsv(exportData.filename, exportData.columns, exportData.data)}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                onClick={() => setIsPrinting(true)}
+              >
+                <Printer className="h-4 w-4 text-red-600" /> PDF / Impresión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button 
+            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm border-0 transition-all duration-200 active:scale-95" 
+            onClick={() => setIsPrinting(true)}
+          >
+            <Printer className="h-4 w-4" /> Imprimir
+          </Button>
+          <Button onClick={() => setShow(true)} className="bg-gradient-primary text-white"><Plus className="mr-1.5 h-4 w-4" /> Nuevo gasto</Button>
+        </div>
       </PageHeader>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -355,7 +426,266 @@ function GastosPage() {
       </Tabs>
 
       <NewGasto open={show} onOpenChange={setShow} tenantId={user.tenant.id} empleadoId={user.empleado.id} onDone={() => { setRefresh((r) => r + 1); setShow(false); }} />
+
+      {isPrinting && (
+        <GastosPrintPortal 
+          activeTab={activeTab}
+          tenant={user.tenant}
+          manualGastos={manualGastos}
+          cajaChicaGastos={cajaChicaGastos}
+          recibidos={recibidos}
+          onClose={() => setIsPrinting(false)}
+        />
+      )}
     </div>
+  );
+}
+
+function GastosPrintPortal({
+  activeTab,
+  tenant,
+  manualGastos,
+  cajaChicaGastos,
+  recibidos,
+  onClose
+}: {
+  activeTab: string;
+  tenant: any;
+  manualGastos: any[];
+  cajaChicaGastos: any[];
+  recibidos: any[];
+  onClose: () => void;
+}) {
+  const title = activeTab === "manual" 
+    ? "Reporte de Gastos Manuales" 
+    : activeTab === "caja-chica" 
+      ? "Reporte de Caja Chica" 
+      : "Reporte de Facturas Fiscales (e-CF)";
+
+  const isManual = activeTab === "manual";
+  const isCaja = activeTab === "caja-chica";
+  const isFiscal = activeTab === "fiscal";
+
+  // Compute stats for active tab
+  const totalMonto = isManual 
+    ? manualGastos.reduce((s, g) => s + g.monto, 0)
+    : isCaja 
+      ? cajaChicaGastos.reduce((s, g) => s + g.monto, 0)
+      : recibidos.reduce((s, d) => s + d.monto_total, 0);
+
+  const totalCount = isManual 
+    ? manualGastos.length 
+    : isCaja 
+      ? cajaChicaGastos.length 
+      : recibidos.length;
+
+  return createPortal(
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target text-slate-800">
+      <div className="max-w-4xl mx-auto p-8 print:p-12 print:max-w-4xl print:mx-auto">
+        {/* Controles de impresión (ocultos al imprimir) */}
+        <div className="flex justify-between items-center border-b-2 border-primary/20 pb-6 mb-8 print:hidden relative z-[100000]">
+          <Button variant="outline" onClick={onClose} className="gap-2 cursor-pointer">
+            Cerrar Reporte
+          </Button>
+          <Button onClick={() => window.print()} className="bg-primary text-white gap-2 cursor-pointer">
+            <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
+          </Button>
+        </div>
+
+        <div className="print-area">
+          {/* Encabezado */}
+          <div className="flex justify-between items-start mb-10 pb-6 border-b border-slate-200">
+            <div>
+              {tenant.logo_url ? (
+                <img src={tenant.logo_url} alt={tenant.nombre} className="h-16 object-contain mb-4" />
+              ) : (
+                <h1 className="text-4xl font-display font-black text-primary uppercase tracking-tighter mb-1">{tenant.nombre}</h1>
+              )}
+              <div className="text-sm font-bold text-slate-500 uppercase">
+                {tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado"}
+              </div>
+              <div className="text-xs text-slate-500 max-w-sm mt-1">{tenant.direccion}</div>
+              <div className="text-xs text-slate-500">Tel: {tenant.telefono} | {tenant.email}</div>
+            </div>
+
+            <div className="text-right">
+              <h2 className="text-2xl font-display font-black uppercase text-slate-900 mb-1">
+                {title}
+              </h2>
+              <div className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                EGRESOS Y COMPROBANTES
+              </div>
+              <div className="text-xs text-slate-600">
+                <span className="font-bold">Generado:</span> {new Date().toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+              </div>
+            </div>
+          </div>
+
+          {/* Sección 1: KPIs Rápidos */}
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total Egresado</div>
+              <div className="text-xl font-bold text-rose-600">{formatRD(totalMonto)}</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Suma de la pestaña activa</div>
+            </div>
+
+            <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Transacciones</div>
+              <div className="text-xl font-bold text-slate-850">{totalCount} {totalCount === 1 ? 'registro' : 'registros'}</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Cantidad de egresos</div>
+            </div>
+
+            {isFiscal ? (
+              <div className="p-4 border border-slate-200 rounded-xl bg-slate-50 flex justify-between items-center">
+                <div>
+                  <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Aprobados / Rechazados</div>
+                  <div className="text-base font-bold text-slate-800">
+                    <span className="text-emerald-600">{recibidos.filter(d => d.estado_comercial === 'APROBADO').length}</span>
+                    <span className="text-slate-400 mx-1">/</span>
+                    <span className="text-rose-600">{recibidos.filter(d => d.estado_comercial === 'RECHAZADO').length}</span>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
+                <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Método Principal</div>
+                <div className="text-base font-bold text-slate-800">
+                  {(() => {
+                    const list = isManual ? manualGastos : cajaChicaGastos;
+                    const counts = list.reduce((acc, curr) => {
+                      acc[curr.metodo_pago] = (acc[curr.metodo_pago] || 0) + curr.monto;
+                      return acc;
+                    }, {} as Record<string, number>);
+                    const top = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
+                    return top ? `${top[0]} (${formatRD(top[1])})` : "—";
+                  })()}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Sección 2: Tabla de Datos */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden mb-8">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                  {isManual && (
+                    <>
+                      <th className="py-3 px-4">Fecha</th>
+                      <th className="py-3 px-4">Categoría</th>
+                      <th className="py-3 px-4">Descripción</th>
+                      <th className="py-3 px-4">Proveedor</th>
+                      <th className="py-3 px-4">Método</th>
+                      <th className="py-3 px-4 text-right">Monto</th>
+                    </>
+                  )}
+                  {isCaja && (
+                    <>
+                      <th className="py-3 px-4">Fecha</th>
+                      <th className="py-3 px-4">Categoría</th>
+                      <th className="py-3 px-4">Descripción</th>
+                      <th className="py-3 px-4">Método</th>
+                      <th className="py-3 px-4 text-right">Monto</th>
+                    </>
+                  )}
+                  {isFiscal && (
+                    <>
+                      <th className="py-3 px-4">Fecha Recepción</th>
+                      <th className="py-3 px-4">Proveedor (Emisor)</th>
+                      <th className="py-3 px-4">e-NCF</th>
+                      <th className="py-3 px-4 text-center">Estado Comercial</th>
+                      <th className="py-3 px-4 text-right">Monto Total</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {isManual && manualGastos.map((g, i) => (
+                  <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{formatDateRD(g.fecha)}</td>
+                    <td className="py-2.5 px-4"><span className="inline-flex items-center rounded-full bg-slate-100 text-slate-800 px-2 py-0.5 text-[9px] font-bold">{g.categoria}</span></td>
+                    <td className="py-2.5 px-4 font-medium text-slate-850">{g.descripcion}</td>
+                    <td className="py-2.5 px-4 text-slate-500">{g.proveedor || "—"}</td>
+                    <td className="py-2.5 px-4 text-slate-600">{g.metodo_pago}</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-rose-600">{formatRD(g.monto)}</td>
+                  </tr>
+                ))}
+                {isCaja && cajaChicaGastos.map((g, i) => (
+                  <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 text-slate-500 whitespace-nowrap">{formatDateRD(g.fecha)}</td>
+                    <td className="py-2.5 px-4"><span className="inline-flex items-center rounded-full bg-blue-50 text-primary px-2 py-0.5 text-[9px] font-bold">{g.categoria}</span></td>
+                    <td className="py-2.5 px-4 font-medium text-slate-850">{g.descripcion}</td>
+                    <td className="py-2.5 px-4 text-slate-600">{g.metodo_pago}</td>
+                    <td className="py-2.5 px-4 text-right font-bold text-rose-600">{formatRD(g.monto)}</td>
+                  </tr>
+                ))}
+                {isFiscal && recibidos.map((d, i) => (
+                  <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                    <td className="py-2.5 px-4 whitespace-nowrap">
+                      <div className="font-medium text-slate-800">{formatDateRD(d.creado_en)}</div>
+                      <div className="text-[8px] text-slate-400 font-bold uppercase">{d.tipo_ecf}</div>
+                    </td>
+                    <td className="py-2.5 px-4">
+                      <div className="font-bold text-slate-800">{d.nombre_emisor || "Proveedor Electrónico"}</div>
+                      <div className="text-[10px] text-slate-500 font-mono">RNC: {d.rnc_emisor}</div>
+                    </td>
+                    <td className="py-2.5 px-4 font-mono font-bold text-primary">{d.encf}</td>
+                    <td className="py-2.5 px-4 text-center">
+                      <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[9px] font-bold border ${
+                        d.estado_comercial === 'APROBADO' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                        d.estado_comercial === 'RECHAZADO' ? 'bg-rose-50 text-rose-700 border-rose-200' :
+                        'bg-amber-50 text-amber-700 border-amber-200'
+                      }`}>
+                        {d.estado_comercial}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-right font-bold text-slate-900">{formatRD(d.monto_total)}</td>
+                  </tr>
+                ))}
+
+                {totalCount === 0 && (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center text-slate-400 italic">
+                      No hay egresos registrados en esta sección
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pie de página */}
+          <div className="flex justify-between items-end border-t border-slate-200 pt-6 mt-12">
+            <div className="text-left text-[9px] text-slate-400 italic leading-relaxed max-w-sm">
+              Este reporte fue generado de forma automática y es propiedad confidencial.
+            </div>
+            <div className="text-right text-[10px] font-bold text-slate-500">
+              Klynn POS Software
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page { size: portrait; margin: 15mm; }
+          html, body { overflow: visible !important; height: auto !important; background: white !important; }
+          body > *:not(.atomic-print-target) { display: none !important; }
+          .atomic-print-target { 
+            display: block !important; 
+            visibility: visible !important; 
+            position: static !important; 
+            width: 100% !important;
+            height: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .print-area { visibility: visible !important; display: block !important; }
+          .no-print { display: none !important; }
+        }
+      `}} />
+    </div>,
+    document.body
   );
 }
 

@@ -2,11 +2,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, ArrowUpCircle, FileText } from "lucide-react";
+import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, ArrowUpCircle, FileText, Download, FileSpreadsheet } from "lucide-react";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
-import { ExportAndPrintButtons } from "@/components/klynn/ExportAndPrintButtons";
+import { exportToCsv } from "@/lib/export";
 import { EstadoBadge } from "@/components/klynn/TenantShell";
 import { Ticket } from "@/components/klynn/Ticket";
 import { Card } from "@/components/ui/card";
@@ -53,6 +53,7 @@ function OrdenesPage() {
   const [motivoDebito, setMotivoDebito] = useState("");
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
+  const [isPrintingList, setIsPrintingList] = useState(false);
   const navigate = useNavigate();
 
   const tenant = user?.tenant;
@@ -86,6 +87,22 @@ function OrdenesPage() {
       return o.numero.toLowerCase().includes(q.toLowerCase()) || c?.nombre.toLowerCase().includes(q.toLowerCase());
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
   }, [ordenes, clientes, filtroEstado, q]);
+
+  const exportData = useMemo(() => {
+    return {
+      filename: "Ordenes",
+      columns: ["Número", "Cliente", "Estado", "Total", "Saldo", "Pago", "Fecha"],
+      data: filt.map(o => [
+        o.numero, 
+        clientes.find(c => c.id === o.cliente_id)?.nombre || "—",
+        o.estado,
+        formatRD(o.total),
+        formatRD(o.saldo),
+        o.metodo_pago,
+        formatDateTimeRD(o.creado_en)
+      ])
+    };
+  }, [filt, clientes]);
 
   if (!user || user.tenant.id === '__loading__') return null;
 
@@ -282,20 +299,36 @@ function OrdenesPage() {
   return (
     <div>
       <PageHeader title="Órdenes" description={`${ordenes.length} órdenes registradas`}>
-        <ExportAndPrintButtons 
-          filename="Ordenes" 
-          tenant={tenant}
-          columns={["Número", "Cliente", "Estado", "Total", "Saldo", "Pago", "Fecha"]}
-          data={filt.map(o => [
-            o.numero, 
-            clientes.find(c => c.id === o.cliente_id)?.nombre || "—",
-            o.estado,
-            formatRD(o.total),
-            formatRD(o.saldo),
-            o.metodo_pago,
-            formatDateTimeRD(o.creado_en)
-          ])}
-        />
+        <div className="flex items-center gap-2">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button className="gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-sm border-0 transition-all duration-200 active:scale-95">
+                <Download className="h-4 w-4" /> Exportar
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-elegant">
+              <DropdownMenuItem 
+                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                onClick={() => exportToCsv(exportData.filename, exportData.columns, exportData.data)}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                onClick={() => setIsPrintingList(true)}
+              >
+                <Printer className="h-4 w-4 text-red-600" /> PDF / Impresión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <Button 
+            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm border-0 transition-all duration-200 active:scale-95" 
+            onClick={() => setIsPrintingList(true)}
+          >
+            <Printer className="h-4 w-4" /> Imprimir
+          </Button>
+        </div>
       </PageHeader>
 
       {limits.orderLimit !== null && (
@@ -553,6 +586,15 @@ function OrdenesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {isPrintingList && (
+        <OrdenesPrintPortal
+          tenant={user.tenant}
+          ordenes={filt}
+          clientes={clientes}
+          onClose={() => setIsPrintingList(false)}
+        />
+      )}
     </div>
   );
 }
@@ -980,6 +1022,169 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           @page { size: portrait; margin: 20mm; }
+          html, body { overflow: visible !important; height: auto !important; background: white !important; }
+          body > *:not(.atomic-print-target) { display: none !important; }
+          .atomic-print-target { 
+            display: block !important; 
+            visibility: visible !important; 
+            position: static !important; 
+            width: 100% !important;
+            height: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+          }
+          .print-area { visibility: visible !important; display: block !important; }
+          .no-print { display: none !important; }
+        }
+      `}} />
+    </div>,
+    document.body
+  );
+}
+
+function OrdenesPrintPortal({
+  tenant,
+  ordenes,
+  clientes,
+  onClose
+}: {
+  tenant: any;
+  ordenes: any[];
+  clientes: any[];
+  onClose: () => void;
+}) {
+  const totalMontoGlobal = ordenes.reduce((acc, curr) => acc + curr.total, 0);
+  const totalSaldoGlobal = ordenes.reduce((acc, curr) => acc + curr.saldo, 0);
+
+  return createPortal(
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target text-slate-800">
+      <div className="max-w-4xl mx-auto p-8 print:p-12 print:max-w-4xl print:mx-auto">
+        {/* Controles de impresión (ocultos al imprimir) */}
+        <div className="flex justify-between items-center border-b-2 border-primary/20 pb-6 mb-8 print:hidden relative z-[100000]">
+          <Button variant="outline" onClick={onClose} className="gap-2 cursor-pointer">
+            Cerrar Reporte
+          </Button>
+          <Button onClick={() => window.print()} className="bg-primary text-white gap-2 cursor-pointer">
+            <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
+          </Button>
+        </div>
+
+        <div className="print-area">
+          {/* Encabezado */}
+          <div className="flex justify-between items-start mb-10 pb-6 border-b border-slate-200">
+            <div>
+              {tenant.logo_url ? (
+                <img src={tenant.logo_url} alt={tenant.nombre} className="h-16 object-contain mb-4" />
+              ) : (
+                <h1 className="text-4xl font-display font-black text-primary uppercase tracking-tighter mb-1">{tenant.nombre}</h1>
+              )}
+              <div className="text-sm font-bold text-slate-500 uppercase">
+                {tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado"}
+              </div>
+              <div className="text-xs text-slate-500 max-w-sm mt-1">{tenant.direccion}</div>
+              <div className="text-xs text-slate-500">Tel: {tenant.telefono} | {tenant.email}</div>
+            </div>
+
+            <div className="text-right">
+              <h2 className="text-2xl font-display font-black uppercase text-slate-900 mb-1">
+                Reporte de Órdenes
+              </h2>
+              <div className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">
+                HISTÓRICO Y ESTADOS DE SERVICIOS
+              </div>
+              <div className="text-xs text-slate-600">
+                <span className="font-bold">Generado:</span> {new Date().toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}
+              </div>
+            </div>
+          </div>
+
+          {/* Sección 1: KPIs Rápidos */}
+          <div className="grid grid-cols-3 gap-4 mb-8">
+            <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Total de Órdenes</div>
+              <div className="text-xl font-bold text-slate-800">{ordenes.length} {ordenes.length === 1 ? 'orden' : 'órdenes'}</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">En el listado actual</div>
+            </div>
+
+            <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Monto Total Facturado</div>
+              <div className="text-xl font-bold text-emerald-600">{formatRD(totalMontoGlobal)}</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Suma de todas las órdenes</div>
+            </div>
+
+            <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Cuentas por Cobrar (Saldos)</div>
+              <div className="text-xl font-bold text-rose-600">{formatRD(totalSaldoGlobal)}</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Pendiente por cobrar</div>
+            </div>
+          </div>
+
+          {/* Sección 2: Tabla de Datos */}
+          <div className="border border-slate-200 rounded-xl overflow-hidden mb-8">
+            <table className="w-full text-xs text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200 text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                  <th className="py-3 px-4">Número</th>
+                  <th className="py-3 px-4">Cliente</th>
+                  <th className="py-3 px-4 text-center">Estado</th>
+                  <th className="py-3 px-4 text-right">Total</th>
+                  <th className="py-3 px-4 text-right">Saldo</th>
+                  <th className="py-3 px-4 text-center">Método Pago</th>
+                  <th className="py-3 px-4 text-center">Fecha / Hora</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ordenes.map((o, i) => {
+                  const c = clientes.find((x) => x.id === o.cliente_id);
+                  return (
+                    <tr key={i} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/50">
+                      <td className="py-2.5 px-4 font-mono font-bold text-slate-855">{o.numero}</td>
+                      <td className="py-2.5 px-4 font-semibold text-slate-700">{c?.nombre || "—"}</td>
+                      <td className="py-2.5 px-4 text-center">
+                        <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[8px] font-black uppercase border ${
+                          o.estado === 'RECIBIDA' ? 'bg-blue-50 text-blue-700 border-blue-200' :
+                          o.estado === 'EN_PROCESO' ? 'bg-amber-50 text-amber-700 border-amber-200' :
+                          o.estado === 'LISTA' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' :
+                          o.estado === 'ENTREGADA' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                          'bg-rose-50 text-rose-700 border-rose-200'
+                        }`}>
+                          {o.estado.replace('_', ' ')}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-4 text-right font-semibold text-slate-700">{formatRD(o.total)}</td>
+                      <td className={`py-2.5 px-4 text-right font-bold ${o.saldo > 0 ? "text-rose-600" : "text-slate-500"}`}>{o.saldo > 0 ? formatRD(o.saldo) : "—"}</td>
+                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{o.metodo_pago}</td>
+                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatDateTimeRD(o.creado_en)}</td>
+                    </tr>
+                  );
+                })}
+
+                {ordenes.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="py-12 text-center text-slate-400 italic">
+                      No hay órdenes registradas que coincidan con los filtros
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pie de página */}
+          <div className="flex justify-between items-end border-t border-slate-200 pt-6 mt-12">
+            <div className="text-left text-[9px] text-slate-400 italic leading-relaxed max-w-sm">
+              Este reporte fue generado de forma automática y es propiedad confidencial.
+            </div>
+            <div className="text-right text-[10px] font-bold text-slate-500">
+              Klynn POS Software
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page { size: portrait; margin: 15mm; }
           html, body { overflow: visible !important; height: auto !important; background: white !important; }
           body > *:not(.atomic-print-target) { display: none !important; }
           .atomic-print-target { 

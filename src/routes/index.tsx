@@ -704,6 +704,11 @@ function LandingPage() {
                       )}
                     </Feature>
                     <Feature on={plan.modulos.logistica}>Logística y Repartidores</Feature>
+                    <Feature on>Clientes ilimitados</Feature>
+                    <Feature on>Generación de reportes</Feature>
+                    <Feature on>Actualizaciones de software</Feature>
+                    <Feature on>Cuentas x cobrar</Feature>
+                    <Feature on>Impresión A4/80mm</Feature>
                   </ul>
 
                   {polarUrl ? (

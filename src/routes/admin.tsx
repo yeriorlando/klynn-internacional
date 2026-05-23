@@ -118,6 +118,7 @@ function AdminPage() {
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
   const [editingLicencia, setEditingLicencia] = useState<LicenciaLocal | null>(null);
+  const [deleteLicencia, setDeleteLicencia] = useState<LicenciaLocal | null>(null);
 
   useEffect(() => {
     async function load() {
@@ -482,13 +483,7 @@ function AdminPage() {
                           <Button size="icon" variant="ghost" onClick={() => { setEditingLicencia(l); setOpenLicenciaModal(true); }}>
                             <Pencil className="h-4 w-4" />
                           </Button>
-                          <Button size="icon" variant="ghost" onClick={async () => {
-                            if(confirm("¿Eliminar licencia? Esta lavandería dejará de funcionar la próxima vez que se conecte a internet.")) {
-                              await deleteLicenciaLocal(l.id);
-                              setTick(t => t + 1);
-                              toast.success("Licencia eliminada");
-                            }
-                          }}>
+                          <Button size="icon" variant="ghost" onClick={() => setDeleteLicencia(l)}>
                             <Trash2 className="h-4 w-4 text-destructive" />
                           </Button>
                         </td>
@@ -678,6 +673,33 @@ function AdminPage() {
         <PlanDialog open={openPlan} onOpenChange={setOpenPlan} initial={editingPlan} onSaved={() => { setTick((r) => r + 1); setOpenPlan(false); }} />
         <BankDetailsDialog open={openBank} onOpenChange={setOpenBank} config={globalConfig} onSaved={() => { setTick((r) => r + 1); setOpenBank(false); }} />
         <LicenciaDialog open={openLicenciaModal} onOpenChange={setOpenLicenciaModal} initial={editingLicencia} onSaved={() => { setTick(r => r + 1); setOpenLicenciaModal(false); }} />
+
+        <AlertDialog open={!!deleteLicencia} onOpenChange={(o) => !o && setDeleteLicencia(null)}>
+          <AlertDialogContent className="rounded-2xl border-none shadow-card">
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar licencia local?</AlertDialogTitle>
+              <AlertDialogDescription>
+                La lavandería <strong className="text-foreground">{deleteLicencia?.nombre_lavanderia}</strong> dejará de funcionar localmente la próxima vez que se conecte a internet.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={async () => {
+                  if (deleteLicencia) {
+                    await deleteLicenciaLocal(deleteLicencia.id);
+                    setTick(t => t + 1);
+                    toast.success("Licencia eliminada");
+                    setDeleteLicencia(null);
+                  }
+                }}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl"
+              >
+                Eliminar Licencia
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
     </div>
   );
 }

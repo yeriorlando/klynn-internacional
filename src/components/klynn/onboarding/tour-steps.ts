@@ -17,6 +17,14 @@ export const SIDEBAR_TOUR: PageTour = {
       }
     },
     {
+      element: "#tour-nav-conversations",
+      popover: {
+        title: "💬 Conversaciones WhatsApp",
+        description: "Mantén contacto directo con tus clientes. Chatea y envía notificaciones automáticas desde un solo canal central.",
+        side: "right"
+      }
+    },
+    {
       element: "#tour-nav-dashboard",
       popover: {
         title: "📊 Panel de Control",

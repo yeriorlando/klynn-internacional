@@ -517,6 +517,11 @@ function ConfigPage() {
                           </div>
                         );
                       })}
+                      <div className="text-xs flex items-center gap-2">✅ Clientes ilimitados</div>
+                      <div className="text-xs flex items-center gap-2">✅ Generación de reportes</div>
+                      <div className="text-xs flex items-center gap-2">✅ Actualizaciones de software</div>
+                      <div className="text-xs flex items-center gap-2">✅ Cuentas x cobrar</div>
+                      <div className="text-xs flex items-center gap-2">✅ Impresión A4/80mm</div>
                     </div>
 
                         <Button 

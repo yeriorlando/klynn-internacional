@@ -223,6 +223,7 @@ function RegistroPage() {
 
     try {
       await registerTenant(tenant, admin);
+      localStorage.setItem("klynn_tour_is_new_registration", "true");
       setActiveTenant(tenant.slug);
       setCreatedTenant(tenant);
 

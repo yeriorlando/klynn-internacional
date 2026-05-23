@@ -627,10 +627,16 @@ function UserMenu({ nombre, rol, empleadoId, onLogout }: { nombre: string; rol: 
               <div className="text-xs text-muted-foreground">{rol}</div>
             </div>
             <button 
-              onClick={() => { resetTours(empleadoId); setOpen(false); }} 
+              onClick={() => { window.open("https://wa.link/53y31w", "_blank"); setOpen(false); }} 
               className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
             >
-              <HelpCircle className="h-4 w-4" /> Ver Tour de nuevo
+              <MessageCircle className="h-4 w-4 text-emerald-500 animate-pulse" /> Soporte
+            </button>
+            <button 
+              onClick={() => { toast.info("Tutoriales y guías próximamente 🚀"); setOpen(false); }} 
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
+            >
+              <BookOpen className="h-4 w-4 text-blue-500" /> Tutoriales y guías
             </button>
             <button onClick={onLogout} className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-destructive hover:bg-accent">
               <LogOut className="h-4 w-4" /> Cerrar sesión

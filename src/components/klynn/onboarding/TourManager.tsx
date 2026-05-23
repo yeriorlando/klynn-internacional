@@ -46,6 +46,9 @@ export function TourManager({ userId }: { userId: string }) {
   };
 
   const handleTour = () => {
+    const isNewRegistration = localStorage.getItem("klynn_tour_is_new_registration") === "true";
+    if (!isNewRegistration) return; // Only show to newly registered users!
+
     const tourKey = `klynn_tour_sidebar_${userId}`;
     const sidebarDone = localStorage.getItem(tourKey);
 
@@ -68,6 +71,7 @@ export function TourManager({ userId }: { userId: string }) {
       onDestroyed: () => {
         // Marcar como completado SOLO cuando se cierra o termina
         localStorage.setItem(tourKey, "true");
+        localStorage.removeItem("klynn_tour_is_new_registration");
         fireConfetti();
       }
     });
