@@ -44,6 +44,7 @@ import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { LandingNavbar } from "@/components/klynn/LandingNavbar";
 import { PLANS as STATIC_PLANS, formatRD, getPlans, type Plan } from "@/lib/storage";
+import DRMap from "@/components/klynn/DRMap";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -598,7 +599,7 @@ function LandingPage() {
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {[
-              { icon: Building2, t: "Lavanderías de barrio", d: "Manejas 30–80 órdenes al día. Necesitas cobrar rápido, imprimir ticket y no perder prendas. Klynn te lo resuelve desde RD$1,500/mes." },
+              { icon: Building2, t: "Lavanderías de barrio", d: "Manejas 30–80 órdenes al día. Necesitas cobrar rápido, imprimir ticket y no perder prendas. Klynn te lo resuelve desde RD$2,500/mes." },
               { icon: TrendingUp, t: "Cadenas multi-sucursal", d: "Tienes 2 o más locales en Santo Domingo, Santiago o la zona Este. Consolida ventas, inventario y empleados en un solo panel." },
               { icon: Star, t: "Lavanderías premium", d: "Tintorería, sastrería, planchado fino y entrega a domicilio. Cobra como hotel 5 estrellas con tickets y WhatsApp de marca." },
             ].map((s) => (
@@ -761,6 +762,8 @@ function LandingPage() {
           ))}
         </div>
       </section>
+
+      <DRMap />
 
       {/* FAQ */}
       <section id="faq" className="border-y border-border bg-surface-elevated">
