@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
 import { useMemo, useState, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
@@ -196,6 +197,7 @@ function NuevaOrdenPage() {
 
   const [creada, setCreada] = useState<Orden | null>(null);
   const [showTicket, setShowTicket] = useState(false);
+  const [showPrintPortal, setShowPrintPortal] = useState<Orden | null>(null);
 
   async function handleSelectGeneric(tipo: "Persona" | "Empresa") {
     const isPersona = tipo === "Persona";
@@ -1990,10 +1992,24 @@ function NuevaOrdenPage() {
           )}
           <DialogFooter>
             <Button variant="outline" onClick={() => navigate({ to: "/t/$slug/ordenes", params: { slug: tenant.slug } })}>Cerrar</Button>
-            <Button onClick={() => window.print()} className="bg-gradient-primary text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir</Button>
+            <Button onClick={() => setShowPrintPortal(creada)} className="bg-gradient-primary text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {showPrintPortal && (
+        <TicketPrintPortal 
+          orden={showPrintPortal} 
+          tenant={tenant} 
+          cliente={cliente} 
+          empleado={empleado} 
+          serviciosList={servicios} 
+          onClose={() => {
+            setShowPrintPortal(null);
+            navigate({ to: "/t/$slug/ordenes", params: { slug: tenant.slug } });
+          }} 
+        />
+      )}
       <PlanLimitModal
         open={showLimitModal}
         onOpenChange={setShowLimitModal}
@@ -2395,5 +2411,96 @@ function DiscountPOSDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function TicketPrintPortal({ 
+  orden, 
+  tenant, 
+  cliente, 
+  empleado, 
+  serviciosList, 
+  onClose 
+}: { 
+  orden: Orden; 
+  tenant: any; 
+  cliente: any; 
+  empleado: any; 
+  serviciosList: any[]; 
+  onClose: () => void 
+}) {
+  return createPortal(
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
+      <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
+        <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000]">
+          <Button 
+            variant="outline" 
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
+            className="cursor-pointer"
+          >
+            Cerrar vista de impresión
+          </Button>
+          <Button 
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }} 
+            className="bg-primary text-white gap-2 cursor-pointer"
+          >
+            <Printer className="h-4 w-4" /> Imprimir ahora
+          </Button>
+        </div>
+
+        <Ticket 
+          orden={orden} 
+          tenant={tenant} 
+          empleado={empleado} 
+          cliente={cliente} 
+          formato={tenant.config?.formato_ticket || "80mm"} 
+          serviciosList={serviciosList}
+        />
+      </div>
+
+      <style dangerouslySetInnerHTML={{ __html: `
+        @media print {
+          @page {
+            size: ${tenant.config?.formato_ticket === "57mm" ? "57mm auto" : "80mm auto"};
+            margin: 0;
+          }
+
+          html,
+          body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff;
+            overflow: visible !important;
+            height: auto !important;
+          }
+
+          /* Ocultar todo el sitio */
+          body > *:not(.atomic-print-target) { display: none !important; }
+
+          /* Mostrar solo el ticket */
+          .atomic-print-target {
+            display: block !important;
+            visibility: visible !important;
+            position: static !important;
+            width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"} !important;
+            max-width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"} !important;
+            padding: ${tenant.config?.formato_ticket === "57mm" ? "2.5mm" : "4mm"};
+            margin: 0 auto !important;
+            background: white;
+            color: black;
+            font-family: monospace;
+            font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};
+            line-height: ${tenant.config?.formato_ticket === "57mm" ? "1.2" : "1.3"};
+            box-sizing: border-box;
+          }
+
+          .no-print, nav, aside, header, footer, button {
+            display: none !important;
+          }
+        }
+      `}} />
+    </div>,
+    document.body
   );
 }

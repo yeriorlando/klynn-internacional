@@ -249,6 +249,8 @@ body.pos-mode .main-header {
     display: block !important;
     position: relative !important;
     margin: 0 auto !important;
+    width: 100% !important;
+    max-width: 100% !important;
     box-shadow: none !important;
   }
   
