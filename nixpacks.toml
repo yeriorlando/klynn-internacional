@@ -1,0 +1,3 @@
+# Nixpacks configuration to override provider detection
+# By forcing "node", we ignore Deno detection triggered by Supabase Edge Functions
+providers = ["node"]
