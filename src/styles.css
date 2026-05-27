@@ -259,6 +259,7 @@ body.pos-mode .main-header {
     position: relative !important;
     width: 100% !important;
     margin: 0 !important;
+    padding: 10mm !important;
     background-color: white !important;
     color: black !important;
     min-height: 100vh;
@@ -270,5 +271,7 @@ body.pos-mode .main-header {
     print-color-adjust: exact !important;
   }
 
-  @page { margin: 10mm; }
+  @page { 
+    margin: 0 !important; 
+  }
 }

@@ -175,11 +175,11 @@ export class ProneSoftClient {
   }
 }
 
-export function getProneSoftClient(tenantId?: string, forceEnv?: 'sandbox' | 'production'): ProneSoftClient {
+export function getProneSoftClient(tenantId?: string, forceEnv?: 'sandbox' | 'production', customClientId?: string, customClientSecret?: string): ProneSoftClient {
   const env = forceEnv || (import.meta.env.VITE_PRONESOFT_ENV as 'sandbox' | 'production') || 'sandbox';
   return new ProneSoftClient({
-    clientId: import.meta.env.VITE_PRONESOFT_CLIENT_ID ?? '',
-    clientSecret: import.meta.env.VITE_PRONESOFT_CLIENT_SECRET ?? '',
+    clientId:     customClientId || import.meta.env.VITE_PRONESOFT_CLIENT_ID     || '',
+    clientSecret: customClientSecret || import.meta.env.VITE_PRONESOFT_CLIENT_SECRET || '',
     env,
     tenantId,
   });

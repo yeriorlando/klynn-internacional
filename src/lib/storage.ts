@@ -219,6 +219,9 @@ export interface ECFConfig {
   api_token_expires_at?: string;
   // Pronesoft multi-empresa
   pronesoft_tenant_id?: string;  // x-tenant-id (UUID asignado por Pronesoft a este negocio)
+  usar_credenciales_propias?: boolean;
+  pronesoft_client_id?: string;
+  pronesoft_client_secret?: string;
   updated_at: string;
 }
 
@@ -332,6 +335,7 @@ export interface CatalogoItem {
   imagen_url?: string;
   icono?: string;
   es_muestra?: boolean;
+  permitir_desglose?: boolean;
 }
 
 export interface Servicio {
@@ -345,6 +349,7 @@ export interface Servicio {
   precio: number;
   is_exento?: boolean;
   es_muestra?: boolean;
+  permitir_desglose?: boolean;
 }
 
 const KEY = {

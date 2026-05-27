@@ -1252,17 +1252,19 @@ function NuevaOrdenPage() {
                         </Button>
                       </div>
                       <div className="flex justify-between items-center">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/10 rounded-md gap-1"
-                          onClick={() => {
-                            setIndexDesglose(-1);
-                            setShowDesgloseDialog(true);
-                          }}
-                        >
-                          <Plus className="h-2.5 w-2.5" /> Detalle
-                        </Button>
+                        {srv.permitir_desglose ? (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-6 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/10 rounded-md gap-1"
+                            onClick={() => {
+                              setIndexDesglose(-1);
+                              setShowDesgloseDialog(true);
+                            }}
+                          >
+                            <Plus className="h-2.5 w-2.5" /> Detalle
+                          </Button>
+                        ) : <div />}
                         <div className="text-xs font-black text-primary">
                           {formatRD(srv.precio || 0)}
                         </div>
@@ -1273,6 +1275,7 @@ function NuevaOrdenPage() {
                   {/* Prendas (Items) */}
                   {items.map((it, i) => {
                     const isDetail = it.descripcion.startsWith("↳");
+                    const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
                     return (
                       <div key={i} className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all ${
                         isDetail ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground" : "bg-card shadow-sm hover:border-primary/25"
@@ -1301,17 +1304,19 @@ function NuevaOrdenPage() {
                                 <Plus className="h-2.5 w-2.5" />
                               </Button>
                               
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="h-6 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/10 rounded-md gap-1 ml-1"
-                                onClick={() => {
-                                  setIndexDesglose(i);
-                                  setShowDesgloseDialog(true);
-                                }}
-                              >
-                                <Plus className="h-2.5 w-2.5" /> Detalle
-                              </Button>
+                              {catalogMatch?.permitir_desglose && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/10 rounded-md gap-1 ml-1"
+                                  onClick={() => {
+                                    setIndexDesglose(i);
+                                    setShowDesgloseDialog(true);
+                                  }}
+                                >
+                                  <Plus className="h-2.5 w-2.5" /> Detalle
+                                </Button>
+                              )}
                             </div>
                           )}
                           <div className="text-xs font-black text-primary">
@@ -1537,23 +1542,27 @@ function NuevaOrdenPage() {
                             <span>🧺</span> Servicio: {srv.nombre}
                           </div>
                           <div className="text-xs text-muted-foreground">
-                            Servicio de la orden · Haz clic en "+" para detallar sus prendas
+                            {srv.permitir_desglose 
+                              ? "Servicio de la orden · Haz clic en \"+\" para detallar sus prendas"
+                              : "Servicio de la orden"}
                           </div>
                         </div>
                         <div className="font-display text-base sm:text-lg font-bold text-primary">{formatRD(srv.precio || 0)}</div>
                         <div className="flex items-center gap-1">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-primary hover:bg-primary/10 rounded-md"
-                            title={`Desglosar prendas para el servicio ${srv.nombre}`}
-                            onClick={() => {
-                              setIndexDesglose(-1);
-                              setShowDesgloseDialog(true);
-                            }}
-                          >
-                            <Plus className="h-4 w-4" />
-                          </Button>
+                          {srv.permitir_desglose && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-primary hover:bg-primary/10 rounded-md"
+                              title={`Desglosar prendas para el servicio ${srv.nombre}`}
+                              onClick={() => {
+                                setIndexDesglose(-1);
+                                setShowDesgloseDialog(true);
+                              }}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          )}
                           <Button
                             variant="ghost"
                             size="icon"
@@ -1569,6 +1578,7 @@ function NuevaOrdenPage() {
                     {/* Items normal */}
                     {items.map((it, i) => {
                       const isDetail = it.descripcion.startsWith("↳");
+                      const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
                       return (
                         <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-all ${
                           isDetail ? "bg-accent/5 ml-8 border-dashed border-primary/20 text-muted-foreground" : "bg-surface-elevated"
@@ -1585,7 +1595,7 @@ function NuevaOrdenPage() {
                           </div>
                           <div className="font-display text-lg">{isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}</div>
                           <div className="flex items-center gap-1">
-                            {!isDetail && (
+                            {!isDetail && catalogMatch?.permitir_desglose && (
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -2337,8 +2347,14 @@ function DiscountPOSDialog({
 }) {
   const [val, setVal] = useState(discount > 0 ? String(discount) : "");
 
+  useEffect(() => {
+    if (open) {
+      setVal(discount > 0 ? String(discount) : "");
+    }
+  }, [open, discount]);
+
   function apply() {
-    setDiscount(Number(val) || 0);
+    setDiscount(parseAmount(val) || 0);
     onOpenChange(false);
   }
 

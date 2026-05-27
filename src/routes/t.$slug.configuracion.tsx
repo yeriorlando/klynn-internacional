@@ -1095,7 +1095,12 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
     setLoading(true);
     try {
       const proneSoftEnv = config?.ambiente === 'pruebas' ? 'sandbox' : config?.ambiente === 'produccion' ? 'production' : undefined;
-      const client = getProneSoftClient(config?.pronesoft_tenant_id, proneSoftEnv);
+      const client = getProneSoftClient(
+        config?.pronesoft_tenant_id, 
+        proneSoftEnv,
+        draft.usar_credenciales_propias ? draft.pronesoft_client_id : undefined,
+        draft.usar_credenciales_propias ? draft.pronesoft_client_secret : undefined
+      );
       const res = await client.testConnection();
       if (res.ok) {
         toast.success("¡Conexión con Pronesoft exitosa! ✓");
@@ -1278,7 +1283,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                   <div className="flex items-center justify-between p-3 border rounded-xl bg-accent/10">
                     <div className="space-y-0.5">
                       <div className="text-sm font-bold">Ambiente DGII</div>
-                      <div className="text-xs text-muted-foreground">Pruebas u Producción.</div>
+                      <div className="text-xs text-muted-foreground">Pruebas o Producción.</div>
                     </div>
                     <Select value={draft.ambiente} onValueChange={(v: any) => setDraft({ ...draft, ambiente: v })}>
                       <SelectTrigger className="w-32 h-9 rounded-lg"><SelectValue /></SelectTrigger>
@@ -1287,6 +1292,51 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                         <SelectItem value="produccion">PRODUCCIÓN</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                )}
+
+                {isElectronic && (
+                  <div className="space-y-4 pt-4 pb-2 border-y">
+                    <div className="flex items-center justify-between">
+                      <div className="space-y-0.5">
+                        <div className="text-sm font-bold flex items-center gap-1.5 text-foreground">
+                          <Key className="h-4 w-4 text-primary" /> Usar credenciales propias (Pronesoft)
+                        </div>
+                        <div className="text-xs text-muted-foreground">
+                          Activa esta opción si tienes tu propia cuenta en Pronesoft.
+                        </div>
+                      </div>
+                      <Switch 
+                        checked={!!draft.usar_credenciales_propias} 
+                        onCheckedChange={(v) => setDraft({ ...draft, usar_credenciales_propias: v })} 
+                      />
+                    </div>
+                    
+                    {draft.usar_credenciales_propias && (
+                      <div className="space-y-4 pt-2">
+                        <Field label="Client ID (Pronesoft)">
+                          <Input 
+                            type="password"
+                            className={FIELD} 
+                            value={draft.pronesoft_client_id || ""} 
+                            onChange={(e) => setDraft({ ...draft, pronesoft_client_id: e.target.value })} 
+                            placeholder="app_live_..."
+                          />
+                        </Field>
+                        <Field label="Client Secret (Pronesoft)">
+                          <Input 
+                            type="password"
+                            className={FIELD} 
+                            value={draft.pronesoft_client_secret || ""} 
+                            onChange={(e) => setDraft({ ...draft, pronesoft_client_secret: e.target.value })} 
+                            placeholder="sk_live_..."
+                          />
+                        </Field>
+                        <p className="text-[10px] text-muted-foreground leading-tight">
+                          Estas credenciales se guardan de forma segura en tu tenant de Klynn. Puedes encontrarlas en tu panel de Pronesoft.
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )}
 

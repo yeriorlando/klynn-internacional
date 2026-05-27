@@ -375,7 +375,7 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
   
   useEffect(() => { 
     if (open) {
-      setF(initial ? { ...initial } : { categoria: "", nombre: "", precio: 0, activo: true, icono: "👕", is_exento: false, es_muestra: false });
+      setF(initial ? { ...initial } : { categoria: "", nombre: "", precio: 0, activo: true, icono: "👕", is_exento: false, es_muestra: false, permitir_desglose: false });
       setMode(initial?.imagen_url ? "image" : "emoji");
       setImgError(false);
       setIconSearch("");
@@ -433,6 +433,7 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
       activo: f.activo ?? true,
       is_exento: !!f.is_exento,
       es_muestra: !!f.es_muestra,
+      permitir_desglose: !!f.permitir_desglose,
       icono: mode === "emoji" ? f.icono : undefined,
       imagen_url: mode === "image" ? f.imagen_url : undefined,
     };
@@ -493,10 +494,10 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
                   </div>
                 </div>
                 <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-border/60 shadow-sm col-span-2">
-                  <Switch checked={!!f.es_muestra} onCheckedChange={(v) => setF({ ...f, es_muestra: v })} />
+                  <Switch checked={!!f.permitir_desglose} onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })} />
                   <div className="space-y-0.5">
-                    <Label className="text-sm font-bold">Es Muestra</Label>
-                    <p className="text-[11px] text-muted-foreground leading-none">Marcar como producto de muestra o ejemplo.</p>
+                    <Label className="text-sm font-bold">Habilitar desglose</Label>
+                    <p className="text-[11px] text-muted-foreground leading-none">Permitir desglosar esta prenda al crear una orden.</p>
                   </div>
                 </div>
               </div>
@@ -639,7 +640,7 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
 
   useEffect(() => { 
     if (open) {
-      setF(initial ? { ...initial } : { nombre: "", descripcion: "", icono: "🧺", activo: true, precio: 0, is_exento: false, es_muestra: false });
+      setF(initial ? { ...initial } : { nombre: "", descripcion: "", icono: "🧺", activo: true, precio: 0, is_exento: false, es_muestra: false, permitir_desglose: false });
       setMode(initial?.imagen_url ? "image" : "emoji");
       setImgError(false);
       setIconSearch("");
@@ -698,6 +699,7 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
       activo: f.activo ?? true,
       precio: Number(f.precio) || 0,
       is_exento: !!f.is_exento,
+      permitir_desglose: !!f.permitir_desglose,
     };
     await saveServicio(s);
     toast.success(isCloning ? "Servicio personalizado para tu catálogo" : (initial ? "Servicio actualizado" : "Servicio creado"));
@@ -744,6 +746,13 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
                   <div className="space-y-0">
                     <Label className="text-xs font-bold text-primary">Servicio Activo</Label>
                     <p className="text-[10px] text-muted-foreground leading-none">Disponible.</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-border/60 shadow-sm col-span-2">
+                  <Switch checked={!!f.permitir_desglose} onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })} />
+                  <div className="space-y-0">
+                    <Label className="text-xs font-bold text-primary">Habilitar desglose</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">Permitir desglosar este servicio al crear una orden.</p>
                   </div>
                 </div>
               </div>

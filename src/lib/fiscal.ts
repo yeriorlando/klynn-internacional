@@ -64,7 +64,18 @@ export async function emitirECF(
   const payload = ordenToECFPayload(orden, cliente, config, tipoECF, reference);
 
   // 2. Obtener cliente Pronesoft (usa VITE_PRONESOFT_ENV del .env para determinar sandbox/production)
-  const client = getProneSoftClient(ecfTenantId);
+  let customClientId: string | undefined = undefined;
+  let customClientSecret: string | undefined = undefined;
+  try {
+    const ecfConf = await getECFConfig(tenant.id);
+    if (ecfConf?.usar_credenciales_propias) {
+      customClientId = ecfConf.pronesoft_client_id;
+      customClientSecret = ecfConf.pronesoft_client_secret;
+    }
+  } catch (e) {
+    console.error("Error al buscar ECFConfig del tenant:", e);
+  }
+  const client = getProneSoftClient(ecfTenantId, undefined, customClientId, customClientSecret);
 
   // 3. Enviar a Pronesoft → DGII
   let response: ECFSubmitResponse;
@@ -151,7 +162,12 @@ export async function registerTenantInPronesoft(tenantId: string): Promise<strin
   const { data: tenantData } = await supabase.from('tenants').select('nombre').eq('id', tenantId).single();
 
   const proneSoftEnv = config.ambiente === 'pruebas' ? 'sandbox' : config.ambiente === 'produccion' ? 'production' : undefined;
-  const client = getProneSoftClient(undefined, proneSoftEnv);
+  const client = getProneSoftClient(
+    undefined, 
+    proneSoftEnv,
+    config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
+    config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+  );
 
   const companyName = config.razon_social || tenantData?.nombre || "Lavanderia Klynn";
 
@@ -194,7 +210,12 @@ export async function uploadCertificateToPronesoft(
   }
 
   const proneSoftEnv2 = config.ambiente === 'pruebas' ? 'sandbox' : config.ambiente === 'produccion' ? 'production' : undefined;
-  const client = getProneSoftClient(config.pronesoft_tenant_id, proneSoftEnv2);
+  const client = getProneSoftClient(
+    config.pronesoft_tenant_id, 
+    proneSoftEnv2,
+    config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
+    config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+  );
   const res = await client.uploadCertificate({
     certificate: base64,
     password: password,
@@ -211,7 +232,9 @@ export async function importSequencesToPronesoft(
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
     config?.pronesoft_tenant_id,
-    config?.ambiente === 'pruebas' ? 'sandbox' : 'production'
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
   );
   const res = await client.importSequences(fileBase64);
   return res.ok;
