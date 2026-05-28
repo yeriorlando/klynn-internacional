@@ -2482,7 +2482,8 @@ function TicketPrintPortal({
           .atomic-print-target {
             display: block !important;
             visibility: visible !important;
-            position: static !important;
+            position: relative !important;
+            left: -2mm !important;
             width: 100% !important;
             max-width: ${tenant.config?.formato_ticket === "57mm" ? "52mm" : "72mm"} !important;
             padding: ${tenant.config?.formato_ticket === "57mm" ? "1.5mm" : "2mm"} !important;
