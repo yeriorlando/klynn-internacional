@@ -126,6 +126,8 @@ export async function notificarWhatsApp(
       ? `${humanizeDate(orden.fecha_entrega, true)} (${tenant.config?.tiempo_entrega_urgente || 3} HORAS)`
       : humanizeDate(orden.fecha_entrega, false),
     estado: orden.estado,
+    ticket_pie: tenant.config?.ticket_pie || "¡Gracias por su preferencia!",
+    ticket_nota: tenant.config?.ticket_nota || "",
   });
 
     const phone = normalizePhoneRD(cliente.telefono);

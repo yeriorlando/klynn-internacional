@@ -145,6 +145,18 @@ function ConfigPage() {
       toast.error("Error al guardar configuración: " + (err.message || "desconocido"));
     }
   }
+  function updateCfg(c: Partial<TenantConfig>) {
+    setTenant(prev => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        config: {
+          ...(prev.config || DEFAULT_CONFIG),
+          ...c
+        }
+      };
+    });
+  }
   async function saveWA(w: Partial<WhatsAppConfig>) {
     await saveCfg({ whatsapp: { ...wa, ...w } });
   }
@@ -326,7 +338,7 @@ function ConfigPage() {
           <Card className={CARD}>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field label="Formato impresora">
-                <Select value={cfg.formato_ticket} onValueChange={(v: any) => saveCfg({ formato_ticket: v })}>
+                <Select value={cfg.formato_ticket} onValueChange={(v: any) => updateCfg({ formato_ticket: v })}>
                   <SelectTrigger className="rounded-xl border-input">
                     <SelectValue placeholder="Seleccionar formato" />
                   </SelectTrigger>
@@ -338,7 +350,7 @@ function ConfigPage() {
               </Field>
 
               <Field label="Tiempo de entrega estándar">
-                <Select value={String(cfg.tiempo_entrega_estandar || 24)} onValueChange={(v) => saveCfg({ tiempo_entrega_estandar: Number(v) })}>
+                <Select value={String(cfg.tiempo_entrega_estandar || 24)} onValueChange={(v) => updateCfg({ tiempo_entrega_estandar: Number(v) })}>
                   <SelectTrigger className="rounded-xl border-input">
                     <SelectValue />
                   </SelectTrigger>
@@ -352,7 +364,7 @@ function ConfigPage() {
               </Field>
 
               <Field label="Tiempo de entrega URGENTE">
-                <Select value={String(cfg.tiempo_entrega_urgente || 6)} onValueChange={(v) => saveCfg({ tiempo_entrega_urgente: Number(v) })}>
+                <Select value={String(cfg.tiempo_entrega_urgente || 6)} onValueChange={(v) => updateCfg({ tiempo_entrega_urgente: Number(v) })}>
                   <SelectTrigger className="rounded-xl border-input">
                     <SelectValue />
                   </SelectTrigger>
@@ -369,7 +381,7 @@ function ConfigPage() {
                 <Textarea 
                   className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
                   value={cfg.ticket_pie || ""} 
-                  onChange={(e) => saveCfg({ ticket_pie: e.target.value })} 
+                  onChange={(e) => updateCfg({ ticket_pie: e.target.value })} 
                   rows={2} 
                 />
               </Field>
@@ -378,7 +390,7 @@ function ConfigPage() {
                 <Textarea 
                   className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
                   value={cfg.ticket_nota || ""} 
-                  onChange={(e) => saveCfg({ ticket_nota: e.target.value })} 
+                  onChange={(e) => updateCfg({ ticket_nota: e.target.value })} 
                   rows={2} 
                   placeholder="Mensaje o nota adicional que aparecerá debajo del pie de página del ticket..."
                 />
@@ -388,7 +400,7 @@ function ConfigPage() {
                 <span className="text-sm font-medium">Mostrar empleado en ticket</span>
                 <Switch 
                   checked={cfg.ticket_mostrar_empleado} 
-                  onCheckedChange={(v) => saveCfg({ ticket_mostrar_empleado: v })} 
+                  onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
                 />
               </label>
             </div>
@@ -402,13 +414,13 @@ function ConfigPage() {
           <Card className={CARD}>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label="Recargo urgencia %">
-                <Input className={FIELD} type="number" value={cfg.recargo_urgencia} onChange={(e) => saveCfg({ recargo_urgencia: Number(e.target.value) })} />
+                <Input className={FIELD} type="number" value={cfg.recargo_urgencia} onChange={(e) => updateCfg({ recargo_urgencia: Number(e.target.value) })} />
               </Field>
               <Field label="Umbral diferencia caja (RD$)">
-                <Input className={FIELD} value={formatAmountInput(String(cfg.umbral_diferencia_caja))} onChange={(e) => saveCfg({ umbral_diferencia_caja: parseAmount(e.target.value) })} />
+                <Input className={FIELD} value={formatAmountInput(String(cfg.umbral_diferencia_caja))} onChange={(e) => updateCfg({ umbral_diferencia_caja: parseAmount(e.target.value) })} />
               </Field>
               <Field label="Máx caja chica (RD$)">
-                <Input className={FIELD} value={formatAmountInput(String(cfg.monto_max_caja_chica))} onChange={(e) => saveCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} />
+                <Input className={FIELD} value={formatAmountInput(String(cfg.monto_max_caja_chica))} onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} />
               </Field>
             </div>
             <Button className="mt-6" onClick={() => save(tenant)}>
@@ -758,7 +770,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         </div>
 
         <div className="mt-8 grid gap-4">
-          <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {lavanderia_dir} {numero} {fecha} {cliente} {cliente_tel} {cliente_dir} {detalle} {subtotal} {total} {metodo_pago} {pagado} {saldo} {entrega} {estado} {web_url}">
+          <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {lavanderia_dir} {numero} {fecha} {cliente} {cliente_tel} {cliente_dir} {detalle} {subtotal} {total} {metodo_pago} {pagado} {saldo} {entrega} {estado} {web_url} {ticket_pie} {ticket_nota}">
             <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_creada} onChange={(e) => setDraft({ ...draft, plantilla_creada: e.target.value })} />
           </Field>
           <Field label="Plantilla — Orden lista">

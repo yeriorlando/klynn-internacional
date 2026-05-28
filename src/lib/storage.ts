@@ -510,7 +510,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
 🚚 *Entrega:* {entrega}
 ✅ *Estado:* {estado}
 
-¡Gracias por su preferencia!`,
+{ticket_pie}
+{ticket_nota}`,
     plantilla_lista: "Hola 👋, {cliente} ✨, tu orden {numero} de {detalle} en {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
     plantilla_entregada: "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
   },
