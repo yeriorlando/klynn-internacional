@@ -963,11 +963,19 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
   open: boolean; onOpenChange: (o: boolean) => void; initial: LicenciaLocal | null; onSaved: () => void;
 }) {
   const [f, setF] = useState<Partial<LicenciaLocal>>({});
+  const [frecuencia, setFrecuencia] = useState<"mensual" | "anual" | "permanente">("anual");
   
   useEffect(() => {
     if (open) {
       if (initial) {
         setF({ ...initial });
+        if (!initial.expira_en) {
+          setFrecuencia("permanente");
+        } else if (initial.es_anual) {
+          setFrecuencia("anual");
+        } else {
+          setFrecuencia("mensual");
+        }
       } else {
         // Generar código aleatorio KLYNN-XXXX-XXXX
         const rand = () => Math.random().toString(36).substring(2, 6).toUpperCase();
@@ -980,6 +988,7 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
           whatsapp_activo: false,
           facturacion_activa: false
         });
+        setFrecuencia("anual");
       }
     }
   }, [open, initial]);
@@ -987,12 +996,15 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
   async function submit() {
     if (!f.nombre_lavanderia?.trim()) { toast.error("Nombre de lavandería requerido"); return; }
     try {
+      const isAnual = frecuencia === "anual";
+      const expira = frecuencia === "permanente" ? undefined : f.expira_en;
+
       if (initial) {
         await updateLicenciaLocal(initial.id, {
           nombre_lavanderia: f.nombre_lavanderia,
           estado: f.estado,
-          es_anual: f.es_anual,
-          expira_en: f.es_anual ? f.expira_en : undefined,
+          es_anual: isAnual,
+          expira_en: expira,
           whatsapp_activo: f.whatsapp_activo,
           facturacion_activa: f.facturacion_activa
         });
@@ -1001,8 +1013,8 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
           codigo: f.codigo,
           nombre_lavanderia: f.nombre_lavanderia,
           estado: f.estado,
-          es_anual: f.es_anual,
-          expira_en: f.es_anual ? f.expira_en : undefined,
+          es_anual: isAnual,
+          expira_en: expira,
           whatsapp_activo: f.whatsapp_activo,
           facturacion_activa: f.facturacion_activa
         });
@@ -1038,6 +1050,57 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
               <Input value={f.nombre_lavanderia} onChange={(e) => setF({...f, nombre_lavanderia: e.target.value})} placeholder="Ej: Lavandería La Principal" className="h-11 rounded-xl" />
             </div>
 
+            <div className="space-y-2">
+              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Frecuencia de Pago / Tipo</Label>
+              <div className="grid grid-cols-3 gap-2">
+                <Button 
+                  type="button"
+                  variant={frecuencia === "mensual" ? "default" : "outline"}
+                  onClick={() => {
+                    setFrecuencia("mensual");
+                    setF({
+                      ...f,
+                      es_anual: false,
+                      expira_en: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString().split("T")[0]
+                    });
+                  }}
+                  className={`rounded-xl h-11 font-bold text-xs ${frecuencia === "mensual" ? "bg-primary text-white shadow" : "text-slate-600 bg-white hover:bg-slate-50"}`}
+                >
+                  Mensual
+                </Button>
+                <Button 
+                  type="button"
+                  variant={frecuencia === "anual" ? "default" : "outline"}
+                  onClick={() => {
+                    setFrecuencia("anual");
+                    setF({
+                      ...f,
+                      es_anual: true,
+                      expira_en: new Date(new Date().setFullYear(new Date().getFullYear() + 1)).toISOString().split("T")[0]
+                    });
+                  }}
+                  className={`rounded-xl h-11 font-bold text-xs ${frecuencia === "anual" ? "bg-primary text-white shadow" : "text-slate-600 bg-white hover:bg-slate-50"}`}
+                >
+                  Anual
+                </Button>
+                <Button 
+                  type="button"
+                  variant={frecuencia === "permanente" ? "default" : "outline"}
+                  onClick={() => {
+                    setFrecuencia("permanente");
+                    setF({
+                      ...f,
+                      es_anual: false,
+                      expira_en: undefined
+                    });
+                  }}
+                  className={`rounded-xl h-11 font-bold text-xs ${frecuencia === "permanente" ? "bg-primary text-white shadow" : "text-slate-600 bg-white hover:bg-slate-50"}`}
+                >
+                  De por vida
+                </Button>
+              </div>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Estado</Label>
@@ -1050,7 +1113,7 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
                   </SelectContent>
                 </Select>
               </div>
-              {f.es_anual && (
+              {frecuencia !== "permanente" && (
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Fecha de Expiración</Label>
                   <Input type="date" value={f.expira_en?.substring(0,10) || ""} onChange={(e) => setF({...f, expira_en: new Date(e.target.value).toISOString()})} className="h-11 rounded-xl" />
@@ -1063,13 +1126,6 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
           <div className="space-y-4 p-5 bg-accent/20 border border-border/50 rounded-2xl flex flex-col justify-center">
             <h4 className="text-xs font-black uppercase tracking-wider text-primary mb-2 px-1">Módulos y Parámetros</h4>
             <div className="space-y-4">
-              <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/40 transition-colors">
-                <div className="space-y-0.5">
-                  <Label className="text-sm font-bold">Licencia Anual</Label>
-                  <p className="text-xs text-muted-foreground">Si está apagado, la licencia es de por vida.</p>
-                </div>
-                <Switch checked={f.es_anual} onCheckedChange={(v) => setF({...f, es_anual: v})} />
-              </div>
               <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/40 transition-colors">
                 <div className="space-y-0.5">
                   <Label className="text-sm font-bold">Módulo WhatsApp</Label>

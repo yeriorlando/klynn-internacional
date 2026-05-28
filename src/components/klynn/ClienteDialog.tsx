@@ -183,9 +183,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
  
   async function submit() {
     const isEmpresa = f.tipo === "Empresa";
-    if (!f.nombre.trim() || (!isEmpresa && !f.apellido.trim()) || f.telefono.replace(/\D/g, "").length < 10) { 
-      toast.error(isEmpresa ? "Nombre de empresa y teléfono válidos requeridos" : "Nombre, apellido y teléfono válidos requeridos"); 
+    const phoneDigits = f.telefono.replace(/\D/g, "");
+    if (!f.nombre.trim() || (!isEmpresa && !f.apellido.trim())) { 
+      toast.error(isEmpresa ? "Nombre de empresa requerido" : "Nombre y apellido requeridos"); 
       return; 
+    }
+    if (phoneDigits.length > 0 && phoneDigits.length < 10) {
+      toast.error("El teléfono debe tener al menos 10 dígitos");
+      return;
     }
     if (hasDelivery && !f.direccion?.trim()) {
       toast.error("La dirección es requerida para envío a domicilio");
@@ -261,7 +266,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                 </Select>
               </div>
               <div>
-                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Teléfono / WhatsApp</Label>
+                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Teléfono / WhatsApp (Opcional)</Label>
                 <Input 
                   value={f.telefono} 
                   onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 

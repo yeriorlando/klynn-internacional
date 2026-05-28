@@ -471,7 +471,14 @@ function NuevaOrdenPage() {
 
   async function onCrearOrden() {
     if (limits?.ordersReached) { setShowLimitModal(true); return; }
-    if (!cliente) { toast.error("Selecciona un cliente"); return; }
+    if (!cliente) {
+      const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
+      if (isConsumoFinal) {
+        await handleSelectGeneric("Persona");
+      } else {
+        toast.error("Selecciona un cliente"); return;
+      }
+    }
     if (items.length === 0 && serviciosSel.length === 0) { toast.error("Agrega al menos una prenda o selecciona un servicio"); return; }
     if ((metodo !== "CREDITO" || abonoCredito > 0) && !caja) {
       toast.error("Abre la caja antes de registrar un pago");
@@ -643,9 +650,16 @@ function NuevaOrdenPage() {
     }
   }
 
-  function next() {
+  async function next() {
     if (limits?.ordersReached) { setShowLimitModal(true); return; }
-    if (step === 1 && !cliente) { toast.error("Selecciona un cliente"); return; }
+    if (step === 1 && !cliente) {
+      const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
+      if (isConsumoFinal) {
+        await handleSelectGeneric("Persona");
+        return;
+      }
+      toast.error("Selecciona un cliente"); return;
+    }
     if (step === 2 && serviciosSel.length === 0) { toast.error("Selecciona al menos un servicio"); return; }
     if (step === 3 && items.length === 0 && serviciosSel.length === 0) { toast.error("Agrega al menos una prenda o selecciona un servicio"); return; }
     setStep((s) => Math.min(5, s + 1));
