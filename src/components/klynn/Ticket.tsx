@@ -71,7 +71,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       <div className="text-center space-y-0.5">
         {tenant.logo_url && (
           <div className="flex justify-center mb-0">
-            <img src={tenant.logo_url} alt="Logo" className="h-18 w-auto max-w-[180px] object-contain filter grayscale" />
+            <img src={tenant.logo_url} alt="Logo" className="h-24 w-auto max-w-[220px] object-contain filter grayscale" />
           </div>
         )}
         {!tenant.logo_url && <div className="text-base font-bold uppercase leading-tight">{tenant.nombre}</div>}
@@ -270,12 +270,18 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
         </>
       )}
       <Sep />
-      <div className="text-center">
+      <div className="text-center py-1">
         <div>{cfg?.ticket_pie ?? "¡Gracias por su preferencia!"}</div>
+        {cfg?.ticket_nota && (
+          <div className="text-[10px] leading-tight whitespace-pre-line border-t border-dashed border-black/30 pt-1 mt-1 font-medium">
+            {cfg.ticket_nota}
+          </div>
+        )}
       </div>
+      <Sep />
 
       {isECF && qrData && (
-        <div className="mt-4 flex flex-col items-center gap-1 border-t border-dashed border-black pt-4">
+        <div className="mt-2 flex flex-col items-center gap-1">
           <div className="text-[9px] font-bold uppercase text-center">
             {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : ""}
           </div>

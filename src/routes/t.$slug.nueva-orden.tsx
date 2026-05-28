@@ -472,7 +472,7 @@ function NuevaOrdenPage() {
   async function onCrearOrden() {
     if (limits?.ordersReached) { setShowLimitModal(true); return; }
     if (!cliente) { toast.error("Selecciona un cliente"); return; }
-    if (items.length === 0) { toast.error("Agrega al menos una prenda"); return; }
+    if (items.length === 0 && serviciosSel.length === 0) { toast.error("Agrega al menos una prenda o selecciona un servicio"); return; }
     if ((metodo !== "CREDITO" || abonoCredito > 0) && !caja) {
       toast.error("Abre la caja antes de registrar un pago");
       return;
@@ -647,7 +647,7 @@ function NuevaOrdenPage() {
     if (limits?.ordersReached) { setShowLimitModal(true); return; }
     if (step === 1 && !cliente) { toast.error("Selecciona un cliente"); return; }
     if (step === 2 && serviciosSel.length === 0) { toast.error("Selecciona al menos un servicio"); return; }
-    if (step === 3 && items.length === 0) { toast.error("Agrega al menos una prenda"); return; }
+    if (step === 3 && items.length === 0 && serviciosSel.length === 0) { toast.error("Agrega al menos una prenda o selecciona un servicio"); return; }
     setStep((s) => Math.min(5, s + 1));
   }
 
@@ -1740,9 +1740,26 @@ function NuevaOrdenPage() {
                   <div className="space-y-1 rounded-xl border border-border/60 bg-accent/5 p-4">
                     <div className="mb-3 flex items-center gap-2 border-b border-border/40 pb-2">
                       <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detalle de prendas</span>
+                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detalles de la orden</span>
                     </div>
                     <div className="space-y-2">
+                      {serviciosSel.map((sName, i) => {
+                        const sPrice = customServicePrices[sName] !== undefined 
+                          ? customServicePrices[sName] 
+                          : (servicios.find(x => x.nombre === sName)?.precio || 0);
+                        return (
+                          <div key={`srv-${i}`} className="flex justify-between items-center text-sm group">
+                            <div className="flex flex-col">
+                              <span className="font-medium text-foreground">Servicio: {sName}</span>
+                              <span className="text-[10px] text-muted-foreground uppercase">Servicio de la orden</span>
+                            </div>
+                            <div className="font-display font-semibold text-foreground text-primary">
+                              {formatRD(sPrice)}
+                            </div>
+                          </div>
+                        );
+                      })}
+
                       {items.map((it, i) => (
                         <div key={i} className="flex justify-between items-center text-sm group">
                           <div className="flex flex-col">

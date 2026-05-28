@@ -368,9 +368,19 @@ function ConfigPage() {
               <Field label="Pie de página del ticket" span>
                 <Textarea 
                   className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
-                  value={cfg.ticket_pie} 
+                  value={cfg.ticket_pie || ""} 
                   onChange={(e) => saveCfg({ ticket_pie: e.target.value })} 
-                  rows={3} 
+                  rows={2} 
+                />
+              </Field>
+
+              <Field label="Nota o mensaje personalizado (Adicional)" span>
+                <Textarea 
+                  className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
+                  value={cfg.ticket_nota || ""} 
+                  onChange={(e) => saveCfg({ ticket_nota: e.target.value })} 
+                  rows={2} 
+                  placeholder="Mensaje o nota adicional que aparecerá debajo del pie de página del ticket..."
                 />
               </Field>
 

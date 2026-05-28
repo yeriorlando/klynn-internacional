@@ -90,6 +90,9 @@ export interface TenantConfig {
   ticket_mostrar_rnc: boolean;
   mostrar_empleado: boolean;
   pie_pagina_ticket: string;
+  ticket_pie?: string;
+  ticket_mostrar_empleado?: boolean;
+  ticket_nota?: string;
   recargo_urgencia: number; // %
   umbral_diferencia_caja: number;
   monto_max_caja_chica: number;
@@ -449,6 +452,9 @@ export const DEFAULT_CONFIG: TenantConfig = {
   ticket_mostrar_rnc: true,
   mostrar_empleado: true,
   pie_pagina_ticket: "¡Gracias por su preferencia!",
+  ticket_pie: "¡Gracias por su preferencia!",
+  ticket_mostrar_empleado: true,
+  ticket_nota: "",
   recargo_urgencia: 30,
   umbral_diferencia_caja: 100,
   monto_max_caja_chica: 2000,
