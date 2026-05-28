@@ -169,6 +169,7 @@ export interface Orden {
   cliente_id: string;
   empleado_id: string;
   servicios: string[];
+  servicios_precios?: Record<string, number>;
   items: OrdenItem[];
   subtotal: number;
   itbis: number;
@@ -336,6 +337,7 @@ export interface CatalogoItem {
   icono?: string;
   es_muestra?: boolean;
   permitir_desglose?: boolean;
+  permitir_editar_precio?: boolean;
 }
 
 export interface Servicio {
@@ -350,6 +352,7 @@ export interface Servicio {
   is_exento?: boolean;
   es_muestra?: boolean;
   permitir_desglose?: boolean;
+  permitir_editar_precio?: boolean;
 }
 
 const KEY = {

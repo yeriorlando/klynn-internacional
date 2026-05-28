@@ -72,6 +72,7 @@ function NuevaOrdenPage() {
   const [showNewCliente, setShowNewCliente] = useState(false);
 
   const [serviciosSel, setServiciosSel] = useState<string[]>(["Lavado y secado"]);
+  const [customServicePrices, setCustomServicePrices] = useState<Record<string, number>>({});
   const [items, setItems] = useState<OrdenItem[]>([]);
   const [showAddItem, setShowAddItem] = useState(false);
   const [esUrgente, setEsUrgente] = useState(false);
@@ -376,7 +377,7 @@ function NuevaOrdenPage() {
   const subtotalGravableBase = itemsGravables.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
   const subtotalExentoBase = itemsExentos.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
 
-  const costoServicios = servicios.filter(s => serviciosSel.includes(s.nombre)).reduce((acc, s) => acc + s.precio, 0);
+  const costoServicios = servicios.filter(s => serviciosSel.includes(s.nombre)).reduce((acc, s) => acc + (customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio), 0);
 
   // El recargo de urgencia se aplica al subtotal base de prendas más el costo de los servicios
   const recargoTotal = esUrgente ? (subtotalGravableBase + subtotalExentoBase + costoServicios) * (cfg.recargo_urgencia / 100) : 0;
@@ -530,6 +531,13 @@ function NuevaOrdenPage() {
         cliente_id: cliente.id,
         empleado_id: empleado.id,
         servicios: serviciosSel,
+        servicios_precios: serviciosSel.reduce((acc, sName) => {
+          const sPrice = customServicePrices[sName] !== undefined 
+            ? customServicePrices[sName] 
+            : (servicios.find(x => x.nombre === sName)?.precio || 0);
+          acc[sName] = sPrice;
+          return acc;
+        }, {} as Record<string, number>),
         items,
         subtotal: +subtotal.toFixed(2),
         itbis,
@@ -1267,8 +1275,26 @@ function NuevaOrdenPage() {
                             <Plus className="h-2.5 w-2.5" /> Detalle
                           </Button>
                         ) : <div />}
-                        <div className="text-xs font-black text-primary">
-                          {formatRD(srv.precio || 0)}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {srv.permitir_editar_precio ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                value={formatAmountInput(String(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0)))}
+                                onChange={(e) => {
+                                  const val = parseAmount(e.target.value) || 0;
+                                  setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="text-xs font-black text-primary">
+                              {formatRD(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0))}
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1321,8 +1347,33 @@ function NuevaOrdenPage() {
                               )}
                             </div>
                           )}
-                          <div className="text-xs font-black text-primary">
-                            {isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
+                          <div className="flex flex-col items-end gap-0.5 shrink-0">
+                            {(!isDetail && catalogMatch?.permitir_editar_precio) ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                    value={formatAmountInput(String(it.precio_unitario || ""))}
+                                    onChange={(e) => {
+                                      const val = parseAmount(e.target.value) || 0;
+                                      setItems(prev => prev.map((item, idx) => idx === i ? { ...item, precio_unitario: val } : item));
+                                    }}
+                                  />
+                                </div>
+                                {it.cantidad > 1 && (
+                                  <span className="text-[9px] text-muted-foreground font-semibold">
+                                    Tot: {formatRD(it.cantidad * it.precio_unitario)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-xs font-black text-primary">
+                                {isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
@@ -1549,7 +1600,27 @@ function NuevaOrdenPage() {
                               : "Servicio de la orden"}
                           </div>
                         </div>
-                        <div className="font-display text-base sm:text-lg font-bold text-primary">{formatRD(srv.precio || 0)}</div>
+                        <div>
+                          {srv.permitir_editar_precio ? (
+                            <div className="flex items-center gap-1">
+                              <span className="text-xs font-bold text-muted-foreground">RD$</span>
+                              <Input
+                                type="text"
+                                inputMode="decimal"
+                                className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                value={formatAmountInput(String(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0)))}
+                                onChange={(e) => {
+                                  const val = parseAmount(e.target.value) || 0;
+                                  setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+                                }}
+                              />
+                            </div>
+                          ) : (
+                            <div className="font-display text-base sm:text-lg font-bold text-primary">
+                              {formatRD(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0))}
+                            </div>
+                          )}
+                        </div>
                         <div className="flex items-center gap-1">
                           {srv.permitir_desglose && (
                             <Button
@@ -1595,7 +1666,34 @@ function NuevaOrdenPage() {
                               {it.notes || it.notas ? ` · ${it.notes || it.notas}` : ""}
                             </div>
                           </div>
-                          <div className="font-display text-lg">{isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}</div>
+                          <div className="flex flex-col items-end gap-1">
+                            {(!isDetail && catalogMatch?.permitir_editar_precio) ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs font-bold text-muted-foreground">RD$</span>
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                    value={formatAmountInput(String(it.precio_unitario || ""))}
+                                    onChange={(e) => {
+                                      const val = parseAmount(e.target.value) || 0;
+                                      setItems(prev => prev.map((item, idx) => idx === i ? { ...item, precio_unitario: val } : item));
+                                    }}
+                                  />
+                                </div>
+                                {it.cantidad > 1 && (
+                                  <span className="text-[10px] text-muted-foreground font-semibold">
+                                    Total: {formatRD(it.cantidad * it.precio_unitario)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="font-display text-lg">
+                                {isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
+                              </div>
+                            )}
+                          </div>
                           <div className="flex items-center gap-1">
                             {!isDetail && catalogMatch?.permitir_desglose && (
                               <Button

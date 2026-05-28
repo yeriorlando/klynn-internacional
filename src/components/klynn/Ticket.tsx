@@ -135,7 +135,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       <div className="mt-1 mb-2">
         {(() => {
            const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
-                                 (orden.servicios?.map(s => srvListSafe.find(x => x.nombre === s)?.precio || 0).reduce((a,b) => a+b, 0) || 0);
+                                 (orden.servicios?.map(s => orden.servicios_precios?.[s] !== undefined ? orden.servicios_precios[s] : (srvListSafe.find(x => x.nombre === s)?.precio || 0)).reduce((a,b) => a+b, 0) || 0);
            
            // Si el subtotal de la orden es significativamente menor al subtotal bruto de los items, 
            // significa que cuando se creó la orden, los precios INCLUÍAN el ITBIS (y se extrajo el subtotal base).
@@ -151,7 +151,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
                {/* 1. Renderizar Servicios Principales y sus desgloses correspondientes */}
                {orden.servicios?.map((sName, i) => {
                   const srv = srvListSafe.find(s => s.nombre === sName);
-                  const p = srv ? srv.precio : 0;
+                  const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
                   let baseTotal = p;
                   let itemItbis = 0;
                   let valor = baseTotal;
