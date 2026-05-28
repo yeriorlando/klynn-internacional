@@ -268,7 +268,7 @@ export function TenantShell() {
                   </Button>
                   
                   <Button 
-                    className="h-11 w-full rounded-xl bg-primary hover:bg-primary/95 text-white text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
+                    className="h-11 w-full rounded-xl bg-slate-950 hover:bg-slate-900 text-white text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
                     onClick={() => navigate({ to: `/t/${tenant.slug}/configuracion?tab=plan&expired=true` })}
                   >
                     <CreditCard className="h-4 w-4" /> Ver planes
