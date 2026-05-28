@@ -2485,7 +2485,10 @@ function TicketPrintPortal({
             position: static !important;
             width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"} !important;
             max-width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"} !important;
-            padding: ${tenant.config?.formato_ticket === "57mm" ? "2.5mm" : "4mm"};
+            padding-top: ${tenant.config?.formato_ticket === "57mm" ? "2.5mm" : "4mm"} !important;
+            padding-bottom: ${tenant.config?.formato_ticket === "57mm" ? "2.5mm" : "4mm"} !important;
+            padding-left: ${tenant.config?.formato_ticket === "57mm" ? "4.5mm" : "7.5mm"} !important;
+            padding-right: ${tenant.config?.formato_ticket === "57mm" ? "1mm" : "1.5mm"} !important;
             margin: 0 auto !important;
             background: white;
             color: black;
