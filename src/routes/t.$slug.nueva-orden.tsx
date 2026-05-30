@@ -169,8 +169,8 @@ function NuevaOrdenPage() {
     }
   }, [validTipos, tipoECF]);
 
-  const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
-  const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("EFECTIVO");
+  const [metodo, setMetodo] = useState<MetodoPago>("CREDITO");
+  const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("PAGO_AL_RETIRAR");
   const [recibido, setRecibido] = useState<number>(0);
   const [abonoCredito, setAbonoCredito] = useState<number>(0);
 
