@@ -2,7 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, ArrowUpCircle, FileText, Download, FileSpreadsheet } from "lucide-react";
+import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, ArrowUpCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft } from "lucide-react";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -14,7 +14,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, getServicios,
   type Orden, type EstadoOrden,
@@ -54,6 +55,9 @@ function OrdenesPage() {
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [isPrintingList, setIsPrintingList] = useState(false);
+  const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
+  const [showPendientes, setShowPendientes] = useState(false);
+  const [searchPendientes, setSearchPendientes] = useState("");
   const navigate = useNavigate();
 
   const tenant = user?.tenant;
@@ -296,6 +300,129 @@ function OrdenesPage() {
     }
   }
 
+  if (showPendientes) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-300">
+        <div className="flex flex-col space-y-1 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-2 sticky top-0 z-10 border-b border-border/10 pb-4">
+          <div className="flex items-center">
+            <Button 
+              onClick={() => setShowPendientes(false)}
+              className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 gap-1.5 font-bold"
+            >
+              <ArrowLeft className="h-4 w-4" /> Volver a Órdenes
+            </Button>
+          </div>
+          <h1 className="text-3xl font-display font-black text-foreground tracking-tight pt-3">
+            Órdenes Pendientes de Cobro
+          </h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Aquí puedes ver, buscar y saldar todas las órdenes que tienen cobros pendientes de entrega.
+          </p>
+        </div>
+
+        {/* Buscador de Pendientes */}
+        <Card className="p-4 relative border border-primary/10 shadow-sm rounded-2xl bg-card">
+          <Search className="pointer-events-none absolute left-7 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+          <Input 
+            value={searchPendientes} 
+            onChange={(e) => setSearchPendientes(e.target.value)} 
+            placeholder="Buscar por número de orden, nombre de cliente o monto (ej: 590, KL-0147)..." 
+            className="pl-12 h-11 bg-background border border-primary/10 rounded-2xl focus-visible:ring-amber-500 font-medium" 
+          />
+        </Card>
+
+        {/* Cuadrícula de Tarjetas */}
+        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 py-2">
+          {ordenes
+            .filter(o => o.saldo > 0 && o.estado !== "ANULADA")
+            .filter(o => {
+              if (!searchPendientes) return true;
+              const searchLower = searchPendientes.toLowerCase();
+              const clienteObj = clientes.find(c => c.id === o.cliente_id);
+              const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
+              
+              return o.numero.toLowerCase().includes(searchLower) ||
+                     clienteNombre.includes(searchLower) ||
+                     String(o.total).includes(searchLower) ||
+                     String(o.saldo).includes(searchLower);
+            })
+            .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en))
+            .map((o) => (
+              <PendienteCard 
+                key={o.id}
+                o={o}
+                clientes={clientes}
+                cajaAbierta={cajaAbierta}
+                onCobrarClick={(ordenToPay) => {
+                  setCobrarOrden(ordenToPay);
+                }}
+              />
+            ))}
+
+          {ordenes.filter(o => o.saldo > 0 && o.estado !== "ANULADA").length === 0 && (
+            <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-card rounded-3xl border border-border shadow-sm">
+              <div className="rounded-full bg-emerald-500/10 p-3.5 mb-3 text-emerald-600">
+                <CheckCircle2 className="h-8 w-8" />
+              </div>
+              <h4 className="font-bold text-base text-foreground">¡Todo al día!</h4>
+              <p className="text-xs text-muted-foreground mt-1 max-w-xs">No hay ninguna orden con saldos pendientes por cobrar en este momento.</p>
+              <Button 
+                onClick={() => setShowPendientes(false)}
+                className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
+              >
+                Volver a Órdenes
+              </Button>
+            </div>
+          )}
+
+          {ordenes.filter(o => o.saldo > 0 && o.estado !== "ANULADA").length > 0 && 
+           ordenes.filter(o => o.saldo > 0 && o.estado !== "ANULADA").filter(o => {
+              if (!searchPendientes) return true;
+              const searchLower = searchPendientes.toLowerCase();
+              const clienteObj = clientes.find(c => c.id === o.cliente_id);
+              const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
+              
+              return o.numero.toLowerCase().includes(searchLower) ||
+                     clienteNombre.includes(searchLower) ||
+                     String(o.total).includes(searchLower) ||
+                     String(o.saldo).includes(searchLower);
+           }).length === 0 && (
+            <div className="col-span-full py-12 text-center flex flex-col items-center justify-center bg-card rounded-3xl border border-border shadow-sm">
+              <h4 className="font-bold text-sm text-foreground">Sin resultados</h4>
+              <p className="text-xs text-muted-foreground mt-1">No se encontraron órdenes pendientes que coincidan con "{searchPendientes}".</p>
+            </div>
+          )}
+        </div>
+
+        {/* Modal de cobro unificado */}
+        {cobrarOrden && (
+          <CobrarOrdenDialog
+            orden={cobrarOrden}
+            onClose={() => setCobrarOrden(null)}
+            tenant={tenant}
+            cajaAbierta={cajaAbierta}
+            clientes={clientes}
+            queryClient={queryClient}
+            showPrintPortal={(upd) => {
+              setShowPrint(upd);
+            }}
+          />
+        )}
+
+        {/* Modal de impresión térmica */}
+        {showPrint && (
+          <TicketPrintPortal 
+            orden={showPrint} 
+            tenant={tenant} 
+            clientes={clientes}
+            empleados={empleados}
+            onClose={() => setShowPrint(null)} 
+          />
+        )}
+      </div>
+    );
+  }
+
   return (
     <div>
       <PageHeader title="Órdenes" description={`${ordenes.length} órdenes registradas`}>
@@ -328,6 +455,24 @@ function OrdenesPage() {
           >
             <Printer className="h-4 w-4" /> Imprimir
           </Button>
+
+          {(() => {
+            const cantidadPendientes = ordenes.filter(o => o.saldo > 0 && o.estado !== "ANULADA").length;
+            return (
+              <Button
+                onClick={() => setShowPendientes(true)}
+                className="gap-2 bg-amber-500 hover:bg-amber-600 text-white shadow-glow border-0 transition-all duration-200 active:scale-95 font-bold"
+              >
+                <Coins className="h-4 w-4" /> 
+                Órdenes Pendientes
+                {cantidadPendientes > 0 && (
+                  <Badge className="ml-1 bg-white text-amber-600 hover:bg-white border-none font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-sm">
+                    {cantidadPendientes}
+                  </Badge>
+                )}
+              </Button>
+            );
+          })()}
         </div>
       </PageHeader>
 
@@ -410,7 +555,19 @@ function OrdenesPage() {
                     <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex justify-center">
-                        {o.saldo > 0 ? <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground">{formatRD(o.saldo)}</Badge> : <span className="text-muted-foreground">—</span>}
+                        {o.saldo > 0 ? (
+                          <button
+                            onClick={() => o.estado !== "ANULADA" && setCobrarOrden(o)}
+                            className="transition-transform active:scale-95 cursor-pointer"
+                            title="Cobrar saldo de esta orden"
+                          >
+                            <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
+                              {formatRD(o.saldo)}
+                            </Badge>
+                          </button>
+                        ) : (
+                          <span className="text-muted-foreground">—</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center text-xs">{o.metodo_pago}</td>
@@ -431,6 +588,12 @@ function OrdenesPage() {
                               <Eye className="mr-2 h-4 w-4" /> Ver Detalles
                             </DropdownMenuItem>
                             
+                            {o.saldo > 0 && o.estado !== "ANULADA" && (
+                              <DropdownMenuItem onClick={() => setCobrarOrden(o)} className="text-emerald-600 focus:bg-emerald-50 focus:text-emerald-700">
+                                <DollarSign className="mr-2 h-4 w-4 text-emerald-600" /> Cobrar Orden
+                              </DropdownMenuItem>
+                            )}
+
                             <DropdownMenuItem onClick={() => setShowPrint(o)}>
                               <Printer className="mr-2 h-4 w-4" /> Imprimir Ticket
                             </DropdownMenuItem>
@@ -489,6 +652,7 @@ function OrdenesPage() {
               cambiarEstado={cambiarEstado} 
               setView={setView} 
               onPrint={() => setShowPrint(view)}
+              setCobrarOrden={setCobrarOrden}
             />
           )}
         </DialogContent>
@@ -595,12 +759,26 @@ function OrdenesPage() {
           onClose={() => setIsPrintingList(false)}
         />
       )}
+
+      {cobrarOrden && (
+        <CobrarOrdenDialog
+          orden={cobrarOrden}
+          onClose={() => setCobrarOrden(null)}
+          tenant={user.tenant}
+          cajaAbierta={cajaAbierta}
+          clientes={clientes}
+          queryClient={queryClient}
+          showPrintPortal={(upd) => setShowPrint(upd)}
+        />
+      )}
+
+
     </div>
   );
 }
 
-function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, setView, onPrint }: { 
-  view: Orden; tenant: any; clientes: any[]; empleados: any[]; cambiarEstado: any; setView: any; onPrint: () => void;
+function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, setView, onPrint, setCobrarOrden }: { 
+  view: Orden; tenant: any; clientes: any[]; empleados: any[]; cambiarEstado: any; setView: any; onPrint: () => void; setCobrarOrden: any;
 }) {
   const [empleadoView, setEmpleadoView] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
@@ -672,21 +850,34 @@ function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, setView
             </div>
           </div>
 
-          <div className="flex gap-2 pt-4">
-            <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" onClick={() => {
-              if (!c.telefono) { toast.error("El cliente no tiene teléfono"); return; }
-              const promise = notificarWhatsApp(tenant, c, view, "creada", view.pagado);
-              toast.promise(promise, {
-                loading: "Enviando recibo por WhatsApp...",
-                success: (r) => r.ok ? "¡Recibo enviado exitosamente! ✅" : `Fallo al enviar: ${r.reason}`,
-                error: "Error inesperado al enviar WhatsApp",
-              });
-            }}>
-              <MessageCircle className="mr-1.5 h-4 w-4" /> Enviar WhatsApp
-            </Button>
-            <Button className="flex-1 bg-gradient-primary text-white" onClick={onPrint}>
-              <Printer className="mr-1.5 h-4 w-4" /> Imprimir
-            </Button>
+          <div className="flex flex-col gap-2 pt-4">
+            {view.saldo > 0 && view.estado !== "ANULADA" && (
+              <Button 
+                className="w-full bg-[#16A34A] hover:bg-[#15803D] text-white shadow-glow font-bold h-11 rounded-xl"
+                onClick={() => {
+                  setView(null);
+                  setCobrarOrden(view);
+                }}
+              >
+                <DollarSign className="mr-2 h-4.5 w-4.5" /> Cobrar Orden ({formatRD(view.saldo)})
+              </Button>
+            )}
+            <div className="flex gap-2">
+              <Button className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm" onClick={() => {
+                if (!c.telefono) { toast.error("El cliente no tiene teléfono"); return; }
+                const promise = notificarWhatsApp(tenant, c, view, "creada", view.pagado);
+                toast.promise(promise, {
+                  loading: "Enviando recibo por WhatsApp...",
+                  success: (r) => r.ok ? "¡Recibo enviado exitosamente! ✅" : `Fallo al enviar: ${r.reason}`,
+                  error: "Error inesperado al enviar WhatsApp",
+                });
+              }}>
+                <MessageCircle className="mr-1.5 h-4 w-4" /> Enviar WhatsApp
+              </Button>
+              <Button className="flex-1 bg-gradient-primary text-white" onClick={onPrint}>
+                <Printer className="mr-1.5 h-4 w-4" /> Imprimir
+              </Button>
+            </div>
           </div>
         </div>
         <div className="max-h-[500px] overflow-auto rounded-xl bg-zinc-100 p-4 shadow-inner dark:bg-zinc-800/50">
@@ -1203,5 +1394,440 @@ function OrdenesPrintPortal({
       `}} />
     </div>,
     document.body
+  );
+}
+
+// ============ DIALOG DE COBRO DE SALDO (PAGO AL RETIRAR) ============
+interface CobrarOrdenDialogProps {
+  orden: Orden;
+  onClose: () => void;
+  tenant: any;
+  cajaAbierta: Caja | null | undefined;
+  clientes: Cliente[];
+  queryClient: any;
+  showPrintPortal?: (orden: Orden) => void;
+}
+
+function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, queryClient, showPrintPortal }: CobrarOrdenDialogProps) {
+  const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
+  const [recibido, setRecibido] = useState<number>(0);
+  const [entregarAlCobrar] = useState<boolean>(true);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const totalCobrar = orden.saldo;
+  const vuelto = metodo === "EFECTIVO" && recibido > totalCobrar ? recibido - totalCobrar : 0;
+  const faltante = metodo === "EFECTIVO" && recibido > 0 && recibido < totalCobrar ? totalCobrar - recibido : 0;
+
+  const cli = clientes.find((c) => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", telefono: "", tipo: "Consumidor Final" };
+
+  async function handleConfirmarCobro() {
+    if (!cajaAbierta) {
+      toast.error("Debes abrir la caja antes de registrar un pago");
+      return;
+    }
+    if (metodo === "EFECTIVO" && recibido < totalCobrar) {
+      toast.error("El monto recibido es menor al saldo pendiente");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const nuevoPagado = orden.pagado + totalCobrar;
+      const nuevoSaldo = 0;
+      const nuevoEstado: EstadoOrden = entregarAlCobrar ? "ENTREGADA" : orden.estado;
+
+      let finalNCF: string | undefined = orden.ncf;
+      let finalNcfVencimiento: string | undefined = orden.ncf_vencimiento;
+      let finalTipoECF: string | undefined = orden.tipo_ecf;
+      let finalEcfId: string | undefined = orden.ecf_id;
+      let finalEcfQr: string | undefined = orden.ecf_qr;
+      let finalEcfSecurityCode: string | undefined = orden.ecf_security_code;
+      let finalEcfSignatureDate: string | undefined = orden.ecf_signature_date;
+
+      const fiscalConfig = await getECFConfig(tenant.id);
+      const isElectronic = !!fiscalConfig?.is_active;
+
+      if (tenant.config?.ncf_facturacion_activa && !orden.ncf) {
+        const isEmpresa = cli.tipo === "Empresa" || (cli.cedula && cli.cedula.length >= 9);
+        const tipoECFDefault = isElectronic 
+          ? (isEmpresa ? "E31" : "E32")
+          : (isEmpresa ? "B01" : "B02");
+
+        if (!isElectronic) {
+          try {
+            const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
+            finalNCF = nextNCF;
+            finalNcfVencimiento = expiration_date;
+          } catch (seqErr) {
+            console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
+            finalNCF = `${tenant.config.ncf_secuencia || 'B02'}${String(tenant.config.ncf_proximo || 1).padStart(8, "0")}`;
+          }
+        } else {
+          try {
+            let nextNCF: string | undefined = undefined;
+            if (fiscalConfig?.ambiente === 'produccion') {
+              const { ncf, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
+              nextNCF = ncf;
+              finalNcfVencimiento = expiration_date;
+            }
+
+            const ordenTemporal: Orden = {
+              ...orden,
+              pagado: nuevoPagado,
+              saldo: nuevoSaldo,
+              estado: nuevoEstado,
+              metodo_pago: metodo,
+              ncf: nextNCF
+            };
+
+            const result = await emitirECF(
+              ordenTemporal,
+              cli as Cliente,
+              fiscalConfig?.pronesoft_tenant_id,
+              tenant.config,
+              tenant,
+              tipoECFDefault
+            );
+
+            finalNCF = result.encf;
+            finalTipoECF = tipoECFDefault;
+            finalEcfId = result.document.id;
+            finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
+            finalEcfSecurityCode = result.security_code || '';
+            finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
+
+            toast.success(`✅ Comprobante DGII ${result.encf} emitido con éxito`);
+          } catch (fErr: any) {
+            console.error("Error Fiscal al cobrar:", fErr);
+            toast.error("Error al generar comprobante fiscal: " + fErr.message);
+          }
+        }
+      }
+
+      // 1. Guardar la orden con los saldos actualizados, el nuevo estado y datos fiscales
+      const ordenActualizada: Orden = {
+        ...orden,
+        pagado: nuevoPagado,
+        saldo: nuevoSaldo,
+        estado: nuevoEstado,
+        metodo_pago: orden.pagado > 0 ? "MIXTO" : metodo,
+        ncf: finalNCF,
+        ncf_vencimiento: finalNcfVencimiento,
+        tipo_ecf: finalTipoECF,
+        ecf_id: finalEcfId,
+        ecf_qr: finalEcfQr,
+        ecf_security_code: finalEcfSecurityCode,
+        ecf_signature_date: finalEcfSignatureDate
+      };
+
+      await saveOrden(ordenActualizada);
+
+      // 2. Registrar el movimiento de entrada en caja
+      await saveMovimiento({
+        id: uid("mov"),
+        tenant_id: tenant.id,
+        caja_id: cajaAbierta.id,
+        empleado_id: ordenActualizada.empleado_id,
+        tipo: "VENTA",
+        concepto: `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`,
+        monto: totalCobrar,
+        metodo: metodo,
+        orden_id: orden.id,
+        creado_en: new Date().toISOString(),
+      });
+
+      // 3. Notificación de WhatsApp si corresponde
+      if (entregarAlCobrar) {
+        import("@/lib/whatsapp").then(({ notificarWhatsApp }) => {
+          const cliFull = clientes.find(c => c.id === orden.cliente_id);
+          if (cliFull) {
+            notificarWhatsApp(tenant, cliFull, ordenActualizada, "entregada", totalCobrar).then((r) => {
+              if (r.ok) toast.success("WhatsApp de entrega enviado ✅");
+            });
+          }
+        });
+      }
+
+      toast.success(`Orden #${orden.numero} saldada correctamente RD$${totalCobrar} ✅`);
+      
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenant.id] });
+      queryClient.invalidateQueries({ queryKey: ['movimientos', tenant.id] });
+
+      onClose();
+      if (showPrintPortal) {
+        showPrintPortal(ordenActualizada);
+      }
+    } catch (err: any) {
+      toast.error("Error al registrar el cobro: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  const formatAmountInput = (val: string) => {
+    if (!val) return "";
+    // Eliminar comas previas y limpiar entrada
+    const clean = val.replace(/,/g, "").replace(/[^0-9.]/g, "");
+    const parts = clean.split(".");
+    const integerPart = parts[0];
+    const decimalPart = parts.length > 1 ? parts.slice(1).join("") : null;
+    
+    // Aplicar expresión regular para agregar comas de miles
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    
+    if (decimalPart !== null) {
+      // Limitar a un máximo de 2 dígitos decimales
+      return formattedInteger + "." + decimalPart.substring(0, 2);
+    }
+    return formattedInteger;
+  };
+
+  const parseAmount = (val: string) => {
+    const clean = val.replace(/,/g, "").replace(/[^0-9.]/g, "");
+    return parseFloat(clean) || 0;
+  };
+
+  return (
+    <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
+      <DialogContent className="max-w-3xl rounded-3xl p-0 border border-primary/10 shadow-elegant overflow-hidden bg-background">
+        <div className="grid grid-cols-1 md:grid-cols-12">
+          {/* COLUMNA IZQUIERDA: RESUMEN DE LA ORDEN */}
+          <div className="md:col-span-5 bg-accent/5 p-6 border-r border-border/40 flex flex-col justify-between space-y-6">
+            <div className="space-y-4">
+              <div className="flex items-center gap-2 text-emerald-600">
+                <Coins className="h-5 w-5" />
+                <span className="text-sm font-black uppercase tracking-wider">Resumen de Orden</span>
+              </div>
+
+              <div className="space-y-3 pt-2">
+                <div className="flex flex-col space-y-1">
+                  <span className="text-[10px] font-black uppercase text-muted-foreground">Número de Orden</span>
+                  <span className="font-mono text-base font-black text-primary bg-primary/5 border border-primary/10 px-3 py-1 rounded-xl self-start">
+                    #{orden.numero}
+                  </span>
+                </div>
+
+                <div className="flex flex-col space-y-1">
+                  <div className="flex items-center gap-1.5 justify-between">
+                    <span className="text-[10px] font-black uppercase text-muted-foreground">Cliente</span>
+                    <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                      cli.tipo === "Empresa" 
+                        ? "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400" 
+                        : "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
+                    }`}>
+                      {cli.tipo === "Empresa" ? "🏢 Empresa" : "👤 Personal"}
+                    </span>
+                  </div>
+                  <span className="font-bold text-sm text-foreground">
+                    {cli.nombre} {cli.apellido || ""}
+                  </span>
+                </div>
+
+                <div className="h-px bg-border/40 my-2" />
+
+                <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground font-semibold">
+                  <div className="flex flex-col">
+                    <span>Total Orden</span>
+                    <span className="text-foreground font-bold">{formatRD(orden.total)}</span>
+                  </div>
+                  <div className="flex flex-col text-right">
+                    <span>Monto ya pagado</span>
+                    <span className="text-emerald-600 font-bold">{formatRD(orden.pagado)}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Saldo destacado */}
+            <div className="bg-emerald-500/[0.04] border border-emerald-500/10 rounded-2xl p-4 space-y-1 mt-auto">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">Saldo Pendiente a Cobrar</span>
+              <span className="text-3xl font-black text-emerald-600 block">{formatRD(totalCobrar)}</span>
+            </div>
+          </div>
+
+          {/* COLUMNA DERECHA: REGISTRO DE COBRO */}
+          <div className="md:col-span-7 p-6 flex flex-col justify-between space-y-4">
+            <div>
+              <DialogHeader className="pb-3 border-b border-primary/5">
+                <DialogTitle className="text-lg font-display font-black text-foreground">
+                  Registrar Cobro
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Elige el método de pago e ingresa el monto para saldar la orden.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 pt-4">
+                {/* Selector de Método de Pago */}
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                    Método de Pago
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {[
+                      { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
+                      { id: "TARJETA", label: "Tarjeta", icon: "💳" },
+                      { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" }
+                    ].map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => setMetodo(m.id as MetodoPago)}
+                        className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border-2 transition-all active:scale-95 ${
+                          metodo === m.id
+                            ? "border-emerald-600 bg-emerald-500/[0.05] text-emerald-700 font-bold scale-[1.02] shadow-sm ring-1 ring-emerald-500/10"
+                            : "border-border bg-card text-muted-foreground hover:border-emerald-500/30 hover:bg-emerald-500/[0.01]"
+                        }`}
+                      >
+                        <span className="text-lg mb-0.5">{m.icon}</span>
+                        <span className="text-[9px] font-black uppercase tracking-wider">{m.label}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Formulario Efectivo */}
+                {metodo === "EFECTIVO" && (
+                  <div className="rounded-2xl border border-border/60 bg-accent/5 p-3.5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="space-y-1.5">
+                      <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Monto Recibido</label>
+                      <div className="relative h-14">
+                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/40">RD$</span>
+                        <Input
+                          className="h-full pl-14 text-2xl md:text-3xl font-black bg-background border border-primary/20 focus-visible:ring-emerald-500 focus-visible:ring-offset-0 rounded-2xl transition-all"
+                          value={recibido ? formatAmountInput(String(recibido)) : ""}
+                          onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                          placeholder="0.00"
+                          autoFocus
+                        />
+                      </div>
+                    </div>
+
+                    <div className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold transition-all ${
+                      faltante > 0 ? "bg-rose-50 border-rose-100 text-rose-700" : "bg-emerald-50 border-emerald-100 text-emerald-700"
+                    }`}>
+                      <span className="uppercase text-[9px] tracking-wider">
+                        {faltante > 0 ? "Faltan" : "Vuelto a entregar"}
+                      </span>
+                      <span className="text-sm font-black">
+                        {formatRD(faltante > 0 ? faltante : vuelto)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Acciones del Dialog */}
+            <div className="space-y-2 pt-2 border-t border-border/40 mt-auto">
+              <Button
+                size="lg"
+                className="w-full h-11 font-bold text-xs tracking-wider rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-glow transition-all active:scale-[0.98]"
+                onClick={handleConfirmarCobro}
+                disabled={loading || !cajaAbierta || (metodo === "EFECTIVO" && (faltante > 0))}
+              >
+                {loading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <Check className="mr-2 h-4 w-4" />
+                )}
+                REGISTRAR COBRO
+              </Button>
+              
+              {!cajaAbierta && (
+                <p className="text-[9px] font-black text-destructive text-center flex items-center justify-center gap-1 animate-pulse">
+                  <AlertTriangle className="h-3.5 w-3.5" /> La caja está cerrada. Abre la caja antes de registrar un pago.
+                </p>
+              )}
+
+              <Button
+                variant="ghost"
+                onClick={onClose}
+                className="w-full h-9 rounded-xl text-[10px] font-black text-muted-foreground hover:text-foreground"
+              >
+                CANCELAR COBRO
+              </Button>
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ============ TARJETA DE ORDEN PENDIENTE INTERACTIVA ============
+interface PendienteCardProps {
+  o: Orden;
+  clientes: Cliente[];
+  cajaAbierta: Caja | null | undefined;
+  onCobrarClick: (orden: Orden) => void;
+}
+
+function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick }: PendienteCardProps) {
+  const c = clientes.find(cli => cli.id === o.cliente_id) || { nombre: "Consumidor", apellido: "Final", tipo: "Consumidor Final" };
+
+  return (
+    <Card className="relative overflow-hidden border border-border bg-card hover:border-amber-500/30 hover:shadow-elegant transition-all duration-300 rounded-3xl flex flex-col min-h-[250px] justify-between group shadow-sm animate-in fade-in duration-300">
+      <div className="p-4 space-y-3 flex-grow flex flex-col justify-start">
+        {/* Header de tarjeta */}
+        <div className="flex justify-between items-start">
+          <div className="flex flex-col">
+            <span className="font-mono text-xs font-black text-primary bg-primary/5 px-2.5 py-0.5 rounded-full border border-primary/10 self-start mb-1">
+              #{o.numero}
+            </span>
+            <span className="text-[10px] text-muted-foreground font-semibold">
+              {formatDateTimeRD(o.creado_en)}
+            </span>
+          </div>
+          <EstadoBadge estado={o.estado} />
+        </div>
+
+        {/* Cliente y Tipo */}
+        <div className="space-y-0.5">
+          <div className="flex items-center gap-1.5 justify-between">
+            <span className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Cliente</span>
+            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+              c.tipo === "Empresa" 
+                ? "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400" 
+                : "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
+            }`}>
+              {c.tipo === "Empresa" ? "🏢 Empresa" : "👤 Personal"}
+            </span>
+          </div>
+          <div className="font-bold text-sm text-foreground line-clamp-1">
+            {c.nombre} {c.apellido || ""}
+          </div>
+        </div>
+
+        {/* Importes */}
+        <div className="grid grid-cols-2 gap-2 pt-2 border-t border-dashed border-border/80 mt-1">
+          <div className="space-y-0.5">
+            <span className="text-[9px] font-black uppercase tracking-wider text-muted-foreground block">Total</span>
+            <span className="text-sm font-black text-foreground">{formatRD(o.total)}</span>
+          </div>
+          <div className="space-y-0.5 text-right">
+            <span className="text-[9px] font-black uppercase tracking-wider text-amber-600 block">Saldo Pendiente</span>
+            <span className="text-sm font-black text-amber-600 bg-amber-500/5 border border-amber-500/10 px-2.5 py-0.5 rounded-xl inline-block">{formatRD(o.saldo)}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Botón de Cobrar */}
+      <div className="p-3 bg-accent/5 border-t border-border/40 rounded-b-3xl">
+        <Button
+          onClick={() => {
+            if (!cajaAbierta) {
+              toast.error("Abre la caja antes de registrar cobros");
+              return;
+            }
+            onCobrarClick(o);
+          }}
+          className="w-full bg-[#16A34A] hover:bg-[#15803D] text-white shadow-glow font-bold text-xs h-9 rounded-2xl transition-all duration-200 active:scale-95 gap-1.5"
+        >
+          <DollarSign className="h-3.5 w-3.5" />
+          Cobrar Orden
+        </Button>
+      </div>
+    </Card>
   );
 }

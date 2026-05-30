@@ -170,8 +170,22 @@ function NuevaOrdenPage() {
   }, [validTipos, tipoECF]);
 
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
+  const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(0);
   const [abonoCredito, setAbonoCredito] = useState<number>(0);
+
+  const handleOpcionPagoChange = (opcionId: string) => {
+    setOpcionPagoSelected(opcionId);
+    if (opcionId === "PAGO_AL_RETIRAR") {
+      setMetodo("CREDITO");
+      setAbonoCredito(0);
+    } else {
+      setMetodo(opcionId as MetodoPago);
+      if (opcionId === "CREDITO") {
+        setAbonoCredito(0);
+      }
+    }
+  };
 
   const [limiteDiasSel, setLimiteDiasSel] = useState<number>(30);
 
@@ -512,7 +526,7 @@ function NuevaOrdenPage() {
       let ncfVencimiento: string | undefined = undefined;
       let finalNCF: string | undefined = undefined;
 
-      if (cfg.ncf_facturacion_activa && !isElectronic) {
+      if (cfg.ncf_facturacion_activa && !isElectronic && opcionPagoSelected !== "PAGO_AL_RETIRAR") {
         try {
           const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
           finalNCF = nextNCF;
@@ -566,7 +580,7 @@ function NuevaOrdenPage() {
 
       // --- LOGICA FISCAL ELECTRONICA (Pronesoft) ---
       let ordenActualizada = { ...orden };
-      if (isElectronic && activeTipo) {
+      if (isElectronic && activeTipo && opcionPagoSelected !== "PAGO_AL_RETIRAR") {
         try {
           let nextNCF: string | undefined = undefined;
 
@@ -824,24 +838,37 @@ function NuevaOrdenPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 mb-4">
+                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-4">
                     {[
+                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️" },
                       { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
                       { id: "TARJETA", label: "Tarjeta", icon: "💳" },
                       { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
                       { id: "CREDITO", label: "Crédito", icon: "📝" }
                     ].map((m) => (
-                      <button key={m.id} onClick={() => setMetodo(m.id as MetodoPago)}
-                        className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${metodo === m.id
+                      <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
+                        className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
                             ? "border-primary bg-primary/5 ring-1 ring-primary shadow-glow"
                             : "border-border bg-card hover:border-primary/40"
                           }`}>
                         <span className="text-2xl">{m.icon}</span>
-                        <div className="font-bold text-sm uppercase tracking-tight">{m.label}</div>
-                        {metodo === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
+                        <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
+                        {opcionPagoSelected === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
                       </button>
                     ))}
                   </div>
+
+                  {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
+                    <div className="space-y-4 mb-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-500/[0.03] p-4 text-teal-800">
+                        <Timer className="h-8 w-8 text-teal-600 shrink-0" />
+                        <div>
+                          <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
+                          <span className="text-xs">La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a retirar su ropa.</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
                   {cfg.ncf_facturacion_activa && (
                     <div className="mb-4 p-4 rounded-2xl border-2 border-primary/10 bg-primary/5">
                       <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">Tipo de Comprobante Fiscal</Label>
@@ -903,7 +930,7 @@ function NuevaOrdenPage() {
                     </div>
                   )}
 
-                  {metodo === "CREDITO" && (
+                  {opcionPagoSelected === "CREDITO" && (
                     <div className="space-y-4 mb-4">
                       <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-4 text-warning-foreground">
                         <AlertTriangle className="h-8 w-8 text-warning shrink-0" />
@@ -1909,24 +1936,37 @@ function NuevaOrdenPage() {
                     <p className="text-sm font-bold text-muted-foreground/80">Selecciona el método de pago</p>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
                     {[
+                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️" },
                       { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
                       { id: "TARJETA", label: "Tarjeta", icon: "💳" },
                       { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
                       { id: "CREDITO", label: "Crédito", icon: "📝" }
                     ].map((m) => (
-                      <button key={m.id} onClick={() => setMetodo(m.id as MetodoPago)}
-                        className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${metodo === m.id
-                            ? "border-primary bg-primary/5 ring-1 ring-primary"
+                      <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
+                        className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
+                            ? "border-primary bg-primary/5 ring-1 ring-primary shadow-sm"
                             : "border-border bg-card hover:border-primary/40"
                           }`}>
                         <span className="text-2xl">{m.icon}</span>
-                        <div className="font-bold text-sm uppercase tracking-tight">{m.label}</div>
-                        {metodo === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
+                        <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
+                        {opcionPagoSelected === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
                       </button>
                     ))}
                   </div>
+
+                  {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
+                    <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-500/[0.03] p-4 text-teal-800">
+                        <Timer className="h-8 w-8 text-teal-600 shrink-0" />
+                        <div>
+                          <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
+                          <span className="text-xs">La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a retirar su ropa.</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
 
                   {cfg.ncf_facturacion_activa && (
                     <div className="mt-4 rounded-2xl border-2 border-primary/20 bg-primary/5 p-4">
@@ -1991,7 +2031,7 @@ function NuevaOrdenPage() {
                     </div>
                   )}
 
-                  {metodo === "CREDITO" && (
+                  {opcionPagoSelected === "CREDITO" && (
                     <div className="space-y-4 mt-6 w-full max-w-2xl mx-auto">
                       <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
                         className="flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-warning-foreground">

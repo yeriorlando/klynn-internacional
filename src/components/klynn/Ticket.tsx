@@ -172,19 +172,21 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
                   );
 
                   return (
-                    <div key={'s'+i} className="mb-2">
-                      <div className="flex justify-between items-start mb-1.5">
-                        <div className="w-[44%] pr-1">
-                          <div className="font-bold leading-tight uppercase text-[10px]">Servicio: {sName}</div>
-                          {p > 0 && <div className="text-[9px] text-black/70 leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>}
+                    <div key={'s'+i} className={p > 0 ? "mb-2" : "mb-1"}>
+                      {p > 0 && (
+                        <div className="flex justify-between items-start mb-1.5">
+                          <div className="w-[44%] pr-1">
+                            <div className="font-bold leading-tight uppercase text-[10px]">Servicio: {sName}</div>
+                            <div className="text-[9px] text-black/70 leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
+                          </div>
+                          <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
+                          <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
                         </div>
-                        <div className="w-[26%] text-right font-bold pt-0.5">{p > 0 ? (itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00") : "—"}</div>
-                        <div className="w-[30%] text-right font-bold pt-0.5">{p > 0 ? formatRD(valor).replace("RD$", "") : "—"}</div>
-                      </div>
+                      )}
 
                       {/* Desgloses anidados debajo del servicio */}
                       {misPrendasDesglosadas.map((it, dIdx) => (
-                        <div key={'sd'+dIdx} className="flex justify-between items-start pl-3 mb-1 animate-in fade-in duration-200">
+                        <div key={'sd'+dIdx} className={`flex justify-between items-start ${p > 0 ? "pl-3" : "pl-0"} mb-1 animate-in fade-in duration-200`}>
                           <div className="w-[44%] pr-1">
                             <div className="font-normal text-black/75 text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/60">Nota: {it.notas}</div>}
@@ -241,7 +243,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div>
-        <Row k="Pago" v={orden.metodo_pago} />
+        <Row k="Pago" v={orden.metodo_pago === "CREDITO" && orden.pagado === 0 ? "AL RETIRAR" : orden.metodo_pago} />
         {pagoRecibido !== undefined && <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} />}
         {vuelto > 0 && <Row k="Vuelto" v={formatRD(vuelto).replace("DOP", "RD$")} />}
         {orden.saldo > 0 && <Row k="Saldo pendiente" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />}
