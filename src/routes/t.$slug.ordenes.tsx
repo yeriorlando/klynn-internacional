@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, getServicios,
-  type Orden, type EstadoOrden,
+  type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago,
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
@@ -53,6 +53,7 @@ function OrdenesPage() {
   const [montoDebito, setMontoDebito] = useState(0);
   const [motivoDebito, setMotivoDebito] = useState("");
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
+  const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [isPrintingList, setIsPrintingList] = useState(false);
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
@@ -403,8 +404,9 @@ function OrdenesPage() {
             cajaAbierta={cajaAbierta}
             clientes={clientes}
             queryClient={queryClient}
-            showPrintPortal={(upd) => {
+            showPrintPortal={(upd, rec) => {
               setShowPrint(upd);
+              setPagoRecibidoParaTicket(rec);
             }}
           />
         )}
@@ -416,7 +418,11 @@ function OrdenesPage() {
             tenant={tenant} 
             clientes={clientes}
             empleados={empleados}
-            onClose={() => setShowPrint(null)} 
+            pagoRecibido={pagoRecibidoParaTicket}
+            onClose={() => {
+              setShowPrint(null);
+              setPagoRecibidoParaTicket(undefined);
+            }} 
           />
         )}
       </div>
@@ -664,7 +670,11 @@ function OrdenesPage() {
           tenant={tenant} 
           clientes={clientes}
           empleados={empleados}
-          onClose={() => setShowPrint(null)} 
+          pagoRecibido={pagoRecibidoParaTicket}
+          onClose={() => {
+            setShowPrint(null);
+            setPagoRecibidoParaTicket(undefined);
+          }} 
         />
       )}
 
@@ -768,7 +778,10 @@ function OrdenesPage() {
           cajaAbierta={cajaAbierta}
           clientes={clientes}
           queryClient={queryClient}
-          showPrintPortal={(upd) => setShowPrint(upd)}
+          showPrintPortal={(upd, rec) => {
+            setShowPrint(upd);
+            setPagoRecibidoParaTicket(rec);
+          }}
         />
       )}
 
@@ -888,7 +901,7 @@ function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, setView
   );
 }
 
-function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void }) {
+export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose, pagoRecibido }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void; pagoRecibido?: number }) {
   const [emp, setEmp] = useState<any>(null);
   const [cli, setCli] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
@@ -933,6 +946,7 @@ function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose }: { or
           cliente={cli} 
           formato={tenant.config?.formato_ticket || "80mm"} 
           serviciosList={srvList}
+          pagoRecibido={pagoRecibido}
         />
       </div>
 
@@ -1398,43 +1412,58 @@ function OrdenesPrintPortal({
 }
 
 // ============ DIALOG DE COBRO DE SALDO (PAGO AL RETIRAR) ============
-interface CobrarOrdenDialogProps {
+export interface CobrarOrdenDialogProps {
   orden: Orden;
   onClose: () => void;
   tenant: any;
   cajaAbierta: Caja | null | undefined;
   clientes: Cliente[];
   queryClient: any;
-  showPrintPortal?: (orden: Orden) => void;
+  showPrintPortal?: (orden: Orden, pagoRecibido?: number) => void;
+  onSuccess?: (orden: Orden) => void;
 }
 
-function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, queryClient, showPrintPortal }: CobrarOrdenDialogProps) {
+export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, queryClient, showPrintPortal, onSuccess }: CobrarOrdenDialogProps) {
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
-  const [recibido, setRecibido] = useState<number>(0);
+  const [recibido, setRecibido] = useState<number>(orden.saldo);
   const [entregarAlCobrar] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
 
   const totalCobrar = orden.saldo;
   const vuelto = metodo === "EFECTIVO" && recibido > totalCobrar ? recibido - totalCobrar : 0;
-  const faltante = metodo === "EFECTIVO" && recibido > 0 && recibido < totalCobrar ? totalCobrar - recibido : 0;
+  const faltante = recibido > 0 && recibido < totalCobrar ? totalCobrar - recibido : 0;
 
-  const cli = clientes.find((c) => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", telefono: "", tipo: "Consumidor Final" };
+  const cli = clientes.find((c) => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", telefono: "", tipo: "Consumidor Final" as Cliente["tipo"], cedula: undefined };
+
+  const handleMetodoChange = (m: MetodoPago) => {
+    setMetodo(m);
+    if (m !== "EFECTIVO" && recibido > totalCobrar) {
+      setRecibido(totalCobrar);
+    }
+  };
 
   async function handleConfirmarCobro() {
     if (!cajaAbierta) {
       toast.error("Debes abrir la caja antes de registrar un pago");
       return;
     }
-    if (metodo === "EFECTIVO" && recibido < totalCobrar) {
-      toast.error("El monto recibido es menor al saldo pendiente");
+    if (recibido <= 0) {
+      toast.error("El monto recibido debe ser mayor a cero");
+      return;
+    }
+    if (metodo !== "EFECTIVO" && recibido > totalCobrar) {
+      toast.error("El monto no puede superar el saldo pendiente para este método de pago");
       return;
     }
 
     setLoading(true);
     try {
-      const nuevoPagado = orden.pagado + totalCobrar;
-      const nuevoSaldo = 0;
-      const nuevoEstado: EstadoOrden = entregarAlCobrar ? "ENTREGADA" : orden.estado;
+      const montoAPagar = metodo === "EFECTIVO" ? Math.min(recibido, totalCobrar) : recibido;
+      const nuevoPagado = orden.pagado + montoAPagar;
+      const nuevoSaldo = Math.max(0, totalCobrar - montoAPagar);
+      const nuevoEstado: EstadoOrden = orden.estado === "ENTREGADA" 
+        ? "ENTREGADA" 
+        : (nuevoSaldo === 0 ? (entregarAlCobrar ? "ENTREGADA" : "PAGADA") : orden.estado);
 
       let finalNCF: string | undefined = orden.ncf;
       let finalNcfVencimiento: string | undefined = orden.ncf_vencimiento;
@@ -1528,34 +1557,43 @@ function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, quer
         tenant_id: tenant.id,
         caja_id: cajaAbierta.id,
         empleado_id: ordenActualizada.empleado_id,
-        tipo: "VENTA",
-        concepto: `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`,
-        monto: totalCobrar,
+        tipo: nuevoSaldo === 0 ? "VENTA" : "ABONO",
+        concepto: nuevoSaldo === 0
+          ? `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`
+          : `Abono a orden #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`,
+        monto: montoAPagar,
         metodo: metodo,
         orden_id: orden.id,
         creado_en: new Date().toISOString(),
       });
 
       // 3. Notificación de WhatsApp si corresponde
-      if (entregarAlCobrar) {
+      if (entregarAlCobrar && nuevoSaldo === 0) {
         import("@/lib/whatsapp").then(({ notificarWhatsApp }) => {
           const cliFull = clientes.find(c => c.id === orden.cliente_id);
           if (cliFull) {
-            notificarWhatsApp(tenant, cliFull, ordenActualizada, "entregada", totalCobrar).then((r) => {
+            notificarWhatsApp(tenant, cliFull, ordenActualizada, "entregada", montoAPagar).then((r) => {
               if (r.ok) toast.success("WhatsApp de entrega enviado ✅");
             });
           }
         });
       }
 
-      toast.success(`Orden #${orden.numero} saldada correctamente RD$${totalCobrar} ✅`);
+      toast.success(
+        nuevoSaldo === 0
+          ? `Orden #${orden.numero} saldada correctamente RD$${montoAPagar} ✅`
+          : `Abono de RD$${montoAPagar} registrado a la orden #${orden.numero} ✅`
+      );
       
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenant.id] });
       queryClient.invalidateQueries({ queryKey: ['movimientos', tenant.id] });
 
       onClose();
       if (showPrintPortal) {
-        showPrintPortal(ordenActualizada);
+        showPrintPortal(ordenActualizada, montoAPagar);
+      }
+      if (onSuccess) {
+        onSuccess(ordenActualizada);
       }
     } catch (err: any) {
       toast.error("Error al registrar el cobro: " + err.message);
@@ -1672,7 +1710,7 @@ function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, quer
                       <button
                         key={m.id}
                         type="button"
-                        onClick={() => setMetodo(m.id as MetodoPago)}
+                        onClick={() => handleMetodoChange(m.id as MetodoPago)}
                         className={`flex flex-col items-center justify-center p-2.5 rounded-2xl border-2 transition-all active:scale-95 ${
                           metodo === m.id
                             ? "border-emerald-600 bg-emerald-500/[0.05] text-emerald-700 font-bold scale-[1.02] shadow-sm ring-1 ring-emerald-500/10"
@@ -1686,23 +1724,25 @@ function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, quer
                   </div>
                 </div>
 
-                {/* Formulario Efectivo */}
-                {metodo === "EFECTIVO" && (
-                  <div className="rounded-2xl border border-border/60 bg-accent/5 p-3.5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                    <div className="space-y-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Monto Recibido</label>
-                      <div className="relative h-14">
-                        <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/40">RD$</span>
-                        <Input
-                          className="h-full pl-14 text-2xl md:text-3xl font-black bg-background border border-primary/20 focus-visible:ring-emerald-500 focus-visible:ring-offset-0 rounded-2xl transition-all"
-                          value={recibido ? formatAmountInput(String(recibido)) : ""}
-                          onChange={(e) => setRecibido(parseAmount(e.target.value))}
-                          placeholder="0.00"
-                          autoFocus
-                        />
-                      </div>
+                {/* Formulario Efectivo / Tarjeta / Transferencia */}
+                <div className="rounded-2xl border border-border/60 bg-accent/5 p-3.5 space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                      {metodo === "EFECTIVO" ? "Monto Recibido" : "Monto a Cobrar"}
+                    </label>
+                    <div className="relative h-14">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/40">RD$</span>
+                      <Input
+                        className="h-full pl-14 text-2xl md:text-3xl font-black bg-background border border-primary/20 focus-visible:ring-emerald-500 focus-visible:ring-offset-0 rounded-2xl transition-all"
+                        value={recibido ? formatAmountInput(String(recibido)) : ""}
+                        onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                        placeholder="0.00"
+                        autoFocus
+                      />
                     </div>
+                  </div>
 
+                  {metodo === "EFECTIVO" ? (
                     <div className={`flex items-center justify-between p-2 rounded-xl border text-xs font-bold transition-all ${
                       faltante > 0 ? "bg-rose-50 border-rose-100 text-rose-700" : "bg-emerald-50 border-emerald-100 text-emerald-700"
                     }`}>
@@ -1713,8 +1753,17 @@ function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, quer
                         {formatRD(faltante > 0 ? faltante : vuelto)}
                       </span>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    faltante > 0 && (
+                      <div className="flex items-center justify-between p-2 rounded-xl border border-rose-100 bg-rose-50 text-xs font-bold text-rose-700 transition-all">
+                        <span className="uppercase text-[9px] tracking-wider">Saldo Restante</span>
+                        <span className="text-sm font-black">
+                          {formatRD(faltante)}
+                        </span>
+                      </div>
+                    )
+                  )}
+                </div>
               </div>
             </div>
 
@@ -1724,7 +1773,7 @@ function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, quer
                 size="lg"
                 className="w-full h-11 font-bold text-xs tracking-wider rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-glow transition-all active:scale-[0.98]"
                 onClick={handleConfirmarCobro}
-                disabled={loading || !cajaAbierta || (metodo === "EFECTIVO" && (faltante > 0))}
+                disabled={loading || !cajaAbierta || recibido <= 0 || (metodo !== "EFECTIVO" && recibido > totalCobrar)}
               >
                 {loading ? (
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />

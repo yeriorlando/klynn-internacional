@@ -92,8 +92,32 @@ function CatalogoPage() {
   const [editServ, setEditServ] = useState<Servicio | null>(null);
   const [openServ, setOpenServ] = useState(false);
 
-    // Sincronización automática desactivada, manejada por DB Triggers
+  // Sincronización automática desactivada, manejada por DB Triggers
 
+  const [tab, setTab] = useState(() => {
+    if (typeof window !== "undefined") {
+      return new URLSearchParams(window.location.search).get("tab") || "prendas";
+    }
+    return "prendas";
+  });
+
+  useEffect(() => {
+    const handleUrlChange = () => {
+      const currentTab = new URLSearchParams(window.location.search).get("tab") || "prendas";
+      if (currentTab !== tab) {
+        setTab(currentTab);
+      }
+    };
+    const interval = setInterval(handleUrlChange, 100);
+    return () => clearInterval(interval);
+  }, [tab]);
+
+  const handleTabChange = (val: string) => {
+    setTab(val);
+    const url = new URL(window.location.href);
+    url.searchParams.set("tab", val);
+    window.history.pushState({}, "", url.toString());
+  };
 
   const loading = loadingItems || loadingServicios;
 
@@ -118,7 +142,7 @@ function CatalogoPage() {
         description="Gestiona prendas, precios y servicios disponibles para tu lavandería."
       />
 
-      <Tabs defaultValue="prendas" className="mt-2">
+      <Tabs value={tab} onValueChange={handleTabChange} className="mt-2">
         <TabsList className="mb-6 bg-muted/30 p-1 rounded-2xl border border-primary/5 shadow-sm inline-flex h-auto">
           <TabsTrigger 
             value="prendas" 

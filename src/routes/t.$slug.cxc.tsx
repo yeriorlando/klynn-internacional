@@ -8,10 +8,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { formatRD } from "@/lib/storage";
-import type { Orden, Cliente, Tenant } from "@/lib/storage";
+import { formatRD, saveOrden, saveMovimiento, uid } from "@/lib/storage";
+import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
+import { useCajaAbierta } from "@/hooks/use-queries";
+import { queryClient } from "@/router";
+import { CobrarOrdenDialog, TicketPrintPortal } from "./t.$slug.ordenes";
 
 export const Route = createFileRoute("/t/$slug/cxc")({
   component: CuentasPorCobrarPage,
@@ -70,6 +73,13 @@ export default function CuentasPorCobrarPage() {
   const navigate = useNavigate();
   const tenantId = user?.tenant?.id || "";
 
+  const { data: cajaAbierta } = useCajaAbierta(tenantId);
+  const [dbClientes, setDbClientes] = useState<Cliente[]>([]);
+  const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
+  const [cobrarCliente, setCobrarCliente] = useState<ClienteDeuda | null>(null);
+  const [showPrint, setShowPrint] = useState<Orden | null>(null);
+  const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
+
   const [loading, setLoading] = useState(true);
   const [savingLimite, setSavingLimite] = useState(false);
   const [enviando, setEnviando] = useState<string | null>(null);
@@ -115,8 +125,10 @@ export default function CuentasPorCobrarPage() {
       if (error) throw error;
 
       const map = new Map<string, ClienteDeuda>();
+      const allClientsMap = new Map<string, Cliente>();
       for (const o of ordenes || []) {
         const c: Cliente = o.clientes;
+        if (c) allClientsMap.set(c.id, c);
         const dias = diasAntiguedad(o.creado_en);
         const mora = estadoMora(dias, limiteDias);
         const ord: CXCOrden = { ...o, cliente: c, dias_antiguedad: dias, estado_mora: mora };
@@ -143,6 +155,7 @@ export default function CuentasPorCobrarPage() {
         entry.ordenes.push(ord);
       }
 
+      setDbClientes(Array.from(allClientsMap.values()));
       setClientes(Array.from(map.values()).sort((a, b) => b.total_deuda - a.total_deuda));
     } catch (err: any) {
       toast.error("Error al cargar cuentas por cobrar");
@@ -525,7 +538,7 @@ export default function CuentasPorCobrarPage() {
               <Card key={cli.cliente_id} className="overflow-hidden">
                 <div
                   onClick={() => setExpanded(p => ({ ...p, [cli.cliente_id]: !p[cli.cliente_id] }))}
-                  className="w-full p-4 flex items-center gap-4 hover:bg-accent/30 transition-colors text-left cursor-pointer"
+                  className="w-full p-4 flex items-center justify-between gap-4 hover:bg-accent/30 transition-colors text-left cursor-pointer"
                 >
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -541,63 +554,91 @@ export default function CuentasPorCobrarPage() {
                       <span className="flex items-center gap-1"><Clock className="h-3 w-3" />Max {cli.dias_max} {cli.dias_max === 1 ? "día" : "días"}</span>
                     </div>
                   </div>
+
+                  {/* Right: Balance and accordion trigger */}
                   <div className="flex items-center gap-3 shrink-0">
-                    <button
-                      onClick={e => { e.stopPropagation(); enviarRecordatorio(cli); }}
-                      disabled={enviando === cli.cliente_id}
-                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold border border-emerald-400/50 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
-                    >
-                      <MessageCircle className="h-3.5 w-3.5" />
-                      {enviando === cli.cliente_id ? "Enviando..." : "Enviar recordatorio"}
-                    </button>
                     <div className="text-right">
                       <div className="font-display text-xl font-black text-red-600">{formatRD(cli.total_deuda)}</div>
                       <div className="text-xs text-muted-foreground">pendiente</div>
                     </div>
+                    {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                   </div>
-                  {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                 </div>
 
                 {isOpen && (
-                  <div className="border-t border-border overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground">
-                        <tr>
-                          <th className="px-4 py-2.5 text-left">Orden</th>
-                          <th className="px-4 py-2.5 text-left">Fecha</th>
-                          <th className="px-4 py-2.5 text-left">Días</th>
-                          <th className="px-4 py-2.5 text-right">Total</th>
-                          <th className="px-4 py-2.5 text-right">Pagado</th>
-                          <th className="px-4 py-2.5 text-right font-bold text-red-600">Saldo</th>
-                          <th className="px-4 py-2.5 text-left">Estado</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cli.ordenes.map(o => {
-                          const mc = MORA_CONFIG[o.estado_mora];
-                          return (
-                            <tr key={o.id} className="border-t border-border/50 hover:bg-accent/20">
-                              <td className="px-4 py-2.5 font-mono text-xs font-bold">{o.numero}</td>
-                              <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(o.creado_en).toLocaleDateString("es-DO")}</td>
-                              <td className="px-4 py-2.5">
-                                <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${mc.color}`}>
-                                  {o.dias_antiguedad} {o.dias_antiguedad === 1 ? "día" : "días"}
-                                </span>
-                              </td>
-                              <td className="px-4 py-2.5 text-right">{formatRD(o.total)}</td>
-                              <td className="px-4 py-2.5 text-right text-emerald-600">{formatRD(o.pagado)}</td>
-                              <td className="px-4 py-2.5 text-right font-bold text-red-600">{formatRD(o.saldo)}</td>
-                              <td className="px-4 py-2.5 text-xs">{o.estado}</td>
-                            </tr>
-                          );
-                        })}
-                        <tr className="border-t-2 border-border bg-surface-elevated font-bold">
-                          <td colSpan={5} className="px-4 py-2.5 text-right text-sm">Total deuda de {cli.cliente_nombre}:</td>
-                          <td className="px-4 py-2.5 text-right text-red-600 font-display">{formatRD(cli.total_deuda)}</td>
-                          <td />
-                        </tr>
-                      </tbody>
-                    </table>
+                  <div className="border-t border-border p-4 bg-slate-50/10 space-y-4">
+                    <div className="overflow-x-auto border border-border rounded-xl bg-background">
+                      <table className="w-full text-sm">
+                        <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground">
+                          <tr>
+                            <th className="px-4 py-2.5 text-left">Orden</th>
+                            <th className="px-4 py-2.5 text-left">Fecha</th>
+                            <th className="px-4 py-2.5 text-left">Días</th>
+                            <th className="px-4 py-2.5 text-right">Total</th>
+                            <th className="px-4 py-2.5 text-right">Pagado</th>
+                            <th className="px-4 py-2.5 text-right font-bold text-red-600">Saldo</th>
+                            <th className="px-4 py-2.5 text-left">Estado</th>
+                            <th className="px-4 py-2.5 text-center">Acciones</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {cli.ordenes.map(o => {
+                            const mc = MORA_CONFIG[o.estado_mora];
+                            return (
+                              <tr key={o.id} className="border-t border-border/50 hover:bg-accent/20">
+                                <td className="px-4 py-2.5 font-mono text-xs font-bold">{o.numero}</td>
+                                <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(o.creado_en).toLocaleDateString("es-DO")}</td>
+                                <td className="px-4 py-2.5">
+                                  <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${mc.color}`}>
+                                    {o.dias_antiguedad} {o.dias_antiguedad === 1 ? "día" : "días"}
+                                  </span>
+                                </td>
+                                <td className="px-4 py-2.5 text-right">{formatRD(o.total)}</td>
+                                <td className="px-4 py-2.5 text-right text-emerald-600">{formatRD(o.pagado)}</td>
+                                <td className="px-4 py-2.5 text-right font-bold text-red-600">{formatRD(o.saldo)}</td>
+                                <td className="px-4 py-2.5 text-xs">{o.estado}</td>
+                                <td className="px-4 py-2.5 text-center">
+                                  <Button
+                                    size="sm"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setCobrarOrden(o);
+                                    }}
+                                    className="h-7 px-3 text-[10px] font-black tracking-wider uppercase rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                                  >
+                                    Cobrar / Abono
+                                  </Button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                          <tr className="border-t-2 border-border bg-surface-elevated font-bold">
+                            <td colSpan={5} className="px-4 py-2.5 text-right text-sm">Total deuda de {cli.cliente_nombre}:</td>
+                            <td className="px-4 py-2.5 text-right text-red-600 font-display">{formatRD(cli.total_deuda)}</td>
+                            <td colSpan={2} />
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Footer Actions */}
+                    <div className="flex items-center justify-end gap-3 pt-2">
+                      <button
+                        onClick={e => { e.stopPropagation(); enviarRecordatorio(cli); }}
+                        disabled={enviando === cli.cliente_id}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-emerald-400/50 text-emerald-700 bg-emerald-50 hover:bg-emerald-100 transition-colors disabled:opacity-50"
+                      >
+                        <MessageCircle className="h-4 w-4" />
+                        {enviando === cli.cliente_id ? "Enviando..." : "Enviar recordatorio"}
+                      </button>
+                      <button
+                        onClick={e => { e.stopPropagation(); setCobrarCliente(cli); }}
+                        className="flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold border border-indigo-400/50 text-indigo-700 bg-indigo-50 hover:bg-indigo-100 transition-colors shrink-0"
+                      >
+                        <CreditCard className="h-4 w-4" />
+                        Cobrar Todo
+                      </button>
+                    </div>
                   </div>
                 )}
               </Card>
@@ -766,6 +807,263 @@ export default function CuentasPorCobrarPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {cobrarOrden && (
+        <CobrarOrdenDialog
+          orden={cobrarOrden}
+          onClose={() => setCobrarOrden(null)}
+          tenant={user.tenant}
+          cajaAbierta={cajaAbierta}
+          clientes={dbClientes}
+          queryClient={queryClient}
+          showPrintPortal={(upd, rec) => {
+            setShowPrint(upd);
+            setPagoRecibidoParaTicket(rec);
+          }}
+          onSuccess={() => {
+            cargar();
+          }}
+        />
+      )}
+
+      {cobrarCliente && (
+        <CobrarDeudaClienteDialog
+          cliente={cobrarCliente}
+          onClose={() => setCobrarCliente(null)}
+          tenantId={tenantId}
+          cajaAbierta={cajaAbierta}
+          queryClient={queryClient}
+          onSuccess={() => {
+            cargar();
+          }}
+        />
+      )}
+
+      {showPrint && (
+        <TicketPrintPortal 
+          orden={showPrint} 
+          tenant={user.tenant} 
+          clientes={dbClientes}
+          empleados={[]}
+          pagoRecibido={pagoRecibidoParaTicket}
+          onClose={() => {
+            setShowPrint(null);
+            setPagoRecibidoParaTicket(undefined);
+          }} 
+        />
+      )}
     </>
+  );
+}
+
+interface CobrarDeudaClienteDialogProps {
+  cliente: ClienteDeuda;
+  onClose: () => void;
+  tenantId: string;
+  cajaAbierta: any;
+  queryClient: any;
+  onSuccess: () => void;
+}
+
+export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbierta, queryClient, onSuccess }: CobrarDeudaClienteDialogProps) {
+  const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
+  const [recibido, setRecibido] = useState<number>(cliente.total_deuda);
+  const [loading, setLoading] = useState<boolean>(false);
+
+  const formatAmountInput = (val: string) => {
+    if (!val) return "";
+    const clean = val.replace(/,/g, "").replace(/[^0-9.]/g, "");
+    const parts = clean.split(".");
+    const integerPart = parts[0];
+    const decimalPart = parts.length > 1 ? parts.slice(1).join("") : null;
+    
+    const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+    
+    if (decimalPart !== null) {
+      return formattedInteger + "." + decimalPart.substring(0, 2);
+    }
+    return formattedInteger;
+  };
+
+  const parseAmount = (val: string) => {
+    const clean = val.replace(/,/g, "").replace(/[^0-9.]/g, "");
+    return parseFloat(clean) || 0;
+  };
+
+  const vuelto = metodo === "EFECTIVO" && recibido > cliente.total_deuda ? recibido - cliente.total_deuda : 0;
+
+  async function handleConfirmarCobro() {
+    if (!cajaAbierta) {
+      toast.error("La caja debe estar abierta para registrar un cobro");
+      return;
+    }
+    if (recibido <= 0) {
+      toast.error("El monto recibido debe ser mayor a cero");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const montoAPagar = Math.min(recibido, cliente.total_deuda);
+      let restante = montoAPagar;
+
+      // Ordenar las órdenes del cliente por fecha de creación (FIFO)
+      const sortedOrdenes = [...cliente.ordenes].sort((a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime());
+
+      for (const o of sortedOrdenes) {
+        if (restante <= 0) break;
+        const totalCobrarOrden = o.saldo;
+        const montoAPagarOrden = Math.min(restante, totalCobrarOrden);
+        if (montoAPagarOrden <= 0) continue;
+
+        const nuevoPagado = Number((o.pagado + montoAPagarOrden).toFixed(2));
+        const nuevoSaldo = Number((totalCobrarOrden - montoAPagarOrden).toFixed(2));
+        const nuevoEstado: EstadoOrden = o.estado === "ENTREGADA" 
+          ? "ENTREGADA" 
+          : (nuevoSaldo === 0 ? "PAGADA" : o.estado);
+
+        // Guardar la orden con los saldos actualizados
+        await saveOrden({
+          ...o,
+          pagado: nuevoPagado,
+          saldo: nuevoSaldo,
+          estado: nuevoEstado,
+          metodo_pago: o.pagado > 0 ? "MIXTO" : metodo
+        });
+
+        // Registrar el movimiento de entrada en caja para esta orden
+        await saveMovimiento({
+          id: uid("mov"),
+          tenant_id: tenantId,
+          caja_id: cajaAbierta.id,
+          empleado_id: o.empleado_id,
+          tipo: nuevoSaldo === 0 ? "VENTA" : "ABONO",
+          concepto: nuevoSaldo === 0
+            ? `Cobro de saldo orden #${o.numero} desde Cobrar Todo`
+            : `Abono a orden #${o.numero} desde Cobrar Todo (Saldo restante: ${formatRD(nuevoSaldo)})`,
+          monto: montoAPagarOrden,
+          metodo: metodo,
+          orden_id: o.id,
+          creado_en: new Date().toISOString(),
+        });
+
+        restante = Number((restante - montoAPagarOrden).toFixed(2));
+      }
+
+      toast.success(`Se cobraron RD$${montoAPagar.toFixed(2)} de la deuda de ${cliente.cliente_nombre} ✅`);
+      
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
+
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      toast.error("Error al registrar el cobro: " + err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl font-display font-black text-emerald-800">
+            <div className="bg-emerald-100 p-2 rounded-xl">
+              <CreditCard className="h-5 w-5 text-emerald-600" />
+            </div>
+            Cobrar Deuda Total
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground pt-1">
+            Registra el pago total o abono parcial para la deuda del cliente <span className="font-bold text-foreground">{cliente.cliente_nombre} {cliente.cliente_apellido || ""}</span>.
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          {/* Tarjeta de Resumen de Deuda */}
+          <div className="rounded-2xl bg-emerald-50/50 border border-emerald-100 p-4 text-center">
+            <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 block">Total Deuda Acumulada</span>
+            <span className="text-3xl font-black text-emerald-600 block">{formatRD(cliente.total_deuda)}</span>
+            <span className="text-[10px] text-muted-foreground block mt-1">{cliente.ordenes_count} orden{cliente.ordenes_count !== 1 ? "es" : ""} con saldo pendiente</span>
+          </div>
+
+          {/* Formulario */}
+          <div className="space-y-3">
+            <div>
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Método de Pago</label>
+              <div className="grid grid-cols-3 gap-2">
+                {[
+                  { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
+                  { id: "TARJETA", label: "Tarjeta", icon: "💳" },
+                  { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" }
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => {
+                      setMetodo(m.id as MetodoPago);
+                      if (m.id !== "EFECTIVO" && recibido > cliente.total_deuda) {
+                        setRecibido(cliente.total_deuda);
+                      }
+                    }}
+                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all duration-200 active:scale-95 ${
+                      metodo === m.id
+                        ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
+                        : "border-border hover:border-emerald-500/40 hover:bg-emerald-50/20 text-muted-foreground"
+                    }`}
+                  >
+                    <span className="text-lg mb-0.5">{m.icon}</span>
+                    <span className="text-[10px] font-black uppercase tracking-wider">{m.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">
+                {metodo === "EFECTIVO" ? "Monto Recibido" : "Monto a Cobrar"}
+              </label>
+              <div className="relative h-14">
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/40">RD$</span>
+                <Input
+                  className="h-full pl-14 text-2xl md:text-3xl font-black bg-background border border-primary/20 focus-visible:ring-emerald-500 focus-visible:ring-offset-0 rounded-2xl transition-all"
+                  value={recibido ? formatAmountInput(String(recibido)) : ""}
+                  onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                  placeholder="0.00"
+                  autoFocus
+                />
+              </div>
+            </div>
+
+            {metodo === "EFECTIVO" && recibido > cliente.total_deuda && (
+              <div className="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
+                <span className="font-medium text-slate-500">Vuelto a entregar:</span>
+                <span className="font-bold text-slate-800 text-sm">{formatRD(vuelto)}</span>
+              </div>
+            )}
+            
+            {recibido > 0 && recibido < cliente.total_deuda && (
+              <div className="flex justify-between items-center bg-amber-50 border border-amber-200 rounded-xl px-3 py-2 text-xs text-amber-800">
+                <span className="font-medium">Saldo restante del cliente:</span>
+                <span className="font-bold text-sm">{formatRD(cliente.total_deuda - recibido)}</span>
+              </div>
+            )}
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 sm:gap-0 mt-2">
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleConfirmarCobro}
+            disabled={loading || !cajaAbierta || recibido <= 0}
+            className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold"
+          >
+            {loading ? "Procesando..." : "Confirmar Pago"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

@@ -81,6 +81,9 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div className="text-center font-bold uppercase text-[12px] py-1">{tipoDocumento}</div>
+      <div className="text-center font-bold uppercase text-[11px] py-1 border border-black my-1">
+        {orden.saldo === 0 ? "★ FACTURA PAGADA ★" : `⚠️ PENDIENTE: ${formatRD(orden.saldo)}`}
+      </div>
       <Sep />
       <div>
         <div><b>ORDEN:</b> {orden.numero}</div>
@@ -244,9 +247,25 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       <Sep />
       <div>
         <Row k="Pago" v={orden.metodo_pago === "CREDITO" && orden.pagado === 0 ? "AL RETIRAR" : orden.metodo_pago} />
-        {pagoRecibido !== undefined && <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} />}
-        {vuelto > 0 && <Row k="Vuelto" v={formatRD(vuelto).replace("DOP", "RD$")} />}
-        {orden.saldo > 0 && <Row k="Saldo pendiente" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />}
+        <Row k="Estado Pago" v={orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"} bold />
+        {pagoRecibido !== undefined && (
+          <>
+            {pagoRecibido < (orden.saldo + pagoRecibido) && pagoRecibido > 0 ? (
+              <>
+                <Row k="Abonado" v={formatRD(pagoRecibido).replace("DOP", "RD$")} bold />
+                <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />
+              </>
+            ) : (
+              <>
+                <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} />
+                {vuelto > 0 && <Row k="Vuelto" v={formatRD(vuelto).replace("DOP", "RD$")} />}
+              </>
+            )}
+          </>
+        )}
+        {pagoRecibido === undefined && orden.saldo > 0 && (
+          <Row k="Saldo pendiente" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />
+        )}
       </div>
       <Sep />
       <div>

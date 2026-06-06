@@ -46,6 +46,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
   const [conceptoPago, setConceptoPago] = useState<string>("Abono a cuenta");
   const [showPagoPanel, setShowPagoPanel] = useState<boolean>(false);
   const [procesandoPago, setProcesandoPago] = useState<boolean>(false);
+  const [searchOrder, setSearchOrder] = useState<string>("");
 
   const empty = { 
     nombre: "", 
@@ -63,6 +64,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
   const [loadingRNC, setLoadingRNC] = useState(false);
 
   const clientOrders = allOrders.filter(o => o.cliente_id === cliente?.id && o.estado !== "ANULADA");
+  const filteredClientOrders = clientOrders.filter(o => {
+    const q = searchOrder.toLowerCase().trim();
+    if (!q) return true;
+    const matchNumero = o.numero?.toLowerCase().includes(q);
+    const dateStr = new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase();
+    const matchDate = dateStr.includes(q);
+    return matchNumero || matchDate;
+  });
   const outstandingDebt = clientOrders.reduce((sum, o) => sum + (o.saldo || 0), 0);
 
   async function handleSearchRNC() {
@@ -126,7 +135,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
         const newPagado = +(currentPagado + p).toFixed(2);
         const newSaldo = +(currentSaldo - p).toFixed(2);
 
-        const nextState = newSaldo === 0 ? "PAGADA" : order.estado;
+        const nextState = order.estado === "ENTREGADA" ? "ENTREGADA" : (newSaldo === 0 ? "PAGADA" : order.estado);
 
         updatedOrders.push({
           ...order,
@@ -178,6 +187,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
       setMontoPago("");
       setConceptoPago("Abono a cuenta");
       setMetodoPago("EFECTIVO");
+      setSearchOrder("");
     }
   }, [cliente, open]);
  
@@ -435,116 +445,56 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                 </div>
               )}
 
-              {cliente && outstandingDebt > 0 ? (
-                <div className="rounded-xl border border-amber-200 bg-amber-50/50 p-3 dark:border-amber-900/30 dark:bg-amber-950/10 space-y-2.5 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <h4 className="text-[9px] uppercase font-black tracking-widest text-amber-600 dark:text-amber-500">Deuda Pendiente</h4>
-                      <p className="text-lg font-display font-black text-amber-700 dark:text-amber-400 mt-0.5">
-                        {formatRD(outstandingDebt)}
-                      </p>
-                    </div>
-                    {!showPagoPanel ? (
-                      <Button 
-                        type="button" 
-                        onClick={() => {
-                          setShowPagoPanel(true);
-                          setMontoPago(String(outstandingDebt));
-                        }} 
-                        className="bg-amber-600 hover:bg-amber-700 text-white border-none font-bold rounded-xl text-[9px] h-7 px-2.5 shadow-sm"
-                      >
-                        Registrar pago
-                      </Button>
+              {cliente && (
+                <div className="flex-1 flex flex-col overflow-hidden min-h-0 mt-3.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Historial de Órdenes</Label>
+                    <span className="text-[9px] font-bold text-muted-foreground bg-accent px-1.5 py-0.5 rounded-full">
+                      {clientOrders.length} {clientOrders.length === 1 ? "orden" : "órdenes"}
+                    </span>
+                  </div>
+                  
+                  {/* Buscador de órdenes */}
+                  <div className="relative mb-2">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+                    <Input
+                      value={searchOrder}
+                      onChange={(e) => setSearchOrder(e.target.value)}
+                      placeholder="Buscar por nº o fecha (dd/mm/aaaa)..."
+                      className="h-8 pl-8 rounded-xl text-xs bg-background"
+                    />
+                  </div>
+
+                  {/* Lista scrollable */}
+                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin max-h-[200px]">
+                    {filteredClientOrders.length === 0 ? (
+                      <div className="text-center py-6 text-muted-foreground text-[10px] border border-dashed border-border rounded-xl bg-background/50">
+                        No se encontraron órdenes
+                      </div>
                     ) : (
-                      <Button 
-                        type="button" 
-                        variant="ghost" 
-                        onClick={() => setShowPagoPanel(false)}
-                        className="text-muted-foreground text-[10px] font-bold h-7 px-2"
-                      >
-                        Cancelar
-                      </Button>
+                      filteredClientOrders.map(o => {
+                        const hasBalance = (o.saldo || 0) > 0;
+                        return (
+                          <div key={o.id} className="flex flex-col p-2.5 rounded-xl border border-border bg-background hover:bg-accent/30 transition-colors text-xs">
+                            <div className="flex items-center justify-between font-bold">
+                              <span className="font-mono text-primary">Orden {o.numero}</span>
+                              <span className="text-foreground">{formatRD(o.total)}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
+                              <span>{new Date(o.creado_en).toLocaleDateString("es-DO")}</span>
+                              <span className={`font-bold uppercase tracking-wide text-[9px] px-1.5 py-0.5 rounded-full ${
+                                o.estado === 'ANULADA' ? 'bg-red-50 text-red-600 border border-red-200' :
+                                o.estado === 'ENTREGADA' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
+                                hasBalance ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
+                              }`}>
+                                {o.estado} {hasBalance && `(${formatRD(o.saldo)} pend.)`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
                     )}
                   </div>
-
-                  {showPagoPanel && (
-                    <div className="pt-2.5 border-t border-amber-200/50 dark:border-amber-900/20 space-y-2.5 animate-in fade-in slide-in-from-top-2 duration-150">
-                      <div>
-                        <Label className="text-[9px] font-bold text-amber-700 dark:text-amber-400">Monto a pagar (RD$)</Label>
-                        <Input
-                          type="number"
-                          min="0.01"
-                          max={outstandingDebt}
-                          step="0.01"
-                          value={montoPago}
-                          onChange={(e) => setMontoPago(e.target.value)}
-                          className="bg-white border-amber-200 focus-visible:ring-amber-500 text-amber-800 font-bold h-8.5 mt-1 rounded-lg text-xs"
-                          placeholder="0.00"
-                          disabled={procesandoPago}
-                        />
-                      </div>
-
-                      <div className="grid grid-cols-2 gap-1.5">
-                        <div>
-                          <Label className="text-[9px] font-bold text-amber-700 dark:text-amber-400">Método de Pago</Label>
-                          <Select 
-                            value={metodoPago} 
-                            onValueChange={(v) => setMetodoPago(v as MetodoPago)}
-                            disabled={procesandoPago}
-                          >
-                            <SelectTrigger className="bg-white border-amber-200 h-7.5 text-[10px] rounded-lg mt-1"><SelectValue /></SelectTrigger>
-                            <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
-                              <SelectItem value="EFECTIVO">💵 Efectivo</SelectItem>
-                              <SelectItem value="TARJETA">💳 Tarjeta</SelectItem>
-                              <SelectItem value="TRANSFERENCIA">🏦 Transf.</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div>
-                          <Label className="text-[9px] font-bold text-amber-700 dark:text-amber-400">Concepto</Label>
-                          <Input
-                            value={conceptoPago}
-                            onChange={(e) => setConceptoPago(e.target.value)}
-                            className="bg-white border-amber-200 text-amber-800 h-7.5 text-[10px] rounded-lg mt-1"
-                            placeholder="Abono..."
-                            disabled={procesandoPago}
-                          />
-                        </div>
-                      </div>
-
-                      {!cajaAbierta && (
-                        <p className="text-[8px] text-destructive font-bold">
-                          ⚠️ Caja cerrada. Abre caja.
-                        </p>
-                      )}
-
-                      <Button
-                        type="button"
-                        onClick={handleRegistrarPago}
-                        disabled={procesandoPago || !cajaAbierta || !montoPago || Number(montoPago) <= 0}
-                        className="w-full bg-[#16A34A] hover:bg-[#15803D] text-white font-bold rounded-xl mt-1 h-8.5 border-none shadow-sm text-xs"
-                      >
-                        {procesandoPago ? (
-                          <>
-                            <Loader2 className="mr-1 h-3 w-3 animate-spin" />
-                            Cobrando...
-                          </>
-                        ) : (
-                          "Confirmar Pago"
-                        )}
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center text-center p-4 border border-dashed border-border rounded-xl bg-background/50 h-32 animate-in fade-in duration-200">
-                  <div className="h-8 w-8 rounded-full bg-emerald-100 dark:bg-emerald-950/30 flex items-center justify-center mb-1.5">
-                    <Check className="h-4.5 w-4.5 text-emerald-600" />
-                  </div>
-                  <h4 className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Sin deudas</h4>
-                  <p className="text-[8px] text-muted-foreground mt-0.5 max-w-[180px]">
-                    El cliente está al día con sus pagos o no cuenta con crédito habilitado.
-                  </p>
                 </div>
               )}
             </div>

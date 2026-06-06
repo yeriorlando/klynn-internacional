@@ -3,8 +3,8 @@ import { useMemo, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import {
-  LayoutDashboard, FilePlus2, Receipt, Wallet, Users, UserCog, Truck, FileBarChart,
-  Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone
+  LayoutDashboard, Wallet, Users, Truck, Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone, HelpCircle,
+  Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -22,31 +22,33 @@ import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CloudSync } from "@/components/klynn/CloudSync";
 import { TourManager, resetTours } from "@/components/klynn/onboarding/TourManager";
-import { HelpCircle } from "lucide-react";
 import { queryClient } from "@/router";
 import { useCajaAbierta } from "@/hooks/use-queries";
 
 interface NavItem {
   to: string;
   label: string;
-  icon: typeof LayoutDashboard;
+  icon: any;
   permission?: string;
   exact?: boolean;
   highlight?: boolean;
+  hasArrow?: boolean;
+  onClick?: () => void;
+  isSoporte?: boolean;
 }
 
 const NAV: (slug: string) => NavItem[] = (slug) => [
-  { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
   { to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard" },
-  { to: `/t/${slug}/nueva-orden`, label: "Nueva orden", icon: FilePlus2, highlight: true, permission: "nueva-orden" },
-  { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: Receipt, permission: "ordenes" },
+  { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
+  {to: `/t/${slug}/nueva-orden`, label: "Punto de Venta", icon: Monitor, permission: "nueva-orden"},
+  {to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes"},
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
-  { to: `/t/${slug}/clientes`, label: "Clientes", icon: Users, permission: "clientes" },
-  { to: `/t/${slug}/catalogo`, label: "Catálogo", icon: BookOpen, permission: "catalogo" },
-  { to: `/t/${slug}/personal`, label: "Personal", icon: UserCog, permission: "personal" },
+  { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
+  { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
+  { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
   { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
-  { to: `/t/${slug}/reportes`, label: "Reportes", icon: FileBarChart, permission: "reportes" },
+  { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
   { to: `/t/${slug}/configuracion`, label: "Configuración", icon: Settings, permission: "configuracion" },
 ];
 
@@ -158,8 +160,14 @@ export function TenantShell() {
     navigate({ to: "/login" });
   }
 
-  const isActive = (to: string, exact?: boolean) =>
-    exact ? pathname === to : pathname === to || pathname.startsWith(to + "/");
+  const isActive = (to: string, exact?: boolean) => {
+    const [toPath, toSearch] = to.split('?');
+    if (toSearch) {
+      const currentSearch = typeof window !== 'undefined' ? window.location.search : '';
+      return pathname === toPath && currentSearch.includes(toSearch);
+    }
+    return exact ? pathname === toPath : pathname === toPath || pathname.startsWith(toPath + "/");
+  };
 
 
   return (
@@ -341,7 +349,7 @@ export function TenantShell() {
 
       {/* Sidebar desktop */}
       <aside id="tour-sidebar" className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out">
-        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} />
+        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} setShowSoporteModal={setShowSoporteModal} />
       </aside>
 
       {/* Sidebar móvil */}
@@ -349,7 +357,7 @@ export function TenantShell() {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-72 bg-surface shadow-elegant flex flex-col">
-            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} onNavigate={() => setMobileOpen(false)} />
+            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} onNavigate={() => setMobileOpen(false)} setShowSoporteModal={setShowSoporteModal} />
           </aside>
         </div>
       )}
@@ -399,14 +407,15 @@ export function TenantShell() {
 }
 
 function SidebarContent({
-  tenant, empleado, pathname, isActive, unreadCount, onNavigate,
+  tenant, empleado, pathname, isActive, unreadCount, onNavigate, setShowSoporteModal,
 }: {
-  tenant: { id: string; nombre: string; slug: string; color_primario: string; color_secundario: string; logo_url?: string };
+  tenant: { id: string; nombre: string; slug: string; color_primario: string; color_secundario: string; logo_url?: string; plan_id: string };
   empleado: any;
   pathname: string;
   isActive: (to: string, exact?: boolean) => boolean;
   unreadCount: number;
   onNavigate?: () => void;
+  setShowSoporteModal: (show: boolean) => void;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
@@ -420,13 +429,6 @@ function SidebarContent({
       setHasLogistica(!!plan?.modulos?.logistica);
     });
   }, [tenant.plan_id]);
-
-  const allowedNav = useMemo(() => {
-    let base = NAV(tenant.slug);
-    if (!hasLogistica) base = base.filter(i => i.permission !== "logistica");
-    base = base.filter(i => i.permission !== "nueva-orden");
-    return base.filter(item => !item.permission || can(empleado, item.permission));
-  }, [tenant.slug, empleado, hasLogistica]);
 
   const switchBranch = async (t: any) => {
     if (t.slug === tenant.slug) return;
@@ -472,6 +474,57 @@ function SidebarContent({
     }
   };
 
+  const filteredCategories = useMemo(() => {
+    const slug = tenant.slug;
+    const itemsList = [
+      {
+        title: "OPERACIÓN",
+        items: [
+          {to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard"},
+          { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
+          {to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes"},
+          { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
+          { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
+          { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
+        ]
+      },
+      {
+        title: "CATÁLOGO",
+        items: [
+          { to: `/t/${slug}/catalogo?tab=prendas`, label: "Prendas", icon: Package, permission: "catalogo" },
+          { to: `/t/${slug}/catalogo?tab=servicios`, label: "Servicios", icon: LayoutGrid, permission: "catalogo", hasArrow: true }
+        ]
+      },
+      {
+        title: "PERSONAS",
+        items: [
+          { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
+          { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" }
+        ]
+      },
+      {
+        title: "ANÁLISIS",
+        items: [
+          { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" }
+        ]
+      },
+      {
+        title: "SISTEMA",
+        items: [
+          { to: `/t/${slug}/configuracion`, label: "Configuración", icon: Settings, permission: "configuracion", hasArrow: true },
+          { to: "#", label: "Soporte", icon: HelpCircle, isSoporte: true }
+        ]
+      }
+    ];
+
+    return itemsList.map(cat => {
+      let items = cat.items;
+      if (!hasLogistica) items = items.filter(i => i.permission !== "logistica");
+      items = items.filter(i => !i.permission || can(empleado, i.permission));
+      return { ...cat, items };
+    }).filter(cat => cat.items.length > 0);
+  }, [tenant.slug, empleado, hasLogistica]);
+
   return (
     <>
       <div className="relative flex h-24 flex-col items-center justify-center border-b border-border px-5">
@@ -486,7 +539,7 @@ function SidebarContent({
         )}
       </div>
 
-      <div className="relative border-b border-border p-5">
+      <div className="relative border-b border-border p-5 shrink-0">
         <div 
           className={`flex items-center gap-3 ${empleado.rol === "ADMIN" && myTenants.length > 1 ? "cursor-pointer rounded-xl p-1 -m-1 transition hover:bg-accent/50" : ""}`}
           onClick={() => empleado.rol === "ADMIN" && myTenants.length > 1 && setShowSwitcher(!showSwitcher)}
@@ -513,7 +566,7 @@ function SidebarContent({
             <div className="fixed inset-0 z-40" onClick={() => setShowSwitcher(false)} />
             <div className="absolute left-4 right-4 top-[calc(100%-8px)] z-50 mt-1 overflow-hidden rounded-xl border border-border bg-popover shadow-elegant animate-in fade-in zoom-in-95 duration-200">
               <div className="bg-muted/50 p-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Mis Sucursales</div>
-              <div className="max-h-[200px] overflow-y-auto p-1">
+              <div className="max-h-[200px] overflow-y-auto p-1 custom-scrollbar">
                 {myTenants.map((t) => (
                   <button
                     key={t.id}
@@ -536,68 +589,117 @@ function SidebarContent({
         )}
       </div>
 
-      <nav className="flex-1 overflow-y-auto p-3 space-y-3.5">
-        {/* Main Centered Green Call-to-Action for New Order */}
+      <nav className="flex-1 overflow-y-auto px-4 py-3 space-y-4 custom-scrollbar">
+        {/* Punto de Venta CTA Button */}
         {can(empleado, "nueva-orden") && (
-          <div className="px-1.5 pb-3 border-b border-border/40 flex justify-center">
+          <div className="px-1 pb-2 flex justify-center shrink-0">
             <Link
               to={`/t/${tenant.slug}/nueva-orden`}
               id="tour-nav-nueva-orden"
               onClick={onNavigate}
               onMouseEnter={() => prefetch('nueva-orden')}
-              className="w-full h-10 px-4 rounded-xl text-white shadow-md flex items-center justify-center gap-2 font-bold text-[13.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
+              className="w-full h-11 px-4 rounded-xl text-white shadow-md flex items-center justify-center gap-2.5 font-bold text-[14.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
             >
-              <PlusCircle className="h-5 w-5 shrink-0" strokeWidth={2.5} />
+              <PlusCircle className="h-5.5 w-5.5 shrink-0" strokeWidth={2.2} />
               <span>Nueva orden</span>
             </Link>
           </div>
         )}
 
-        <div className="space-y-0.5">
-          {allowedNav.map((item) => {
-            const active = isActive(item.to, item.exact);
-            const isConversations = item.permission === "conversations";
-            return (
-              <Link
-                key={item.to}
-                to={item.to}
-                id={`tour-nav-${item.permission}`}
-                onClick={onNavigate}
-                onMouseEnter={() => item.permission && prefetch(item.permission)}
-                className={`mb-0.5 flex items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition ${
-                  active
-                    ? "bg-gradient-primary text-white shadow-card animate-in duration-300"
-                    : "text-foreground/80 hover:bg-accent hover:text-foreground"
-                }`}
-              >
-                <div className="flex items-center gap-3">
-                  <item.icon className="h-4 w-4 shrink-0" />
-                  <span>{item.label}</span>
-                </div>
-                {isConversations && unreadCount > 0 && (
-                  <Badge className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
-                    active ? "bg-white text-primary" : "bg-primary text-primary-foreground"
-                  }`}>
-                    {unreadCount}
-                  </Badge>
-                )}
-              </Link>
-            );
-          })}
-        </div>
+        {filteredCategories.map((category) => (
+          <div key={category.title} className="space-y-1">
+            {/* Category Header */}
+            <div className="px-3.5 pt-3 pb-1.5 text-[11.5px] font-bold uppercase tracking-wider text-muted-foreground/60 select-none">
+              {category.title}
+            </div>
+
+            {/* Category Items */}
+            <div className="space-y-0.5">
+              {category.items.map((item) => {
+                const active = item.isSoporte ? false : isActive(item.to, item.exact);
+                const isConversations = item.permission === "conversations";
+
+                if (item.isSoporte) {
+                  return (
+                    <button
+                      key={item.label}
+                      onClick={() => {
+                        setShowSoporteModal(true);
+                        if (onNavigate) onNavigate();
+                      }}
+                      className="w-full text-left relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition duration-200 text-black dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-black dark:hover:text-white cursor-pointer"
+                    >
+                      <div className="flex items-center gap-3">
+                        <item.icon className="h-5 w-5 shrink-0 text-primary" strokeWidth={1.8} />
+                        <span>{item.label}</span>
+                      </div>
+                    </button>
+                  );
+                }
+
+                return (
+                  <Link
+                    key={item.to}
+                    to={item.to}
+                    id={`tour-nav-${item.permission}`}
+                    onClick={onNavigate}
+                    onMouseEnter={() => item.permission && prefetch(item.permission)}
+                    className={`relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition duration-200 ${
+                      active
+                        ? "bg-primary/10 text-black dark:text-white font-semibold"
+                        : "text-black dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-black dark:hover:text-white"
+                    }`}
+                  >
+                    {active && (
+                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-primary rounded-r-full" style={{ backgroundColor: "var(--primary)" }} />
+                    )}
+                    <div className="flex items-center gap-3">
+                      <item.icon 
+                        className="h-5 w-5 shrink-0 transition-colors text-primary" 
+                        strokeWidth={1.8}
+                      />
+                      <span>{item.label}</span>
+                    </div>
+
+                    {item.hasArrow && (
+                      <ChevronDown className="h-5 w-5 text-slate-400 shrink-0" strokeWidth={1.8} />
+                    )}
+
+                    {isConversations && unreadCount > 0 && (
+                      <Badge className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
+                        active ? "bg-primary text-white" : "bg-primary text-primary-foreground"
+                      }`}>
+                        {unreadCount}
+                      </Badge>
+                    )}
+                  </Link>
+                );
+              })}
+            </div>
+          </div>
+        ))}
       </nav>
 
       {empleado.rol === "ADMIN" && (
-        <div className="p-4 mt-auto">
+        <div className="p-4 pb-2 shrink-0">
           <Link to="/dashboard-admin" onClick={onNavigate}>
-            <div className="flex items-center gap-3 px-4 py-3 rounded-full bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all shadow-sm group">
+            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-primary/10 text-primary border border-primary/20 hover:bg-primary/20 transition-all shadow-sm group">
               <Shield className="h-4 w-4 group-hover:scale-110 transition-transform" />
-              <span className="text-xs font-bold tracking-wide uppercase">Panel Administrador</span>
+              <span className="text-[11px] font-bold tracking-wide uppercase">Panel Administrador</span>
             </div>
           </Link>
         </div>
       )}
 
+      <div className="mt-auto border-t border-border p-4 flex items-center gap-3 shrink-0">
+        <div className="grid h-10 w-10 place-items-center rounded-full bg-primary/10 text-primary font-bold text-sm">
+          {empleado.nombre.split(" ").map((n: string) => n[0]).slice(0, 2).join("").toUpperCase()}
+        </div>
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[14.5px] font-semibold text-slate-800 dark:text-slate-200">{empleado.nombre}</div>
+          <div className="truncate text-[10.5px] font-medium uppercase text-muted-foreground">{empleado.rol}</div>
+        </div>
+      </div>
     </>
   );
 }
