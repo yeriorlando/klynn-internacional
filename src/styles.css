@@ -121,27 +121,27 @@
 }
 
 .dark {
-  --background: oklch(0.14 0.025 250);
-  --foreground: oklch(0.96 0.005 240);
-  --surface: oklch(0.18 0.03 250);
-  --surface-elevated: oklch(0.22 0.035 250);
-  --card: oklch(0.18 0.03 250);
-  --card-foreground: oklch(0.96 0.005 240);
-  --popover: oklch(0.18 0.03 250);
-  --popover-foreground: oklch(0.96 0.005 240);
+  --background: oklch(0.11 0.015 250);
+  --foreground: oklch(0.98 0.005 240);
+  --surface: oklch(0.14 0.02 250);
+  --surface-elevated: oklch(0.17 0.025 250);
+  --card: oklch(0.14 0.02 250);
+  --card-foreground: oklch(0.98 0.005 240);
+  --popover: oklch(0.14 0.02 250);
+  --popover-foreground: oklch(0.98 0.005 240);
   --primary: oklch(0.65 0.20 255);
-  --primary-foreground: oklch(0.14 0.025 250);
+  --primary-foreground: oklch(0.11 0.015 250);
   --primary-glow: oklch(0.72 0.18 255);
-  --secondary: oklch(0.24 0.035 250);
-  --secondary-foreground: oklch(0.96 0.005 240);
-  --muted: oklch(0.22 0.03 250);
-  --muted-foreground: oklch(0.68 0.02 245);
-  --accent: oklch(0.28 0.05 255);
-  --accent-foreground: oklch(0.96 0.005 240);
+  --secondary: oklch(0.20 0.025 250);
+  --secondary-foreground: oklch(0.98 0.005 240);
+  --muted: oklch(0.18 0.02 250);
+  --muted-foreground: oklch(0.65 0.02 245);
+  --accent: oklch(0.24 0.04 255);
+  --accent-foreground: oklch(0.98 0.005 240);
   --gold: oklch(0.78 0.14 75);
   --gold-foreground: oklch(0.18 0.04 60);
-  --border: oklch(1 0 0 / 0.08);
-  --input: oklch(1 0 0 / 0.10);
+  --border: oklch(1 0 0 / 0.06);
+  --input: oklch(1 0 0 / 0.08);
   --ring: oklch(0.65 0.20 255);
   --destructive: oklch(0.65 0.22 25);
   --destructive-foreground: oklch(0.99 0 0);
@@ -296,3 +296,29 @@ body.pos-mode .main-header {
   scrollbar-width: thin;
   scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
 }
+
+/* Circular Reveal Theme Switch Transition */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+::view-transition-old(root) {
+  z-index: 1;
+}
+
+::view-transition-new(root) {
+  z-index: 9999;
+}
+
+/* Disable transitions temporarily during theme change */
+.no-transitions *,
+.no-transitions *::before,
+.no-transitions *::after {
+  transition: none !important;
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+}
+
+

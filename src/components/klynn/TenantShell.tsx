@@ -24,6 +24,7 @@ import { CloudSync } from "@/components/klynn/CloudSync";
 import { TourManager, resetTours } from "@/components/klynn/onboarding/TourManager";
 import { queryClient } from "@/router";
 import { useCajaAbierta } from "@/hooks/use-queries";
+import ThemeSwitch from "@/components/theme-switch";
 
 interface NavItem {
   to: string;
@@ -385,11 +386,7 @@ export function TenantShell() {
             <CloudSync tenantId={tenant.id} />
           </div>
 
-          <Link to="/t/$slug/nueva-orden" params={{ slug: tenant.slug }} className="hidden sm:block">
-            <Button size="sm" className="bg-emerald-600 text-white hover:bg-emerald-700 border-0 shadow-sm transition-all">
-              <PlusCircle className="mr-1.5 h-4 w-4" /> Nueva orden
-            </Button>
-          </Link>
+          <ThemeSwitch />
 
           <button className="relative rounded-md p-2 hover:bg-accent" aria-label="Notificaciones">
             <Bell className="h-5 w-5" />
