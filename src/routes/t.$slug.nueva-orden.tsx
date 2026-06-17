@@ -422,7 +422,11 @@ function NuevaOrdenPage() {
   const subtotalGravableBase = itemsGravables.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
   const subtotalExentoBase = itemsExentos.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
 
-  const costoServicios = servicios.filter(s => serviciosSel.includes(s.nombre)).reduce((acc, s) => acc + (customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio), 0);
+  const costoServicios = servicios.filter(s => serviciosSel.includes(s.nombre)).reduce((acc, s) => {
+    const qty = serviciosSel.filter(x => x === s.nombre).length;
+    const price = customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio;
+    return acc + (price * qty);
+  }, 0);
 
   // El recargo de urgencia se aplica al subtotal base de prendas más el costo de los servicios
   const recargoTotal = esUrgente ? (subtotalGravableBase + subtotalExentoBase + costoServicios) * (cfg.recargo_urgencia / 100) : 0;
@@ -498,6 +502,23 @@ function NuevaOrdenPage() {
       const newQty = Math.max(1, it.cantidad + delta);
       return { ...it, cantidad: newQty };
     }));
+  }
+  function updateServiceQuantity(serviceName: string, delta: number) {
+    setServiciosSel((arr) => {
+      const currentCount = arr.filter(x => x === serviceName).length;
+      if (delta < 0 && currentCount <= 1) return arr;
+      if (delta < 0) {
+        const idx = arr.indexOf(serviceName);
+        if (idx > -1) {
+          const result = [...arr];
+          result.splice(idx, 1);
+          return result;
+        }
+      } else if (delta > 0) {
+        return [...arr, serviceName];
+      }
+      return arr;
+    });
   }
 
   const toggleFullscreen = () => {
@@ -659,9 +680,9 @@ function NuevaOrdenPage() {
             ncf: result.encf,
             tipo_ecf: activeTipo,
             ecf_id: result.document.id,
-            ecf_qr: result.stamp_url || result.document.document_stamp_url || '',
+            ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || '',
             ecf_security_code: result.security_code || '',
-            ecf_signature_date: result.document.signature_date || new Date().toISOString(),
+            ecf_signature_date: (result.document as any).signature_date || new Date().toISOString(),
             ncf_vencimiento: ncfVencimiento,
           };
 
@@ -728,7 +749,7 @@ function NuevaOrdenPage() {
       }
       toast.error("Selecciona un cliente"); return;
     }
-    if (step === 2 && serviciosSel.length === 0) { toast.error("Selecciona al menos un servicio"); return; }
+    if (step === 2 && serviciosSel.length === 0 && !enablePrendas) { toast.error("Selecciona al menos un servicio"); return; }
     if (step === 3 && items.length === 0 && (enableServicios ? serviciosSel.length === 0 : true)) {
       toast.error(enableServicios ? "Agrega al menos una prenda o selecciona un servicio" : "Agrega al menos una prenda");
       return;
@@ -1221,33 +1242,32 @@ function NuevaOrdenPage() {
                       </h3>
                       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
                         {servicesFiltered.map(s => {
-                          const sel = serviciosSel.includes(s.nombre);
+                          const srvCount = serviciosSel.filter(x => x === s.nombre).length;
                           return (
                             <button
                               key={s.id}
-                              onClick={() => setServiciosSel((arr) => sel ? arr.filter((x) => x !== s.nombre) : [...arr, s.nombre])}
-                              className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${sel ? "border-primary bg-primary/10 shadow-glow" : "border-transparent bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
-                                }`}
+                              onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
+                              className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${srvCount > 0 ? "border-primary bg-primary/10 shadow-glow" : "border-transparent bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
+                                 }`}
                             >
                               {s.imagen_url ? (
                                 <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden ring-2 ring-white/20">
                                   <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
                                 </div>
                               ) : (
-                                <div className={`flex h-24 w-24 items-center justify-center rounded-2xl text-4xl transition-colors ${sel ? "bg-primary text-white" : "bg-accent/30"}`}>
+                                <div className={`flex h-24 w-24 items-center justify-center rounded-2xl text-4xl transition-colors ${srvCount > 0 ? "bg-primary text-white shadow-glow" : "bg-accent/30"}`}>
                                   {s.icono || "🧺"}
                                 </div>
                               )}
                               <div>
-                                <div className="text-sm font-bold leading-tight line-clamp-2">{s.nombre}</div>
-                                {s.precio > 0 && <div className="mt-1 text-xs font-black text-primary">+{formatRD(s.precio)}</div>}
+                                <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
+                                <div className="mt-1 text-xs font-black text-primary">+{formatRD(s.precio)}</div>
                               </div>
-                              {sel && (
-                                <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white shadow-glow">
-                                  <Check className="h-3 w-3" />
+                              {srvCount > 0 && (
+                                <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
+                                  {srvCount}
                                 </div>
                               )}
-                              <Badge className="absolute top-2 left-2 text-[7px] font-normal uppercase px-1.5 py-0 bg-primary text-white border-none shadow-sm pointer-events-none ring-1 ring-white/20">Servicio</Badge>
                             </button>
                           );
                         })}
@@ -1315,7 +1335,7 @@ function NuevaOrdenPage() {
               <div className="flex items-center justify-between mb-3">
                 <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Orden</div>
                 <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => { setItems([]); setServiciosSel(["Lavado y secado"]); setCliente(null); }}>
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => { setItems([]); setServiciosSel([]); setCliente(null); }}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                   {!cliente && (
@@ -1351,15 +1371,6 @@ function NuevaOrdenPage() {
 
             {/* List: Items */}
             <div className="overflow-y-auto p-4 space-y-3 custom-scrollbar">
-              {serviciosSel.length > 0 && (
-                <div className="flex flex-wrap gap-1 mb-4 border-b border-primary/10 pb-3">
-                  {serviciosSel.map(sName => (
-                    <Badge key={sName} variant="secondary" className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold py-0.5">
-                      {sName}
-                    </Badge>
-                  ))}
-                </div>
-              )}
               {items.length === 0 && serviciosSel.length === 0 ? (
                 <div className="h-full flex flex-col items-center justify-center text-center opacity-40 py-10">
                   <ShoppingCart className="h-10 w-10 mb-2" />
@@ -1368,60 +1379,76 @@ function NuevaOrdenPage() {
               ) : (
                 <>
                   {/* Servicios Seleccionados en Carrito POS */}
-                  {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => (
-                    <div key={'pos-srv-'+idx} className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-primary/20 bg-primary/5 mb-3 transition-all animate-in fade-in duration-200">
-                      <div className="flex justify-between items-start">
-                        <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
-                          <span>🧺</span>
-                          <span className="line-clamp-1">Servicio: {srv.nombre}</span>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-5 w-5 text-destructive hover:bg-rose-50 rounded-md shrink-0"
-                          onClick={() => setServiciosSel(prev => prev.filter(x => x !== srv.nombre))}
-                        >
-                          <X className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      <div className="flex justify-between items-center">
-                        {srv.permitir_desglose ? (
+                  {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
+                    const count = serviciosSel.filter(x => x === srv.nombre).length;
+                    const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
+                    return (
+                      <div key={'pos-srv-'+idx} className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-primary/20 bg-primary/5 mb-3 transition-all animate-in fade-in duration-200">
+                        <div className="flex justify-between items-start">
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
+                            <span>🧺</span>
+                            <span className="line-clamp-1">Servicio: {srv.nombre}</span>
+                          </div>
                           <Button
                             variant="ghost"
-                            size="sm"
-                            className="h-6 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/10 rounded-md gap-1"
-                            onClick={() => {
-                              setIndexDesglose(-1);
-                              setShowDesgloseDialog(true);
-                            }}
+                            size="icon"
+                            className="h-5 w-5 text-destructive hover:bg-rose-50 rounded-md shrink-0"
+                            onClick={() => setServiciosSel(prev => {
+                              const index = prev.indexOf(srv.nombre);
+                              if (index > -1) {
+                                const next = [...prev];
+                                next.splice(index, 1);
+                                return next;
+                              }
+                              return prev;
+                            })}
                           >
-                            <Plus className="h-2.5 w-2.5" /> Detalle
+                            <X className="h-3 w-3" />
                           </Button>
-                        ) : <div />}
-                        <div className="flex items-center gap-1.5 shrink-0">
-                          {srv.permitir_editar_precio ? (
-                            <div className="flex items-center gap-1">
-                              <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
-                              <Input
-                                type="text"
-                                inputMode="decimal"
-                                className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                value={formatAmountInput(String(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0)))}
-                                onChange={(e) => {
-                                  const val = parseAmount(e.target.value) || 0;
-                                  setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
-                                }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="text-xs font-black text-primary">
-                              {formatRD(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0))}
-                            </div>
-                          )}
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
+                              <Minus className="h-2.5 w-2.5" />
+                            </Button>
+                            <span className="text-xs font-bold w-5 text-center">{count}</span>
+                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
+                              <Plus className="h-2.5 w-2.5" />
+                            </Button>
+                          </div>
+                          
+                          <div className="flex flex-col items-end gap-0.5 shrink-0">
+                            {srv.permitir_editar_precio ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                    value={formatAmountInput(String(unitPrice))}
+                                    onChange={(e) => {
+                                      const val = parseAmount(e.target.value) || 0;
+                                      setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+                                    }}
+                                  />
+                                </div>
+                                {count > 1 && (
+                                  <span className="text-[9px] text-muted-foreground font-semibold">
+                                    Tot: {formatRD(count * unitPrice)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="text-xs font-black text-primary">
+                                {formatRD(count * unitPrice)}
+                              </div>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
 
                   {/* Prendas (Items) */}
                   {items.map((it, i) => {
@@ -1454,20 +1481,6 @@ function NuevaOrdenPage() {
                               <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateItemQuantity(i, 1)}>
                                 <Plus className="h-2.5 w-2.5" />
                               </Button>
-                              
-                              {catalogMatch?.permitir_desglose && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="h-6 px-2 text-[9px] font-black uppercase text-primary hover:bg-primary/10 rounded-md gap-1 ml-1"
-                                  onClick={() => {
-                                    setIndexDesglose(i);
-                                    setShowDesgloseDialog(true);
-                                  }}
-                                >
-                                  <Plus className="h-2.5 w-2.5" /> Detalle
-                                </Button>
-                              )}
                             </div>
                           )}
                           <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -1532,7 +1545,7 @@ function NuevaOrdenPage() {
               </div>
               {!(isPosMode && step === 5) && (
                 <Button
-                  disabled={items.length === 0 || !cliente}
+                  disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
                   className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2"
                   onClick={() => { setStep(5); }}
                 >
@@ -1678,13 +1691,13 @@ function NuevaOrdenPage() {
                   ) : (
                     <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                       {servicios.map((s) => {
-                        const sel = serviciosSel.includes(s.nombre);
+                        const srvCount = serviciosSel.filter(x => x === s.nombre).length;
                         return (
-                          <button key={s.id} onClick={() => setServiciosSel((arr) => sel ? arr.filter((x) => x !== s.nombre) : [...arr, s.nombre])}
-                            className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left text-sm transition ${sel ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
+                          <button key={s.id} onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
+                            className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left text-sm transition relative ${srvCount > 0 ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
                               }`}>
-                            <div className={`flex h-5 w-5 items-center justify-center rounded border-2 ${sel ? "border-primary bg-primary text-white" : "border-border"}`}>
-                              {sel && <Check className="h-3 w-3" />}
+                            <div className={`flex h-5 w-5 items-center justify-center rounded border-2 ${srvCount > 0 ? "border-primary bg-primary text-white" : "border-border"}`}>
+                              {srvCount > 0 && <Check className="h-3 w-3" />}
                             </div>
                             {s.imagen_url ? (
                               <img src={s.imagen_url} alt={s.nombre} className="h-8 w-8 rounded object-cover" />
@@ -1696,6 +1709,11 @@ function NuevaOrdenPage() {
                               {s.descripcion && <div className="text-[11px] text-muted-foreground">{s.descripcion}</div>}
                               {s.precio > 0 && <div className="text-[10px] font-bold text-primary">+{formatRD(s.precio)}</div>}
                             </div>
+                            {srvCount > 0 && (
+                              <div className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-[9px] font-black shadow-sm ring-2 ring-background">
+                                {srvCount}
+                              </div>
+                            )}
                           </button>
                         );
                       })}
@@ -1711,65 +1729,87 @@ function NuevaOrdenPage() {
 
                   <div className="space-y-2">
                     {/* Servicios Seleccionados para desglose */}
-                    {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => (
-                      <div key={'srv-'+idx} className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200">
-                        <div className="flex-1">
-                          <div className="font-semibold text-primary flex items-center gap-1.5 text-sm sm:text-base">
-                            <span>🧺</span> Servicio: {srv.nombre}
+                    {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
+                      const count = serviciosSel.filter(x => x === srv.nombre).length;
+                      const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
+                      return (
+                        <div key={'srv-'+idx} className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200">
+                          <div className="flex-1">
+                            <div className="font-semibold text-primary flex items-center gap-1.5 text-sm sm:text-base">
+                              <span>🧺</span> Servicio: {srv.nombre}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {srv.permitir_desglose 
+                                ? "Servicio de la orden · Haz clic en \"+\" para detallar sus prendas"
+                                : "Servicio de la orden"}
+                            </div>
                           </div>
-                          <div className="text-xs text-muted-foreground">
-                            {srv.permitir_desglose 
-                              ? "Servicio de la orden · Haz clic en \"+\" para detallar sus prendas"
-                              : "Servicio de la orden"}
+                          
+                          <div className="flex items-center gap-2">
+                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
+                              <Minus className="h-2.5 w-2.5" />
+                            </Button>
+                            <span className="text-xs font-bold w-5 text-center">{count}</span>
+                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
+                              <Plus className="h-2.5 w-2.5" />
+                            </Button>
                           </div>
-                        </div>
-                        <div>
-                          {srv.permitir_editar_precio ? (
-                            <div className="flex items-center gap-1">
-                              <span className="text-xs font-bold text-muted-foreground">RD$</span>
-                              <Input
-                                type="text"
-                                inputMode="decimal"
-                                className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                value={formatAmountInput(String(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0)))}
-                                onChange={(e) => {
-                                  const val = parseAmount(e.target.value) || 0;
-                                  setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+
+                          <div className="flex flex-col items-end gap-0.5 shrink-0">
+                            {srv.permitir_editar_precio ? (
+                              <div className="flex flex-col items-end gap-1">
+                                <div className="flex items-center gap-1">
+                                  <span className="text-xs font-bold text-muted-foreground">RD$</span>
+                                  <Input
+                                    type="text"
+                                    inputMode="decimal"
+                                    className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                    value={formatAmountInput(String(unitPrice))}
+                                    onChange={(e) => {
+                                      const val = parseAmount(e.target.value) || 0;
+                                      setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+                                    }}
+                                  />
+                                </div>
+                                {count > 1 && (
+                                  <span className="text-[10px] text-muted-foreground font-semibold">
+                                    Tot: {formatRD(count * unitPrice)}
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="font-display text-base sm:text-lg font-bold text-primary">
+                                {formatRD(count * unitPrice)}
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            {srv.permitir_desglose && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-primary hover:bg-primary/10 rounded-md"
+                                title={`Desglosar prendas para el servicio ${srv.nombre}`}
+                                onClick={() => {
+                                  setIndexDesglose(-1);
+                                  setShowDesgloseDialog(true);
                                 }}
-                              />
-                            </div>
-                          ) : (
-                            <div className="font-display text-base sm:text-lg font-bold text-primary">
-                              {formatRD(customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0))}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center gap-1">
-                          {srv.permitir_desglose && (
+                              >
+                                <Plus className="h-4 w-4" />
+                              </Button>
+                            )}
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-primary hover:bg-primary/10 rounded-md"
-                              title={`Desglosar prendas para el servicio ${srv.nombre}`}
-                              onClick={() => {
-                                setIndexDesglose(-1);
-                                setShowDesgloseDialog(true);
-                              }}
+                              className="h-8 w-8 text-destructive hover:bg-rose-50 rounded-md"
+                              onClick={() => setServiciosSel(prev => prev.filter(x => x !== srv.nombre))}
                             >
-                              <Plus className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
-                          )}
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8 text-destructive hover:bg-rose-50 rounded-md"
-                            onClick={() => setServiciosSel(prev => prev.filter(x => x !== srv.nombre))}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
 
                     {/* Items normal */}
                     {items.map((it, i) => {
@@ -1866,18 +1906,21 @@ function NuevaOrdenPage() {
                       <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detalles de la orden</span>
                     </div>
                     <div className="space-y-2">
-                      {serviciosSel.map((sName, i) => {
-                        const sPrice = customServicePrices[sName] !== undefined 
-                          ? customServicePrices[sName] 
-                          : (servicios.find(x => x.nombre === sName)?.precio || 0);
+                      {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
+                        const count = serviciosSel.filter(x => x === srv.nombre).length;
+                        const sPrice = customServicePrices[srv.nombre] !== undefined 
+                          ? customServicePrices[srv.nombre] 
+                          : (srv.precio || 0);
                         return (
-                          <div key={`srv-${i}`} className="flex justify-between items-center text-sm group">
+                          <div key={`srv-${idx}`} className="flex justify-between items-center text-sm group">
                             <div className="flex flex-col">
-                              <span className="font-medium text-foreground">Servicio: {sName}</span>
-                              <span className="text-[10px] text-muted-foreground uppercase">Servicio de la orden</span>
+                              <span className="font-medium text-foreground">Servicio: {srv.nombre}</span>
+                              <span className="text-[10px] text-muted-foreground uppercase">
+                                {count} {count > 1 ? "servicios" : "servicio"} de la orden
+                              </span>
                             </div>
-                            <div className="font-display font-semibold text-foreground text-primary">
-                              {formatRD(sPrice)}
+                            <div className="font-display font-semibold text-primary font-bold">
+                              {formatRD(count * sPrice)}
                             </div>
                           </div>
                         );
