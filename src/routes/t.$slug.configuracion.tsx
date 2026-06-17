@@ -39,7 +39,8 @@ import {
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload,
-  User, Palette, FileText, Banknote, Star, Sparkles, ArrowRight, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff
+  User, Palette, FileText, Banknote, Star, Sparkles, ArrowRight, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff,
+  FlaskConical, Globe
 } from "lucide-react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
@@ -422,6 +423,22 @@ function ConfigPage() {
               <Field label="Máx caja chica (RD$)">
                 <Input className={FIELD} value={formatAmountInput(String(cfg.monto_max_caja_chica))} onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} />
               </Field>
+
+              <label className="flex items-center justify-between rounded-xl border border-input p-3">
+                <span className="text-sm font-medium">Habilitar selección de servicios en nueva orden</span>
+                <Switch 
+                  checked={cfg.pos_habilitar_servicios !== false} 
+                  onCheckedChange={(v) => updateCfg({ pos_habilitar_servicios: v })} 
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl border border-input p-3">
+                <span className="text-sm font-medium">Habilitar selección de prendas en nueva orden</span>
+                <Switch 
+                  checked={cfg.pos_habilitar_prendas !== false} 
+                  onCheckedChange={(v) => updateCfg({ pos_habilitar_prendas: v })} 
+                />
+              </label>
             </div>
             <Button className="mt-6" onClick={() => save(tenant)}>
               <Save className="mr-2 h-4 w-4" /> Guardar cambios
@@ -634,6 +651,26 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     else toast.error("Error: " + (r.reason || "desconocido"));
   }
 
+  if (!enabled) {
+    return (
+      <div className="flex justify-center py-6">
+        <Card className="w-full max-w-md p-8 border border-dashed border-primary/20 bg-primary/5 text-center rounded-3xl shadow-sm">
+          <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 text-primary">
+            <MessageCircle className="h-8 w-8" />
+          </div>
+          <h3 className="font-display text-2xl mb-2 font-bold">Módulo de WhatsApp</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
+            Envía avisos automáticos y fideliza a tus clientes. 
+            Esta función está disponible solo en planes superiores.
+          </p>
+          <Button className="w-full rounded-xl font-bold h-11" onClick={() => onTabChange("plan")}>
+            Ver planes disponibles
+          </Button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <Card className={CARD + " relative overflow-hidden"}>
       {/* Barra de progreso de uso */}
@@ -670,25 +707,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
       </div>
 
       <div className="p-6 pt-6">
-      {!enabled && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-[2px]">
-          <div className="bg-white p-8 rounded-3xl shadow-2xl border border-border text-center max-w-sm mx-4">
-            <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4 text-primary">
-              <MessageCircle className="h-8 w-8" />
-            </div>
-            <h4 className="font-display text-2xl mb-2">Módulo de WhatsApp</h4>
-            <p className="text-sm text-muted-foreground mb-6">
-              Envía avisos automáticos y fideliza a tus clientes. 
-              Esta función está disponible solo en planes superiores.
-            </p>
-            <Button className="w-full rounded-xl font-bold h-11" onClick={() => onTabChange("plan")}>
-              Ver planes disponibles
-            </Button>
-          </div>
-        </div>
-      )}
-      
-      <div className={!enabled ? "opacity-40 pointer-events-none grayscale-[50%]" : ""}>
+      <div>
         <div className="mb-8 flex items-start gap-4">
           <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-600">
             <MessageCircle className="h-6 w-6" />
@@ -1168,22 +1187,26 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
   // Electronic e-CF sequences
   const elecSequences = sequences.filter(s => s.tipo_ecf.startsWith('E') || s.prefijo === 'E');
 
-  return (
-    <div className="space-y-6">
-      {!enabled && (
-        <Card className="p-8 border-dashed border-primary/20 bg-primary/5 text-center rounded-3xl">
+  if (!enabled) {
+    return (
+      <div className="flex justify-center py-6">
+        <Card className="w-full max-w-md p-8 border border-dashed border-primary/20 bg-primary/5 text-center rounded-3xl shadow-sm">
           <Shield className="h-12 w-12 text-primary mx-auto mb-4 opacity-50" />
-          <h3 className="text-xl font-display mb-2">Módulo Fiscal Avanzado</h3>
-          <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
+          <h3 className="text-xl font-display mb-2 font-bold">Módulo Fiscal Avanzado</h3>
+          <p className="text-sm text-muted-foreground mb-6 max-w-xs mx-auto">
             La gestión de RNC, ITBIS y Comprobantes Fiscales (NCF/e-CF) requiere el plan **Enterprise**.
           </p>
-          <Button onClick={() => onTabChange("plan")}>
+          <Button className="rounded-xl font-bold h-11 px-6" onClick={() => onTabChange("plan")}>
             Mejorar Plan
           </Button>
         </Card>
-      )}
+      </div>
+    );
+  }
 
-      <div className={!enabled ? "opacity-40 pointer-events-none space-y-6" : "space-y-6"}>
+  return (
+    <div className="space-y-6">
+      <div className="space-y-6">
         {/* 1. Configuración de Impuestos (ITBIS) */}
         <Card className={CARD}>
           <div className="flex items-center gap-3 mb-6">
@@ -1302,19 +1325,27 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                 </Field>
                 
                 {isElectronic && (
-                  <div className="flex items-center justify-between p-3 border rounded-xl bg-accent/10">
-                    <div className="space-y-0.5">
-                      <div className="text-sm font-bold">Ambiente DGII</div>
-                      <div className="text-xs text-muted-foreground">Pruebas o Producción.</div>
-                    </div>
+                  <Field label="Ambiente DGII" hint="Pruebas o Producción.">
                     <Select value={draft.ambiente} onValueChange={(v: any) => setDraft({ ...draft, ambiente: v })}>
-                      <SelectTrigger className="w-32 h-9 rounded-lg"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="pruebas">PRUEBAS</SelectItem>
-                        <SelectItem value="produccion">PRODUCCIÓN</SelectItem>
+                      <SelectTrigger className={FIELD}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="w-[var(--radix-select-trigger-width)]">
+                        <SelectItem value="pruebas" className="cursor-pointer">
+                          <span className="flex items-center gap-2">
+                            <FlaskConical className="h-4 w-4 text-amber-500" />
+                            <span>PRUEBAS</span>
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="produccion" className="cursor-pointer">
+                          <span className="flex items-center gap-2">
+                            <Globe className="h-4 w-4 text-emerald-500" />
+                            <span>PRODUCCIÓN</span>
+                          </span>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
-                  </div>
+                  </Field>
                 )}
 
                 {isElectronic && (
@@ -1603,21 +1634,23 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                       }} 
                     />
                     <Button 
+                      variant="outline"
                       size="sm" 
-                      className="h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm text-[10px] font-bold px-2"
+                      className="h-9 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200"
                       onClick={() => document.getElementById('import-excel-traditional')?.click()}
                     >
-                      <Upload className="h-3 w-3 mr-1" /> IMPORTAR
+                      <Upload className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Importar
                     </Button>
                     <Button 
+                      variant="outline"
                       size="sm" 
-                      className="h-7 rounded-lg bg-primary hover:bg-primary/90 text-white border-none shadow-sm text-[10px] font-bold px-2" 
+                      className="h-9 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200" 
                       onClick={() => {
                         setDialogMode('traditional');
                         setShowNewSeq(true);
                       }}
                     >
-                      <PlusCircle className="h-3 w-3 mr-1" /> AÑADIR
+                      <PlusCircle className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Añadir
                     </Button>
                   </div>
                 </div>
@@ -1717,21 +1750,23 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                       }} 
                     />
                     <Button 
+                      variant="outline"
                       size="sm" 
-                      className="h-7 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm text-[10px] font-bold px-2"
+                      className="h-9 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200"
                       onClick={() => document.getElementById('import-excel')?.click()}
                     >
-                      <Upload className="h-3 w-3 mr-1" /> IMPORTAR
+                      <Upload className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Importar
                     </Button>
                     <Button 
+                      variant="outline"
                       size="sm" 
-                      className="h-7 rounded-lg bg-primary hover:bg-primary/90 text-white border-none shadow-sm text-[10px] font-bold px-2" 
+                      className="h-9 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200" 
                       onClick={() => {
                         setDialogMode('electronic');
                         setShowNewSeq(true);
                       }}
                     >
-                      <PlusCircle className="h-3 w-3 mr-1" /> AÑADIR
+                      <PlusCircle className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Añadir
                     </Button>
                   </div>
                 </div>

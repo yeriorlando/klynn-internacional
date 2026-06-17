@@ -110,6 +110,8 @@ export interface TenantConfig {
   alerta_ncf_limite?: number;
   alerta_ncf_telefono?: string;
   max_sucursales?: number;
+  pos_habilitar_servicios?: boolean;
+  pos_habilitar_prendas?: boolean;
 }
 
 export interface WhatsAppConfig {
@@ -515,6 +517,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
     plantilla_lista: "Hola 👋, {cliente} ✨, tu orden {numero} de {detalle} en {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
     plantilla_entregada: "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
   },
+  pos_habilitar_servicios: true,
+  pos_habilitar_prendas: true,
 };
 
 export const CATEGORIAS_GASTOS = [

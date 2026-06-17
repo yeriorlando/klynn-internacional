@@ -60,6 +60,20 @@ function NuevaOrdenPage() {
   const plans = plansData || [];
   const tenantId = user?.tenant.id ?? "";
 
+  const cfg = user?.tenant.config || DEFAULT_CONFIG;
+  const enableServicios = cfg.pos_habilitar_servicios !== false;
+  const enablePrendas = cfg.pos_habilitar_prendas !== false;
+
+  function irAlPasoSiguienteDelCliente() {
+    if (enableServicios) {
+      setStep(2);
+    } else if (enablePrendas) {
+      setStep(3);
+    } else {
+      setStep(4);
+    }
+  }
+
   const [step, setStep] = useState(1);
   const [isPosMode, setIsPosMode] = useState(false);
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
@@ -240,7 +254,7 @@ function NuevaOrdenPage() {
 
     setCliente(c);
     setTipoECF(isPersona ? (isElectronic ? "E32" : "B02") : (isElectronic ? "E31" : "B01"));
-    setStep(2);
+    irAlPasoSiguienteDelCliente();
   }
 
   const [empresaDialogOpen, setEmpresaDialogOpen] = useState(false);
@@ -304,7 +318,7 @@ function NuevaOrdenPage() {
 
       setCliente(c);
       setTipoECF(isElectronic ? "E31" : "B01");
-      setStep(2);
+      irAlPasoSiguienteDelCliente();
       setEmpresaDialogOpen(false);
       setRncInput("");
       setRncResult(null);
@@ -356,8 +370,6 @@ function NuevaOrdenPage() {
     return servicios;
   }, [servicios, posSearch]);
 
-  const cfg = user?.tenant.config || DEFAULT_CONFIG;
-
   // Efecto para calcular la fecha de entrega automáticamente
   useEffect(() => {
     if (!user || user.tenant.id === '__loading__') return;
@@ -372,6 +384,25 @@ function NuevaOrdenPage() {
     // Formato YYYY-MM-DD para el input de fecha
     setFechaEntrega(d);
   }, [esUrgente, cfg.tiempo_entrega_estandar, cfg.tiempo_entrega_urgente, user?.tenant.id]);
+
+  useEffect(() => {
+    if (!enableServicios) {
+      setServiciosSel([]);
+    }
+  }, [enableServicios]);
+
+  useEffect(() => {
+    if (!enableServicios && enablePrendas) {
+      setPosFilterTab("PRENDAS");
+      setActiveCategory("TODAS LAS PRENDAS");
+    } else if (enableServicios && !enablePrendas) {
+      setPosFilterTab("SERVICIOS");
+      setActiveCategory("TODOS");
+    } else {
+      setPosFilterTab("TODOS");
+      setActiveCategory("TODOS");
+    }
+  }, [enableServicios, enablePrendas]);
 
   if (!user || user.tenant.id === '__loading__') return null;
   const { tenant, empleado } = user;
@@ -485,10 +516,33 @@ function NuevaOrdenPage() {
 
   async function onCrearOrden() {
     if (limits?.ordersReached) { setShowLimitModal(true); return; }
-    if (!cliente) {
+    let targetCliente: Cliente | null = cliente;
+    if (!targetCliente) {
       const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
       if (isConsumoFinal) {
-        await handleSelectGeneric("Persona");
+        const isPersona = true;
+        const gid = tenantId.substring(0, 24) + "f000" + tenantId.substring(28);
+        const c: Cliente = {
+          id: gid,
+          tenant_id: tenantId,
+          nombre: "Consumidor",
+          apellido: "Final",
+          cedula: "",
+          telefono: "---",
+          email: "",
+          direccion: "",
+          tipo: "Consumidor Final",
+          limite_credito: 0,
+          creado_en: new Date().toISOString()
+        };
+        try {
+          await saveCliente(c);
+          queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+        } catch (e) {
+          console.warn("Cliente genérico ya existe");
+        }
+        setCliente(c);
+        targetCliente = c;
       } else {
         toast.error("Selecciona un cliente"); return;
       }
@@ -549,7 +603,7 @@ function NuevaOrdenPage() {
         id: uid("ord"),
         tenant_id: tenant.id,
         numero,
-        cliente_id: cliente.id,
+        cliente_id: targetCliente.id,
         empleado_id: empleado.id,
         servicios: serviciosSel,
         servicios_precios: serviciosSel.reduce((acc, sName) => {
@@ -594,7 +648,7 @@ function NuevaOrdenPage() {
 
           const result = await emitirECF(
             { ...orden, ncf: nextNCF }, // Pasamos el NCF generado (o undefined en Sandbox)
-            cliente,
+            targetCliente,
             fiscalConfig?.pronesoft_tenant_id,
             cfg,
             tenant,
@@ -646,15 +700,15 @@ function NuevaOrdenPage() {
       setShowTicket(true);
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
 
-      if (cliente && servicioDomicilio && direccionDomicilio.trim() && direccionDomicilio !== cliente.direccion) {
-        await saveCliente({ ...cliente, direccion: direccionDomicilio.trim() });
+      if (targetCliente && servicioDomicilio && direccionDomicilio.trim() && direccionDomicilio !== targetCliente.direccion) {
+        await saveCliente({ ...targetCliente, direccion: direccionDomicilio.trim() });
       }
 
-      if (cliente) {
+      if (targetCliente) {
         queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
         queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
         import("@/lib/whatsapp").then(({ notificarWhatsApp }) =>
-          notificarWhatsApp(tenant, cliente, ordenActualizada, "creada", recibido).then((r) => {
+          notificarWhatsApp(tenant, targetCliente, ordenActualizada, "creada", recibido).then((r) => {
             if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
           }),
         );
@@ -675,15 +729,41 @@ function NuevaOrdenPage() {
       toast.error("Selecciona un cliente"); return;
     }
     if (step === 2 && serviciosSel.length === 0) { toast.error("Selecciona al menos un servicio"); return; }
-    if (step === 3 && items.length === 0 && serviciosSel.length === 0) { toast.error("Agrega al menos una prenda o selecciona un servicio"); return; }
-    setStep((s) => Math.min(5, s + 1));
+    if (step === 3 && items.length === 0 && (enableServicios ? serviciosSel.length === 0 : true)) {
+      toast.error(enableServicios ? "Agrega al menos una prenda o selecciona un servicio" : "Agrega al menos una prenda");
+      return;
+    }
+
+    let nextStep = step + 1;
+    if (nextStep === 2 && !enableServicios) nextStep = 3;
+    if (nextStep === 3 && !enablePrendas) nextStep = 4;
+    setStep(Math.min(5, nextStep));
   }
+
+  function prev() {
+    let prevStep = step - 1;
+    if (prevStep === 3 && !enablePrendas) prevStep = 2;
+    if (prevStep === 2 && !enableServicios) prevStep = 1;
+    setStep(Math.max(1, prevStep));
+  }
+
+  const stepsList = [
+    { id: 1, label: "Cliente" },
+    enableServicios && { id: 2, label: "Servicios" },
+    enablePrendas && { id: 3, label: "Prendas" },
+    { id: 4, label: "Resumen" },
+    { id: 5, label: "Cobro" }
+  ].filter(Boolean) as { id: number; label: string }[];
+
+  const currentVisibleStepIndex = stepsList.findIndex(s => s.id === step);
+  const currentVisibleStepNumber = currentVisibleStepIndex !== -1 ? currentVisibleStepIndex + 1 : 1;
+  const totalVisibleSteps = stepsList.length;
 
   return (
     <div className={`mx-auto w-full px-4 md:px-6 ${isPosMode ? "max-w-none h-[calc(100vh-100px)] flex flex-col" : "max-w-6xl"}`}>
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4 flex-1">
-          <PageHeader title={isPosMode ? "Terminal POS" : "Nueva orden"} description={isPosMode ? "Venta rápida" : `Paso ${step} de 5`} />
+          <PageHeader title={isPosMode ? "Terminal POS" : "Nueva orden"} description={isPosMode ? "Venta rápida" : `Paso ${currentVisibleStepNumber} de ${totalVisibleSteps}`} />
           {isPosMode && (
             <div className="relative w-72 max-w-md animate-in fade-in slide-in-from-left-4 duration-500">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
@@ -778,36 +858,38 @@ function NuevaOrdenPage() {
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
             <div className="flex flex-col gap-3 pb-2 border-b border-border/40 mb-2">
               {/* Filtro Principal de 3 Pestañas */}
-              <div className="grid grid-cols-3 gap-2">
-                {[
-                  { id: "TODOS", label: "Todos", icon: "🌟" },
-                  { id: "SERVICIOS", label: "Servicios", icon: "🧺" },
-                  { id: "PRENDAS", label: "Prendas", icon: "👕" }
-                ].map(tab => (
-                  <button
-                    key={tab.id}
-                    onClick={() => {
-                      setPosFilterTab(tab.id as any);
-                      if (tab.id === "PRENDAS") {
-                        setActiveCategory("TODAS LAS PRENDAS");
-                      } else {
-                        setActiveCategory("TODOS");
-                      }
-                    }}
-                    className={`flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 border-2 shadow-sm ${
-                      posFilterTab === tab.id
-                        ? "bg-primary text-white border-primary shadow-glow ring-2 ring-primary/20"
-                        : "bg-card text-muted-foreground hover:bg-primary/5 hover:border-primary/20 border-border/60"
-                    }`}
-                  >
-                    <span className="text-sm">{tab.icon}</span>
-                    <span>{tab.label}</span>
-                  </button>
-                ))}
-              </div>
+              {enableServicios && enablePrendas && (
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { id: "TODOS", label: "Todos", icon: "🌟" },
+                    { id: "SERVICIOS", label: "Servicios", icon: "🧺" },
+                    { id: "PRENDAS", label: "Prendas", icon: "👕" }
+                  ].map(tab => (
+                    <button
+                      key={tab.id}
+                      onClick={() => {
+                        setPosFilterTab(tab.id as any);
+                        if (tab.id === "PRENDAS") {
+                          setActiveCategory("TODAS LAS PRENDAS");
+                        } else {
+                          setActiveCategory("TODOS");
+                        }
+                      }}
+                      className={`flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 border-2 shadow-sm ${
+                        posFilterTab === tab.id
+                          ? "bg-primary text-white border-primary shadow-glow ring-2 ring-primary/20"
+                          : "bg-card text-muted-foreground hover:bg-primary/5 hover:border-primary/20 border-border/60"
+                      }`}
+                    >
+                      <span className="text-sm">{tab.icon}</span>
+                      <span>{tab.label}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
 
               {/* Sub-filtro de Categorías de Prendas */}
-              {posFilterTab === "PRENDAS" && (
+              {enablePrendas && posFilterTab === "PRENDAS" && (
                 <div className="flex flex-wrap items-center gap-1.5 pt-2 animate-in slide-in-from-top-1 duration-200">
                   {categoriesPrendas.map(cat => (
                     <button
@@ -832,7 +914,7 @@ function NuevaOrdenPage() {
                   <div className="flex items-center justify-between mb-6">
                     <h2 className="text-2xl font-display font-bold text-foreground">Panel de Cobro</h2>
                     <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => setStep(2)} className="bg-primary text-white shadow-glow hover:bg-primary/90 transition-all active:scale-95 rounded-md px-4 font-bold border-none">
+                      <Button size="sm" onClick={() => setStep(enableServicios ? 2 : 3)} className="bg-primary text-white shadow-glow hover:bg-primary/90 transition-all active:scale-95 rounded-md px-4 font-bold border-none">
                         <ArrowLeft className="mr-2 h-4 w-4" /> Volver al catálogo
                       </Button>
                     </div>
@@ -1023,7 +1105,7 @@ function NuevaOrdenPage() {
                       <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95" size="sm" onClick={() => setShowNewCliente(true)}>
                         <UserPlus className="mr-2 h-4 w-4" /> Nuevo cliente
                       </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setStep(2)}>
+                      <Button variant="ghost" size="sm" onClick={() => setStep(enableServicios ? 2 : 3)}>
                         <X className="h-4 w-4" />
                       </Button>
                     </div>
@@ -1110,7 +1192,7 @@ function NuevaOrdenPage() {
                     ).map(c => (
                       <button
                         key={c.id}
-                        onClick={() => { setCliente(c); setStep(2); }}
+                        onClick={() => { setCliente(c); irAlPasoSiguienteDelCliente(); }}
                         className="flex items-center justify-between p-4 rounded-2xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all group"
                       >
                         <div className="flex items-center gap-4 text-left">
@@ -1126,12 +1208,12 @@ function NuevaOrdenPage() {
                       </button>
                     ))}
                   </div>
-                  <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => { if (c) { setCliente(c); setStep(2); } setShowNewCliente(false); }} />
+                  <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => { if (c) { setCliente(c); irAlPasoSiguienteDelCliente(); } setShowNewCliente(false); }} />
                 </div>
               ) : (
                 <>
                   {/* SECCION SERVICIOS */}
-                  {(posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
+                  {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
                     <div className="space-y-4 animate-in fade-in duration-200">
                       <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                         <div className="h-4 w-1 bg-primary rounded-full" />
@@ -1174,7 +1256,7 @@ function NuevaOrdenPage() {
                   )}
 
                   {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
-                  {(posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
+                  {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
                     const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
                     if (itemsInCat.length === 0) return null;
 
@@ -1462,7 +1544,7 @@ function NuevaOrdenPage() {
         </div>
       ) : (
         <>
-          <Stepper step={step} />
+          <Stepper step={step} enableServicios={enableServicios} enablePrendas={enablePrendas} />
 
           <Card className="w-full mt-6 p-6 md:p-8">
             <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="w-full">
@@ -1704,7 +1786,7 @@ function NuevaOrdenPage() {
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {isDetail ? `${it.cantidad} ${it.cantidad > 1 ? "unidades" : "unidad"} en Hamper (Lavado Incluido)` : (it.es_libra ? `${it.cantidad} lb × ${formatRD(it.precio_unitario)}` : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`)}
-                              {it.notes || it.notas ? ` · ${it.notes || it.notas}` : ""}
+                              {it.notas ? ` · ${it.notas}` : ""}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -2120,7 +2202,7 @@ function NuevaOrdenPage() {
                   <Button
                     variant="outline"
                     className="h-10 px-8 rounded-xl bg-accent/50 border-border/50 font-bold text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
-                    onClick={() => setStep((s) => Math.max(1, s - 1))}
+                    onClick={prev}
                   >
                     <ArrowLeft className="mr-2 h-3 w-3" /> VOLVER ATRÁS
                   </Button>
@@ -2130,7 +2212,7 @@ function NuevaOrdenPage() {
                   <Button
                     variant="outline"
                     className="rounded-xl bg-accent/50 border-border/50 font-bold text-xs px-6 h-10 transition-all hover:bg-accent"
-                    onClick={() => setStep((s) => Math.max(1, s - 1))}
+                    onClick={prev}
                     disabled={step === 1}
                   >
                     <ArrowLeft className="mr-2 h-3 w-3" /> ATRÁS
@@ -2280,19 +2362,34 @@ function NuevaOrdenPage() {
   );
 }
 
-function Stepper({ step }: { step: number }) {
-  const labels = ["Cliente", "Servicios", "Prendas", "Resumen", "Cobro"];
+function Stepper({ step, enableServicios, enablePrendas }: { step: number; enableServicios: boolean; enablePrendas: boolean }) {
+  const stepsList = [
+    { id: 1, label: "Cliente" },
+    enableServicios && { id: 2, label: "Servicios" },
+    enablePrendas && { id: 3, label: "Prendas" },
+    { id: 4, label: "Resumen" },
+    { id: 5, label: "Cobro" }
+  ].filter(Boolean) as { id: number; label: string }[];
+
   return (
     <div className="flex items-center gap-2">
-      {labels.map((l, i) => {
-        const n = i + 1;
-        const done = step > n; const cur = step === n;
+      {stepsList.map((stepItem, index) => {
+        const done = step > stepItem.id;
+        const cur = step === stepItem.id;
+        const visibleNum = index + 1;
         return (
-          <div key={l} className="flex flex-1 items-center">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${done ? "bg-success text-white" : cur ? "bg-gradient-primary text-white shadow-glow" : "bg-muted text-muted-foreground"
-              }`}>{done ? <Check className="h-4 w-4" /> : n}</div>
-            <div className={`ml-2 hidden text-xs sm:block ${cur ? "font-semibold text-foreground" : "text-muted-foreground"}`}>{l}</div>
-            {i < labels.length - 1 && <div className={`mx-2 h-0.5 flex-1 ${done ? "bg-success" : "bg-border"}`} />}
+          <div key={stepItem.label} className="flex flex-1 items-center">
+            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
+              done ? "bg-success text-white" : cur ? "bg-gradient-primary text-white shadow-glow" : "bg-muted text-muted-foreground"
+            }`}>
+              {done ? <Check className="h-4 w-4" /> : visibleNum}
+            </div>
+            <div className={`ml-2 hidden text-xs sm:block ${cur ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
+              {stepItem.label}
+            </div>
+            {index < stepsList.length - 1 && (
+              <div className={`mx-2 h-0.5 flex-1 ${done ? "bg-success" : "bg-border"}`} />
+            )}
           </div>
         );
       })}
@@ -2320,7 +2417,7 @@ function AddItemDialog({
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
-  catalogo: ReturnType<typeof getCatalogo>;
+  catalogo: CatalogoItem[];
   items: OrdenItem[];
   onAdd: (it: OrdenItem) => void;
   onUpdateQty: (i: number, d: number) => void;

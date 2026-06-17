@@ -67,7 +67,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
   const srvListSafe = serviciosList || [];
 
   return (
-    <div className={`thermal-ticket mx-auto ${w} ${cols} bg-white p-3 font-mono text-[11px] leading-snug text-black`}>
+    <div className={`thermal-ticket mx-auto ${w} ${cols} bg-white p-3 font-sans text-[11px] leading-snug text-black`} style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}>
       <div className="text-center space-y-0.5">
         {tenant.logo_url && (
           <div className="flex justify-center mb-0">
@@ -179,8 +179,8 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
                       {p > 0 && (
                         <div className="flex justify-between items-start mb-1.5">
                           <div className="w-[44%] pr-1">
-                            <div className="font-bold leading-tight uppercase text-[10px]">Servicio: {sName}</div>
-                            <div className="text-[9px] text-black/70 leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
+                            <div className="font-bold leading-tight uppercase text-[11px]">Servicio: {sName}</div>
+                            <div className="text-[10px] text-black font-semibold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
                           </div>
                           <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
                           <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
@@ -191,11 +191,11 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
                       {misPrendasDesglosadas.map((it, dIdx) => (
                         <div key={'sd'+dIdx} className={`flex justify-between items-start ${p > 0 ? "pl-3" : "pl-0"} mb-1 animate-in fade-in duration-200`}>
                           <div className="w-[44%] pr-1">
-                            <div className="font-normal text-black/75 text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
-                            {it.notas && <div className="text-[9px] italic leading-tight text-black/60">Nota: {it.notas}</div>}
+                            <div className="font-normal text-black text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                            {it.notas && <div className="text-[9px] italic leading-tight text-black">Nota: {it.notas}</div>}
                           </div>
-                          <div className="w-[26%] text-right font-medium pt-0.5 text-black/50">—</div>
-                          <div className="w-[30%] text-right font-medium pt-0.5 text-black/50">—</div>
+                          <div className="w-[26%] text-right font-medium pt-0.5 text-black">—</div>
+                          <div className="w-[30%] text-right font-medium pt-0.5 text-black">—</div>
                         </div>
                       ))}
                     </div>
@@ -218,12 +218,12 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
                   return (
                     <div key={'suelto'+i} className="flex justify-between items-start mb-1.5">
                       <div className="w-[44%] pr-1">
-                        <div className="font-medium leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
-                        <div className="text-[9px] text-black/70 leading-tight">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
-                        {it.notas && <div className="text-[9px] italic leading-tight text-black/60 font-sans">Nota: {it.notas}</div>}
+                        <div className="font-semibold leading-tight text-[11px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                        <div className="text-[10px] text-black font-semibold leading-tight">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
+                        {it.notas && <div className="text-[9px] italic leading-tight text-black font-sans">Nota: {it.notas}</div>}
                       </div>
-                      <div className="w-[26%] text-right font-medium pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
-                      <div className="w-[30%] text-right font-medium pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
+                      <div className="w-[26%] text-right font-semibold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
+                      <div className="w-[30%] text-right font-semibold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
                     </div>
                   );
                })}

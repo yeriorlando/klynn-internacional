@@ -68,6 +68,18 @@ export function TenantShell() {
   const prevUnreadRef = useRef(-1);
   const tenantId = user?.tenant?.id;
 
+  const [hasLogistica, setHasLogistica] = useState<boolean>(true);
+  const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(true);
+
+  useEffect(() => {
+    if (!user || user.tenant.id === '__loading__') return;
+    getPlans().then(plans => {
+      const plan = plans.find(p => p.id === user.tenant.plan_id);
+      setHasLogistica(!!plan?.modulos?.logistica);
+      setHasWhatsApp(!!plan?.modulos?.whatsapp);
+    });
+  }, [user?.tenant?.id, user?.tenant?.plan_id]);
+
   useEffect(() => {
     if (!tenantId || tenantId === '__loading__') return;
 
@@ -125,6 +137,16 @@ export function TenantShell() {
   // Protección de rutas — DEBE estar antes del return condicional
   useEffect(() => {
     if (!user || user.tenant.id === '__loading__') return;
+
+    if (pathname.includes("/conversations") && !hasWhatsApp) {
+      navigate({ to: `/t/${user.tenant.slug}` });
+      return;
+    }
+    if (pathname.includes("/logistica") && !hasLogistica) {
+      navigate({ to: `/t/${user.tenant.slug}` });
+      return;
+    }
+
     const items = NAV(user.tenant.slug);
     const current = items.find(i => {
       if (i.exact) return pathname === i.to;
@@ -137,7 +159,7 @@ export function TenantShell() {
         navigate({ to: firstAllowed.to });
       }
     }
-  }, [pathname, user, navigate]);
+  }, [pathname, user, navigate, hasLogistica, hasWhatsApp]);
 
   if (!user || user.tenant.id === '__loading__') {
     return (
@@ -350,7 +372,7 @@ export function TenantShell() {
 
       {/* Sidebar desktop */}
       <aside id="tour-sidebar" className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out">
-        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} setShowSoporteModal={setShowSoporteModal} />
+        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} setShowSoporteModal={setShowSoporteModal} hasLogistica={hasLogistica} hasWhatsApp={hasWhatsApp} />
       </aside>
 
       {/* Sidebar móvil */}
@@ -358,7 +380,7 @@ export function TenantShell() {
         <div className="fixed inset-0 z-50 lg:hidden">
           <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
           <aside className="absolute inset-y-0 left-0 w-72 bg-surface shadow-elegant flex flex-col">
-            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} onNavigate={() => setMobileOpen(false)} setShowSoporteModal={setShowSoporteModal} />
+            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} onNavigate={() => setMobileOpen(false)} setShowSoporteModal={setShowSoporteModal} hasLogistica={hasLogistica} hasWhatsApp={hasWhatsApp} />
           </aside>
         </div>
       )}
@@ -404,7 +426,7 @@ export function TenantShell() {
 }
 
 function SidebarContent({
-  tenant, empleado, pathname, isActive, unreadCount, onNavigate, setShowSoporteModal,
+  tenant, empleado, pathname, isActive, unreadCount, onNavigate, setShowSoporteModal, hasLogistica, hasWhatsApp
 }: {
   tenant: { id: string; nombre: string; slug: string; color_primario: string; color_secundario: string; logo_url?: string; plan_id: string };
   empleado: any;
@@ -413,19 +435,14 @@ function SidebarContent({
   unreadCount: number;
   onNavigate?: () => void;
   setShowSoporteModal: (show: boolean) => void;
+  hasLogistica: boolean;
+  hasWhatsApp: boolean;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
   useEffect(() => {
     getTenantsForUser(empleado.email).then(setMyTenants);
   }, [empleado.email]);
-  const [hasLogistica, setHasLogistica] = useState<boolean>(true);
-  useEffect(() => {
-    getPlans().then(plans => {
-      const plan = plans.find(p => p.id === tenant.plan_id);
-      setHasLogistica(!!plan?.modulos?.logistica);
-    });
-  }, [tenant.plan_id]);
 
   const switchBranch = async (t: any) => {
     if (t.slug === tenant.slug) return;
@@ -517,10 +534,11 @@ function SidebarContent({
     return itemsList.map(cat => {
       let items = cat.items;
       if (!hasLogistica) items = items.filter(i => i.permission !== "logistica");
+      if (!hasWhatsApp) items = items.filter(i => i.permission !== "conversations");
       items = items.filter(i => !i.permission || can(empleado, i.permission));
       return { ...cat, items };
     }).filter(cat => cat.items.length > 0);
-  }, [tenant.slug, empleado, hasLogistica]);
+  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp]);
 
   return (
     <>
