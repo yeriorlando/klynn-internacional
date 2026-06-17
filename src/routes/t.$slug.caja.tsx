@@ -1,7 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard } from "lucide-react";
+import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard, ShieldCheck } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -36,8 +36,8 @@ function CajaPage() {
   const user = useRequireAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const tenant = user?.tenant;
-  const empleado = user?.empleado;
+  const tenant = user?.tenant as Tenant;
+  const empleado = user?.empleado as Empleado;
   const tenantId = tenant?.id || '';
 
   const [showApertura, setShowApertura] = useState(false);
@@ -596,20 +596,25 @@ function AmountField({ label, value, onChange }: { label: string; value: string;
 function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; tenantId: string; empleadoId: string; onDone: () => void }) {
   const [montoStr, setMontoStr] = useState<string>("");
   const [turno, setTurno] = useState<"Mañana" | "Tarde" | "Noche">("Mañana");
+  const [loading, setLoading] = useState(false);
   async function submit() {
     const monto = parseAmount(montoStr);
     if (monto <= 0) { toast.error("Monto inválido"); return; }
+    setLoading(true);
     try {
       const cajaId = uid("caj");
       await saveCaja({ id: cajaId, tenant_id: tenantId, empleado_id: empleadoId, monto_inicial: monto, estado: "ABIERTA", abierta_en: new Date().toISOString(), notas_apertura: `Turno: ${turno}` });
       await saveMovimiento({ id: uid("mov"), tenant_id: tenantId, caja_id: cajaId, empleado_id: empleadoId, tipo: "INGRESO", concepto: "Apertura de caja", monto, creado_en: new Date().toISOString() });
       toast.success("Caja abierta 🔓"); onDone(); onOpenChange(false); setMontoStr("");
     } catch (err: any) {
+      console.error("Error opening box:", err);
       toast.error("Error al abrir caja");
+    } finally {
+      setLoading(false);
     }
   }
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <Dialog open={open} onOpenChange={(v) => { if (!loading) onOpenChange(v); }}>
       <DialogContent>
         <DialogHeader><DialogTitle>Abrir caja</DialogTitle></DialogHeader>
         <div className="space-y-6 py-4">
@@ -628,6 +633,7 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
                     value={montoStr}
                     onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}
                     placeholder="0.00"
+                    disabled={loading}
                     className="w-full min-w-0 bg-transparent text-center font-display text-5xl font-bold text-primary outline-none placeholder:text-primary/5 tracking-tighter"
                   />
                 </div>
@@ -648,10 +654,11 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
                   <button
                     key={t.id}
                     type="button"
+                    disabled={loading}
                     onClick={() => setTurno(t.id as any)}
                     className={`group relative flex flex-col items-center justify-center rounded-2xl border-2 p-4 transition-all duration-300 ${
                       sel ? "border-primary bg-primary/5 scale-105 shadow-md" : "border-slate-100 bg-white hover:border-slate-200"
-                    }`}
+                    } ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
                     <div className={`mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br text-2xl shadow-sm transition-transform group-hover:scale-110 ${t.color}`}>
                       {t.icon}
@@ -666,8 +673,10 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
           </div>
         </div>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={submit} className="bg-gradient-primary text-white">Abrir caja</Button>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
+          <Button onClick={submit} className="bg-gradient-primary text-white" disabled={loading}>
+            {loading ? "Abriendo..." : "Abrir caja"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -680,11 +689,13 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
   const monto = parseAmount(montoStr);
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [categoria, setCategoria] = useState<string>(CATEGORIAS_GASTOS[0]);
+  const [loading, setLoading] = useState(false);
 
   async function submit() {
     if (!caja) return;
     if (!concepto.trim()) { toast.error("Concepto requerido"); return; }
     if (monto <= 0) { toast.error("Monto inválido ⚠️"); return; }
+    setLoading(true);
     try {
       const id = uid("mov");
       await saveMovimiento({
@@ -715,14 +726,17 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
 
       toast.success("Movimiento registrado 💸"); onDone(); onClose(); setConcepto(""); setMontoStr("");
     } catch (err: any) {
+      console.error("Error creating movement:", err);
       toast.error("Error al registrar movimiento");
+    } finally {
+      setLoading(false);
     }
   }
 
   const labels: Record<TipoMovimiento, string> = { INGRESO: "Ingreso extra", EGRESO: "Egreso", RETIRO: "Retiro de caja", GASTO_CAJA_CHICA: "Gasto de caja chica", VENTA: "Venta", ABONO: "Abono" };
 
   return (
-    <Dialog open={!!tipo} onOpenChange={(o) => !o && onClose()}>
+    <Dialog open={!!tipo} onOpenChange={(o) => { if (!o && !loading) onClose(); }}>
       <DialogContent className="max-w-md p-5">
         <DialogHeader className="sm:text-center">
           <DialogTitle className="text-xl font-display font-black mx-auto">
@@ -740,7 +754,7 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
         <div className="space-y-2.5">
           {tipo === "GASTO_CAJA_CHICA" && (
             <div><Label className="mb-1.5 block">Categoría</Label>
-              <Select value={categoria} onValueChange={setCategoria}>
+              <Select value={categoria} onValueChange={setCategoria} disabled={loading}>
                 <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
                 <SelectContent>{CATEGORIAS_GASTOS.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
@@ -752,6 +766,7 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
               value={concepto} 
               onChange={(e) => setConcepto(e.target.value)} 
               className="bg-white" 
+              disabled={loading}
               placeholder={
                 tipo === "INGRESO" ? "Ej. Venta de insumos, servicios extras..." :
                 tipo === "EGRESO" ? "Ej. Pago de factura, compra de suministros..." :
@@ -773,12 +788,13 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
                 value={montoStr}
                 onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}
                 placeholder="0.00"
+                disabled={loading}
                 className="h-16 w-full px-6 text-center font-display text-4xl font-bold text-primary tracking-tighter rounded-xl border-2 border-slate-200 bg-white shadow-sm focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none placeholder:text-slate-100"
               />
             </div>
           </div>
           <div><Label className="mb-1.5 block">Método</Label>
-            <Select value={metodo} onValueChange={(v) => setMetodo(v as MetodoPago)}>
+            <Select value={metodo} onValueChange={(v) => setMetodo(v as MetodoPago)} disabled={loading}>
               <SelectTrigger className="bg-white"><SelectValue /></SelectTrigger>
               <SelectContent>
                 <SelectItem value="EFECTIVO">Efectivo</SelectItem>
@@ -789,8 +805,10 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
           </div>
         </div>
         <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose} className="h-9 rounded-xl">Cancelar</Button>
-          <Button onClick={submit} className="bg-gradient-primary text-white h-9 rounded-xl px-8">Registrar</Button>
+          <Button variant="outline" onClick={onClose} className="h-9 rounded-xl" disabled={loading}>Cancelar</Button>
+          <Button onClick={submit} className="bg-gradient-primary text-white h-9 rounded-xl px-8" disabled={loading}>
+            {loading ? "Registrando..." : "Registrar"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -814,6 +832,7 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [movimientosPrint, setMovimientosPrint] = useState<MovimientoCaja[]>([]);
   const [showPrint, setShowPrint] = useState(false);
+  const [loading, setLoading] = useState(false);
 
   const contadoEf = parseAmount(contadoEfStr);
   const contadoTar = parseAmount(contadoTarStr);
@@ -834,6 +853,7 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
     
     if (Math.abs(dif) > umbral && notas.length < 5) { toast.error("Diferencia mayor al umbral. Indica una nota explicativa ⚠️"); return; }
     
+    setLoading(true);
     try {
       const updatedCaja = {
         ...caja, estado: "CERRADA", cerrada_en: new Date().toISOString(),
@@ -851,6 +871,8 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
     } catch (err: any) {
       console.error(err);
       toast.error("Error al cerrar caja: " + (err?.message || JSON.stringify(err)));
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -889,7 +911,7 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
   }
 
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!showSuccess) onOpenChange(v); }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!showSuccess && !loading) onOpenChange(v); }}>
       <DialogContent className={`transition-all duration-300 ${showSuccess ? "max-w-md" : "max-w-2xl"}`}>
         <AnimatePresence mode="wait">
           {!showSuccess ? (
@@ -935,7 +957,7 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
                       <span className="text-sm font-semibold text-foreground">¿Añadir nota o explicación?</span>
                       <span className="text-[10px] text-muted-foreground italic">Solo si hubo alguna novedad en el cuadre</span>
                     </div>
-                    <Switch checked={showNotas} onCheckedChange={setShowNotas} />
+                    <Switch checked={showNotas} onCheckedChange={setShowNotas} disabled={loading} />
                   </div>
 
                   <AnimatePresence>
@@ -950,6 +972,7 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
                           value={notas} 
                           onChange={(e) => setNotas(e.target.value)} 
                           rows={2} 
+                          disabled={loading}
                           placeholder="Escribe aquí cualquier observación sobre el cuadre..."
                           className="bg-accent/5 border-border/60 focus:bg-background transition-colors"
                         />
@@ -961,13 +984,15 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
                 {empleadoRol !== "ADMIN" && (
                   <div>
                     <Label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground/70 px-1">PIN / firma del empleado</Label>
-                    <Input type="password" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="••••" className="h-12 text-center text-2xl tracking-[0.5em] rounded-xl border-2 border-slate-100 bg-white" />
+                    <Input type="password" value={pin} onChange={(e) => setPin(e.target.value)} placeholder="••••" disabled={loading} className="h-12 text-center text-2xl tracking-[0.5em] rounded-xl border-2 border-slate-100 bg-white" />
                   </div>
                 )}
               </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-                <Button onClick={submit} className="bg-gradient-primary text-white"><CheckCircle2 className="mr-1.5 h-4 w-4" /> Cerrar caja</Button>
+                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
+                <Button onClick={submit} className="bg-gradient-primary text-white" disabled={loading}>
+                  <CheckCircle2 className="mr-1.5 h-4 w-4" /> {loading ? "Cerrando..." : "Cerrar caja"}
+                </Button>
               </DialogFooter>
             </motion.div>
           ) : (
@@ -1656,7 +1681,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
   const cash = ordenes.filter(o => o.metodo_pago === 'EFECTIVO').reduce((s, o) => s + o.total, 0);
   const card = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);
   const transfer = ordenes.filter(o => o.metodo_pago === 'TRANSFERENCIA').reduce((s, o) => s + o.total, 0);
-  const credit = ordenes.filter(o => o.metodo_pago === 'CRÉDITO' || o.metodo_pago === 'CREDITO').reduce((s, o) => s + o.total, 0);
+  const credit = ordenes.filter(o => o.metodo_pago === 'CREDITO').reduce((s, o) => s + o.total, 0);
   const ventasContado = cash + card + transfer;
   const ventasCredito = credit;
   const totalFacturado = total;
@@ -1753,7 +1778,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
                <span>TOTAL</span>
              </div>
              {ordenes.map(o => {
-                const isCredito = o.metodo_pago === "CRÉDITO" || o.metodo_pago === "CREDITO";
+                const isCredito = o.metodo_pago === "CREDITO";
                 const abono = movimientos?.find(m => m.concepto.includes(o.numero) && m.concepto.includes("Abono inicial"))?.monto || 0;
                 
                 return (

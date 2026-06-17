@@ -1154,10 +1154,21 @@ export async function getHistoricoCierres(filters: { tenant_id: string; empleado
 export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
   if (!tenant_id || tenant_id === 'admin') return null;
   try {
-    const { data, error } = await supabase.from('cajas').select('*').eq('tenant_id', tenant_id).eq('estado', 'ABIERTA').single();
-    if (error) return null;
-    return data;
+    const { data, error } = await supabase
+      .from('cajas')
+      .select('*')
+      .eq('tenant_id', tenant_id)
+      .eq('estado', 'ABIERTA')
+      .order('abierta_en', { ascending: false });
+
+    if (error) {
+      console.error("Error getCajaAbierta:", error);
+      return null;
+    }
+    if (!data || data.length === 0) return null;
+    return data[0];
   } catch (e) {
+    console.error("Exception in getCajaAbierta:", e);
     return null;
   }
 }
