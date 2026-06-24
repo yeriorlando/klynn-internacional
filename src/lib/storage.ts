@@ -112,8 +112,8 @@ export interface TenantConfig {
   max_sucursales?: number;
   pos_habilitar_servicios?: boolean;
   pos_habilitar_prendas?: boolean;
+  pos_modo_defecto?: boolean;
 }
-
 export interface WhatsAppConfig {
   enabled: boolean;
   api_key: string;
@@ -519,6 +519,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
+  pos_modo_defecto: true,
 };
 
 export const CATEGORIAS_GASTOS = [

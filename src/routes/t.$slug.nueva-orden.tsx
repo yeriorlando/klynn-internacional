@@ -38,6 +38,7 @@ import { ClienteDialog } from "@/components/klynn/ClienteDialog";
 import { useCatalogo, useServicios, useClientes, useCajaAbierta, useECFConfig, usePlans, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { PriceInput } from "@/components/klynn/PriceInput";
 
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
@@ -75,7 +76,7 @@ function NuevaOrdenPage() {
   }
 
   const [step, setStep] = useState(1);
-  const [isPosMode, setIsPosMode] = useState(false);
+  const [isPosMode, setIsPosMode] = useState(cfg.pos_modo_defecto !== false);
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
   const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
   const [posSearch, setPosSearch] = useState("");
@@ -85,7 +86,7 @@ function NuevaOrdenPage() {
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [showNewCliente, setShowNewCliente] = useState(false);
 
-  const [serviciosSel, setServiciosSel] = useState<string[]>(["Lavado y secado"]);
+  const [serviciosSel, setServiciosSel] = useState<string[]>([]);
   const [customServicePrices, setCustomServicePrices] = useState<Record<string, number>>({});
   const [items, setItems] = useState<OrdenItem[]>([]);
   const [showAddItem, setShowAddItem] = useState(false);
@@ -1003,11 +1004,10 @@ function NuevaOrdenPage() {
                         <Field label="Monto recibido">
                           <div className="relative h-24">
                             <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">RD$</span>
-                            <Input
+                            <PriceInput
                               className="!h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30 rounded-2xl"
-                              value={recibido ? formatAmountInput(String(recibido)) : ""}
-                              onChange={(e) => {
-                                const val = parseAmount(e.target.value);
+                              value={recibido}
+                              onChange={(val) => {
                                 if (val > 100000000) return; // Limitar a 100M por cordura
                                 setRecibido(val);
                               }}
@@ -1083,11 +1083,10 @@ function NuevaOrdenPage() {
                         </Label>
                         <div className="relative h-20">
                           <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
-                          <Input
+                          <PriceInput
                             className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 font-bold"
-                            value={abonoCredito ? formatAmountInput(String(abonoCredito)) : ""}
-                            onChange={(e) => {
-                              const val = parseAmount(e.target.value);
+                            value={abonoCredito}
+                            onChange={(val) => {
                               if (val > total) {
                                 toast.warning("El abono no puede exceder el total de la orden");
                                 return;
@@ -1422,13 +1421,10 @@ function NuevaOrdenPage() {
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
-                                  <Input
-                                    type="text"
-                                    inputMode="decimal"
+                                  <PriceInput
                                     className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={formatAmountInput(String(unitPrice))}
-                                    onChange={(e) => {
-                                      const val = parseAmount(e.target.value) || 0;
+                                    value={unitPrice}
+                                    onChange={(val) => {
                                       setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
                                     }}
                                   />
@@ -1488,13 +1484,10 @@ function NuevaOrdenPage() {
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
-                                  <Input
-                                    type="text"
-                                    inputMode="decimal"
+                                  <PriceInput
                                     className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={formatAmountInput(String(it.precio_unitario || ""))}
-                                    onChange={(e) => {
-                                      const val = parseAmount(e.target.value) || 0;
+                                    value={it.precio_unitario || 0}
+                                    onChange={(val) => {
                                       setItems(prev => prev.map((item, idx) => idx === i ? { ...item, precio_unitario: val } : item));
                                     }}
                                   />
@@ -1693,7 +1686,18 @@ function NuevaOrdenPage() {
                       {servicios.map((s) => {
                         const srvCount = serviciosSel.filter(x => x === s.nombre).length;
                         return (
-                          <button key={s.id} onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
+                          <button key={s.id} onClick={() => {
+                            if (srvCount > 0) {
+                              setServiciosSel((arr) => arr.filter(x => x !== s.nombre));
+                              setCustomServicePrices((prev) => {
+                                const next = { ...prev };
+                                delete next[s.nombre];
+                                return next;
+                              });
+                            } else {
+                              setServiciosSel((arr) => [...arr, s.nombre]);
+                            }
+                          }}
                             className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left text-sm transition relative ${srvCount > 0 ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
                               }`}>
                             <div className={`flex h-5 w-5 items-center justify-center rounded border-2 ${srvCount > 0 ? "border-primary bg-primary text-white" : "border-border"}`}>
@@ -1760,13 +1764,10 @@ function NuevaOrdenPage() {
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs font-bold text-muted-foreground">RD$</span>
-                                  <Input
-                                    type="text"
-                                    inputMode="decimal"
+                                  <PriceInput
                                     className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={formatAmountInput(String(unitPrice))}
-                                    onChange={(e) => {
-                                      const val = parseAmount(e.target.value) || 0;
+                                    value={unitPrice}
+                                    onChange={(val) => {
                                       setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
                                     }}
                                   />
@@ -1834,13 +1835,10 @@ function NuevaOrdenPage() {
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1">
                                   <span className="text-xs font-bold text-muted-foreground">RD$</span>
-                                  <Input
-                                    type="text"
-                                    inputMode="decimal"
+                                  <PriceInput
                                     className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={formatAmountInput(String(it.precio_unitario || ""))}
-                                    onChange={(e) => {
-                                      const val = parseAmount(e.target.value) || 0;
+                                    value={it.precio_unitario || 0}
+                                    onChange={(val) => {
                                       setItems(prev => prev.map((item, idx) => idx === i ? { ...item, precio_unitario: val } : item));
                                     }}
                                   />
@@ -1971,9 +1969,9 @@ function NuevaOrdenPage() {
                               Se guardará en la ficha del cliente si es nueva.
                             </p>
                             <Field label="Costo de envío (RD$)">
-                              <Input
-                                value={costoDomicilio ? formatAmountInput(String(costoDomicilio)) : ""}
-                                onChange={(e) => setCostoDomicilio(parseAmount(e.target.value))}
+                              <PriceInput
+                                value={costoDomicilio}
+                                onChange={setCostoDomicilio}
                                 placeholder="0.00"
                                 className="bg-background"
                               />
@@ -2132,10 +2130,10 @@ function NuevaOrdenPage() {
                         <Field label="Monto recibido">
                           <div className="relative h-24">
                             <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">RD$</span>
-                            <Input
+                            <PriceInput
                               className="h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30"
-                              value={recibido ? formatAmountInput(String(recibido)) : ""}
-                              onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                              value={recibido}
+                              onChange={setRecibido}
                               placeholder="0.00"
                             />
                           </div>
@@ -2207,11 +2205,10 @@ function NuevaOrdenPage() {
                         </Label>
                         <div className="relative h-20">
                           <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
-                          <Input
+                          <PriceInput
                             className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 font-bold"
-                            value={abonoCredito ? formatAmountInput(String(abonoCredito)) : ""}
-                            onChange={(e) => {
-                              const val = parseAmount(e.target.value);
+                            value={abonoCredito}
+                            onChange={(val) => {
                               if (val > total) {
                                 toast.warning("El abono no puede exceder el total de la orden");
                                 return;
@@ -2642,9 +2639,9 @@ function DeliveryPOSDialog({
                 <Label className="font-bold text-sm">Costo de Envío (RD$)</Label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-muted-foreground/50">RD$</span>
-                  <Input
-                    value={cost ? formatAmountInput(String(cost)) : ""}
-                    onChange={(e) => setCost(parseAmount(e.target.value))}
+                  <PriceInput
+                    value={cost}
+                    onChange={setCost}
                     placeholder="0.00"
                     className="h-12 rounded-xl bg-card border-primary/20 focus-visible:ring-primary/30 pl-12"
                   />
