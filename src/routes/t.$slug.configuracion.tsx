@@ -507,15 +507,34 @@ function ConfigPage() {
             <Card className="p-6 border-none shadow-card bg-surface-elevated flex flex-col items-center text-center">
               <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Plan actual</div>
               <div className="mb-4"><PlanBadge id={tenant.plan_id} /></div>
-              <div className="text-sm">Estado: <Badge variant={tenant.estado === "ACTIVO" ? "success" : "outline"} className="ml-1">{tenant.estado === "TRIAL" ? "Prueba" : tenant.estado}</Badge></div>
+              <div className="text-sm">
+                Estado: 
+                <Badge 
+                  variant="outline" 
+                  className={`ml-1 ${
+                    tenant.estado === "ACTIVO" 
+                      ? "border-success/40 bg-success/10 text-success" 
+                      : isTrialExpired 
+                        ? "border-destructive/40 bg-destructive/10 text-destructive font-bold" 
+                        : ""
+                  }`}
+                >
+                  {tenant.estado === "TRIAL" ? (isTrialExpired ? "Prueba Expirada" : "Prueba") : tenant.estado}
+                </Badge>
+              </div>
               {tenant.estado === "TRIAL" && (
-                <div className="mt-2 text-xs text-muted-foreground">Termina el <strong>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong></div>
+                <div className="mt-2 text-xs text-muted-foreground">
+                  {isTrialExpired ? "Expiró el" : "Termina el"} <strong>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+                </div>
               )}
             </Card>
 
             <div className="md:col-span-3 grid gap-4 md:grid-cols-3">
               {plans.map(p => {
                 const isCurrent = p.id === tenant.plan_id;
+                const showActualBadge = isCurrent && !isTrialExpired;
+                const isCurrentActivePlan = isCurrent && tenant.estado !== "TRIAL";
+
                 const monthlyTotal = p.precio_mensual * 12;
                 const annualPrice = p.precio_anual || monthlyTotal;
                 const savings = monthlyTotal > annualPrice ? Math.round((1 - annualPrice / monthlyTotal) * 100) : 0;
@@ -524,8 +543,8 @@ function ConfigPage() {
                 const period = billingPeriod === "monthly" ? "/mes" : "/año";
                 
                 return (
-                  <Card key={p.id} className={`p-6 border-none shadow-card flex flex-col relative overflow-hidden ${isCurrent ? "ring-2 ring-primary" : ""}`}>
-                    {isCurrent && <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold uppercase tracking-widest">Actual</div>}
+                  <Card key={p.id} className={`p-6 border-none shadow-card flex flex-col relative overflow-hidden ${showActualBadge ? "ring-2 ring-primary" : ""}`}>
+                    {showActualBadge && <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold uppercase tracking-widest">Actual</div>}
                     <div className="font-display text-xl mb-1">{p.nombre}</div>
                     <div className="flex flex-col mb-4">
                       <div className="text-2xl font-display text-primary">
@@ -573,11 +592,13 @@ function ConfigPage() {
 
                         <Button 
                           className="mt-auto h-10 rounded-xl font-bold" 
-                          variant={isCurrent ? "outline" : "default"}
-                          disabled={isCurrent}
+                          variant={isCurrentActivePlan ? "outline" : "default"}
+                          disabled={isCurrentActivePlan}
                           onClick={() => { setSelectedPlan(p); setShowCheckout(true); }}
                         >
-                          {isCurrent ? "Tu plan" : "Cambiar plan"}
+                          {isCurrentActivePlan 
+                            ? "Tu plan" 
+                            : (isTrialExpired || tenant.estado === "TRIAL" ? "Contratar plan" : "Cambiar plan")}
                         </Button>
                   </Card>
                 )
