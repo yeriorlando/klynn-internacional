@@ -529,7 +529,7 @@ function ConfigPage() {
               )}
               {tenant.estado === "ACTIVO" && tenant.trial_hasta && (
                 <div className="mt-2 text-xs text-muted-foreground">
-                  Renovación: <strong>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+                  Renovación: <strong className={new Date(tenant.trial_hasta).getTime() < Date.now() ? "text-destructive font-bold" : ""}>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
                 </div>
               )}
             </Card>

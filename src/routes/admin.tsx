@@ -556,7 +556,13 @@ function AdminPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="edit-plan">Plan de Suscripción</Label>
-                  <Select value={selectedPlanId} onValueChange={(v: PlanId) => setSelectedPlanId(v)}>
+                  <Select 
+                    value={selectedPlanId} 
+                    onValueChange={(v: PlanId) => {
+                      setSelectedPlanId(v);
+                      setNewDaysLimit(30);
+                    }}
+                  >
                     <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue placeholder="Seleccionar plan" />
                     </SelectTrigger>
@@ -586,6 +592,9 @@ function AdminPage() {
                       onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)} 
                     />
                   </div>
+                  <p className="text-xs text-muted-foreground mt-1.5">
+                    Fecha de renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
+                  </p>
                 </div>
               </div>
 
@@ -593,7 +602,15 @@ function AdminPage() {
               <div className="space-y-4">
                 <div className="space-y-2">
                   <Label htmlFor="edit-status">Estado de la Lavandería</Label>
-                  <Select value={newStatus} onValueChange={(v: any) => setNewStatus(v)}>
+                  <Select 
+                    value={newStatus} 
+                    onValueChange={(v: any) => {
+                      setNewStatus(v);
+                      if (v === "ACTIVO" || v === "TRIAL") {
+                        setNewDaysLimit(30);
+                      }
+                    }}
+                  >
                     <SelectTrigger className="h-11 rounded-xl">
                       <SelectValue placeholder="Seleccionar estado" />
                     </SelectTrigger>
