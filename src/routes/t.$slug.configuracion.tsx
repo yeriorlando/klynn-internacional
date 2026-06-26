@@ -527,6 +527,11 @@ function ConfigPage() {
                   {isTrialExpired ? "Expiró el" : "Termina el"} <strong>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
                 </div>
               )}
+              {tenant.estado === "ACTIVO" && tenant.trial_hasta && (
+                <div className="mt-2 text-xs text-muted-foreground">
+                  Renovación: <strong>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+                </div>
+              )}
             </Card>
 
             <div className="md:col-span-3 grid gap-4 md:grid-cols-3">

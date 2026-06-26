@@ -3,7 +3,7 @@ import { useState, useEffect } from "react";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
-  CreditCard
+  CreditCard, Calendar
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -32,6 +32,7 @@ import {
   updateTenantPlan,
   updateTenantStatus,
   updateTenantMaxSucursales,
+  updateTenantTrialHasta,
   getGlobalConfig,
   saveGlobalConfig,
   ADMIN_EMAILS,
@@ -114,6 +115,7 @@ function AdminPage() {
   const [selectedPlanId, setSelectedPlanId] = useState<PlanId>("basico");
   const [newStatus, setNewStatus] = useState<any>("ACTIVO");
   const [newMaxSucursales, setNewMaxSucursales] = useState<number>(1);
+  const [newDaysLimit, setNewDaysLimit] = useState<number>(30);
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -151,6 +153,10 @@ function AdminPage() {
       await updateTenantPlan(editingTenant.id, selectedPlanId);
       await updateTenantStatus(editingTenant.id, newStatus);
       await updateTenantMaxSucursales(editingTenant.id, newMaxSucursales);
+      
+      const trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
+      await updateTenantTrialHasta(editingTenant.id, trialHasta);
+
       toast.success("Información de lavandería actualizada");
       setOpenEditModal(false);
       setTick(t => t + 1);
@@ -282,6 +288,12 @@ function AdminPage() {
                                       setSelectedPlanId(t.plan_id);
                                       setNewStatus(t.estado);
                                       setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
+                                      
+                                      const daysRemaining = t.trial_hasta 
+                                        ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+                                        : 0;
+                                      setNewDaysLimit(daysRemaining || 30);
+
                                       setOpenEditModal(true);
                                     }}
                                   >
@@ -559,6 +571,21 @@ function AdminPage() {
                       ))}
                     </SelectContent>
                   </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="edit-days-limit">Días de vigencia / prueba del plan</Label>
+                  <div className="relative">
+                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      id="edit-days-limit" 
+                      type="number" 
+                      min={0}
+                      className="pl-10 rounded-xl h-11" 
+                      value={newDaysLimit} 
+                      onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)} 
+                    />
+                  </div>
                 </div>
               </div>
 

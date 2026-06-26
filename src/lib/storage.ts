@@ -862,6 +862,19 @@ export async function updateTenantMaxSucursales(tenantId: string, maxSucursales:
   return true;
 }
 
+export async function updateTenantTrialHasta(tenantId: string, trialHasta: string) {
+  const { error } = await supabase
+    .from('tenants')
+    .update({ trial_hasta: trialHasta })
+    .eq('id', tenantId);
+
+  if (error) {
+    console.error("Error updating tenant trial_hasta column:", error);
+    return false;
+  }
+  return true;
+}
+
 export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   requirePlanOnRegistration: true,
   trialDays: 14,
