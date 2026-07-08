@@ -1,0 +1,9 @@
+import { createFileRoute } from '@tanstack/react-router'
+
+export const Route = createFileRoute('/t/$slug/nueva-orden')({
+  component: RouteComponent,
+})
+
+function RouteComponent() {
+  return <div>Hello "/t/$slug/nueva-orden"!</div>
+}

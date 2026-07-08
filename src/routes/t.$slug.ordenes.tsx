@@ -822,6 +822,7 @@ function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, setView
           <div><strong>Pagado:</strong> {formatRD(view.pagado)}</div>
           {view.saldo > 0 && <div className="text-warning-foreground"><strong>Saldo:</strong> {formatRD(view.saldo)}</div>}
           <div><strong>Atendido por:</strong> {emp.nombre}</div>
+          <div><strong>Total de prendas:</strong> {(view.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0)}</div>
           {view.motivo_anulacion && <div className="rounded-md bg-destructive/10 p-2 text-destructive"><strong>Motivo anulación:</strong> {view.motivo_anulacion}</div>}
 
           {/* Datos Fiscales */}
@@ -1188,6 +1189,10 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
 
           <div className="flex justify-end mb-10">
             <div className="w-64">
+              <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
+                <span>Total de prendas:</span>
+                <span>{(orden.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0)}</span>
+              </div>
               <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
                 <span>Subtotal:</span>
                 <span>{formatRD(orden.subtotal)}</span>

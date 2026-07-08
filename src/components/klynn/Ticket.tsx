@@ -66,6 +66,8 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
   // Blindar array de servicios para evitar excepciones en tiempo de ejecución
   const srvListSafe = serviciosList || [];
 
+  const totalPrendas = (orden.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0);
+
   return (
     <div className={`thermal-ticket mx-auto ${w} ${cols} bg-white p-3 font-sans text-[11px] leading-snug text-black`} style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}>
       <div className="text-center space-y-0.5">
@@ -233,6 +235,9 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div>
+        <div className="text-center font-bold text-[12px] my-1">
+          TOTAL DE PRENDAS: {totalPrendas}
+        </div>
         <Row k="Subtotal" v={formatRD(orden.subtotal).replace("DOP", "RD$")} />
         {cfg?.ncf_facturacion_activa && orden.itbis > 0 && (
           <Row k={`ITBIS ${cfg?.itbis_porcentaje ?? 18}%`} v={formatRD(orden.itbis).replace("DOP", "RD$")} />
