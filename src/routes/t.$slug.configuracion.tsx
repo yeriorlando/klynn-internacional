@@ -504,23 +504,23 @@ function ConfigPage() {
           </div>
 
           {/* Plan Actual Banner */}
-          <Card className="mb-6 p-6 border-none shadow-card bg-surface-elevated flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+          <div className="mb-8 p-6 rounded-3xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-transparent flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-md transition-all">
+            <div className="flex items-center gap-4">
+              <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
                 <CreditCard className="h-6 w-6" />
               </div>
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">Plan actual</div>
+              <div className="space-y-1">
+                <div className="text-[10px] font-extrabold uppercase tracking-widest text-primary/80">Suscripción actual</div>
                 <div className="flex items-center gap-2">
                   <PlanBadge id={tenant.plan_id} />
                   <Badge 
                     variant="outline" 
-                    className={`ml-1 ${
+                    className={`px-3 py-0.5 rounded-full text-xs font-bold ${
                       tenant.estado === "ACTIVO" 
-                        ? "border-success/40 bg-success/10 text-success" 
+                        ? "border-success/30 bg-success/15 text-success-foreground" 
                         : isTrialExpired 
-                          ? "border-destructive/40 bg-destructive/10 text-destructive font-bold" 
-                          : ""
+                          ? "border-destructive/30 bg-destructive/15 text-destructive font-bold" 
+                          : "border-amber-300 bg-amber-50 text-amber-700"
                     }`}
                   >
                     {tenant.estado === "TRIAL" ? (isTrialExpired ? "Prueba Expirada" : "Prueba") : tenant.estado}
@@ -528,19 +528,28 @@ function ConfigPage() {
                 </div>
               </div>
             </div>
-            <div className="text-left sm:text-right text-sm">
-              {tenant.estado === "TRIAL" && (
-                <div className="text-muted-foreground">
-                  {isTrialExpired ? "Expiró el" : "Termina el"} <strong className="text-foreground">{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+
+            {/* Renewal status info - highly visible block */}
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 rounded-2xl p-4 shadow-sm min-w-[240px]">
+              <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 shrink-0">
+                <Calendar className="h-5 w-5" />
+              </div>
+              <div className="space-y-0.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expiró el" : "Vence el") : "Próxima renovación"}
                 </div>
-              )}
-              {tenant.estado === "ACTIVO" && tenant.trial_hasta && (
-                <div className="text-muted-foreground">
-                  Renovación: <strong className={new Date(tenant.trial_hasta).getTime() < Date.now() ? "text-destructive font-bold" : "text-foreground font-bold"}>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+                <div className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                  {tenant.trial_hasta ? (
+                    <span className={new Date(tenant.trial_hasta).getTime() < Date.now() ? "text-destructive font-black text-base" : "text-primary font-black text-base"}>
+                      {new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground font-semibold">N/A</span>
+                  )}
                 </div>
-              )}
+              </div>
             </div>
-          </Card>
+          </div>
 
           <div className="grid gap-6 md:grid-cols-3 items-start">
             {plans.map(p => {
@@ -578,11 +587,19 @@ function ConfigPage() {
                     {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((k) => {
                       const v = p.modulos?.[k as keyof typeof p.modulos];
                       
-                      let label = "";
+                      let label: React.ReactNode = "";
                       if (k === "logistica") label = "Logística y Repartidores";
-                      else if (k === "facturacion_fiscal") label = "Facturación Electrónica (Costo adicional)";
+                      else if (k === "facturacion_fiscal") label = (
+                        <span>
+                          Facturación Electrónica <strong className="font-extrabold text-foreground opacity-100">(Costo por uso)</strong>
+                        </span>
+                      );
                       else if (k === "whatsapp") label = "WhatsApp";
-                      else if (k === "multisucursal") label = "Multi-sucursal (Cargo adicional)";
+                      else if (k === "multisucursal") label = (
+                        <span>
+                          Multi-sucursal <strong className="font-extrabold text-foreground opacity-100">(Cargo adicional)</strong>
+                        </span>
+                      );
                       else label = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
 
                       return (
