@@ -504,47 +504,82 @@ function ConfigPage() {
           </div>
 
           {/* Plan Actual Banner */}
-          <div className="mb-8 p-6 rounded-3xl border border-primary/20 bg-gradient-to-r from-primary/5 via-primary/10 to-transparent flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-md transition-all">
-            <div className="flex items-center gap-4">
-              <div className="h-14 w-14 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center text-primary shadow-sm">
-                <CreditCard className="h-6 w-6" />
+          <div 
+            className="mb-8 p-6 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-xl transition-all border-none text-white relative overflow-hidden"
+            style={{ 
+              background: `linear-gradient(135deg, ${tenant.color_primario || '#e11d48'}, ${tenant.color_secundario || '#9f1239'})` 
+            }}
+          >
+            {/* Ambient glows inside the card */}
+            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+            <div className="absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-black/10 blur-2xl pointer-events-none" />
+
+            <div className="flex items-center gap-4 relative z-10">
+              <div 
+                className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform shrink-0"
+                style={{ color: tenant.color_primario || '#e11d48' }}
+              >
+                <CreditCard className="h-7 w-7" />
               </div>
-              <div className="space-y-1">
-                <div className="text-[10px] font-extrabold uppercase tracking-widest text-primary/80">Suscripción actual</div>
-                <div className="flex items-center gap-2">
-                  <PlanBadge id={tenant.plan_id} />
-                  <Badge 
-                    variant="outline" 
-                    className={`px-3 py-0.5 rounded-full text-xs font-bold ${
-                      tenant.estado === "ACTIVO" 
-                        ? "border-success/30 bg-success/15 text-success-foreground" 
-                        : isTrialExpired 
-                          ? "border-destructive/30 bg-destructive/15 text-destructive font-bold" 
-                          : "border-amber-300 bg-amber-50 text-amber-700"
-                    }`}
-                  >
-                    {tenant.estado === "TRIAL" ? (isTrialExpired ? "Prueba Expirada" : "Prueba") : tenant.estado}
-                  </Badge>
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-extrabold uppercase tracking-widest text-white/80">Suscripción actual</div>
+                <div className="flex flex-wrap items-center gap-2">
+                  {(() => {
+                    const planConfig = {
+                      basico: { label: "Básico", className: "bg-white text-blue-700 font-extrabold border-transparent" },
+                      pro: { label: "Pro", className: "bg-white text-indigo-700 font-extrabold border-transparent" },
+                      enterprise: { label: "Enterprise", className: "bg-white text-amber-700 font-extrabold border-transparent" },
+                    }[tenant.plan_id as string] || { label: tenant.plan_id, className: "bg-white text-primary font-extrabold border-transparent" };
+                    
+                    return (
+                      <span className={`px-3 py-1 rounded-full uppercase text-[10px] font-black tracking-widest border shadow-sm ${planConfig.className}`}>
+                        {planConfig.label}
+                      </span>
+                    );
+                  })()}
+
+                  {(() => {
+                    const statusClass = tenant.estado === "ACTIVO" 
+                      ? "bg-emerald-500 text-white font-extrabold border-transparent shadow-md" 
+                      : isTrialExpired 
+                        ? "bg-rose-500 text-white font-extrabold border-transparent shadow-md" 
+                        : "bg-amber-500 text-white font-extrabold border-transparent shadow-md";
+                    
+                    return (
+                      <Badge 
+                        variant="outline" 
+                        className={`px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${statusClass}`}
+                      >
+                        {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expirado" : "Prueba") : tenant.estado}
+                      </Badge>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
 
             {/* Renewal status info - highly visible block */}
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 rounded-2xl p-4 shadow-sm min-w-[240px]">
-              <div className="h-10 w-10 rounded-xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500 shrink-0">
+            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 rounded-2xl p-4 shadow-lg min-w-[240px] relative z-10">
+              <div 
+                className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"
+                style={{ color: tenant.color_primario || '#e11d48' }}
+              >
                 <Calendar className="h-5 w-5" />
               </div>
               <div className="space-y-0.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
                   {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expiró el" : "Vence el") : "Próxima renovación"}
                 </div>
-                <div className="text-sm font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-1">
+                <div className="text-base font-black tracking-wide">
                   {tenant.trial_hasta ? (
-                    <span className={new Date(tenant.trial_hasta).getTime() < Date.now() ? "text-destructive font-black text-base" : "text-primary font-black text-base"}>
+                    <span 
+                      style={{ color: tenant.color_primario || '#e11d48' }}
+                      className="font-black text-base"
+                    >
                       {new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}
                     </span>
                   ) : (
-                    <span className="text-muted-foreground font-semibold">N/A</span>
+                    <span className="text-slate-400 font-semibold">N/A</span>
                   )}
                 </div>
               </div>
