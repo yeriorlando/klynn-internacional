@@ -572,9 +572,9 @@ function ConfigPage() {
                         
                         let label = "";
                         if (k === "logistica") label = "Logística y Repartidores";
-                        else if (k === "facturacion_fiscal") label = "Facturación Electrónica";
+                        else if (k === "facturacion_fiscal") label = "Facturación Electrónica (Costo adicional)";
                         else if (k === "whatsapp") label = "WhatsApp";
-                        else if (k === "multisucursal") label = "Multi-sucursal";
+                        else if (k === "multisucursal") label = "Multi-sucursal (Cargo adicional)";
                         else label = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
 
                         return (

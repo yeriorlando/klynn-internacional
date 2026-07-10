@@ -696,9 +696,9 @@ function LandingPage() {
                     <Feature on>{plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</Feature>
                     <Feature on>Caja, clientes, gastos, reportes</Feature>
                     <Feature on={plan.modulos.whatsapp}>Notificaciones WhatsApp</Feature>
-                    <Feature on={plan.modulos.facturacion_fiscal}>Facturación Electrónica</Feature>
+                    <Feature on={plan.modulos.facturacion_fiscal}>Facturación Electrónica (Costo adicional)</Feature>
                     <Feature on={plan.modulos.multisucursal}>
-                      Multi-sucursal {plan.modulos.multisucursal && (
+                      Multi-sucursal (Cargo adicional) {plan.modulos.multisucursal && (
                         <span className="text-[10px] font-bold text-primary ml-1 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
                           Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
                         </span>
