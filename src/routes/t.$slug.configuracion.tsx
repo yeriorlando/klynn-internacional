@@ -503,112 +503,119 @@ function ConfigPage() {
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-4 items-start">
-            <Card className="p-6 border-none shadow-card bg-surface-elevated flex flex-col items-center text-center">
-              <div className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-1">Plan actual</div>
-              <div className="mb-4"><PlanBadge id={tenant.plan_id} /></div>
-              <div className="text-sm">
-                Estado: 
-                <Badge 
-                  variant="outline" 
-                  className={`ml-1 ${
-                    tenant.estado === "ACTIVO" 
-                      ? "border-success/40 bg-success/10 text-success" 
-                      : isTrialExpired 
-                        ? "border-destructive/40 bg-destructive/10 text-destructive font-bold" 
-                        : ""
-                  }`}
-                >
-                  {tenant.estado === "TRIAL" ? (isTrialExpired ? "Prueba Expirada" : "Prueba") : tenant.estado}
-                </Badge>
+          {/* Plan Actual Banner */}
+          <Card className="mb-6 p-6 border-none shadow-card bg-surface-elevated flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="p-3 bg-primary/10 rounded-2xl text-primary">
+                <CreditCard className="h-6 w-6" />
               </div>
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-0.5">Plan actual</div>
+                <div className="flex items-center gap-2">
+                  <PlanBadge id={tenant.plan_id} />
+                  <Badge 
+                    variant="outline" 
+                    className={`ml-1 ${
+                      tenant.estado === "ACTIVO" 
+                        ? "border-success/40 bg-success/10 text-success" 
+                        : isTrialExpired 
+                          ? "border-destructive/40 bg-destructive/10 text-destructive font-bold" 
+                          : ""
+                    }`}
+                  >
+                    {tenant.estado === "TRIAL" ? (isTrialExpired ? "Prueba Expirada" : "Prueba") : tenant.estado}
+                  </Badge>
+                </div>
+              </div>
+            </div>
+            <div className="text-left sm:text-right text-sm">
               {tenant.estado === "TRIAL" && (
-                <div className="mt-2 text-xs text-muted-foreground">
-                  {isTrialExpired ? "Expiró el" : "Termina el"} <strong>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+                <div className="text-muted-foreground">
+                  {isTrialExpired ? "Expiró el" : "Termina el"} <strong className="text-foreground">{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
                 </div>
               )}
               {tenant.estado === "ACTIVO" && tenant.trial_hasta && (
-                <div className="mt-2 text-xs text-muted-foreground">
-                  Renovación: <strong className={new Date(tenant.trial_hasta).getTime() < Date.now() ? "text-destructive font-bold" : ""}>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
+                <div className="text-muted-foreground">
+                  Renovación: <strong className={new Date(tenant.trial_hasta).getTime() < Date.now() ? "text-destructive font-bold" : "text-foreground font-bold"}>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</strong>
                 </div>
               )}
-            </Card>
-
-            <div className="md:col-span-3 grid gap-4 md:grid-cols-3">
-              {plans.map(p => {
-                const isCurrent = p.id === tenant.plan_id;
-                const showActualBadge = isCurrent && !isTrialExpired;
-                const isCurrentActivePlan = isCurrent && tenant.estado !== "TRIAL";
-
-                const monthlyTotal = p.precio_mensual * 12;
-                const annualPrice = p.precio_anual || monthlyTotal;
-                const savings = monthlyTotal > annualPrice ? Math.round((1 - annualPrice / monthlyTotal) * 100) : 0;
-                
-                const price = billingPeriod === "monthly" ? p.precio_mensual : annualPrice;
-                const period = billingPeriod === "monthly" ? "/mes" : "/año";
-                
-                return (
-                  <Card key={p.id} className={`p-6 border-none shadow-card flex flex-col relative overflow-hidden ${showActualBadge ? "ring-2 ring-primary" : ""}`}>
-                    {showActualBadge && <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold uppercase tracking-widest">Actual</div>}
-                    <div className="font-display text-xl mb-1">{p.nombre}</div>
-                    <div className="flex flex-col mb-4">
-                      <div className="text-2xl font-display text-primary">
-                        {formatRD(price)}
-                        <span className="text-xs font-normal text-muted-foreground">{period}</span>
-                      </div>
-                      {billingPeriod === "yearly" && savings > 0 && (
-                        <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
-                          Ahorras {savings}% vs mensual
-                        </div>
-                      )}
-                    </div>
-                    
-                    <div className="space-y-2 mb-6">
-                      <div className="text-xs flex items-center gap-2">✅ {p.limite_empleados} Empleados</div>
-                      <div className="text-xs flex items-center gap-2">✅ {p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</div>
-                      <div className="text-xs flex items-center gap-2 font-medium text-blue-600">✅ {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes</div>
-                      {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((k) => {
-                        const v = p.modulos?.[k as keyof typeof p.modulos];
-                        
-                        let label = "";
-                        if (k === "logistica") label = "Logística y Repartidores";
-                        else if (k === "facturacion_fiscal") label = "Facturación Electrónica (Costo adicional)";
-                        else if (k === "whatsapp") label = "WhatsApp";
-                        else if (k === "multisucursal") label = "Multi-sucursal (Cargo adicional)";
-                        else label = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
-
-                        return (
-                          <div key={k} className={`text-xs flex items-center gap-2 ${v ? "text-foreground" : "text-muted-foreground opacity-50"}`}>
-                             {v ? "✅" : "❌"} <span>{label}</span>
-                             {k === "multisucursal" && v && (
-                               <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
-                                 Hasta {1 + (p.limite_sucursales_adicionales || 0)}
-                               </span>
-                             )}
-                          </div>
-                        );
-                      })}
-                      <div className="text-xs flex items-center gap-2">✅ Clientes ilimitados</div>
-                      <div className="text-xs flex items-center gap-2">✅ Generación de reportes</div>
-                      <div className="text-xs flex items-center gap-2">✅ Actualizaciones de software</div>
-                      <div className="text-xs flex items-center gap-2">✅ Cuentas x cobrar</div>
-                      <div className="text-xs flex items-center gap-2">✅ Impresión A4/80mm</div>
-                    </div>
-
-                        <Button 
-                          className="mt-auto h-10 rounded-xl font-bold" 
-                          variant={isCurrentActivePlan ? "outline" : "default"}
-                          disabled={isCurrentActivePlan}
-                          onClick={() => { setSelectedPlan(p); setShowCheckout(true); }}
-                        >
-                          {isCurrentActivePlan 
-                            ? "Tu plan" 
-                            : (isTrialExpired || tenant.estado === "TRIAL" ? "Contratar plan" : "Cambiar plan")}
-                        </Button>
-                  </Card>
-                )
-              })}
             </div>
+          </Card>
+
+          <div className="grid gap-6 md:grid-cols-3 items-start">
+            {plans.map(p => {
+              const isCurrent = p.id === tenant.plan_id;
+              const showActualBadge = isCurrent && !isTrialExpired;
+              const isCurrentActivePlan = isCurrent && tenant.estado !== "TRIAL";
+
+              const monthlyTotal = p.precio_mensual * 12;
+              const annualPrice = p.precio_anual || monthlyTotal;
+              const savings = monthlyTotal > annualPrice ? Math.round((1 - annualPrice / monthlyTotal) * 100) : 0;
+              
+              const price = billingPeriod === "monthly" ? p.precio_mensual : annualPrice;
+              const period = billingPeriod === "monthly" ? "/mes" : "/año";
+              
+              return (
+                <Card key={p.id} className={`p-6 border-none shadow-card flex flex-col relative overflow-hidden ${showActualBadge ? "ring-2 ring-primary" : ""}`}>
+                  {showActualBadge && <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold uppercase tracking-widest">Actual</div>}
+                  <div className="font-display text-xl mb-1">{p.nombre}</div>
+                  <div className="flex flex-col mb-4">
+                    <div className="text-2xl font-display text-primary">
+                      {formatRD(price)}
+                      <span className="text-xs font-normal text-muted-foreground">{period}</span>
+                    </div>
+                    {billingPeriod === "yearly" && savings > 0 && (
+                      <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
+                        Ahorras {savings}% vs mensual
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="space-y-2 mb-6">
+                    <div className="text-xs flex items-center gap-2">✅ {p.limite_empleados} Empleados</div>
+                    <div className="text-xs flex items-center gap-2">✅ {p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</div>
+                    <div className="text-xs flex items-center gap-2 font-medium text-blue-600">✅ {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes</div>
+                    {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((k) => {
+                      const v = p.modulos?.[k as keyof typeof p.modulos];
+                      
+                      let label = "";
+                      if (k === "logistica") label = "Logística y Repartidores";
+                      else if (k === "facturacion_fiscal") label = "Facturación Electrónica (Costo adicional)";
+                      else if (k === "whatsapp") label = "WhatsApp";
+                      else if (k === "multisucursal") label = "Multi-sucursal (Cargo adicional)";
+                      else label = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
+
+                      return (
+                        <div key={k} className={`text-xs flex items-center gap-2 ${v ? "text-foreground" : "text-muted-foreground opacity-50"}`}>
+                           {v ? "✅" : "❌"} <span>{label}</span>
+                           {k === "multisucursal" && v && (
+                             <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
+                               Hasta {1 + (p.limite_sucursales_adicionales || 0)}
+                             </span>
+                           )}
+                        </div>
+                      );
+                    })}
+                    <div className="text-xs flex items-center gap-2">✅ Clientes ilimitados</div>
+                    <div className="text-xs flex items-center gap-2">✅ Generación de reportes</div>
+                    <div className="text-xs flex items-center gap-2">✅ Actualizaciones de software</div>
+                    <div className="text-xs flex items-center gap-2">✅ Cuentas x cobrar</div>
+                    <div className="text-xs flex items-center gap-2">✅ Impresión A4/80mm</div>
+                  </div>
+
+                      <Button 
+                        className="mt-auto h-10 rounded-xl font-bold" 
+                        variant={isCurrentActivePlan ? "outline" : "default"}
+                        disabled={isCurrentActivePlan}
+                        onClick={() => { setSelectedPlan(p); setShowCheckout(true); }}
+                      >
+                        {isCurrentActivePlan 
+                          ? "Tu plan" 
+                          : (isTrialExpired || tenant.estado === "TRIAL" ? "Contratar plan" : "Cambiar plan")}
+                      </Button>
+                </Card>
+              )
+            })}
           </div>
 
           <SubscriptionModal 
