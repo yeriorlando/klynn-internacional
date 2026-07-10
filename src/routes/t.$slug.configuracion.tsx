@@ -38,7 +38,7 @@ import { toast } from "sonner";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
-  CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload,
+  CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar,
   User, Palette, FileText, Banknote, Star, Sparkles, ArrowRight, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff,
   FlaskConical, Globe
 } from "lucide-react";
