@@ -827,6 +827,13 @@ export async function updateTenantAdmin(tenant_id: string, newEmail: string, new
   const admin = emps.find(e => e.rol === "ADMIN");
   if (admin) {
     const updates: Partial<Empleado> = { email: newEmail };
+
+    // Actualizar el email en Supabase Auth mediante la función RPC segura
+    await supabase.rpc('admin_set_user_email', {
+      target_user_id: admin.id,
+      new_email: newEmail
+    });
+
     if (newPassword) {
       updates.password = '***'; // No guardamos texto plano
       // Actualizar en Auth mediante la función RPC segura
@@ -940,6 +947,12 @@ export async function saveEmpleado(e: Empleado) {
         console.log("Auto-actualización de contraseña...");
         const { error: updateError } = await supabase.auth.updateUser({ password: e.password });
         if (updateError) authErrorMsg = "Error auto-update: " + updateError.message;
+
+        if (currentUser.email !== emailLower) {
+          console.log("Auto-actualización de email...");
+          const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
+          if (emailError) authErrorMsg = (authErrorMsg ? authErrorMsg + " " : "") + "Error auto-update email: " + emailError.message;
+        }
       } else {
         // ESTRATEGIA ROBUSTA: Intentamos Sign Up primero. 
         // Si el usuario ya existe en Auth, fallará con un mensaje específico.
@@ -969,6 +982,16 @@ export async function saveEmpleado(e: Empleado) {
               console.error("RPC ERROR:", rpcError);
               authErrorMsg = "No se pudo actualizar la contraseña. Verifica que el ID sea correcto y que el RPC exista.";
             }
+
+            // También actualizamos el correo en Auth mediante la función RPC segura
+            const { error: emailRpcError } = await supabase.rpc('admin_set_user_email', {
+              target_user_id: e.id,
+              new_email: emailLower
+            });
+            if (emailRpcError) {
+              console.error("RPC EMAIL ERROR:", emailRpcError);
+              authErrorMsg = (authErrorMsg ? authErrorMsg + " " : "") + "No se pudo actualizar el correo en la autenticación.";
+            }
           } else {
             console.error("SIGNUP ERROR:", authError);
             authErrorMsg = "Error Auth: " + authError.message;
@@ -981,6 +1004,24 @@ export async function saveEmpleado(e: Empleado) {
     } catch (err: any) {
       console.error("EXCEPCION AUTH:", err);
       authErrorMsg = "Excepción: " + err.message;
+    }
+  } else {
+    // Si no hay cambio de contraseña, pero es un usuario existente, debemos actualizar su email en auth.users si cambió
+    if (e.id && e.id.length === 36) {
+      try {
+        console.log("Actualizando email del usuario existente en Auth...");
+        const { error: emailRpcError } = await supabase.rpc('admin_set_user_email', {
+          target_user_id: e.id,
+          new_email: emailLower
+        });
+        if (emailRpcError) {
+          console.error("RPC EMAIL ERROR (no password update):", emailRpcError);
+          authErrorMsg = "No se pudo actualizar el correo en la autenticación.";
+        }
+      } catch (err: any) {
+        console.error("EXCEPCION RPC EMAIL:", err);
+        authErrorMsg = "Excepción al actualizar correo: " + err.message;
+      }
     }
   }
 
