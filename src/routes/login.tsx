@@ -130,6 +130,16 @@ function LoginPage() {
 
       {/* Panel informativo lateral */}
       <div className="relative hidden overflow-hidden p-10 lg:flex lg:flex-col lg:justify-between bg-primary">
+        {/* Imagen de fondo premium */}
+        <div className="absolute inset-0 z-0">
+          <img 
+            src="/login.webp" 
+            alt="Laundry background" 
+            className="w-full h-full object-cover opacity-35 mix-blend-overlay"
+          />
+          <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-primary/70 to-primary/90" />
+        </div>
+
         <div className="absolute -right-24 -top-24 h-80 w-80 rounded-full bg-primary/10 blur-3xl" />
         <div className="absolute -bottom-32 -left-20 h-96 w-96 rounded-full bg-primary/5 blur-3xl" />
 
