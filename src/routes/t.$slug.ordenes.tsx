@@ -19,11 +19,12 @@ import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, getServicios,
   type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago,
-  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument
+  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import { toast } from "sonner";
 import { AlertTriangle, Rocket } from "lucide-react";
+import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/t/$slug/ordenes")({
 
 function OrdenesPage() {
   const user = useRequireAuth();
+  const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos">("todos");
@@ -59,6 +61,7 @@ function OrdenesPage() {
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
   const [showPendientes, setShowPendientes] = useState(false);
   const [searchPendientes, setSearchPendientes] = useState("");
+  const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
   const navigate = useNavigate();
 
   const tenant = user?.tenant;
@@ -614,6 +617,11 @@ function OrdenesPage() {
                                 <DropdownMenuItem onClick={() => setDebito(o)}>
                                   <ArrowUpCircle className="mr-2 h-4 w-4 text-blue-600" /> Nota de Débito
                                 </DropdownMenuItem>
+                                {o.saldo > 0 && isAuthorized && (
+                                  <DropdownMenuItem onClick={() => setCondonarOrden(o)} className="text-amber-600 focus:bg-amber-50 focus:text-amber-700">
+                                    <AlertTriangle className="mr-2 h-4 w-4 text-amber-600" /> Condonar Deuda
+                                  </DropdownMenuItem>
+                                )}
                                 <DropdownMenuItem onClick={() => setAnular(o)} className="text-destructive focus:bg-destructive/10 focus:text-destructive">
                                   <XCircle className="mr-2 h-4 w-4" /> Anular Orden
                                 </DropdownMenuItem>
@@ -785,7 +793,16 @@ function OrdenesPage() {
         />
       )}
 
-
+      {condonarOrden && (
+        <CondonarDeudaDialog
+          orden={condonarOrden}
+          onClose={() => setCondonarOrden(null)}
+          tenantId={tenantId}
+          onSuccess={() => {
+            queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -1429,10 +1446,13 @@ export interface CobrarOrdenDialogProps {
 }
 
 export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, queryClient, showPrintPortal, onSuccess }: CobrarOrdenDialogProps) {
+  const user = useRequireAuth();
+  const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(orden.saldo);
   const [entregarAlCobrar] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
+  const [showCondonar, setShowCondonar] = useState<boolean>(false);
 
   const totalCobrar = orden.saldo;
   const vuelto = metodo === "EFECTIVO" && recibido > totalCobrar ? recibido - totalCobrar : 0;
@@ -1630,6 +1650,23 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
     return parseFloat(clean) || 0;
   };
 
+  if (showCondonar) {
+    return (
+      <CondonarDeudaDialog
+        orden={orden}
+        onClose={() => {
+          setShowCondonar(false);
+          onClose();
+        }}
+        tenantId={tenant.id}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
+          if (onSuccess) onSuccess(orden);
+        }}
+      />
+    );
+  }
+
   return (
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-3xl rounded-3xl p-0 border border-primary/10 shadow-elegant overflow-hidden bg-background">
@@ -1794,13 +1831,28 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 </p>
               )}
 
-              <Button
-                variant="ghost"
-                onClick={onClose}
-                className="w-full h-9 rounded-xl text-[10px] font-black text-muted-foreground hover:text-foreground"
-              >
-                CANCELAR COBRO
-              </Button>
+              <div className={isAuthorized ? "grid grid-cols-2 gap-2" : "w-full"}>
+                <Button
+                  variant="destructive"
+                  type="button"
+                  onClick={onClose}
+                  className="w-full h-9 rounded-xl text-[10px] font-black bg-rose-600 hover:bg-rose-700 text-white border-none shadow-sm"
+                >
+                  CANCELAR COBRO
+                </Button>
+
+                {isAuthorized && (
+                  <Button
+                    variant="outline"
+                    type="button"
+                    onClick={() => setShowCondonar(true)}
+                    className="w-full h-9 rounded-xl text-[10px] font-black border-amber-500/30 text-amber-700 hover:bg-amber-50 hover:text-amber-800 gap-1.5"
+                  >
+                    <AlertTriangle className="h-3.5 w-3.5 text-amber-600" />
+                    CONDONAR DEUDA (AJUSTE)
+                  </Button>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -1883,5 +1935,148 @@ function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick }: PendienteCar
         </Button>
       </div>
     </Card>
+  );
+}
+
+interface CondonarDeudaDialogProps {
+  orden: Orden;
+  onClose: () => void;
+  tenantId: string;
+  onSuccess: () => void;
+}
+
+function cleanOrden(o: any): Orden {
+  return {
+    id: o.id,
+    tenant_id: o.tenant_id,
+    numero: o.numero,
+    cliente_id: o.cliente_id,
+    empleado_id: o.empleado_id,
+    servicios: o.servicios,
+    servicios_precios: o.servicios_precios,
+    items: o.items,
+    subtotal: o.subtotal,
+    itbis: o.itbis,
+    descuento: o.descuento,
+    total: o.total,
+    pagado: o.pagado,
+    saldo: o.saldo,
+    metodo_pago: o.metodo_pago,
+    estado: o.estado,
+    fecha_entrega: o.fecha_entrega,
+    es_urgente: o.es_urgente,
+    notas: o.notas,
+    creado_en: o.creado_en,
+    ncf: o.ncf,
+    tipo_ecf: o.tipo_ecf,
+    ecf_id: o.ecf_id,
+    motivo_anulacion: o.motivo_anulacion,
+    motivo_anulacion_codigo: o.motivo_anulacion_codigo,
+    nota_credito_ncf: o.nota_credito_ncf,
+    nota_credito_id: o.nota_credito_id,
+    nota_debito_ncf: o.nota_debito_ncf,
+    nota_debito_id: o.nota_debito_id,
+    nota_debito_monto: o.nota_debito_monto,
+    entrega_domicilio: o.entrega_domicilio,
+    costo_envio: o.costo_envio,
+    repartidor_id: o.repartidor_id,
+    ecf_qr: o.ecf_qr,
+    ecf_security_code: o.ecf_security_code,
+    ecf_signature_date: o.ecf_signature_date,
+    ncf_vencimiento: o.ncf_vencimiento,
+  };
+}
+
+export function CondonarDeudaDialog({ orden, onClose, tenantId, onSuccess }: CondonarDeudaDialogProps) {
+  const [motivo, setMotivo] = useState("Redondeo / Centavos");
+  const [loading, setLoading] = useState(false);
+
+  async function handleConfirmar() {
+    setLoading(true);
+    try {
+      const notaAjuste = motivo.trim();
+      const nuevoNotas = orden.notas
+        ? `${orden.notas} | Deuda condonada: ${notaAjuste}`
+        : `Deuda condonada: ${notaAjuste}`;
+
+      const ordenActualizada: Orden = {
+        ...orden,
+        saldo: 0,
+        estado: orden.estado === "ENTREGADA" ? "ENTREGADA" : "PAGADA",
+        notas: nuevoNotas
+      };
+
+      const cleaned = cleanOrden(ordenActualizada);
+
+      if (!IS_LOCAL_MODE) {
+        const { error } = await supabase.from('ordenes').upsert(cleaned);
+        if (error) throw error;
+      }
+
+      await saveOrden(cleaned);
+
+      toast.success(`Deuda de la orden #${orden.numero} condonada con éxito ✅`);
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      console.error("Error al condonar:", err);
+      toast.error("Error al condonar deuda: " + (err.message || JSON.stringify(err)));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <Dialog open={true} onOpenChange={onClose}>
+      <DialogContent className="max-w-sm rounded-3xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl font-display font-black text-amber-800">
+            <div className="bg-amber-100 p-2 rounded-xl">
+              <AlertTriangle className="h-5 w-5 text-amber-600" />
+            </div>
+            Condonar Deuda
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground pt-1">
+            Esta acción eliminará el saldo pendiente de la orden sin registrar un ingreso de dinero real en la caja.
+          </p>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="rounded-2xl bg-amber-50/50 border border-amber-100 p-4 text-center">
+            <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 block">Orden #{orden.numero}</span>
+            <span className="text-2xl font-black text-amber-600 block">{formatRD(orden.saldo)}</span>
+            <span className="text-[10px] text-muted-foreground block mt-1">Saldo pendiente a condonar</span>
+          </div>
+
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">Motivo / Justificación</label>
+            <select
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              className="w-full p-2.5 rounded-xl border border-border bg-background text-sm font-medium focus:outline-none focus:ring-2 focus:ring-amber-500"
+            >
+              <option value="Redondeo / Centavos">Redondeo / Centavos</option>
+              <option value="Descuento especial">Descuento especial</option>
+              <option value="Cliente recurrente / Cortesía">Cliente recurrente / Cortesía</option>
+              <option value="Saldo incobrable / Pérdida">Saldo incobrable / Pérdida</option>
+              <option value="Error de facturación">Error de facturación</option>
+            </select>
+          </div>
+        </div>
+
+        <DialogFooter className="gap-2 pt-2">
+          <Button variant="outline" onClick={onClose} disabled={loading} className="flex-1">
+            Cancelar
+          </Button>
+          <Button
+            onClick={handleConfirmar}
+            disabled={loading}
+            className="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-bold"
+          >
+            {loading ? "Procesando..." : "Confirmar Condonación"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

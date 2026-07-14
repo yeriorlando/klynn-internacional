@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText } from "lucide-react";
+import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -14,7 +14,7 @@ import { notificarWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
 import { useCajaAbierta } from "@/hooks/use-queries";
 import { queryClient } from "@/router";
-import { CobrarOrdenDialog, TicketPrintPortal } from "./t.$slug.ordenes";
+import { CobrarOrdenDialog, TicketPrintPortal, CondonarDeudaDialog } from "./t.$slug.ordenes";
 
 export const Route = createFileRoute("/t/$slug/cxc")({
   component: CuentasPorCobrarPage,
@@ -70,6 +70,7 @@ function estadoMora(dias: number, limite: number): CXCOrden["estado_mora"] {
 
 export default function CuentasPorCobrarPage() {
   const user = useRequireAuth();
+  const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const navigate = useNavigate();
   const tenantId = user?.tenant?.id || "";
 
@@ -79,6 +80,7 @@ export default function CuentasPorCobrarPage() {
   const [cobrarCliente, setCobrarCliente] = useState<ClienteDeuda | null>(null);
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
+  const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
 
   const [loading, setLoading] = useState(true);
   const [savingLimite, setSavingLimite] = useState(false);
@@ -598,16 +600,31 @@ export default function CuentasPorCobrarPage() {
                                 <td className="px-4 py-2.5 text-right font-bold text-red-600">{formatRD(o.saldo)}</td>
                                 <td className="px-4 py-2.5 text-xs">{o.estado}</td>
                                 <td className="px-4 py-2.5 text-center">
-                                  <Button
-                                    size="sm"
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      setCobrarOrden(o);
-                                    }}
-                                    className="h-7 px-3 text-[10px] font-black tracking-wider uppercase rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  >
-                                    Cobrar / Abono
-                                  </Button>
+                                  <div className="flex items-center justify-center gap-1.5">
+                                    <Button
+                                      size="sm"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setCobrarOrden(o);
+                                      }}
+                                      className="h-7 px-3 text-[10px] font-black tracking-wider uppercase rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    >
+                                      Cobrar / Abono
+                                    </Button>
+                                    {isAuthorized && (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCondonarOrden(o);
+                                        }}
+                                        className="h-7 px-3 text-[10px] font-black tracking-wider uppercase rounded-lg border-amber-500/50 text-amber-700 hover:bg-amber-50 hover:text-amber-800"
+                                      >
+                                        Condonar
+                                      </Button>
+                                    )}
+                                  </div>
                                 </td>
                               </tr>
                             );
@@ -850,6 +867,17 @@ export default function CuentasPorCobrarPage() {
             setShowPrint(null);
             setPagoRecibidoParaTicket(undefined);
           }} 
+        />
+      )}
+
+      {condonarOrden && (
+        <CondonarDeudaDialog
+          orden={condonarOrden}
+          onClose={() => setCondonarOrden(null)}
+          tenantId={tenantId}
+          onSuccess={() => {
+            cargar();
+          }}
         />
       )}
     </>

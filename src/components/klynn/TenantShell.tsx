@@ -11,14 +11,6 @@ import { BrandStyle } from "@/components/klynn/BrandStyle";
 import { Logo } from "@/components/klynn/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { 
   logout, getCajaAbierta, formatRD, can, getTenantsForUser, 
   setActiveTenant, setSession, switchSession, getPlans,
@@ -728,73 +720,48 @@ function SidebarContent({
 }
 
 function UserMenu({ nombre, rol, empleadoId, onLogout }: { nombre: string; rol: string; empleadoId: string; onLogout: () => void }) {
+  const [open, setOpen] = useState(false);
   const initials = nombre.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <button className="flex items-center gap-2 rounded-xl px-2.5 py-1.5 hover:bg-accent/60 transition-all outline-none">
-          <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-primary text-xs font-bold text-white shadow-sm">{initials}</div>
-          <div className="hidden text-left md:block">
-            <div className="text-sm font-semibold leading-tight text-foreground">{nombre.split(" ")[0]}</div>
-            <div className="text-[10px] font-bold uppercase text-muted-foreground/80">{rol}</div>
-          </div>
-          <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform duration-200" />
-        </button>
-      </DropdownMenuTrigger>
-
-      <DropdownMenuContent className="w-[280px] rounded-2xl bg-slate-50/90 dark:bg-black/90 p-0 border border-slate-200/50 dark:border-slate-800/50 backdrop-blur-xl shadow-elegant" align="end" sideOffset={8}>
-        <div className="p-1.5">
-          {/* User Profile Header Card */}
-          <div className="flex items-center gap-3 p-3 bg-white dark:bg-slate-900/40 rounded-xl shadow-sm border border-slate-100 dark:border-slate-800/50 mb-1">
-            <div className="grid h-10 w-10 place-items-center rounded-full bg-gradient-primary text-sm font-bold text-white shadow">
-              {initials}
-            </div>
-            <div className="min-w-0 flex-1">
-              <h3 className="font-bold text-sm text-slate-800 dark:text-slate-100 truncate">{nombre}</h3>
-              <p className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground/60">{rol}</p>
-            </div>
-            <Badge className="bg-emerald-500 hover:bg-emerald-500 text-white font-extrabold border-transparent text-[9px] px-2 py-0.5 rounded uppercase tracking-wider shadow-sm">
-              En línea
-            </Badge>
-          </div>
-
-          <DropdownMenuGroup className="space-y-0.5">
-            <DropdownMenuItem 
-              className="p-2.5 rounded-lg cursor-pointer flex items-center justify-between text-slate-700 dark:text-slate-350 hover:bg-accent focus:bg-accent focus:text-foreground transition-all duration-150"
-              onClick={() => window.open("https://wa.link/53y31w", "_blank")}
-            >
-              <span className="flex items-center gap-2 font-medium">
-                <MessageCircle className="h-4 w-4 text-emerald-500 animate-pulse" />
-                Soporte
-              </span>
-              <span className="text-[9px] font-extrabold text-emerald-600 bg-emerald-500/10 px-1.5 py-0.5 rounded uppercase tracking-wider">
-                WhatsApp
-              </span>
-            </DropdownMenuItem>
-
-            <DropdownMenuItem 
-              className="p-2.5 rounded-lg cursor-pointer flex items-center gap-2 text-slate-700 dark:text-slate-350 hover:bg-accent focus:bg-accent focus:text-foreground transition-all duration-150"
-              onClick={() => toast.info("Tutoriales y guías próximamente 🚀")}
-            >
-              <BookOpen className="h-4 w-4 text-blue-500" />
-              <span className="font-medium">Tutoriales y guías</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
-
-          <DropdownMenuSeparator className="my-1.5 border-slate-100 dark:border-slate-800" />
-
-          <DropdownMenuGroup>
-            <DropdownMenuItem 
-              className="p-2.5 rounded-lg cursor-pointer flex items-center gap-2 text-rose-600 hover:bg-rose-500/10 focus:bg-rose-500/10 focus:text-rose-600 transition-all duration-150"
-              onClick={onLogout}
-            >
-              <LogOut className="h-4 w-4" />
-              <span className="font-bold">Cerrar sesión</span>
-            </DropdownMenuItem>
-          </DropdownMenuGroup>
+    <div className="relative">
+      <button
+        onClick={() => setOpen((s) => !s)}
+        className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent"
+      >
+        <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-primary text-xs font-bold text-white">{initials}</div>
+        <div className="hidden text-left md:block">
+          <div className="text-sm font-medium leading-tight">{nombre.split(" ")[0]}</div>
+          <div className="text-[10px] uppercase text-muted-foreground">{rol}</div>
         </div>
-      </DropdownMenuContent>
-    </DropdownMenu>
+        <ChevronDown className="h-4 w-4 text-muted-foreground" />
+      </button>
+      {open && (
+        <>
+          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
+          <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border border-border bg-popover shadow-elegant">
+            <div className="border-b border-border p-3">
+              <div className="text-sm font-semibold">{nombre}</div>
+              <div className="text-xs text-muted-foreground">{rol}</div>
+            </div>
+            <button 
+              onClick={() => { window.open("https://wa.link/53y31w", "_blank"); setOpen(false); }} 
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
+            >
+              <MessageCircle className="h-4 w-4 text-emerald-500 animate-pulse" /> Soporte
+            </button>
+            <button 
+              onClick={() => { toast.info("Tutoriales y guías próximamente 🚀"); setOpen(false); }} 
+              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
+            >
+              <BookOpen className="h-4 w-4 text-blue-500" /> Tutoriales y guías
+            </button>
+            <button onClick={onLogout} className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-destructive hover:bg-accent">
+              <LogOut className="h-4 w-4" /> Cerrar sesión
+            </button>
+          </div>
+        </>
+      )}
+    </div>
   );
 }
 
