@@ -597,6 +597,7 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
   const [montoStr, setMontoStr] = useState<string>("");
   const [turno, setTurno] = useState<"Mañana" | "Tarde" | "Noche">("Mañana");
   const [loading, setLoading] = useState(false);
+  
   async function submit() {
     const monto = parseAmount(montoStr);
     if (monto <= 0) { toast.error("Monto inválido"); return; }
@@ -613,41 +614,52 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
       setLoading(false);
     }
   }
+
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!loading) onOpenChange(v); }}>
-      <DialogContent>
-        <DialogHeader><DialogTitle>Abrir caja</DialogTitle></DialogHeader>
-        <div className="space-y-6 py-4">
-          <div className="text-center">
-            <Label className="mb-3 block text-sm font-semibold uppercase tracking-wider text-muted-foreground">Monto inicial en efectivo</Label>
-            <div className="relative mx-auto max-w-[280px] group">
-              <div className="absolute inset-0 bg-primary/5 blur-3xl opacity-0 group-focus-within:opacity-100 transition-opacity" />
-              <div className="relative flex flex-col items-center rounded-2xl border-2 border-slate-100 bg-slate-50/50 p-5 shadow-sm transition-all group-focus-within:border-primary group-focus-within:bg-white group-focus-within:shadow-xl">
-                <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.15em] text-primary/40">Monto inicial en caja</div>
-                <div className="flex w-full items-baseline justify-center gap-2">
-                  <span className="font-display text-xl font-bold text-primary/20">RD$</span>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    autoFocus
-                    value={montoStr}
-                    onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}
-                    placeholder="0.00"
-                    disabled={loading}
-                    className="w-full min-w-0 bg-transparent text-center font-display text-5xl font-bold text-primary outline-none placeholder:text-primary/5 tracking-tighter"
-                  />
-                </div>
+      <DialogContent className="max-w-md rounded-3xl p-6">
+        <DialogHeader className="flex flex-row items-center justify-between pb-2">
+          <DialogTitle className="font-display text-2xl font-black">Abrir caja</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-5">
+          {/* MONTO INICIAL EN EFECTIVO */}
+          <div className="space-y-2">
+            <Label className="block text-center text-[10.5px] font-bold uppercase tracking-widest text-slate-500">
+              Monto inicial en efectivo
+            </Label>
+            
+            <div className="rounded-2xl border border-slate-200/80 bg-slate-50/20 p-5 shadow-sm">
+              <div className="text-center mb-1 text-[9px] font-black uppercase tracking-[0.15em] text-[#C2410C]/85 dark:text-orange-400">
+                Monto inicial en caja
+              </div>
+              <div className="flex items-center justify-center gap-2">
+                <span className="font-display text-[28px] font-bold text-primary opacity-60 shrink-0 select-none">RD$</span>
+                <input
+                  type="text"
+                  inputMode="decimal"
+                  autoFocus
+                  value={montoStr}
+                  onChange={(e) => setMontoStr(formatAmountInput(e.target.value))}
+                  placeholder="0.00"
+                  disabled={loading}
+                  className="w-full max-w-[260px] bg-transparent text-center font-display text-5xl font-black text-primary outline-none placeholder:text-primary/5 tracking-tighter"
+                />
               </div>
             </div>
           </div>
 
-          <div>
-            <Label className="mb-4 block text-center text-sm font-semibold uppercase tracking-wider text-muted-foreground">Selecciona el turno</Label>
+          {/* SELECCIONA EL TURNO */}
+          <div className="space-y-2">
+            <Label className="block text-center text-[10.5px] font-bold uppercase tracking-widest text-slate-500">
+              Selecciona el turno
+            </Label>
+            
             <div className="grid grid-cols-3 gap-3">
               {[
-                { id: "Mañana", icon: "🌅", color: "from-orange-400 to-yellow-200" },
-                { id: "Tarde", icon: "☀️", color: "from-blue-400 to-cyan-200" },
-                { id: "Noche", icon: "🌙", color: "from-indigo-600 to-purple-400" },
+                { id: "Mañana", icon: "🌅", color: "bg-orange-100 text-orange-600" },
+                { id: "Tarde", icon: "☀️", color: "bg-blue-100 text-blue-600" },
+                { id: "Noche", icon: "🌙", color: "bg-purple-100 text-purple-600" },
               ].map((t) => {
                 const sel = turno === t.id;
                 return (
@@ -656,14 +668,14 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
                     type="button"
                     disabled={loading}
                     onClick={() => setTurno(t.id as any)}
-                    className={`group relative flex flex-col items-center justify-center rounded-2xl border-2 p-4 transition-all duration-300 ${
-                      sel ? "border-primary bg-primary/5 scale-105 shadow-md" : "border-slate-100 bg-white hover:border-slate-200"
+                    className={`group relative flex flex-col items-center justify-center rounded-2xl border p-4 transition-all duration-300 ${
+                      sel ? "border-primary bg-primary/[0.02] ring-1 ring-primary shadow-sm" : "border-slate-200/80 bg-white hover:bg-slate-50/50"
                     } ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
                   >
-                    <div className={`mb-2 flex h-12 w-12 items-center justify-center rounded-full bg-gradient-to-br text-2xl shadow-sm transition-transform group-hover:scale-110 ${t.color}`}>
+                    <div className={`mb-3 flex h-11 w-11 items-center justify-center rounded-full text-xl shadow-inner ${t.color}`}>
                       {t.icon}
                     </div>
-                    <span className={`text-xs font-bold uppercase tracking-widest ${sel ? "text-primary" : "text-slate-400"}`}>
+                    <span className={`text-[10px] font-black uppercase tracking-wider ${sel ? "text-primary" : "text-slate-500"}`}>
                       {t.id}
                     </span>
                   </button>
@@ -672,12 +684,25 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
             </div>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>Cancelar</Button>
-          <Button onClick={submit} className="bg-gradient-primary text-white" disabled={loading}>
+
+        {/* Separador e inferior */}
+        <div className="border-t border-slate-100 mt-5 pt-4 flex justify-end gap-3">
+          <Button 
+            variant="outline" 
+            onClick={() => onOpenChange(false)} 
+            disabled={loading}
+            className="h-10 rounded-xl font-bold border-slate-200 text-slate-700 hover:bg-slate-50/80 px-5 text-sm"
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={submit} 
+            disabled={loading}
+            className="bg-primary text-white font-bold rounded-xl h-10 px-6 text-sm hover:opacity-95 shadow-sm"
+          >
             {loading ? "Abriendo..." : "Abrir caja"}
           </Button>
-        </DialogFooter>
+        </div>
       </DialogContent>
     </Dialog>
   );

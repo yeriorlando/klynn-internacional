@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Phone, Mail, MapPin, Trash2, Search, Loader2, CreditCard, Coins, Check, AlertTriangle, FileText } from "lucide-react";
+import { UserPlus, Phone, Mail, MapPin, Trash2, Search, Loader2, CreditCard, Coins, Check, AlertTriangle, FileText, Building2, User } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -249,260 +249,215 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden border-none shadow-2xl rounded-2xl bg-background flex flex-col md:flex-row h-[95vh] md:h-[530px]">
-        {/* LEFT COLUMN: Profile Form */}
-        <div className="flex-1 flex flex-col p-5 md:p-6 overflow-hidden h-full justify-between">
-          {/* Header - Static */}
-          <DialogHeader className="mb-2">
-            <DialogTitle className="text-lg font-display font-black text-foreground">
-              {cliente ? "Editar Perfil de Cliente" : "Nuevo Perfil de Cliente"}
-            </DialogTitle>
-            <DialogDescription className="text-[10px] text-muted-foreground mt-0.5">
-              Introduce la información de contacto y detalles de facturación del cliente.
-            </DialogDescription>
-          </DialogHeader>
+      <DialogContent className="max-w-[620px] p-0 overflow-hidden border-none shadow-2xl rounded-3xl bg-background flex flex-col gap-0">
+        {/* Header */}
+        <DialogHeader className="p-5 pb-3 border-b border-border/50 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white font-extrabold text-sm shrink-0">
+              KL
+            </div>
+            <div className="text-left">
+              <DialogTitle className="text-base font-bold text-foreground">
+                {cliente ? "Editar Perfil de Cliente" : "Nuevo Perfil de Cliente"}
+              </DialogTitle>
+              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                Introduce la información de contacto y detalles de facturación del cliente.
+              </DialogDescription>
+            </div>
+          </div>
+        </DialogHeader>
 
-          {/* Scrollable Form Fields */}
-          <div className="space-y-3 flex-1 overflow-y-auto pr-1 scrollbar-thin my-1.5">
-            <div className="grid gap-2.5 grid-cols-2">
+        {/* Form Body */}
+        <div className="p-5 space-y-3">
+          <div className="grid gap-3.5 grid-cols-2">
+            {/* Tipo de cliente */}
+            <div>
+              <Label className="text-xs font-bold text-muted-foreground">Tipo de Cliente</Label>
+              <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
+                <SelectTrigger className="h-10 rounded-xl mt-1 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
+                  <SelectItem value="Consumidor Final">
+                    <span className="flex items-center gap-2">
+                      <User className="h-3.5 w-3.5 text-teal-600" />
+                      <span>Consumidor Final</span>
+                    </span>
+                  </SelectItem>
+                  {tenant.config?.ncf_facturacion_activa && (
+                    <SelectItem value="Empresa">
+                      <span className="flex items-center gap-2">
+                        <Building2 className="h-3.5 w-3.5 text-purple-600" />
+                        <span>Empresa</span>
+                      </span>
+                    </SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Telefono */}
+            <div>
+              <Label className="text-xs font-bold text-muted-foreground">Teléfono / WhatsApp</Label>
+              <Input 
+                value={f.telefono} 
+                onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
+                placeholder="809-000-0000" 
+                className="h-10 rounded-xl mt-1 text-xs"
+              />
+            </div>
+          </div>
+
+          {/* Nombre / Apellido / Empresa / RNC (Siempre 2 Columnas) */}
+          {f.tipo === "Empresa" ? (
+            <div className="grid gap-3.5 grid-cols-2 animate-in fade-in slide-in-from-left-1 duration-150">
               <div>
-                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Tipo de Cliente</Label>
-                <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
-                  <SelectTrigger className="h-9 rounded-xl mt-1 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
-                    <SelectItem value="Consumidor Final">👤 Consumidor Final</SelectItem>
-                    {tenant.config?.ncf_facturacion_activa && <SelectItem value="Empresa">🏢 Empresa</SelectItem>}
-                  </SelectContent>
-                </Select>
+                <Label className="text-xs font-bold text-muted-foreground">Nombre de la Empresa</Label>
+                <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-10 rounded-xl mt-1 text-xs" />
+              </div>
+              {tenant.config?.ncf_facturacion_activa ? (
+                <div>
+                  <Label className="text-xs font-bold text-muted-foreground">RNC de la Empresa</Label>
+                  <div className="flex gap-2 mt-1">
+                    <Input 
+                      value={f.cedula} 
+                      onChange={(e) => setF({ ...f, cedula: e.target.value })} 
+                      placeholder="131-12345-6"
+                      className="h-10 rounded-xl text-xs flex-1"
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="h-10 rounded-xl px-3 text-xs gap-1.5 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-semibold"
+                      onClick={handleSearchRNC}
+                      disabled={loadingRNC}
+                    >
+                      {loadingRNC ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <Search className="h-3.5 w-3.5" />
+                      )}
+                      <span>Buscar</span>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div />
+              )}
+            </div>
+          ) : (
+            <div className="grid gap-3.5 grid-cols-2 animate-in fade-in slide-in-from-left-1 duration-150">
+              <div>
+                <Label className="text-xs font-bold text-muted-foreground">Nombre</Label>
+                <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 rounded-xl mt-1 text-xs" />
               </div>
               <div>
-                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Teléfono / WhatsApp (Opcional)</Label>
-                <Input 
-                  value={f.telefono} 
-                  onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
-                  placeholder="809-000-0000" 
-                  className="h-9 rounded-xl mt-1 text-xs"
-                />
+                <Label className="text-xs font-bold text-muted-foreground">Apellido</Label>
+                <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 rounded-xl mt-1 text-xs" />
               </div>
             </div>
+          )}
 
-            {f.tipo === "Empresa" ? (
-              <div className="space-y-2.5 animate-in fade-in slide-in-from-left-1 duration-150">
-                <div>
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre de la Empresa</Label>
-                  <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-9 rounded-xl mt-1 text-xs" />
-                </div>
-                <div className="grid gap-2.5 grid-cols-2">
-                  {tenant.config?.ncf_facturacion_activa && (
-                    <div>
-                      <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">RNC de la Empresa</Label>
-                      <div className="relative mt-1">
-                        <Input 
-                          value={f.cedula} 
-                          onChange={(e) => setF({ ...f, cedula: e.target.value })} 
-                          placeholder="131-12345-6"
-                          className="h-9 rounded-xl pr-9 text-xs"
-                        />
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="absolute right-0.5 top-1/2 -translate-y-1/2 h-7.5 w-7.5 text-primary hover:bg-primary/10 rounded-lg"
-                          onClick={handleSearchRNC}
-                          disabled={loadingRNC}
-                        >
-                          {loadingRNC ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-                  <div className={tenant.config?.ncf_facturacion_activa ? "" : "col-span-2"}>
-                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email (Opcional)</Label>
-                    <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="empresa@correo.com" className="h-9 rounded-xl mt-1 text-xs" />
-                  </div>
-                </div>
-              </div>
-            ) : (
-              <div className="space-y-2.5 animate-in fade-in slide-in-from-left-1 duration-150">
-                <div className="grid gap-2.5 grid-cols-2">
-                  <div>
-                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Nombre</Label>
-                    <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-9 rounded-xl mt-1 text-xs" />
-                  </div>
-                  <div>
-                    <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Apellido</Label>
-                    <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-9 rounded-xl mt-1 text-xs" />
-                  </div>
-                </div>
-                <div>
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Email (Opcional)</Label>
-                  <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-9 rounded-xl mt-1 text-xs" />
-                </div>
-              </div>
-            )}
-            
-            <div className="flex items-center justify-between rounded-xl border border-border py-2 px-3 bg-accent/30 dark:bg-accent/10 mt-1">
-              <div className="space-y-0.5">
-                <Label className="text-[10px] font-black uppercase tracking-wider text-teal-600 dark:text-teal-400">Envío a domicilio</Label>
-                <div className="text-[9px] text-muted-foreground">¿Este cliente requiere servicio de delivery constante?</div>
-              </div>
+          {/* Email */}
+          <div>
+            <Label className="text-xs font-bold text-muted-foreground">Email (Opcional)</Label>
+            <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-10 rounded-xl mt-1 text-xs" />
+          </div>
+
+          {/* Switches (Envío a domicilio & Línea de Crédito) */}
+          <div className="grid grid-cols-2 gap-3.5 pt-0.5">
+            {/* Envío a domicilio */}
+            <div className="flex items-center gap-4 py-0.5 px-0.5">
               <Switch 
                 checked={hasDelivery} 
                 onCheckedChange={(checked) => {
                   setHasDelivery(checked);
                   if (!checked) setF({ ...f, direccion: "" });
                 }} 
+                className="scale-110 origin-left"
               />
+              <div className="flex flex-col text-left">
+                <Label className="text-sm font-bold text-foreground">Envío a domicilio</Label>
+                <span className="text-[11px] text-muted-foreground mt-0.5">¿Requiere delivery?</span>
+              </div>
             </div>
 
-            {hasDelivery && (
-              <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-                <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Dirección de entrega</Label>
-                <div className="relative mt-1">
-                  <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
-                  <Input value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} placeholder="Calle, # Casa, Sector, Referencia..." className="h-9 pl-8 rounded-xl text-xs" />
-                </div>
-              </div>
-            )}
-
-            <div>
-              <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Notas / Comentarios Internos</Label>
-              <Textarea 
-                value={f.notas} 
-                onChange={(e) => setF({ ...f, notas: e.target.value })} 
-                placeholder="Indica preferencias de lavado, alergias, o detalles importantes..." 
-                className="mt-1 h-12 min-h-[48px] max-h-[70px] resize-none rounded-xl text-xs py-2 px-3"
+            {/* Línea de crédito */}
+            <div className="flex items-center gap-4 py-0.5 px-0.5">
+              <Switch 
+                checked={f.limite_credito > 0} 
+                onCheckedChange={(checked) => setF({ ...f, limite_credito: checked ? 5000 : 0 })} 
+                className="scale-110 origin-left"
               />
+              <div className="flex flex-col text-left">
+                <Label className="text-sm font-bold text-foreground">Línea de Crédito</Label>
+                <span className="text-[11px] text-muted-foreground mt-0.5">Permitir a crédito</span>
+              </div>
             </div>
           </div>
 
-          {/* Footer - Static and ALWAYS visible at first glance */}
-          <div className="border-t border-border pt-3 mt-1.5 flex items-center justify-between">
-            {cliente && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
-                  <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 rounded-xl h-9 text-xs"><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar</Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent className="rounded-2xl border-none shadow-card">
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>¿Eliminar a {cliente.nombre}?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Esta acción no se puede deshacer. Se eliminará el registro del cliente pero sus órdenes pasadas permanecerán en el sistema.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                    <AlertDialogAction onClick={remove} className="bg-destructive text-white rounded-xl border-none hover:bg-destructive/90">Eliminar permanentemente</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
-            )}
-            <div className="flex gap-2 ml-auto">
-              <Button type="button" variant="outline" className="rounded-xl h-9 text-xs" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button type="button" onClick={submit} className="bg-gradient-primary text-white rounded-xl h-9 text-xs px-6 shadow-sm hover:opacity-95">Guardar Cliente</Button>
-            </div>
-          </div>
-        </div>
-
-        {/* RIGHT COLUMN: Financial & Credit Panel */}
-        <div className="w-full md:w-[350px] bg-accent/20 dark:bg-accent/5 p-5 md:p-6 flex flex-col justify-between border-t md:border-t-0 md:border-l border-border h-full overflow-hidden">
-          <div className="space-y-4 flex-1 flex flex-col overflow-hidden">
-            {/* Header - Static */}
-            <div className="border-b border-border/80 pb-2">
-              <h3 className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-1.5">
-                <Coins className="h-3.5 w-3.5 text-amber-500" /> Crédito y Finanzas
-              </h3>
-              <p className="text-[9px] text-muted-foreground mt-0.5">
-                Gestiona la línea de crédito y el registro de cobros.
-              </p>
-            </div>
-
-            {/* Scrollable Credit Status / Payment Panel */}
-            <div className="space-y-3.5 flex-1 overflow-y-auto pr-1 scrollbar-thin my-1">
-              <div className="flex items-center justify-between rounded-xl border border-border py-2 px-3 bg-background">
-                <div className="space-y-0.5">
-                  <Label className="text-[10px] font-black uppercase tracking-wider text-amber-600 dark:text-amber-500">Línea de Crédito</Label>
-                  <div className="text-[9px] text-muted-foreground">Permitir compras al crédito.</div>
+          {/* Conditional Inputs Grid */}
+          {(hasDelivery || f.limite_credito > 0) && (
+            <div className="grid gap-3.5 grid-cols-2 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+              {hasDelivery && (
+                <div className={f.limite_credito > 0 ? "col-span-1" : "col-span-2"}>
+                  <Label className="text-xs font-bold text-muted-foreground">Dirección de entrega</Label>
+                  <div className="relative mt-1">
+                    <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+                    <Input value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} placeholder="Calle, # Casa, Sector, Referencia..." className="h-10 pl-8 rounded-xl text-xs" />
+                  </div>
                 </div>
-                <Switch 
-                  checked={f.limite_credito > 0} 
-                  onCheckedChange={(checked) => setF({ ...f, limite_credito: checked ? 5000 : 0 })} 
-                />
-              </div>
-
+              )}
               {f.limite_credito > 0 && (
-                <div className="animate-in fade-in slide-in-from-top-1 duration-150">
-                  <Label className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Límite de crédito (RD$)</Label>
+                <div className={hasDelivery ? "col-span-1" : "col-span-2"}>
+                  <Label className="text-xs font-bold text-muted-foreground">Límite de crédito (RD$)</Label>
                   <div className="relative mt-1">
                     <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
                     <Input 
                       type="number" 
                       value={f.limite_credito} 
                       onChange={(e) => setF({ ...f, limite_credito: Number(e.target.value) || 0 })} 
-                      className="h-9 pl-8 rounded-xl font-bold text-xs"
+                      className="h-10 pl-8 rounded-xl font-bold text-xs"
                     />
-                  </div>
-                </div>
-              )}
-
-              {cliente && (
-                <div className="flex-1 flex flex-col overflow-hidden min-h-0 mt-3.5 animate-in fade-in duration-200">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <Label className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Historial de Órdenes</Label>
-                    <span className="text-[9px] font-bold text-muted-foreground bg-accent px-1.5 py-0.5 rounded-full">
-                      {clientOrders.length} {clientOrders.length === 1 ? "orden" : "órdenes"}
-                    </span>
-                  </div>
-                  
-                  {/* Buscador de órdenes */}
-                  <div className="relative mb-2">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
-                    <Input
-                      value={searchOrder}
-                      onChange={(e) => setSearchOrder(e.target.value)}
-                      placeholder="Buscar por nº o fecha (dd/mm/aaaa)..."
-                      className="h-8 pl-8 rounded-xl text-xs bg-background"
-                    />
-                  </div>
-
-                  {/* Lista scrollable */}
-                  <div className="flex-1 overflow-y-auto space-y-1.5 pr-1 scrollbar-thin max-h-[200px]">
-                    {filteredClientOrders.length === 0 ? (
-                      <div className="text-center py-6 text-muted-foreground text-[10px] border border-dashed border-border rounded-xl bg-background/50">
-                        No se encontraron órdenes
-                      </div>
-                    ) : (
-                      filteredClientOrders.map(o => {
-                        const hasBalance = (o.saldo || 0) > 0;
-                        return (
-                          <div key={o.id} className="flex flex-col p-2.5 rounded-xl border border-border bg-background hover:bg-accent/30 transition-colors text-xs">
-                            <div className="flex items-center justify-between font-bold">
-                              <span className="font-mono text-primary">Orden {o.numero}</span>
-                              <span className="text-foreground">{formatRD(o.total)}</span>
-                            </div>
-                            <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1">
-                              <span>{new Date(o.creado_en).toLocaleDateString("es-DO")}</span>
-                              <span className={`font-bold uppercase tracking-wide text-[9px] px-1.5 py-0.5 rounded-full ${
-                                o.estado === 'ANULADA' ? 'bg-red-50 text-red-600 border border-red-200' :
-                                o.estado === 'ENTREGADA' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                                hasBalance ? 'bg-amber-50 text-amber-700 border border-amber-200' : 'bg-blue-50 text-blue-700 border border-blue-200'
-                              }`}>
-                                {o.estado} {hasBalance && `(${formatRD(o.saldo)} pend.)`}
-                              </span>
-                            </div>
-                          </div>
-                        );
-                      })
-                    )}
                   </div>
                 </div>
               )}
             </div>
-          </div>
+          )}
 
-          {/* Footer - Static */}
-          <div className="text-[8px] text-muted-foreground text-center border-t border-border/60 pt-2 mt-1.5">
-            Sistema Klynn v1.1 • FIFO & Crédito
+          {/* Notas */}
+          <div>
+            <Label className="text-xs font-bold text-muted-foreground">Notas / Comentarios Internos</Label>
+            <Textarea 
+              value={f.notas} 
+              onChange={(e) => setF({ ...f, notas: e.target.value })} 
+              placeholder="Preferencias de lavado, alergias, etc..." 
+              className="mt-1 h-16 min-h-[60px] max-h-[80px] resize-none rounded-xl text-xs py-2 px-3"
+            />
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="border-t border-border/50 p-5 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30">
+          {cliente && (
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 rounded-xl h-10 text-xs"><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar</Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="rounded-2xl border-none shadow-card">
+                <AlertDialogHeader>
+                  <AlertDialogTitle>¿Eliminar a {cliente.nombre}?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Esta acción no se puede deshacer. Se eliminará el registro del cliente pero sus órdenes pasadas permanecerán en el sistema.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                  <AlertDialogAction onClick={remove} className="bg-destructive text-white rounded-xl border-none hover:bg-destructive/90">Eliminar permanentemente</AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          )}
+          <div className="flex gap-2.5 ml-auto">
+            <Button type="button" variant="outline" className="rounded-xl h-10 text-xs px-5 border-slate-300 dark:border-slate-800" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="button" onClick={submit} className="bg-[#2c4e82] text-white rounded-xl h-10 text-xs px-6 font-bold shadow-sm hover:bg-[#1e365c] transition-colors">Guardar</Button>
           </div>
         </div>
       </DialogContent>

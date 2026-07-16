@@ -695,7 +695,9 @@ function LandingPage() {
                     <Feature on>{plan.limite_empleados} empleados</Feature>
                     <Feature on>{plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</Feature>
                     <Feature on>Caja, clientes, gastos, reportes</Feature>
-                    <Feature on={plan.modulos.whatsapp}>Notificaciones WhatsApp</Feature>
+                    <Feature on={!!plan.modulos?.whatsapp}>
+                      Notificaciones WhatsApp {plan.modulos?.whatsapp && plan.limite_whatsapp_mes && `(${plan.limite_whatsapp_mes.toLocaleString("es-DO")} mensajes/mes)`}
+                    </Feature>
                     <Feature on={plan.modulos.facturacion_fiscal}>
                       Facturación Electrónica <strong className="font-extrabold text-foreground">(Costo por uso)</strong>
                     </Feature>

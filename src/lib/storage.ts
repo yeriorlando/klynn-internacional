@@ -113,6 +113,12 @@ export interface TenantConfig {
   pos_habilitar_servicios?: boolean;
   pos_habilitar_prendas?: boolean;
   pos_modo_defecto?: boolean;
+  modulos_override?: {
+    whatsapp?: boolean;
+    facturacion_fiscal?: boolean;
+    multisucursal?: boolean;
+    logistica?: boolean;
+  };
 }
 export interface WhatsAppConfig {
   enabled: boolean;
@@ -445,6 +451,24 @@ export const PLANS: Plan[] = [
 export function getTenantPlan(tenant: Tenant | null): Plan {
   if (!tenant) return PLANS[0];
   return PLANS.find(p => p.id === tenant.plan_id) || PLANS[0];
+}
+
+export function isModuleEnabled(
+  tenant: Tenant | null,
+  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica",
+  plan?: Plan
+): boolean {
+  if (!tenant) return false;
+  
+  // 1. Check if there is an override in tenant.config.modulos_override
+  const override = tenant.config?.modulos_override?.[moduleKey];
+  if (override !== undefined) {
+    return override;
+  }
+  
+  // 2. Fallback to plan
+  const activePlan = plan || getTenantPlan(tenant);
+  return !!activePlan?.modulos?.[moduleKey];
 }
 
 export const DEFAULT_CONFIG: TenantConfig = {
@@ -877,6 +901,39 @@ export async function updateTenantTrialHasta(tenantId: string, trialHasta: strin
 
   if (error) {
     console.error("Error updating tenant trial_hasta column:", error);
+    return false;
+  }
+  return true;
+}
+
+export async function updateTenantModulosOverride(
+  tenantId: string,
+  overrides: TenantConfig['modulos_override']
+): Promise<boolean> {
+  const { data: tenant, error: fetchError } = await supabase
+    .from('tenants')
+    .select('config')
+    .eq('id', tenantId)
+    .single();
+
+  if (fetchError) {
+    console.error("Error fetching tenant config for override:", fetchError);
+    return false;
+  }
+
+  const currentConfig = tenant?.config || {};
+  const nextConfig = {
+    ...currentConfig,
+    modulos_override: overrides
+  };
+
+  const { error } = await supabase
+    .from('tenants')
+    .update({ config: nextConfig })
+    .eq('id', tenantId);
+
+  if (error) {
+    console.error("Error saving tenant config overrides:", error);
     return false;
   }
   return true;

@@ -17,6 +17,7 @@ import {
   setActiveTenant, uid, PROVINCIAS_RD, DEFAULT_CONFIG, getGlobalConfig,
   DEFAULT_GLOBAL_CONFIG,
   setSession,
+  isModuleEnabled,
   type PlanId, type Tenant, type TenantConfig, type Empleado, type GlobalConfig
 } from "@/lib/storage";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -92,7 +93,7 @@ function NuevaSucursalPage() {
       if (tenants.length > 0) {
         const hasMulti = tenants.some(t => {
           const p = allPlans.find(plan => plan.id === t.plan_id);
-          return p?.modulos.multisucursal;
+          return isModuleEnabled(t, 'multisucursal', p);
         });
 
         if (!hasMulti) {

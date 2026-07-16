@@ -15,7 +15,8 @@ import {
   logout, getCajaAbierta, formatRD, can, getTenantsForUser, 
   setActiveTenant, setSession, switchSession, getPlans,
   getOrdenes, getClientes, getCatalogo, getServicios, 
-  getCajas, getMovimientos, getGastos, getGlobalConfig, getECFConfig 
+  getCajas, getMovimientos, getGastos, getGlobalConfig, getECFConfig,
+  isModuleEnabled
 } from "@/lib/storage";
 import { Toaster, toast } from "sonner";
 import { useEffect } from "react";
@@ -75,10 +76,10 @@ export function TenantShell() {
     if (!user || user.tenant.id === '__loading__') return;
     getPlans().then(plans => {
       const plan = plans.find(p => p.id === user.tenant.plan_id);
-      setHasLogistica(!!plan?.modulos?.logistica);
-      setHasWhatsApp(!!plan?.modulos?.whatsapp);
+      setHasLogistica(isModuleEnabled(user.tenant, 'logistica', plan));
+      setHasWhatsApp(isModuleEnabled(user.tenant, 'whatsapp', plan));
     });
-  }, [user?.tenant?.id, user?.tenant?.plan_id]);
+  }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
   useEffect(() => {
     if (!tenantId || tenantId === '__loading__') return;

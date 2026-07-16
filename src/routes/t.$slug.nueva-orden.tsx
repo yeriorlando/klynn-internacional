@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
   Printer, Phone, Shirt, Truck, Maximize2, Minimize2, LayoutGrid, List,
-  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer
+  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -28,6 +28,7 @@ import {
   nextOrdenNumero, formatRD, formatPhoneRD, uid, DEFAULT_CONFIG,
   formatAmountInput, parseAmount, saveTenant, getTenantPlan,
   checkPlanLimits, getECFConfig, getECFSequences, nextECFNumero, saveECFDocument,
+  isModuleEnabled,
   type Cliente, type OrdenItem, type MetodoPago, type Orden, type CatalogoItem, type Servicio, type Caja,
   type ECFConfig, type ECFSequence, type ECFDocument, NCF_NOMBRES
 } from "@/lib/storage";
@@ -786,7 +787,7 @@ function NuevaOrdenPage() {
       <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-4 flex-1">
           <PageHeader title={isPosMode ? "Terminal POS" : "Nueva orden"} description={isPosMode ? "Venta rápida" : `Paso ${currentVisibleStepNumber} de ${totalVisibleSteps}`} />
-          {isPosMode && (
+          {isPosMode && !(step === 1 && !cliente) && (
             <div className="relative w-72 max-w-md animate-in fade-in slide-in-from-left-4 duration-500">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
               <Input
@@ -802,7 +803,7 @@ function NuevaOrdenPage() {
               )}
             </div>
           )}
-          {isPosMode && (
+          {isPosMode && !(step === 1 && !cliente) && (
             <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-4 duration-500 delay-150">
               <Button
                 size="sm"
@@ -878,59 +879,66 @@ function NuevaOrdenPage() {
         <div className="flex flex-1 gap-6 overflow-hidden min-h-[600px]">
           {/* CATALOG GRID */}
           <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-            <div className="flex flex-col gap-3 pb-2 border-b border-border/40 mb-2">
-              {/* Filtro Principal de 3 Pestañas */}
-              {enableServicios && enablePrendas && (
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: "TODOS", label: "Todos", icon: "🌟" },
-                    { id: "SERVICIOS", label: "Servicios", icon: "🧺" },
-                    { id: "PRENDAS", label: "Prendas", icon: "👕" }
-                  ].map(tab => (
-                    <button
-                      key={tab.id}
-                      onClick={() => {
-                        setPosFilterTab(tab.id as any);
-                        if (tab.id === "PRENDAS") {
-                          setActiveCategory("TODAS LAS PRENDAS");
-                        } else {
-                          setActiveCategory("TODOS");
-                        }
-                      }}
-                      className={`flex items-center justify-center gap-2 py-3 px-4 rounded-2xl text-xs font-black uppercase tracking-wider transition-all duration-300 active:scale-95 border-2 shadow-sm ${
-                        posFilterTab === tab.id
-                          ? "bg-primary text-white border-primary shadow-glow ring-2 ring-primary/20"
-                          : "bg-card text-muted-foreground hover:bg-primary/5 hover:border-primary/20 border-border/60"
-                      }`}
-                    >
-                      <span className="text-sm">{tab.icon}</span>
-                      <span>{tab.label}</span>
-                    </button>
-                  ))}
-                </div>
-              )}
+            {!(step === 1 && !cliente) && (
+              <div className="flex flex-col gap-3 pb-2 border-b border-border/40 mb-2">
+                {/* Filtro Principal de 3 Pestañas */}
+                {enableServicios && enablePrendas && (
+                  <div className="grid grid-cols-3 gap-2.5">
+                    {[
+                      { id: "TODOS", label: "Todos", icon: <LayoutGrid className="h-4 w-4" /> },
+                      { id: "SERVICIOS", label: "Servicios", icon: <Sparkles className="h-4 w-4" /> },
+                      { id: "PRENDAS", label: "Prendas", icon: <Shirt className="h-4 w-4" /> }
+                    ].map(tab => {
+                      const isSelected = posFilterTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => {
+                            setPosFilterTab(tab.id as any);
+                            if (tab.id === "PRENDAS") {
+                              setActiveCategory("TODAS LAS PRENDAS");
+                            } else {
+                              setActiveCategory("TODOS");
+                            }
+                          }}
+                          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 active:scale-95 border ${
+                            isSelected
+                              ? "bg-primary text-white border-primary shadow-sm font-extrabold ring-1 ring-primary/30"
+                              : "bg-card border-slate-300 dark:border-slate-800 shadow-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50/60 dark:hover:bg-slate-900/40 hover:text-slate-800 dark:hover:text-slate-200 hover:border-slate-400"
+                          }`}
+                        >
+                          <span className={isSelected ? "text-white" : "text-slate-500"}>
+                            {tab.icon}
+                          </span>
+                          <span>{tab.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
 
-              {/* Sub-filtro de Categorías de Prendas */}
-              {enablePrendas && posFilterTab === "PRENDAS" && (
-                <div className="flex flex-wrap items-center gap-1.5 pt-2 animate-in slide-in-from-top-1 duration-200">
-                  {categoriesPrendas.map(cat => (
-                    <button
-                      key={cat}
-                      onClick={() => setActiveCategory(cat)}
-                      className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${
-                        activeCategory === cat
-                          ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                          : "bg-card text-muted-foreground hover:bg-accent border-border/50"
-                      }`}
-                    >
-                      {cat}
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                {/* Sub-filtro de Categorías de Prendas */}
+                {enablePrendas && posFilterTab === "PRENDAS" && (
+                  <div className="flex flex-wrap items-center gap-1.5 pt-2 animate-in slide-in-from-top-1 duration-200">
+                    {categoriesPrendas.map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setActiveCategory(cat)}
+                        className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${
+                          activeCategory === cat
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                            : "bg-card text-muted-foreground hover:bg-accent border-border/50"
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
 
-            <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-8">
+            <div className="flex-1 overflow-y-auto pl-2 pr-2 custom-scrollbar space-y-8">
               {step === 5 ? (
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
                   <div className="flex items-center justify-between mb-6">
@@ -1131,11 +1139,11 @@ function NuevaOrdenPage() {
                     </div>
                   </div>
 
-                  <div className="relative mb-6">
-                    <Search className="absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
+                  <div className="relative mb-4">
+                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                     <Input
                       placeholder="Buscar por nombre o teléfono..."
-                      className="pl-12 h-14 text-lg bg-card rounded-2xl shadow-sm border-primary/10"
+                      className="pl-10 h-11 text-sm bg-card rounded-xl shadow-sm border-primary/10"
                       value={clienteSearch}
                       onChange={(e) => setClienteSearch(e.target.value)}
                     />
@@ -1148,32 +1156,43 @@ function NuevaOrdenPage() {
                       const name = NCF_NOMBRES[tipo.substring(0,3)]?.replace("FISCAL", "")?.trim() || "Empresa";
                       
                       const label = isConsumo ? "Consumidor Final" : (isCredito ? "Empresa / RNC" : name);
-                      const subLabel = isConsumo ? "Para Factura de Consumo" : (isCredito ? "Para Crédito Fiscal" : `Para Comprobante ${tipo}`);
+                      const subLabel = isConsumo ? "Factura Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
                       const Icon = isConsumo ? UserIcon : (isCredito ? Truck : Building);
 
-                      let colorClass = "";
+                      const isSelected = tipoECF === tipo;
+                      let borderClass = "";
+                      let bgClass = "";
                       let bgIconClass = "";
-                      let iconColorClass = "";
                       let textClass = "";
+                      let subTextClass = "";
 
                       if (isConsumo) {
-                         colorClass = tipoECF === tipo ? "border-primary bg-primary/20 ring-1 ring-primary shadow-sm" : "border-dashed border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40";
-                         bgIconClass = "bg-primary/20";
-                         iconColorClass = "text-primary";
-                         textClass = "text-primary";
+                        bgClass = isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/20" : "bg-emerald-50/20 dark:bg-emerald-950/5";
+                        borderClass = isSelected 
+                          ? "border-emerald-500 ring-2 ring-emerald-500/20" 
+                          : "border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-300";
+                        bgIconClass = isSelected ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected ? "text-emerald-700 dark:text-emerald-300 font-extrabold" : "text-slate-700 dark:text-slate-350 font-bold";
+                        subTextClass = isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400";
                       } else if (isCredito) {
-                         colorClass = tipoECF === tipo ? "border-blue-600 bg-blue-50/80 ring-1 ring-blue-600 shadow-sm" : "border-dashed border-blue-200 bg-blue-50/50 hover:bg-blue-100/50 hover:border-blue-400";
-                         bgIconClass = "bg-blue-100";
-                         iconColorClass = "text-blue-600";
-                         textClass = "text-blue-700";
+                        bgClass = isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "bg-blue-50/20 dark:bg-blue-950/5";
+                        borderClass = isSelected 
+                          ? "border-blue-500 ring-2 ring-blue-500/20" 
+                          : "border-blue-200/80 dark:border-blue-900/40 hover:border-blue-300";
+                        bgIconClass = isSelected ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected ? "text-blue-700 dark:text-blue-300 font-extrabold" : "text-slate-700 dark:text-slate-350 font-bold";
+                        subTextClass = isSelected ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400";
                       } else {
-                         colorClass = tipoECF === tipo ? "border-amber-600 bg-amber-50/80 ring-1 ring-amber-600 shadow-sm" : "border-dashed border-amber-200 bg-amber-50/50 hover:bg-amber-100/50 hover:border-amber-400";
-                         bgIconClass = "bg-amber-100";
-                         iconColorClass = "text-amber-600";
-                         textClass = "text-amber-700";
+                        bgClass = isSelected ? "bg-amber-50/70 dark:bg-amber-950/20" : "bg-amber-50/20 dark:bg-amber-950/5";
+                        borderClass = isSelected 
+                          ? "border-amber-500 ring-2 ring-amber-500/20" 
+                          : "border-amber-200/80 dark:border-amber-900/40 hover:border-amber-300";
+                        bgIconClass = isSelected ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected ? "text-amber-700 dark:text-amber-300 font-extrabold" : "text-slate-700 dark:text-slate-350 font-bold";
+                        subTextClass = isSelected ? "text-amber-600 dark:text-amber-400" : "text-slate-500 dark:text-slate-400";
                       }
 
-                      if (!isConsumo && !((plans.find(p => p.id === user.tenant.plan_id) || getTenantPlan(user.tenant)).modulos.facturacion_fiscal)) {
+                      if (!isConsumo && !isModuleEnabled(user.tenant, 'facturacion_fiscal', plans.find(p => p.id === user.tenant.plan_id))) {
                         return null;
                       }
 
@@ -1188,21 +1207,32 @@ function NuevaOrdenPage() {
                               setEmpresaDialogOpen(true);
                             }
                           }}
-                          className={`flex items-center gap-4 p-5 rounded-[2rem] border-2 transition-all group text-left ${colorClass}`}
+                          className={`relative flex items-center gap-3.5 p-4 rounded-2xl border transition-all group text-left shadow-sm ${bgClass} ${borderClass}`}
                         >
-                          <div className={`h-12 w-12 rounded-full flex items-center justify-center group-hover:scale-110 transition-transform ${bgIconClass}`}>
-                            <Icon className={`h-6 w-6 ${iconColorClass}`} />
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}>
+                            <Icon className="h-5 w-5" />
                           </div>
-                          <div>
-                            <div className={`font-bold text-lg leading-tight ${textClass}`}>{label}</div>
-                            <div className="text-[10px] uppercase tracking-widest font-black opacity-60">{subLabel}</div>
+                          <div className="min-w-0 flex-1 pr-4">
+                            <div className={`font-bold text-sm leading-tight line-clamp-1 ${textClass}`}>{label}</div>
+                            <div className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap ${subTextClass}`}>{subLabel}</div>
                           </div>
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
+                              <Check className="h-2.5 w-2.5" />
+                            </div>
+                          )}
                         </button>
                       );
                     })}
                   </div>
 
-                  <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60 px-2 mb-4">O busca en tu base de datos</div>
+                  <div className="flex items-center gap-2 mt-6 mb-4 px-1">
+                    <div className="h-3.5 w-1 bg-primary rounded-full animate-pulse" />
+                    <span className="text-xs font-black uppercase tracking-widest text-primary/80">
+                      Búsqueda en base de datos
+                    </span>
+                    <div className="flex-1 h-px bg-primary/10" />
+                  </div>
 
                   <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
                     {clientes.filter(c =>
@@ -1213,18 +1243,18 @@ function NuevaOrdenPage() {
                       <button
                         key={c.id}
                         onClick={() => { setCliente(c); irAlPasoSiguienteDelCliente(); }}
-                        className="flex items-center justify-between p-4 rounded-2xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all group"
+                        className="flex items-center justify-between p-4 rounded-2xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all group min-w-0"
                       >
-                        <div className="flex items-center gap-4 text-left">
-                          <div className="h-12 w-12 rounded-full bg-accent flex items-center justify-center font-bold text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors">
+                        <div className="flex items-center gap-4 text-left min-w-0 flex-1">
+                          <div className="h-12 w-12 rounded-full bg-accent flex items-center justify-center font-bold text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
                             {c.nombre.charAt(0)}{c.apellido?.charAt(0) || ""}
                           </div>
-                          <div>
-                            <div className="font-bold text-lg">{c.nombre} {c.apellido || ""}</div>
-                            <div className="text-sm text-muted-foreground">{c.telefono}</div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-lg line-clamp-1" title={`${c.nombre} ${c.apellido || ""}`}>{c.nombre} {c.apellido || ""}</div>
+                            <div className="text-sm text-muted-foreground truncate">{c.telefono}</div>
                           </div>
                         </div>
-                        <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors" />
+                        <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
                       </button>
                     ))}
                   </div>
@@ -1309,7 +1339,16 @@ function NuevaOrdenPage() {
                               )}
                               <div>
                                 <div className="text-sm font-bold leading-tight line-clamp-2">{item.nombre}</div>
-                                <div className="mt-1 text-xs font-black text-primary">{formatRD(item.precio)}</div>
+                                {item.por_libra && (
+                                  <div className="mt-1.5 flex justify-center">
+                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                                      <Scale className="h-3 w-3 text-amber-600" /> Cobro por libra
+                                    </span>
+                                  </div>
+                                )}
+                                <div className="mt-1 text-xs font-black text-primary">
+                                  {formatRD(item.precio)}{item.por_libra ? "/lb" : ""}
+                                </div>
                               </div>
                               {items.some(it => it.descripcion === item.nombre) && (
                                 <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
@@ -1328,7 +1367,7 @@ function NuevaOrdenPage() {
           </div>
 
           {/* SIDEBAR ORDER */}
-          <Card className="w-80 md:w-96 flex flex-col overflow-hidden border-2 border-primary/10 shadow-elegant rounded-3xl">
+          <Card className="w-80 md:w-96 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl">
             {/* Header: Cliente */}
             <div className="p-4 border-b bg-accent/5">
               <div className="flex items-center justify-between mb-3">
@@ -1355,14 +1394,14 @@ function NuevaOrdenPage() {
                       <div className="text-[10px] text-muted-foreground">{cliente.telefono}</div>
                     </div>
                   </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setCliente(null)}>
-                    <X className="h-3 w-3" />
+                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-rose-50 rounded-md" onClick={() => setCliente(null)}>
+                    <Trash2 className="h-3.5 w-3.5" />
                   </Button>
                 </div>
               ) : (
-                <div className="py-2">
-                  <Button variant="outline" className="w-full justify-start h-12 bg-accent/20 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all rounded-xl" onClick={() => { setStep(1); }}>
-                    <Search className="mr-2 h-3 w-3" /> Seleccionar cliente...
+                <div className="py-1">
+                  <Button variant="outline" className="w-full justify-start h-10 text-xs bg-accent/20 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all rounded-xl" onClick={() => { setStep(1); }}>
+                    <Search className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> Seleccionar cliente...
                   </Button>
                 </div>
               )}
@@ -1455,18 +1494,41 @@ function NuevaOrdenPage() {
                         isDetail ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground" : "bg-card shadow-sm hover:border-primary/25"
                       }`}>
                         <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-1.5 text-xs font-bold leading-tight flex-1">
-                            {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
-                            <span className="line-clamp-1">{it.descripcion}{isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}</span>
+                          <div className="flex flex-col flex-1 min-w-0">
+                            <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
+                              {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
+                              <span className="line-clamp-1">{it.descripcion}{isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}</span>
+                            </div>
+                            {it.es_libra && (
+                              <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                {formatRD(it.precio_unitario)} por libra
+                              </div>
+                            )}
                           </div>
                           <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:bg-rose-50 rounded-md" onClick={() => removeItem(i)}>
-                            <X className="h-3 w-3" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                         <div className="flex justify-between items-center">
                           {isDetail ? (
                             <div className="text-[10px] font-black uppercase text-primary/80 tracking-wide flex items-center gap-1">
                               <span>🧺</span> {it.cantidad > 1 ? `${it.cantidad} Unids. en Hamper` : "En Hamper"}
+                            </div>
+                          ) : it.es_libra ? (
+                            <div className="flex items-center gap-1.5 text-xs font-semibold">
+                              <span className="text-muted-foreground text-[10px]">Peso:</span>
+                              <Input
+                                type="number"
+                                step="any"
+                                min="0.1"
+                                className="w-14 h-7 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-sm p-1"
+                                value={it.cantidad}
+                                onChange={(e) => {
+                                  const val = parseFloat(e.target.value) || 0;
+                                  setItems(prev => prev.map((item, idx) => idx === i ? { ...item, cantidad: val } : item));
+                                }}
+                              />
+                              <span className="text-muted-foreground text-[10px] font-bold">lb</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
@@ -1570,33 +1632,44 @@ function NuevaOrdenPage() {
                       const name = NCF_NOMBRES[tipo.substring(0,3)]?.replace("FISCAL", "")?.trim() || "Empresa";
                       
                       const label = isConsumo ? "Consumidor Final" : (isCredito ? "Empresa / RNC" : name);
-                      const subLabel = isConsumo ? "Factura de Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
+                      const subLabel = isConsumo ? "Factura Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
                       const Icon = isConsumo ? UserIcon : (isCredito ? Truck : Building);
 
-                      let colorClass = "";
+                      const isSelected = tipoECF === tipo;
+                      let borderClass = "";
+                      let bgClass = "";
                       let bgIconClass = "";
-                      let iconColorClass = "";
                       let textClass = "";
+                      let subTextClass = "";
 
                       if (isConsumo) {
-                         colorClass = tipoECF === tipo ? "border-primary bg-primary/10 ring-1 ring-primary" : "border-dashed border-primary/20 bg-primary/5 hover:border-primary/40";
-                         bgIconClass = "bg-primary/20";
-                         iconColorClass = "text-primary";
-                         textClass = "text-primary";
+                        bgClass = isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/20" : "bg-emerald-50/20 dark:bg-emerald-950/5";
+                        borderClass = isSelected 
+                          ? "border-emerald-500 ring-2 ring-emerald-500/20" 
+                          : "border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-300";
+                        bgIconClass = isSelected ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected ? "text-emerald-700 dark:text-emerald-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
+                        subTextClass = isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400";
                       } else if (isCredito) {
-                         colorClass = tipoECF === tipo ? "border-blue-600 bg-blue-50 ring-1 ring-blue-600" : "border-dashed border-blue-200 bg-blue-50/50 hover:border-blue-400";
-                         bgIconClass = "bg-blue-100";
-                         iconColorClass = "text-blue-600";
-                         textClass = "text-blue-700";
+                        bgClass = isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "bg-blue-50/20 dark:bg-blue-950/5";
+                        borderClass = isSelected 
+                          ? "border-blue-500 ring-2 ring-blue-500/20" 
+                          : "border-blue-200/80 dark:border-blue-900/40 hover:border-blue-300";
+                        bgIconClass = isSelected ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected ? "text-blue-700 dark:text-blue-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
+                        subTextClass = isSelected ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400";
                       } else {
-                         colorClass = tipoECF === tipo ? "border-amber-600 bg-amber-50 ring-1 ring-amber-600" : "border-dashed border-amber-200 bg-amber-50/50 hover:border-amber-400";
-                         bgIconClass = "bg-amber-100";
-                         iconColorClass = "text-amber-600";
-                         textClass = "text-amber-700";
+                        bgClass = isSelected ? "bg-amber-50/70 dark:bg-amber-950/20" : "bg-amber-50/20 dark:bg-amber-950/5";
+                        borderClass = isSelected 
+                          ? "border-amber-500 ring-2 ring-amber-500/20" 
+                          : "border-amber-200/80 dark:border-amber-900/40 hover:border-amber-300";
+                        bgIconClass = isSelected ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected ? "text-amber-700 dark:text-amber-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
+                        subTextClass = isSelected ? "text-amber-600 dark:text-amber-400" : "text-slate-500 dark:text-slate-400";
                       }
 
                       // We only show non-consumo buttons if billing is active
-                      if (!isConsumo && !((plans.find(p => p.id === user.tenant.plan_id) || getTenantPlan(user.tenant)).modulos.facturacion_fiscal)) {
+                      if (!isConsumo && !isModuleEnabled(user.tenant, 'facturacion_fiscal', plans.find(p => p.id === user.tenant.plan_id))) {
                         return null;
                       }
 
@@ -1611,23 +1684,34 @@ function NuevaOrdenPage() {
                               setEmpresaDialogOpen(true);
                             }
                           }}
-                          className={`flex items-center gap-4 p-4 rounded-2xl border-2 transition-all text-left ${colorClass}`}
+                          className={`relative flex items-center gap-3.5 p-4 rounded-2xl border transition-all group text-left shadow-sm ${bgClass} ${borderClass}`}
                         >
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center ${bgIconClass}`}>
-                            <Icon className={`h-5 w-5 ${iconColorClass}`} />
+                          <div className={`h-10 w-10 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}>
+                            <Icon className="h-5 w-5" />
                           </div>
-                          <div>
-                            <div className={`font-bold text-sm leading-tight ${textClass}`}>{label}</div>
-                            <div className="text-[10px] uppercase tracking-widest font-black opacity-60">{subLabel}</div>
+                          <div className="min-w-0 flex-1 pr-4">
+                            <div className={`font-bold text-sm leading-tight line-clamp-1 ${textClass}`}>{label}</div>
+                            <div className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap ${subTextClass}`}>{subLabel}</div>
                           </div>
+                          {isSelected && (
+                            <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
+                              <Check className="h-2.5 w-2.5" />
+                            </div>
+                          )}
                         </button>
                       );
                     })}
                   </div>
 
-                  <div className="mt-8 flex items-center justify-between">
-                    <div className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/60">O busca en tu base de datos</div>
-                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95" size="sm" onClick={() => setShowNewCliente(true)}>
+                  <div className="mt-8 mb-2 flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <div className="h-3.5 w-1 bg-primary rounded-full animate-pulse" />
+                      <span className="text-xs font-black uppercase tracking-widest text-primary/80">
+                        Búsqueda en base de datos
+                      </span>
+                      <div className="flex-1 h-px bg-primary/10 mr-4" />
+                    </div>
+                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95 shrink-0" size="sm" onClick={() => setShowNewCliente(true)}>
                       <UserPlus className="mr-1.5 h-4 w-4" /> Nuevo cliente
                     </Button>
                   </div>
@@ -1638,26 +1722,26 @@ function NuevaOrdenPage() {
                       <button
                         key={c.id}
                         onClick={() => setCliente(c)}
-                        className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all ${cliente?.id === c.id
+                        className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all min-w-0 ${cliente?.id === c.id
                             ? "border-primary bg-primary/10 ring-1 ring-primary shadow-sm"
                             : "border-border bg-card hover:border-primary/50 hover:bg-accent/30 hover:shadow-elegant"
                           }`}
                       >
-                        <div className="flex items-center gap-4">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold ${cliente?.id === c.id ? "bg-primary text-white" : "bg-accent text-muted-foreground"
+                        <div className="flex items-center gap-4 min-w-0 flex-1">
+                          <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold shrink-0 ${cliente?.id === c.id ? "bg-primary text-white" : "bg-accent text-muted-foreground"
                             }`}>
                             {c.nombre.charAt(0)}{c.apellido?.charAt(0) || ""}
                           </div>
-                          <div>
-                            <div className="font-display text-base font-semibold">
+                          <div className="min-w-0 flex-1">
+                            <div className="font-display text-base font-semibold line-clamp-1" title={`${c.nombre} ${c.apellido || ""}`}>
                               {c.nombre} {c.apellido || ""}
                             </div>
-                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                              <Phone className="h-3 w-3" /> {c.telefono}
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+                              <Phone className="h-3 w-3 shrink-0" /> {c.telefono}
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 shrink-0">
                           {c.tipo === "Empresa" ? (
                             <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-600">Empresa</Badge>
                           ) : (
@@ -2569,7 +2653,16 @@ function AddItemDialog({
                     )}
                     <div>
                       <div className="text-sm font-bold leading-tight line-clamp-1">{it.nombre}</div>
-                      <div className="mt-1 text-xs font-black text-primary">{formatRD(it.precio)}</div>
+                      {it.por_libra && (
+                        <div className="mt-1.5 flex justify-center">
+                          <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
+                            <Scale className="h-3 w-3 text-amber-600" /> Cobro por libra
+                          </span>
+                        </div>
+                      )}
+                      <div className="mt-1 text-xs font-black text-primary">
+                        {formatRD(it.precio)}{it.por_libra ? "/lb" : ""}
+                      </div>
                     </div>
 
                     {count > 0 && (

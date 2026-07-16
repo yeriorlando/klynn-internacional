@@ -23,7 +23,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, User, Zap, Calendar, Receipt, Inbox, RefreshCw, CircleCheck, Truck, Ban, LayoutGrid } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -41,12 +41,28 @@ export const Route = createFileRoute("/t/$slug/ordenes")({
   component: OrdenesPage,
 });
 
+function esParaHoy(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  const hoy = new Date();
+  return d.getDate() === hoy.getDate() &&
+         d.getMonth() === hoy.getMonth() &&
+         d.getFullYear() === hoy.getFullYear();
+}
+
+function esAtrasada(fechaStr?: string, estado?: EstadoOrden): boolean {
+  if (!fechaStr || estado === "ENTREGADA" || estado === "ANULADA") return false;
+  return new Date(fechaStr).getTime() < Date.now();
+}
+
 function OrdenesPage() {
   const user = useRequireAuth();
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
-  const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos">("todos");
+  const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos" | "hoy" | "urgente">("todos");
+  const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas">("todas");
+  const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar">("todas");
   const [view, setView] = useState<Orden | null>(null);
   const [anular, setAnular] = useState<Orden | null>(null);
   const [motivoAnular, setMotivoAnular] = useState("");
@@ -89,12 +105,41 @@ function OrdenesPage() {
 
   const filt = useMemo(() => {
     return ordenes.filter((o) => {
-      if (filtroEstado !== "todos" && o.estado !== filtroEstado) return false;
+      if (filtroEstado === "hoy") {
+        if (!esParaHoy(o.fecha_entrega)) return false;
+      } else if (filtroEstado === "urgente") {
+        if (!o.es_urgente) return false;
+      } else if (filtroEstado !== "todos" && o.estado !== filtroEstado) {
+        return false;
+      }
+      
+      // Filtro de entrega (Plazo)
+      if (filtroEntrega === "hoy") {
+        if (!esParaHoy(o.fecha_entrega)) return false;
+      } else if (filtroEntrega === "atrasadas") {
+        if (!esAtrasada(o.fecha_entrega, o.estado)) return false;
+      }
+
+      // Filtro de urgencia
+      if (filtroUrgencia === "urgente" && !o.es_urgente) return false;
+      if (filtroUrgencia === "estandar" && o.es_urgente) return false;
+
       if (!q) return true;
       const c = clientes.find((x) => x.id === o.cliente_id);
-      return o.numero.toLowerCase().includes(q.toLowerCase()) || c?.nombre.toLowerCase().includes(q.toLowerCase());
-    }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-  }, [ordenes, clientes, filtroEstado, q]);
+      const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
+      return o.numero.toLowerCase().includes(q.toLowerCase()) || nombreCompleto.toLowerCase().includes(q.toLowerCase());
+    }).sort((a, b) => {
+      const getPriority = (order: any) => {
+        if (order.es_urgente) return 2;
+        if (esParaHoy(order.fecha_entrega)) return 1;
+        return 0;
+      };
+      const pA = getPriority(a);
+      const pB = getPriority(b);
+      if (pA !== pB) return pB - pA;
+      return +new Date(b.creado_en) - +new Date(a.creado_en);
+    });
+  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, q]);
 
   const exportData = useMemo(() => {
     return {
@@ -118,12 +163,12 @@ function OrdenesPage() {
     try {
       await saveOrden({ ...o, estado });
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-      toast.success(`Estado actualizado: ${estado} ✨`);
       if (estado === "LISTA" || estado === "ENTREGADA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
         if (cli) {
+          toast.success(estado === "LISTA" ? "Orden lista — notificando al cliente..." : "Orden entregada — notificando al cliente...");
           notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada").then((r) => {
-            if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+            if (r.ok) toast.success("WhatsApp enviado al cliente \u2705");
           });
         }
       }
@@ -517,35 +562,83 @@ function OrdenesPage() {
       )}
 
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
-        <div className="relative flex-1 min-w-64">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número o cliente..." className="pl-10" />
         </div>
-        <Select value={filtroEstado} onValueChange={(v: any) => setFiltroEstado(v)}>
-          <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+        <Select value={filtroEntrega} onValueChange={(v: any) => setFiltroEntrega(v)}>
+          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
+            <Calendar className="h-4 w-4 text-primary shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
           <SelectContent>
-            <SelectItem value="todos">Todos los estados</SelectItem>
-            <SelectItem value="RECIBIDA">Recibida</SelectItem>
-            <SelectItem value="EN_PROCESO">En proceso</SelectItem>
-            <SelectItem value="LISTA">Lista</SelectItem>
-            <SelectItem value="ENTREGADA">Entregada</SelectItem>
-            <SelectItem value="ANULADA">Anulada</SelectItem>
+            <SelectItem value="todas">Todas</SelectItem>
+            <SelectItem value="hoy">Para hoy</SelectItem>
+            <SelectItem value="atrasadas">Atrasadas</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
+          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
+            <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Prioridades</SelectItem>
+            <SelectItem value="urgente">Urgentes</SelectItem>
+            <SelectItem value="estandar">Estándar</SelectItem>
           </SelectContent>
         </Select>
       </Card>
+
+      {/* Badge tabs de estado */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {[
+          { value: "todos", label: "Todas", icon: LayoutGrid, bg: "bg-slate-100 text-slate-700 border-slate-200", activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md" },
+          { value: "RECIBIDA", label: "Recibida", icon: Inbox, bg: "bg-blue-50 text-blue-700 border-blue-200", activeBg: "bg-blue-600 text-white border-blue-600 shadow-md" },
+          { value: "hoy", label: "Para hoy", icon: Calendar, bg: "bg-orange-50 text-orange-700 border-orange-200", activeBg: "bg-orange-600 text-white border-orange-600 shadow-md" },
+          { value: "urgente", label: "Urgentes", icon: Zap, bg: "bg-rose-50 text-rose-700 border-rose-200", activeBg: "bg-rose-600 text-white border-rose-600 shadow-md" },
+          { value: "EN_PROCESO", label: "En proceso", icon: RefreshCw, bg: "bg-amber-50 text-amber-700 border-amber-200", activeBg: "bg-amber-500 text-white border-amber-500 shadow-md" },
+          { value: "LISTA", label: "Lista", icon: CircleCheck, bg: "bg-emerald-50 text-emerald-700 border-emerald-200", activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md" },
+          { value: "ENTREGADA", label: "Entregada", icon: Truck, bg: "bg-purple-50 text-purple-700 border-purple-200", activeBg: "bg-purple-600 text-white border-purple-600 shadow-md" },
+          { value: "ANULADA", label: "Anulada", icon: Ban, bg: "bg-red-50 text-red-700 border-red-200", activeBg: "bg-red-600 text-white border-red-600 shadow-md" },
+        ].map((tab) => {
+          const count = tab.value === "todos" ? ordenes.length :
+                        tab.value === "hoy" ? ordenes.filter(o => esParaHoy(o.fecha_entrega)).length :
+                        tab.value === "urgente" ? ordenes.filter(o => o.es_urgente).length :
+                        ordenes.filter(o => o.estado === tab.value).length;
+          const isActive = filtroEstado === tab.value;
+          const Icon = tab.icon;
+          return (
+            <button
+              key={tab.value}
+              onClick={() => setFiltroEstado(tab.value as any)}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-200 cursor-pointer hover:shadow-sm ${
+                isActive ? tab.activeBg : tab.bg
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {tab.label}
+              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                isActive ? "bg-white/25" : "bg-black/5"
+              }`}>
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
 
       <Card className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="border-b border-border bg-surface-elevated text-xs uppercase text-muted-foreground">
               <tr>
-                <th className="px-4 py-3 text-left">Número</th>
-                <th className="px-4 py-3 text-left">Cliente</th>
+                <th className="px-4 py-3 text-left">Orden y Cliente</th>
                 <th className="px-4 py-3 text-center">Estado</th>
                 <th className="px-4 py-3 text-center">Total</th>
                 <th className="px-4 py-3 text-center">Saldo</th>
                 <th className="px-4 py-3 text-center">Pago</th>
-                <th className="px-4 py-3 text-center">Fecha</th>
+                <th className="px-4 py-3 text-center">Entrega</th>
                 <th className="px-4 py-3 text-center">Acciones</th>
               </tr>
             </thead>
@@ -554,13 +647,80 @@ function OrdenesPage() {
                 const c = clientes.find((x) => x.id === o.cliente_id);
                 return (
                   <tr key={o.id} className="border-b border-border/50 hover:bg-accent/30">
-                    <td className="px-4 py-3 font-mono text-xs font-semibold">{o.numero}</td>
                     <td className="px-4 py-3">
-                      <div className="max-w-[200px] truncate" title={c?.nombre || ""}>
-                        {c?.nombre || "—"}
+                      <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
+                          <Receipt className="h-5 w-5" />
+                        </div>
+                        <div className="flex flex-col min-w-0">
+                          <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                            {o.numero}
+                          </span>
+                          <span className="font-bold text-sm text-foreground truncate max-w-[220px]" title={c ? `${c.nombre} ${c.apellido || ""}` : ""}>
+                            {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
+                          </span>
+                          <span className="text-[11px] text-muted-foreground font-medium">
+                            {formatDateTimeRD(o.creado_en)}
+                          </span>
+                        </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center"><EstadoBadge estado={o.estado} /></td>
+                    <td className="px-4 py-3 text-center">
+                      {o.estado === "ANULADA" ? (
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                          <Ban className="h-3 w-3" /> ANULADA
+                        </span>
+                      ) : (
+                        <DropdownMenu modal={false}>
+                          <DropdownMenuTrigger asChild>
+                            <button className="cursor-pointer transition-transform duration-100 active:scale-90 hover:scale-[1.08] focus:outline-none">
+                              <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors duration-150 ${
+                                o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400" :
+                                o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" :
+                                o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" :
+                                o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400" :
+                                "border-zinc-200 bg-zinc-50 text-zinc-600"
+                              }`}>
+                                {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
+                                {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
+                                {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
+                                {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
+                                {o.estado.replace("_", " ")}
+                              </span>
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="center" sideOffset={4} className="w-[180px] p-1.5 rounded-xl shadow-lg border border-border/60">
+                            <div className="px-2 py-1.5 text-[10px] font-extrabold uppercase tracking-widest text-black dark:text-white text-center">Cambiar estado</div>
+                            <div className="space-y-1">
+                              {([
+                                { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, solidBg: "bg-blue-600", hoverBg: "hover:bg-blue-50 dark:hover:bg-blue-950/20" },
+                                { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, solidBg: "bg-amber-500", hoverBg: "hover:bg-amber-50 dark:hover:bg-amber-950/20" },
+                                { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, solidBg: "bg-emerald-600", hoverBg: "hover:bg-emerald-50 dark:hover:bg-emerald-950/20" },
+                                { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, solidBg: "bg-purple-600", hoverBg: "hover:bg-purple-50 dark:hover:bg-purple-950/20" },
+                              ]).map((s) => {
+                                const Icon = s.icon;
+                                const isCurrent = o.estado === s.value;
+                                return (
+                                  <button
+                                    key={s.value}
+                                    onClick={() => { if (!isCurrent) cambiarEstado(o, s.value); }}
+                                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors duration-75 ${
+                                      isCurrent ? "bg-accent font-bold" : `${s.hoverBg} text-foreground`
+                                    }`}
+                                  >
+                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${s.solidBg}`}>
+                                      <Icon className="h-3.5 w-3.5 text-white" />
+                                    </span>
+                                    {s.label}
+                                    {isCurrent && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex justify-center">
@@ -580,7 +740,30 @@ function OrdenesPage() {
                       </div>
                     </td>
                     <td className="px-4 py-3 text-center text-xs">{o.metodo_pago}</td>
-                    <td className="px-4 py-3 text-center text-xs text-muted-foreground">{formatDateTimeRD(o.creado_en)}</td>
+                    <td className="px-4 py-3 text-center text-xs">
+                      <div className="flex flex-col items-center gap-1">
+                        <span className="font-semibold">
+                          {o.fecha_entrega ? formatDateTimeRD(o.fecha_entrega) : "—"}
+                        </span>
+                        <div className="flex flex-wrap gap-1.5 justify-center max-w-[140px]">
+                          {o.es_urgente && (
+                            <Badge className="bg-rose-500 hover:bg-rose-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
+                              <Zap className="h-2.5 w-2.5 fill-white" /> Urgente
+                            </Badge>
+                          )}
+                          {o.fecha_entrega && esParaHoy(o.fecha_entrega) && (
+                            <Badge className="bg-amber-500 hover:bg-amber-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
+                              Hoy
+                            </Badge>
+                          )}
+                          {o.fecha_entrega && esAtrasada(o.fecha_entrega, o.estado) && (
+                            <Badge className="bg-red-600 hover:bg-red-700 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0 animate-pulse">
+                              Atrasada
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                    </td>
                     <td className="px-4 py-3">
                       <div className="flex justify-center">
                         <DropdownMenu>
@@ -636,7 +819,7 @@ function OrdenesPage() {
               })}
               {filt.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="py-16 text-center">
+                  <td colSpan={7} className="py-16 text-center">
                     <div className="flex flex-col items-center justify-center py-10 max-w-md mx-auto px-4">
                       <div className="rounded-2xl bg-primary/10 p-4 mb-4 text-primary shadow-sm">
                         <FileText className="h-10 w-10" />
@@ -1690,12 +1873,22 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 <div className="flex flex-col space-y-1">
                   <div className="flex items-center gap-1.5 justify-between">
                     <span className="text-[10px] font-black uppercase text-muted-foreground">Cliente</span>
-                    <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+                    <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 ${
                       cli.tipo === "Empresa" 
                         ? "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400" 
                         : "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
                     }`}>
-                      {cli.tipo === "Empresa" ? "🏢 Empresa" : "👤 Personal"}
+                      {cli.tipo === "Empresa" ? (
+                        <>
+                          <Building2 className="h-3 w-3 shrink-0" />
+                          <span>Empresa</span>
+                        </>
+                      ) : (
+                        <>
+                          <User className="h-3 w-3 shrink-0" />
+                          <span>Personal</span>
+                        </>
+                      )}
                     </span>
                   </div>
                   <span className="font-bold text-sm text-foreground">
@@ -1892,12 +2085,22 @@ function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick }: PendienteCar
         <div className="space-y-0.5">
           <div className="flex items-center gap-1.5 justify-between">
             <span className="text-[9px] font-black uppercase tracking-wider text-muted-foreground">Cliente</span>
-            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full ${
+            <span className={`text-[8px] font-black uppercase tracking-wider px-2 py-0.5 rounded-full flex items-center gap-1 ${
               c.tipo === "Empresa" 
                 ? "bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400" 
                 : "bg-teal-100 text-teal-700 dark:bg-teal-950/40 dark:text-teal-400"
             }`}>
-              {c.tipo === "Empresa" ? "🏢 Empresa" : "👤 Personal"}
+              {c.tipo === "Empresa" ? (
+                <>
+                  <Building2 className="h-3 w-3 shrink-0" />
+                  <span>Empresa</span>
+                </>
+              ) : (
+                <>
+                  <User className="h-3 w-3 shrink-0" />
+                  <span>Personal</span>
+                </>
+              )}
             </span>
           </div>
           <div className="font-bold text-sm text-foreground line-clamp-1">

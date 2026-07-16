@@ -27,6 +27,7 @@ import {
   saveTenant, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
   getTenantPlan, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence,
+  isModuleEnabled,
   type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
@@ -119,8 +120,8 @@ function ConfigPage() {
 
   const cfg: TenantConfig = tenant.config || DEFAULT_CONFIG;
   const plan = plans.find(p => p.id === tenant.plan_id);
-  const hasFiscal = plan?.modulos.facturacion_fiscal;
-  const hasWA = plan?.modulos.whatsapp;
+  const hasFiscal = isModuleEnabled(tenant, 'facturacion_fiscal', plan);
+  const hasWA = isModuleEnabled(tenant, 'whatsapp', plan);
   const wa: WhatsAppConfig = cfg.whatsapp || DEFAULT_CONFIG.whatsapp!;
 
   async function save(updates: Partial<Tenant>) {
@@ -618,7 +619,11 @@ function ConfigPage() {
                   <div className="space-y-2 mb-6">
                     <div className="text-xs flex items-center gap-2">✅ {p.limite_empleados} Empleados</div>
                     <div className="text-xs flex items-center gap-2">✅ {p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</div>
-                    <div className="text-xs flex items-center gap-2 font-medium text-blue-600">✅ {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes</div>
+                    {p.modulos?.whatsapp && (
+                      <div className="text-xs flex items-center gap-2 font-medium text-blue-600">
+                        ✅ {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes
+                      </div>
+                    )}
                     {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((k) => {
                       const v = p.modulos?.[k as keyof typeof p.modulos];
                       

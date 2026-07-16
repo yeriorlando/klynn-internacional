@@ -11,6 +11,7 @@ import {
 } from "@/lib/storage";
 import {
   Receipt, Package, Wallet, AlertCircle, ArrowUpRight, FilePlus2, Truck, TrendingUp,
+  Inbox, RefreshCw, CircleCheck, Ban
 } from "lucide-react";
 import { useOrdenes, useCajaAbierta, useGastos, useClientes, useMovimientos } from "@/hooks/use-queries";
 import { TenantShell } from "@/components/klynn/TenantShell";
@@ -193,7 +194,23 @@ function DashboardPage() {
                         {c?.nombre || "—"}
                       </div>
                     </td>
-                    <td className="py-3"><EstadoBadge estado={o.estado} /></td>
+                    <td className="py-3">
+                      <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                        o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400" :
+                        o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" :
+                        (o.estado === "LISTA" || o.estado === "PAGADA") ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" :
+                        o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400" :
+                        o.estado === "ANULADA" ? "border-red-200 bg-red-50 text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400" :
+                        "border-zinc-200 bg-zinc-50 text-zinc-600"
+                      }`}>
+                        {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
+                        {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
+                        {(o.estado === "LISTA" || o.estado === "PAGADA") && <CircleCheck className="h-3 w-3" />}
+                        {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
+                        {o.estado === "ANULADA" && <Ban className="h-3 w-3" />}
+                        {o.estado.replace("_", " ")}
+                      </span>
+                    </td>
                     <td className="py-3 text-right font-medium">{formatRD(o.total)}</td>
                     <td className="py-3 text-right text-xs text-muted-foreground">{formatDateTimeRD(o.creado_en)}</td>
                   </tr>

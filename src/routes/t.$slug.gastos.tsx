@@ -21,7 +21,8 @@ import {
   getGastos, saveGasto, deleteGasto, formatRD, formatDateRD, uid, CATEGORIAS_GASTOS, 
   getECFDocumentosRecibidos, updateEstadoComercialECF, getTenantPlan, getECFConfig, 
   DEFAULT_CONFIG, type Gasto, type ECFDocumentRecibido,
-  getCajaAbierta, saveMovimiento, type MetodoPago
+  getCajaAbierta, saveMovimiento, type MetodoPago,
+  isModuleEnabled
 } from "@/lib/storage";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -78,7 +79,7 @@ function GastosPage() {
 
   const { data: plans = [] } = usePlans();
   const plan = plans.find(p => p.id === user?.tenant?.plan_id) || (user ? getTenantPlan(user.tenant) : null);
-  const canSeeFiscal = plan?.modulos?.facturacion_fiscal;
+  const canSeeFiscal = isModuleEnabled(user?.tenant || null, 'facturacion_fiscal', plan || undefined);
 
   const manualGastos = useMemo(() => gastos.filter(g => !g.is_caja_chica), [gastos]);
   const cajaChicaGastos = useMemo(() => gastos.filter(g => g.is_caja_chica), [gastos]);

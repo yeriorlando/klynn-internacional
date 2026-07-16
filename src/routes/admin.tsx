@@ -33,6 +33,7 @@ import {
   updateTenantStatus,
   updateTenantMaxSucursales,
   updateTenantTrialHasta,
+  updateTenantModulosOverride,
   getGlobalConfig,
   saveGlobalConfig,
   ADMIN_EMAILS,
@@ -117,6 +118,11 @@ function AdminPage() {
   const [newMaxSucursales, setNewMaxSucursales] = useState<number>(1);
   const [newDaysLimit, setNewDaysLimit] = useState<number>(30);
 
+  const [modOverrideWa, setModOverrideWa] = useState(false);
+  const [modOverrideFiscal, setModOverrideFiscal] = useState(false);
+  const [modOverrideMultisucursal, setModOverrideMultisucursal] = useState(false);
+  const [modOverrideLogistica, setModOverrideLogistica] = useState(false);
+
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
   const [editingLicencia, setEditingLicencia] = useState<LicenciaLocal | null>(null);
@@ -156,6 +162,14 @@ function AdminPage() {
       
       const trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
       await updateTenantTrialHasta(editingTenant.id, trialHasta);
+
+      // Guardar anulaciones de módulos
+      await updateTenantModulosOverride(editingTenant.id, {
+        whatsapp: modOverrideWa,
+        facturacion_fiscal: modOverrideFiscal,
+        multisucursal: modOverrideMultisucursal,
+        logistica: modOverrideLogistica
+      });
 
       toast.success("Información de lavandería actualizada");
       setOpenEditModal(false);
@@ -294,6 +308,21 @@ function AdminPage() {
                                         : 0;
                                       setNewDaysLimit(daysRemaining || 30);
 
+                                      // Inicializar interruptores de módulos
+                                      const pOfTenant = plans.find(pl => pl.id === t.plan_id);
+                                      setModOverrideWa(t.config?.modulos_override?.whatsapp !== undefined 
+                                        ? t.config.modulos_override.whatsapp 
+                                        : !!pOfTenant?.modulos.whatsapp);
+                                      setModOverrideFiscal(t.config?.modulos_override?.facturacion_fiscal !== undefined 
+                                        ? t.config.modulos_override.facturacion_fiscal 
+                                        : !!pOfTenant?.modulos.facturacion_fiscal);
+                                      setModOverrideMultisucursal(t.config?.modulos_override?.multisucursal !== undefined 
+                                        ? t.config.modulos_override.multisucursal 
+                                        : !!pOfTenant?.modulos.multisucursal);
+                                      setModOverrideLogistica(t.config?.modulos_override?.logistica !== undefined 
+                                        ? t.config.modulos_override.logistica 
+                                        : !!pOfTenant?.modulos.logistica);
+
                                       setOpenEditModal(true);
                                     }}
                                   >
@@ -404,7 +433,9 @@ function AdminPage() {
                   <div className="mt-4 space-y-2 text-sm">
                     <div>👥 {p.limite_empleados} Empleados</div>
                     <div>📦 {p.limite_ordenes_mes ?? "∞"} Órdenes/mes</div>
-                    <div className="text-blue-600 font-medium">💬 {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp</div>
+                    {p.modulos?.whatsapp && (
+                      <div className="text-blue-600 font-medium">💬 {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp</div>
+                    )}
                     <div className="border-t border-border pt-2 space-y-1">
                       {Object.entries(p.modulos).map(([k, v]) => (
                         <div key={k} className={`flex items-center gap-2 ${v ? "text-foreground font-medium" : "text-muted-foreground line-through opacity-50"}`}>
@@ -512,7 +543,7 @@ function AdminPage() {
 
         {/* Modal para editar Credenciales de Lavandería */}
         <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-          <DialogContent className="rounded-2xl border-none shadow-card max-w-4xl">
+          <DialogContent className="rounded-2xl border-none shadow-card max-w-3xl">
             <DialogHeader>
               <DialogTitle className="font-display text-2xl flex items-center gap-2">
                 <Shield className="h-5 w-5 text-primary" /> Editar Credenciales
@@ -522,192 +553,186 @@ function AdminPage() {
               </DialogDescription>
             </DialogHeader>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 py-4">
-              {/* COLUMNA IZQUIERDA: ACCESO Y PLAN */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-email">Correo Administrativo</Label>
-                  <div className="relative">
-                    <Users className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="edit-email" 
-                      type="email" 
-                      className="pl-10 rounded-xl h-11" 
-                      value={newEmail} 
-                      onChange={(e) => setNewEmail(e.target.value)} 
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-pass">Nueva Contraseña (opcional)</Label>
-                  <div className="relative">
-                    <Key className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="edit-pass" 
-                      type="password" 
-                      className="pl-10 rounded-xl h-11" 
-                      placeholder="Dejar en blanco para no cambiar"
-                      value={newPassword} 
-                      onChange={(e) => setNewPassword(e.target.value)} 
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-plan">Plan de Suscripción</Label>
-                  <Select 
-                    value={selectedPlanId} 
-                    onValueChange={(v: PlanId) => {
-                      setSelectedPlanId(v);
-                      setNewDaysLimit(30);
-                    }}
-                  >
-                    <SelectTrigger className="h-11 rounded-xl">
-                      <SelectValue placeholder="Seleccionar plan" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl shadow-elegant">
-                      {plans.map((p) => (
-                        <SelectItem key={p.id} value={p.id} className="rounded-lg">
-                          <div className="flex items-center justify-between w-full gap-4">
-                            <span className="font-semibold">{p.nombre}</span>
-                            <span className="text-xs text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
-                          </div>
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <div className="space-y-2">
-                  <Label htmlFor="edit-days-limit">Días de vigencia / prueba del plan</Label>
-                  <div className="relative">
-                    <Calendar className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input 
-                      id="edit-days-limit" 
-                      type="number" 
-                      min={0}
-                      className="pl-10 rounded-xl h-11" 
-                      value={newDaysLimit} 
-                      onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)} 
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground mt-1.5">
-                    Fecha de renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
-                  </p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3.5 py-2">
+              {/* Correo Administrativo */}
+              <div className="space-y-1">
+                <Label htmlFor="edit-email" className="text-xs font-semibold text-slate-655">Correo Administrativo</Label>
+                <div className="relative">
+                  <Users className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="edit-email" 
+                    type="email" 
+                    className="pl-10 rounded-xl h-10 text-sm" 
+                    value={newEmail} 
+                    onChange={(e) => setNewEmail(e.target.value)} 
+                  />
                 </div>
               </div>
 
-              {/* COLUMNA DERECHA: ESTADO Y SUCURSALES */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-status">Estado de la Lavandería</Label>
-                  <Select 
-                    value={newStatus} 
-                    onValueChange={(v: any) => {
-                      setNewStatus(v);
-                      if (v === "ACTIVO" || v === "TRIAL") {
-                        setNewDaysLimit(30);
-                      }
-                    }}
-                  >
-                    <SelectTrigger className="h-11 rounded-xl">
-                      <SelectValue placeholder="Seleccionar estado" />
-                    </SelectTrigger>
-                    <SelectContent className="rounded-xl shadow-elegant">
-                      <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
-                      <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
-                      <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
-                      <SelectItem value="CANCELADO" className="rounded-lg text-destructive">Cancelado</SelectItem>
-                    </SelectContent>
-                  </Select>
+              {/* Estado de la Lavandería */}
+              <div className="space-y-1">
+                <Label htmlFor="edit-status" className="text-xs font-semibold text-slate-655">Estado de la Lavandería</Label>
+                <Select 
+                  value={newStatus} 
+                  onValueChange={(v: any) => {
+                    setNewStatus(v);
+                    if (v === "ACTIVO" || v === "TRIAL") {
+                      setNewDaysLimit(30);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10 rounded-xl text-sm">
+                    <SelectValue placeholder="Seleccionar estado" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl shadow-elegant text-sm">
+                    <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
+                    <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
+                    <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
+                    <SelectItem value="CANCELADO" className="rounded-lg text-destructive">Cancelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Nueva Contraseña (opcional) */}
+              <div className="space-y-1">
+                <Label htmlFor="edit-pass" className="text-xs font-semibold text-slate-655">Nueva Contraseña (opcional)</Label>
+                <div className="relative">
+                  <Key className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="edit-pass" 
+                    type="password" 
+                    className="pl-10 rounded-xl h-10 text-sm" 
+                    placeholder="Dejar en blanco para no cambiar"
+                    value={newPassword} 
+                    onChange={(e) => setNewPassword(e.target.value)} 
+                  />
                 </div>
+              </div>
 
-                <div className="space-y-3">
-                  <Label className="text-slate-700 dark:text-slate-300 font-semibold block">
-                    Sucursales Habilitadas (Cupo Total)
-                  </Label>
+              {/* Plan de Suscripción */}
+              <div className="space-y-1">
+                <Label htmlFor="edit-plan" className="text-xs font-semibold text-slate-655">Plan de Suscripción</Label>
+                <Select 
+                  value={selectedPlanId} 
+                  onValueChange={(v: PlanId) => {
+                    setSelectedPlanId(v);
+                    setNewDaysLimit(30);
+                    const newPlan = plans.find(p => p.id === v);
+                    if (newPlan) {
+                      setModOverrideWa(!!newPlan.modulos.whatsapp);
+                      setModOverrideFiscal(!!newPlan.modulos.facturacion_fiscal);
+                      setModOverrideMultisucursal(!!newPlan.modulos.multisucursal);
+                      setModOverrideLogistica(!!newPlan.modulos.logistica);
+                    }
+                  }}
+                >
+                  <SelectTrigger className="h-10 rounded-xl text-sm">
+                    <SelectValue placeholder="Seleccionar plan" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl shadow-elegant text-sm">
+                    {plans.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="rounded-lg">
+                        <div className="flex items-center justify-between w-full gap-4 text-sm">
+                          <span className="font-semibold">{p.nombre}</span>
+                          <span className="text-xs text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
 
-                  {/* Accesos rápidos con sub-labels aclaratorios */}
-                  <div className="grid grid-cols-3 gap-2">
-                    <Button 
-                      type="button"
-                      variant={newMaxSucursales === 1 ? "default" : "outline"}
-                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
-                      onClick={() => setNewMaxSucursales(1)}
-                    >
-                      <span className="text-sm">1</span>
-                      <span className="text-[10px] opacity-75 font-normal">Base</span>
-                    </Button>
-                    <Button 
-                      type="button"
-                      variant={newMaxSucursales === 2 ? "default" : "outline"}
-                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
-                      onClick={() => setNewMaxSucursales(2)}
-                    >
-                      <span className="text-sm">2</span>
-                      <span className="text-[10px] opacity-75 font-normal">+1 Extra</span>
-                    </Button>
-                    <Button 
-                      type="button"
-                      variant={newMaxSucursales === 3 ? "default" : "outline"}
-                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
-                      onClick={() => setNewMaxSucursales(3)}
-                    >
-                      <span className="text-sm">3</span>
-                      <span className="text-[10px] opacity-75 font-normal">+2 Extra</span>
-                    </Button>
-                    <Button 
-                      type="button"
-                      variant={newMaxSucursales === 4 ? "default" : "outline"}
-                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
-                      onClick={() => setNewMaxSucursales(4)}
-                    >
-                      <span className="text-sm">4</span>
-                      <span className="text-[10px] opacity-75 font-normal">+3 Extra</span>
-                    </Button>
-                    <Button 
-                      type="button"
-                      variant={newMaxSucursales === 5 ? "default" : "outline"}
-                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
-                      onClick={() => setNewMaxSucursales(5)}
-                    >
-                      <span className="text-sm">5</span>
-                      <span className="text-[10px] opacity-75 font-normal">+4 Extra</span>
-                    </Button>
-                    <Button 
-                      type="button"
-                      variant={newMaxSucursales === 6 ? "default" : "outline"}
-                      className="rounded-xl h-14 flex flex-col items-center justify-center p-1 text-xs font-semibold"
-                      onClick={() => setNewMaxSucursales(6)}
-                    >
-                      <span className="text-sm">6</span>
-                      <span className="text-[10px] opacity-75 font-normal font-normal">+5 Extra</span>
-                    </Button>
-                  </div>
+              {/* Días de vigencia / prueba del plan */}
+              <div className="space-y-1">
+                <Label htmlFor="edit-days-limit" className="text-xs font-semibold text-slate-655">Días de vigencia / prueba del plan</Label>
+                <div className="relative">
+                  <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="edit-days-limit" 
+                    type="number" 
+                    min={0}
+                    className="pl-10 rounded-xl h-10 text-sm" 
+                    value={newDaysLimit} 
+                    onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)} 
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground">
+                  Fecha de renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
+                </p>
+              </div>
 
-                  {/* Entrada personalizada pequeña */}
-                  <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
-                    <span className="text-xs text-muted-foreground font-medium">Cantidad personalizada:</span>
-                    <div className="relative w-28">
-                      <Building2 className="absolute left-2.5 top-2.5 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input 
-                        id="edit-max-sucursales" 
-                        type="number" 
-                        className="pl-8 pr-2 rounded-xl h-9 text-center font-bold text-sm" 
-                        min={1}
-                        value={newMaxSucursales} 
-                        onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)} 
-                      />
+              {/* Sucursales Habilitadas */}
+              <div className="space-y-1">
+                <Label htmlFor="edit-max-sucursales" className="text-xs font-semibold text-slate-655">Sucursales Habilitadas (Cupo Total)</Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+                  <Input 
+                    id="edit-max-sucursales" 
+                    type="number" 
+                    min={1} 
+                    className="pl-10 rounded-xl h-10 font-bold text-sm"
+                    value={newMaxSucursales} 
+                    onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)} 
+                  />
+                </div>
+              </div>
+
+              {/* SECCIÓN MÓDULOS PERSONALIZADOS */}
+              <div className="md:col-span-2 border-t pt-3.5 mt-2">
+                <Label className="text-slate-700 dark:text-slate-355 font-bold block mb-2 text-xs uppercase tracking-wider">
+                  Módulos Habilitados para esta Lavandería (Personalización)
+                </Label>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold">WhatsApp</span>
+                      <span className="text-[9px] text-muted-foreground leading-tight">Mensajería y alertas</span>
                     </div>
-                  </div>
+                    <Switch 
+                      checked={modOverrideWa} 
+                      onCheckedChange={setModOverrideWa} 
+                    />
+                  </label>
+                  
+                  <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold">Facturación</span>
+                      <span className="text-[9px] text-muted-foreground leading-tight">DGII (e-CF / NCF)</span>
+                    </div>
+                    <Switch 
+                      checked={modOverrideFiscal} 
+                      onCheckedChange={setModOverrideFiscal} 
+                    />
+                  </label>
+                  
+                  <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold">Sucursales</span>
+                      <span className="text-[9px] text-muted-foreground leading-tight">Múltiples locales</span>
+                    </div>
+                    <Switch 
+                      checked={modOverrideMultisucursal} 
+                      onCheckedChange={setModOverrideMultisucursal} 
+                    />
+                  </label>
+                  
+                  <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                    <div className="flex flex-col">
+                      <span className="text-xs font-semibold">Logística</span>
+                      <span className="text-[9px] text-muted-foreground leading-tight">Repartidores y envíos</span>
+                    </div>
+                    <Switch 
+                      checked={modOverrideLogistica} 
+                      onCheckedChange={setModOverrideLogistica} 
+                    />
+                  </label>
                 </div>
               </div>
             </div>
 
-            <DialogFooter className="gap-2 sm:gap-0">
-              <Button variant="ghost" onClick={() => setOpenEditModal(false)} className="rounded-xl">Cancelar</Button>
-              <Button onClick={handleUpdateAdmin} className="bg-gradient-primary text-white rounded-xl shadow-md font-bold">
+            <DialogFooter className="gap-2 sm:gap-0 border-t pt-3">
+              <Button variant="ghost" onClick={() => setOpenEditModal(false)} className="rounded-xl h-9">Cancelar</Button>
+              <Button onClick={handleUpdateAdmin} className="bg-gradient-primary text-white rounded-xl shadow-md font-bold h-9">
                 Guardar Cambios
               </Button>
             </DialogFooter>
