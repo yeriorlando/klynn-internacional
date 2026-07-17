@@ -14,7 +14,7 @@ import { notificarWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
 import { useCajaAbierta } from "@/hooks/use-queries";
 import { queryClient } from "@/router";
-import { CobrarOrdenDialog, TicketPrintPortal, CondonarDeudaDialog } from "./t.$slug.ordenes";
+import { CobrarOrdenDialog, TicketPrintPortal, CondonarDeudaDialog } from "@/components/klynn/OrdenesPage";
 
 export const Route = createFileRoute("/t/$slug/cxc")({
   component: CuentasPorCobrarPage,

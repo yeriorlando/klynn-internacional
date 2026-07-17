@@ -332,4 +332,96 @@ body.pos-mode .main-header {
   animation-delay: 0s !important;
 }
 
+/* Contenedor del Menú de Acciones */
+.action-menu {
+  position: relative;
+  align-items: center !important;
+  overflow: visible !important;
+  --menu-border: var(--border);
+  --menu-muted: var(--muted-foreground);
+  --menu-anil: var(--primary);
+  --menu-card: var(--card);
+  --menu-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+  --menu-surface: var(--accent);
+  --menu-brick: var(--destructive);
+}
+
+.dark .action-menu {
+  --menu-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+}
+
+/* El botón del disparador de tres puntos (...) */
+.order-actions .action-menu > button {
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--menu-border);
+  background: transparent;
+  color: var(--menu-muted);
+  border-radius: 6px;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.order-actions .action-menu > button svg {
+  width: 15px;
+  height: 15px;
+}
+
+/* Hover e Indicador de Abierto en el Botón */
+.order-actions .action-menu > button:hover,
+.order-actions .action-menu.is-open > button {
+  border-color: var(--menu-anil);
+  color: var(--menu-anil);
+  background: color-mix(in srgb, var(--menu-anil), transparent 93%);
+}
+
+/* El menú desplegable (Popover) */
+.action-menu > div, 
+.action-menu-popover {
+  position: absolute;
+  right: 0;
+  top: 34px;
+  z-index: 70;
+  width: 220px;
+  background: var(--menu-card);
+  border: 1px solid var(--menu-border);
+  border-radius: 7px;
+  box-shadow: var(--menu-shadow);
+  overflow: hidden;
+}
+
+/* Botones internos del menú desplegable */
+.action-menu > div button,
+.action-menu-popover button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  padding: 10px 14px;
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  color: var(--foreground);
+}
+
+.action-menu > div button:hover,
+.action-menu-popover button:hover {
+  background: var(--menu-surface);
+}
+
+.action-menu > div svg,
+.action-menu-popover svg {
+  width: 16px;
+}
+
+/* Botón peligroso (Eliminar) */
+.action-menu .danger,
+.action-menu-popover .danger {
+  color: var(--menu-brick) !important;
+}
+
 
