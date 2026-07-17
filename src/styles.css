@@ -187,18 +187,23 @@
   .text-balance { text-wrap: balance; }
 
   .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 10px;
+    height: 10px;
   }
   .custom-scrollbar::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: color-mix(in oklab, var(--primary) 20%, transparent);
+    background: color-mix(in oklab, var(--primary) 5%, transparent);
     border-radius: 10px;
   }
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in oklab, var(--primary) 50%, transparent);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
   .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: color-mix(in oklab, var(--primary) 40%, transparent);
+    background: var(--primary);
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
   .scrollbar-hide::-webkit-scrollbar {
     display: none;
@@ -278,23 +283,29 @@ body.pos-mode .main-header {
   }
 }
 
-/* Minimalist Scrollbar Customization */
+/* Custom Scrollbar Customization */
 .custom-scrollbar::-webkit-scrollbar {
-  width: 5px;
+  width: 10px;
+  height: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-track {
-  background: transparent;
+  background: color-mix(in oklab, var(--primary) 5%, transparent);
+  border-radius: 10px;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(156, 163, 175, 0.3);
-  border-radius: 9999px;
+  background: color-mix(in oklab, var(--primary) 50%, transparent);
+  border-radius: 10px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(156, 163, 175, 0.5);
+  background: var(--primary);
+  border: 2px solid transparent;
+  background-clip: padding-box;
 }
 .custom-scrollbar {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(156, 163, 175, 0.3) transparent;
+  scrollbar-width: auto;
+  scrollbar-color: color-mix(in oklab, var(--primary) 50%, transparent) transparent;
 }
 
 /* Circular Reveal Theme Switch Transition */

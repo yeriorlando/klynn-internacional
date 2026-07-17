@@ -1,12 +1,13 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { supabase } from "@/lib/supabase";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
-  Printer, Phone, Shirt, Truck, Maximize2, Minimize2, LayoutGrid, List,
-  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles
+  Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
+  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles,
+  CreditCard, CornerDownLeft, Percent
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -23,6 +24,7 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   getClientes, saveCliente, getCatalogo, getServicios, getCajaAbierta, saveOrden, saveMovimiento,
   nextOrdenNumero, formatRD, formatPhoneRD, uid, DEFAULT_CONFIG,
@@ -77,15 +79,46 @@ function NuevaOrdenPage() {
   }
 
   const [step, setStep] = useState(1);
-  const [isPosMode, setIsPosMode] = useState(cfg.pos_modo_defecto !== false);
+  const isPosMode = true;
+  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const headerDiv = document.querySelector(".main-header > div.flex-1");
+    if (!headerDiv) return;
+
+    const wrapper = document.createElement("div");
+    wrapper.className = "hidden lg:flex items-center gap-3 ml-auto mr-4 animate-in fade-in duration-300";
+    headerDiv.appendChild(wrapper);
+    setHeaderPortalTarget(wrapper);
+
+    return () => {
+      wrapper.remove();
+    };
+  }, []);
+
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
   const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
   const [posSearch, setPosSearch] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
 
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
   const [clienteSearch, setClienteSearch] = useState("");
   const [cliente, setCliente] = useState<Cliente | null>(null);
   const [showNewCliente, setShowNewCliente] = useState(false);
+  const [clientSearchQuery, setClientSearchQuery] = useState("");
+  const [isClientModalOpen, setIsClientModalOpen] = useState(false);
 
   const [serviciosSel, setServiciosSel] = useState<string[]>([]);
   const [customServicePrices, setCustomServicePrices] = useState<Record<string, number>>({});
@@ -131,16 +164,23 @@ function NuevaOrdenPage() {
 
   const catalogo = useMemo(() => catalogoData.filter(i => i.activo), [catalogoData]);
   const servicios = useMemo(() => serviciosData.filter(s => s.activo), [serviciosData]);
+  const filteredClients = useMemo(() => {
+    return clientes.filter(c =>
+      c.nombre.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
+      (c.apellido && c.apellido.toLowerCase().includes(clientSearchQuery.toLowerCase())) ||
+      c.telefono.includes(clientSearchQuery)
+    );
+  }, [clientes, clientSearchQuery]);
   const fiscalConfig = fiscalConfigData || null;
 
   useEffect(() => {
-    if (isPosMode) {
+    if (isPosMode && isFullscreen) {
       document.body.classList.add("pos-mode");
     } else {
       document.body.classList.remove("pos-mode");
     }
     return () => document.body.classList.remove("pos-mode");
-  }, [isPosMode]);
+  }, [isPosMode, isFullscreen]);
 
   // 1. Setea la dirección únicamente cuando cambia el cliente seleccionado realmente, pero mantiene el envío desactivado por defecto
   useEffect(() => {
@@ -188,6 +228,7 @@ function NuevaOrdenPage() {
   const [metodo, setMetodo] = useState<MetodoPago>("CREDITO");
   const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("PAGO_AL_RETIRAR");
   const [recibido, setRecibido] = useState<number>(0);
+  const [isCreatingOrden, setIsCreatingOrden] = useState(false);
   const [abonoCredito, setAbonoCredito] = useState<number>(0);
 
   const handleOpcionPagoChange = (opcionId: string) => {
@@ -258,6 +299,8 @@ function NuevaOrdenPage() {
     setTipoECF(isPersona ? (isElectronic ? "E32" : "B02") : (isElectronic ? "E31" : "B01"));
     irAlPasoSiguienteDelCliente();
   }
+
+
 
   const [empresaDialogOpen, setEmpresaDialogOpen] = useState(false);
   const [rncInput, setRncInput] = useState("");
@@ -406,6 +449,101 @@ function NuevaOrdenPage() {
     }
   }, [enableServicios, enablePrendas]);
 
+  const posStateRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (!isPosMode) return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const state = posStateRef.current;
+      if (!state) return;
+      const target = e.target as HTMLElement;
+      const isInput = ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
+      
+      // Enter to cobrar (open checkout modal) or confirm pay (if modal is open)
+      if (e.key === "Enter") {
+        const isTextarea = target.tagName === "TEXTAREA";
+        if (!isTextarea) {
+          if (!state.isCobroModalOpen) {
+            if (state.items.length > 0 || state.serviciosSel.length > 0) {
+              e.preventDefault();
+              state.setIsCobroModalOpen(true);
+            }
+          } else {
+            const isEfectivo = state.metodo === "EFECTIVO";
+            const canConfirm = !isEfectivo || (state.recibido >= state.total);
+            if (canConfirm) {
+              e.preventDefault();
+              state.onCrearOrden();
+            }
+          }
+          return;
+        }
+      }
+
+      // Space key to confirm and create order if checkout modal is open
+      if (e.key === " " || e.code === "Space") {
+        if (state.isCobroModalOpen) {
+          const isTypingText = target.tagName === "TEXTAREA" || (target.tagName === "INPUT" && (target as HTMLInputElement).type === "text" && (target as HTMLInputElement).inputMode !== "decimal");
+          if (!isTypingText) {
+            e.preventDefault();
+            e.stopPropagation();
+            const isEfectivo = state.metodo === "EFECTIVO";
+            const canConfirm = !isEfectivo || (state.recibido >= state.total);
+            if (canConfirm) {
+              state.onCrearOrden();
+            } else {
+              toast.error("El monto recibido es menor al total de la orden 💵");
+            }
+            return;
+          }
+        }
+      }
+
+      // Ctrl+K or / to focus search
+      if ((e.ctrlKey && e.key.toLowerCase() === "k") || e.key === "/") {
+        e.preventDefault();
+        const searchInput = document.querySelector('input[placeholder*="Buscar prenda"]') as HTMLInputElement;
+        if (searchInput) searchInput.focus();
+        return;
+      }
+
+      if (isInput) return;
+
+      // F2 to open client search modal
+      if (e.key === "F2") {
+        e.preventDefault();
+        state.setIsClientModalOpen(true);
+        return;
+      }
+
+      // F4 to open discount dialog
+      if (e.key === "F4") {
+        e.preventDefault();
+        state.setShowDiscountPOS(true);
+        return;
+      }
+
+      // Ctrl + Z to undo (deshacer)
+      if (e.ctrlKey && e.key.toLowerCase() === "z") {
+        e.preventDefault();
+        if (state.items.length > 0) {
+          setItems(prev => prev.slice(0, -1));
+          toast.info("Prenda removida (Deshacer) ↩️");
+        } else if (state.serviciosSel.length > 0) {
+          setServiciosSel(prev => prev.slice(0, -1));
+          toast.info("Servicio removido (Deshacer) ↩️");
+        }
+        return;
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+    };
+  }, [isPosMode]);
+
   if (!user || user.tenant.id === '__loading__') return null;
   const { tenant, empleado } = user;
 
@@ -456,17 +594,16 @@ function NuevaOrdenPage() {
       const baseSinItbis = +(baseParaItbis / (1 + itbisRate)).toFixed(2);
       itbis = +(baseParaItbis - baseSinItbis).toFixed(2);
       subtotal = +(baseSinItbis + subtotalExentoBase).toFixed(2);
-      total = subtotal + itbis - descuento + costoEnvio;
     } else {
       // ITBIS se suma a la base gravable
       itbis = +(baseParaItbis * itbisRate).toFixed(2);
       subtotal = +(baseParaItbis + subtotalExentoBase).toFixed(2);
-      total = subtotal + itbis - descuento + costoEnvio;
     }
-  } else {
-    // Sin facturación fiscal o ITBIS desactivado
-    total = subtotal - descuento + costoEnvio;
   }
+
+  const subtotalConImpuestos = subtotal + itbis;
+  const descuentoMonto = +((subtotalConImpuestos * descuento) / 100).toFixed(2);
+  total = +(subtotalConImpuestos - descuentoMonto + costoEnvio).toFixed(2);
 
   const vuelto = metodo === "EFECTIVO" && recibido > total ? recibido - total : 0;
   const faltante = metodo === "EFECTIVO" && recibido > 0 && recibido < total ? total - recibido : 0;
@@ -525,12 +662,15 @@ function NuevaOrdenPage() {
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch((e) => {
+      document.documentElement.requestFullscreen().then(() => {
+        setIsFullscreen(true);
+      }).catch((e) => {
         console.error(`Error al activar pantalla completa: ${e.message}`);
       });
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen();
+        setIsFullscreen(false);
       }
     }
   };
@@ -538,7 +678,9 @@ function NuevaOrdenPage() {
 
 
   async function onCrearOrden() {
-    if (limits?.ordersReached) { setShowLimitModal(true); return; }
+    if (isCreatingOrden) return;
+    setIsCreatingOrden(true);
+    if (limits?.ordersReached) { setShowLimitModal(true); setIsCreatingOrden(false); return; }
     let targetCliente: Cliente | null = cliente;
     if (!targetCliente) {
       const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
@@ -567,17 +709,29 @@ function NuevaOrdenPage() {
         setCliente(c);
         targetCliente = c;
       } else {
-        toast.error("Selecciona un cliente"); return;
+        toast.error("Selecciona un cliente");
+        setIsCreatingOrden(false);
+        return;
       }
     }
-    if (items.length === 0 && serviciosSel.length === 0) { toast.error("Agrega al menos una prenda o selecciona un servicio"); return; }
-    if ((metodo !== "CREDITO" || abonoCredito > 0) && !caja) {
-      toast.error("Abre la caja antes de registrar un pago");
+    if (items.length === 0 && serviciosSel.length === 0) {
+      toast.error("Agrega al menos una prenda o selecciona un servicio");
+      setIsCreatingOrden(false);
       return;
     }
-    if (metodo === "EFECTIVO" && recibido < total) { toast.error("El monto recibido es menor al total"); return; }
+    if ((metodo !== "CREDITO" || abonoCredito > 0) && !caja) {
+      toast.error("Abre la caja antes de registrar un pago");
+      setIsCreatingOrden(false);
+      return;
+    }
+    if (metodo === "EFECTIVO" && recibido < total) {
+      toast.error("El monto recibido es menor al total");
+      setIsCreatingOrden(false);
+      return;
+    }
     if (metodo === "CREDITO" && abonoCredito >= total) {
       toast.error("El abono debe ser menor al total. Si desea pagar completo, cambie el método de pago.");
+      setIsCreatingOrden(false);
       return;
     }
 
@@ -639,7 +793,7 @@ function NuevaOrdenPage() {
         items,
         subtotal: +subtotal.toFixed(2),
         itbis,
-        descuento,
+        descuento: descuentoMonto,
         total,
         pagado,
         saldo,
@@ -721,6 +875,7 @@ function NuevaOrdenPage() {
 
       setCreada({ ...ordenActualizada });
       setShowTicket(true);
+      setIsCobroModalOpen(false);
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
 
       if (targetCliente && servicioDomicilio && direccionDomicilio.trim() && direccionDomicilio !== targetCliente.direccion) {
@@ -736,8 +891,10 @@ function NuevaOrdenPage() {
           }),
         );
       }
+      setIsCreatingOrden(false);
     } catch (err: any) {
       toast.error("Error al crear la orden: " + err.message);
+      setIsCreatingOrden(false);
     }
   }
 
@@ -782,91 +939,64 @@ function NuevaOrdenPage() {
   const currentVisibleStepNumber = currentVisibleStepIndex !== -1 ? currentVisibleStepIndex + 1 : 1;
   const totalVisibleSteps = stepsList.length;
 
+  posStateRef.current = {
+    isPosMode,
+    items,
+    serviciosSel,
+    step,
+    catalogFiltered,
+    metodo,
+    recibido,
+    total,
+    onCrearOrden,
+    setIsClientModalOpen,
+    setShowDiscountPOS,
+    addItem,
+    isCobroModalOpen,
+    setIsCobroModalOpen
+  };
+
   return (
-    <div className={`mx-auto w-full px-4 md:px-6 ${isPosMode ? "max-w-none h-[calc(100vh-100px)] flex flex-col" : "max-w-6xl"}`}>
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4 flex-1">
-          <PageHeader title={isPosMode ? "Terminal POS" : "Nueva orden"} description={isPosMode ? "Venta rápida" : `Paso ${currentVisibleStepNumber} de ${totalVisibleSteps}`} />
-          {isPosMode && !(step === 1 && !cliente) && (
-            <div className="relative w-72 max-w-md animate-in fade-in slide-in-from-left-4 duration-500">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-              <Input
-                value={posSearch}
-                onChange={(e) => setPosSearch(e.target.value)}
-                placeholder="Buscar prenda o servicio..."
-                className="pl-10 h-10 bg-accent/30 border-primary/5 focus-visible:ring-primary/20 rounded-xl shadow-inner border-0"
-              />
-              {posSearch && (
-                <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent" onClick={() => setPosSearch("")}>
-                  <X className="h-3.5 w-3.5 text-muted-foreground/30" />
-                </Button>
-              )}
+    <div className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}>
+      {isPosMode && (
+        <style dangerouslySetInnerHTML={{ __html: `
+          main {
+            padding: 0px !important;
+            height: calc(100vh - 4rem) !important;
+            min-height: calc(100vh - 4rem) !important;
+            max-height: calc(100vh - 4rem) !important;
+            overflow: hidden !important;
+          }
+        `}} />
+      )}
+      {isFullscreen && headerPortalTarget && createPortal(
+        <div className="flex items-center gap-3 text-xs bg-slate-100 dark:bg-slate-800/80 py-1.5 px-4 rounded-full border border-border/60 shadow-sm animate-in fade-in duration-200">
+          <span className="text-rose-700 dark:text-rose-400 font-extrabold uppercase text-[10px] tracking-wider shrink-0 mr-1">Atajos:</span>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">F2</kbd>
+              <span className="text-[11px] font-bold text-muted-foreground">Cliente</span>
             </div>
-          )}
-          {isPosMode && !(step === 1 && !cliente) && (
-            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-left-4 duration-500 delay-150">
-              <Button
-                size="sm"
-                onClick={() => setShowDeliveryPOS(true)}
-                className={`rounded-md px-4 font-bold transition-all border-none bg-teal-600 text-white shadow-glow hover:bg-teal-700`}
-              >
-                <Truck className="mr-2 h-4 w-4" />
-                {servicioDomicilio ? "Envío activo" : "Envío a domicilio"}
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => setShowDiscountPOS(true)}
-                className={`rounded-md px-4 font-bold transition-all border-none bg-slate-600 text-white shadow-glow hover:bg-slate-700`}
-              >
-                <Plus className="mr-2 h-4 w-4" />
-                {descuento > 0 ? `Desc. RD$${descuento}` : "Descuento"}
-              </Button>
-
-              <div className="flex items-center gap-3 px-3 h-9 rounded-md bg-card border border-primary/10 shadow-sm">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className={`h-4 w-4 ${esUrgente ? "text-amber-500" : "text-muted-foreground/40"}`} />
-                  <span className={`text-[11px] font-bold uppercase tracking-wider ${esUrgente ? "text-amber-600" : "text-muted-foreground/60"}`}>Urgente</span>
-                </div>
-                <Switch checked={esUrgente} onCheckedChange={setEsUrgente} className="scale-[0.65] origin-right" />
-              </div>
-
-              <DeliveryPOSDialog
-                open={showDeliveryPOS}
-                onOpenChange={setShowDeliveryPOS}
-                enabled={servicioDomicilio}
-                setEnabled={setServicioDomicilio}
-                address={direccionDomicilio}
-                setAddress={setDireccionDomicilio}
-                cost={costoDomicilio}
-                setCost={setCostoDomicilio}
-              />
-
-              <DiscountPOSDialog
-                open={showDiscountPOS}
-                onOpenChange={setShowDiscountPOS}
-                discount={descuento}
-                setDiscount={setDescuento}
-              />
+            <div className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">F4</kbd>
+              <span className="text-[11px] font-bold text-muted-foreground">Descuento</span>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          <Button
-            variant={isPosMode ? "default" : "outline"}
-            size="sm"
-            onClick={() => setIsPosMode(!isPosMode)}
-            className={isPosMode ? "bg-primary text-white shadow-glow" : ""}
-          >
-            {isPosMode ? <List className="mr-2 h-4 w-4" /> : <LayoutGrid className="mr-2 h-4 w-4" />}
-            {isPosMode ? "Modo Clásico" : "Modo POS"}
-          </Button>
-          {isPosMode && (
-            <Button variant="outline" size="sm" onClick={toggleFullscreen}>
-              <Maximize2 className="h-4 w-4" />
-            </Button>
-          )}
-        </div>
-      </div>
+            <div className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">Ctrl+Z</kbd>
+              <span className="text-[11px] font-bold text-muted-foreground">Deshacer</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">Enter</kbd>
+              <span className="text-[11px] font-bold text-muted-foreground">Cobrar</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">Espacio</kbd>
+              <span className="text-[11px] font-bold text-muted-foreground">Confirmar</span>
+            </div>
+          </div>
+        </div>,
+        headerPortalTarget
+      )}
 
       {!caja && (
         <Card className="mb-4 flex items-center gap-3 border-warning/40 bg-warning/10 p-4 text-sm">
@@ -876,543 +1006,323 @@ function NuevaOrdenPage() {
       )}
 
       {isPosMode ? (
-        <div className="flex flex-1 gap-6 overflow-hidden min-h-[600px]">
+        <div 
+          className="flex gap-6 overflow-hidden min-h-0 w-full flex-1"
+        >
           {/* CATALOG GRID */}
-          <div className="flex-1 flex flex-col gap-4 overflow-hidden">
-            {!(step === 1 && !cliente) && (
-              <div className="flex flex-col gap-3 pb-2 border-b border-border/40 mb-2">
-                {/* Filtro Principal de 3 Pestañas */}
-                {enableServicios && enablePrendas && (
-                  <div className="grid grid-cols-3 gap-2.5">
-                    {[
-                      { id: "TODOS", label: "Todos", icon: <LayoutGrid className="h-4 w-4" /> },
-                      { id: "SERVICIOS", label: "Servicios", icon: <Sparkles className="h-4 w-4" /> },
-                      { id: "PRENDAS", label: "Prendas", icon: <Shirt className="h-4 w-4" /> }
-                    ].map(tab => {
-                      const isSelected = posFilterTab === tab.id;
-                      return (
-                        <button
-                          key={tab.id}
-                          onClick={() => {
-                            setPosFilterTab(tab.id as any);
-                            if (tab.id === "PRENDAS") {
-                              setActiveCategory("TODAS LAS PRENDAS");
-                            } else {
-                              setActiveCategory("TODOS");
-                            }
-                          }}
-                          className={`flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl text-xs font-black uppercase tracking-wider transition-all duration-200 active:scale-95 border ${
-                            isSelected
-                              ? "bg-primary text-white border-primary shadow-sm font-extrabold ring-1 ring-primary/30"
-                              : "bg-card border-slate-300 dark:border-slate-800 shadow-sm text-slate-600 dark:text-slate-400 hover:bg-slate-50/60 dark:hover:bg-slate-900/40 hover:text-slate-800 dark:hover:text-slate-200 hover:border-slate-400"
-                          }`}
-                        >
-                          <span className={isSelected ? "text-white" : "text-slate-500"}>
-                            {tab.icon}
-                          </span>
-                          <span>{tab.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-
-                {/* Sub-filtro de Categorías de Prendas */}
-                {enablePrendas && posFilterTab === "PRENDAS" && (
-                  <div className="flex flex-wrap items-center gap-1.5 pt-2 animate-in slide-in-from-top-1 duration-200">
-                    {categoriesPrendas.map(cat => (
-                      <button
-                        key={cat}
-                        onClick={() => setActiveCategory(cat)}
-                        className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${
-                          activeCategory === cat
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                            : "bg-card text-muted-foreground hover:bg-accent border-border/50"
-                        }`}
-                      >
-                        {cat}
-                      </button>
-                    ))}
-                  </div>
+          <div className="flex-1 flex flex-col gap-4 overflow-hidden h-full">
+            {/* Top row of POS: Search, Badges, and Fullscreen inside the grid column */}
+            <div className="flex flex-wrap items-center gap-2.5 py-1 w-full justify-between sm:justify-start">
+               {/* Search input */}
+               <div className="relative flex-grow max-w-[260px] w-full animate-in fade-in slide-in-from-left-4 duration-500">
+                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+                 <Input
+                   value={posSearch}
+                   onChange={(e) => setPosSearch(e.target.value)}
+                   placeholder="Buscar prenda o servicio..."
+                   className="pl-10 h-10 bg-background border border-border shadow-sm focus-visible:border-primary/30 focus-visible:ring-1 focus-visible:ring-primary/10 rounded-xl"
+                 />
+                {posSearch ? (
+                  <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent" onClick={() => setPosSearch("")}>
+                    <X className="h-3.5 w-3.5 text-muted-foreground/30" />
+                  </Button>
+                ) : (
+                  <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded bg-card border border-border px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/50 shadow-sm">Ctrl K</kbd>
                 )}
               </div>
-            )}
 
-            <div className="flex-1 overflow-y-auto pl-2 pr-2 custom-scrollbar space-y-8">
-              {step === 5 ? (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex items-center justify-between mb-6">
-                    <h2 className="text-2xl font-display font-bold text-foreground">Panel de Cobro</h2>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" onClick={() => setStep(enableServicios ? 2 : 3)} className="bg-primary text-white shadow-glow hover:bg-primary/90 transition-all active:scale-95 rounded-md px-4 font-bold border-none">
-                        <ArrowLeft className="mr-2 h-4 w-4" /> Volver al catálogo
-                      </Button>
-                    </div>
-                  </div>
+              {/* Action Buttons Group */}
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowDeliveryPOS(true)}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${
+                    servicioDomicilio
+                      ? "bg-teal-600 text-white border-teal-600 shadow-md hover:bg-teal-700"
+                      : "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+                  }`}
+                >
+                  <Truck className="h-3.5 w-3.5" />
+                  <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
+                </button>
 
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-4">
-                    {[
-                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️" },
-                      { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
-                      { id: "TARJETA", label: "Tarjeta", icon: "💳" },
-                      { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
-                      { id: "CREDITO", label: "Crédito", icon: "📝" }
-                    ].map((m) => (
-                      <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
-                        className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
-                            ? "border-primary bg-primary/5 ring-1 ring-primary shadow-glow"
-                            : "border-border bg-card hover:border-primary/40"
-                          }`}>
-                        <span className="text-2xl">{m.icon}</span>
-                        <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
-                        {opcionPagoSelected === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
-                      </button>
-                    ))}
-                  </div>
+              <button
+                type="button"
+                onClick={() => setShowDiscountPOS(true)}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${
+                  descuento > 0
+                    ? "bg-amber-600 text-white border-amber-600 shadow-md hover:bg-amber-700"
+                    : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                }`}
+              >
+                <Percent className="h-3.5 w-3.5" />
+                <span>{descuento > 0 ? `Desc. ${descuento}%` : "Descuento"}</span>
+              </button>
 
-                  {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
-                    <div className="space-y-4 mb-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                      <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-500/[0.03] p-4 text-teal-800">
-                        <Timer className="h-8 w-8 text-teal-600 shrink-0" />
-                        <div>
-                          <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
-                          <span className="text-xs">La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a retirar su ropa.</span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {cfg.ncf_facturacion_activa && (
-                    <div className="mb-4 p-4 rounded-2xl border-2 border-primary/10 bg-primary/5">
-                      <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">Tipo de Comprobante Fiscal</Label>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => setTipoECF(isElectronic ? "E32" : "B02")}
-                          className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${(tipoECF === "E32" || tipoECF === "B02") ? "bg-primary text-white" : "bg-background border border-border"}`}
-                        >
-                          CONSUMO ({isElectronic ? "E32" : "B02"})
-                        </button>
-                        <button
-                          onClick={() => setTipoECF(isElectronic ? "E31" : "B01")}
-                          className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${(tipoECF === "E31" || tipoECF === "B01") ? "bg-primary text-white" : "bg-background border border-border"}`}
-                        >
-                          CRÉDITO FISCAL ({isElectronic ? "E31" : "B01"})
-                        </button>
-                      </div>
-                      {(tipoECF === "E31" || tipoECF === "B01") && !cliente?.cedula && (
-                        <p className="mt-2 text-[10px] text-destructive font-bold flex items-center gap-1">
-                          <AlertTriangle className="h-3 w-3" /> El cliente debe tener RNC/Cédula para Crédito Fiscal.
-                        </p>
-                      )}
-                    </div>
-                  )}
 
-                  {metodo === "EFECTIVO" && (
-                    <div className="rounded-3xl border-2 border-border/60 bg-accent/5 p-4 mb-4">
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
-                        <Field label="Monto recibido">
-                          <div className="relative h-24">
-                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">RD$</span>
-                            <PriceInput
-                              className="!h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30 rounded-2xl"
-                              value={recibido}
-                              onChange={(val) => {
-                                if (val > 100000000) return; // Limitar a 100M por cordura
-                                setRecibido(val);
-                              }}
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </Field>
 
-                        <div className={`flex flex-col items-center justify-center h-28 px-4 rounded-2xl border-2 transition-all duration-300 ${faltante > 0
-                            ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                            : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
-                          }`}>
-                          <div className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1 text-center">
-                            {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
-                          </div>
-                          <div className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 9999999 ? "text-xl" :
-                              (faltante > 0 ? faltante : vuelto) > 999999 ? "text-2xl" : "text-4xl"
-                            }`}>
-                            {formatRD(faltante > 0 ? faltante : vuelto)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {opcionPagoSelected === "CREDITO" && (
-                    <div className="space-y-4 mb-4">
-                      <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-4 text-warning-foreground">
-                        <AlertTriangle className="h-8 w-8 text-warning shrink-0" />
-                        <div>
-                          <strong className="block text-lg">Venta a crédito</strong>
-                          Se registrará en el balance de <span className="font-bold">{cliente?.nombre}</span>.
-                        </div>
-                      </div>
-
-                      {/* --- CREDIT LIMIT CARD --- */}
-                      <div className="rounded-[1.75rem] border border-amber-200 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="flex items-center gap-2 mb-4">
-                          <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
-                          <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800">
-                            PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
-                          </span>
-                        </div>
-                        <div className="grid grid-cols-6 gap-2.5">
-                          {OPCIONES_CREDITO.map((op) => (
-                            <button
-                              key={op.dias}
-                              type="button"
-                              onClick={() => actualizarLimiteDias(op.dias)}
-                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
-                                limiteDiasSel === op.dias
-                                  ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                                  : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                              }`}
-                            >
-                              <span className={`text-xl font-display font-black leading-none mb-1 ${
-                                limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
-                              }`}>{op.dias}</span>
-                              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
-                                limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
-                              }`}>DÍAS</span>
-                              {limiteDiasSel === op.dias && (
-                                <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-3xl border-2 border-warning/20 bg-warning/5 p-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <Label className="mb-2 block text-xs font-black uppercase tracking-widest text-amber-600">
-                          ¿Monto a abonar inicialmente? (Opcional)
-                        </Label>
-                        <div className="relative h-20">
-                          <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
-                          <PriceInput
-                            className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 font-bold"
-                            value={abonoCredito}
-                            onChange={(val) => {
-                              if (val > total) {
-                                toast.warning("El abono no puede exceder el total de la orden");
-                                return;
-                              }
-                              setAbonoCredito(val);
-                            }}
-                            placeholder="0.00"
-                          />
-                        </div>
-                        <p className="mt-2 text-xs text-amber-600/70 font-medium">
-                          El monto abonado se registrará en la caja activa. El saldo restante (<strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex justify-center px-4 pb-4">
-                    <Button
-                      size="lg"
-                      className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white hover:-translate-y-0.5 transition-all shadow-none"
-                      onClick={onCrearOrden}
-                      disabled={metodo === "EFECTIVO" && faltante > 0}
-                    >
-                      <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
-                    </Button>
-                  </div>
-                </div>
-              ) : (step === 1 && !cliente) ? (
-                <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-                  <div className="flex items-center justify-between mb-6">
-                    <div>
-                      <h2 className="text-2xl font-display font-bold">Seleccionar Cliente</h2>
-                      <p className="text-sm text-muted-foreground">Busca un cliente existente o registra uno nuevo.</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95" size="sm" onClick={() => setShowNewCliente(true)}>
-                        <UserPlus className="mr-2 h-4 w-4" /> Nuevo cliente
-                      </Button>
-                      <Button variant="ghost" size="sm" onClick={() => setStep(enableServicios ? 2 : 3)}>
-                        <X className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-
-                  <div className="relative mb-4">
-                    <Search className="absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por nombre o teléfono..."
-                      className="pl-10 h-11 text-sm bg-card rounded-xl shadow-sm border-primary/10"
-                      value={clienteSearch}
-                      onChange={(e) => setClienteSearch(e.target.value)}
-                    />
-                  </div>
-
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
-                    {validTipos.map((tipo) => {
-                      const isConsumo = tipo === "E32" || tipo === "B02";
-                      const isCredito = tipo === "E31" || tipo === "B01";
-                      const name = NCF_NOMBRES[tipo.substring(0,3)]?.replace("FISCAL", "")?.trim() || "Empresa";
-                      
-                      const label = isConsumo ? "Consumidor Final" : (isCredito ? "Empresa / RNC" : name);
-                      const subLabel = isConsumo ? "Factura Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
-                      const Icon = isConsumo ? UserIcon : (isCredito ? Truck : Building);
-
-                      const isSelected = tipoECF === tipo;
-                      let borderClass = "";
-                      let bgClass = "";
-                      let bgIconClass = "";
-                      let textClass = "";
-                      let subTextClass = "";
-
-                      if (isConsumo) {
-                        bgClass = isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/20" : "bg-emerald-50/20 dark:bg-emerald-950/5";
-                        borderClass = isSelected 
-                          ? "border-emerald-500 ring-2 ring-emerald-500/20" 
-                          : "border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-300";
-                        bgIconClass = isSelected ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-                        textClass = isSelected ? "text-emerald-700 dark:text-emerald-300 font-extrabold" : "text-slate-700 dark:text-slate-350 font-bold";
-                        subTextClass = isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400";
-                      } else if (isCredito) {
-                        bgClass = isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "bg-blue-50/20 dark:bg-blue-950/5";
-                        borderClass = isSelected 
-                          ? "border-blue-500 ring-2 ring-blue-500/20" 
-                          : "border-blue-200/80 dark:border-blue-900/40 hover:border-blue-300";
-                        bgIconClass = isSelected ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-                        textClass = isSelected ? "text-blue-700 dark:text-blue-300 font-extrabold" : "text-slate-700 dark:text-slate-350 font-bold";
-                        subTextClass = isSelected ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400";
-                      } else {
-                        bgClass = isSelected ? "bg-amber-50/70 dark:bg-amber-950/20" : "bg-amber-50/20 dark:bg-amber-950/5";
-                        borderClass = isSelected 
-                          ? "border-amber-500 ring-2 ring-amber-500/20" 
-                          : "border-amber-200/80 dark:border-amber-900/40 hover:border-amber-300";
-                        bgIconClass = isSelected ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-                        textClass = isSelected ? "text-amber-700 dark:text-amber-300 font-extrabold" : "text-slate-700 dark:text-slate-350 font-bold";
-                        subTextClass = isSelected ? "text-amber-600 dark:text-amber-400" : "text-slate-500 dark:text-slate-400";
-                      }
-
-                      if (!isConsumo && !isModuleEnabled(user.tenant, 'facturacion_fiscal', plans.find(p => p.id === user.tenant.plan_id))) {
-                        return null;
-                      }
-
-                      return (
-                        <button 
-                          key={tipo}
-                          onClick={() => {
-                            setTipoECF(tipo);
-                            if (isConsumo) {
-                              handleSelectGeneric("Persona");
-                            } else {
-                              setEmpresaDialogOpen(true);
-                            }
-                          }}
-                          className={`relative flex items-center gap-3.5 p-4 rounded-2xl border transition-all group text-left shadow-sm ${bgClass} ${borderClass}`}
-                        >
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}>
-                            <Icon className="h-5 w-5" />
-                          </div>
-                          <div className="min-w-0 flex-1 pr-4">
-                            <div className={`font-bold text-sm leading-tight line-clamp-1 ${textClass}`}>{label}</div>
-                            <div className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap ${subTextClass}`}>{subLabel}</div>
-                          </div>
-                          {isSelected && (
-                            <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
-                              <Check className="h-2.5 w-2.5" />
-                            </div>
-                          )}
-                        </button>
-                      );
-                    })}
-                  </div>
-
-                  <div className="flex items-center gap-2 mt-6 mb-4 px-1">
-                    <div className="h-3.5 w-1 bg-primary rounded-full animate-pulse" />
-                    <span className="text-xs font-black uppercase tracking-widest text-primary/80">
-                      Búsqueda en base de datos
-                    </span>
-                    <div className="flex-1 h-px bg-primary/10" />
-                  </div>
-
-                  <div className="grid gap-3 grid-cols-1 md:grid-cols-2">
-                    {clientes.filter(c =>
-                      c.nombre.toLowerCase().includes(clienteSearch.toLowerCase()) ||
-                      (c.apellido && c.apellido.toLowerCase().includes(clienteSearch.toLowerCase())) ||
-                      c.telefono.includes(clienteSearch)
-                    ).map(c => (
-                      <button
-                        key={c.id}
-                        onClick={() => { setCliente(c); irAlPasoSiguienteDelCliente(); }}
-                        className="flex items-center justify-between p-4 rounded-2xl border-2 border-border hover:border-primary/40 hover:bg-primary/5 transition-all group min-w-0"
-                      >
-                        <div className="flex items-center gap-4 text-left min-w-0 flex-1">
-                          <div className="h-12 w-12 rounded-full bg-accent flex items-center justify-center font-bold text-muted-foreground group-hover:bg-primary group-hover:text-white transition-colors shrink-0">
-                            {c.nombre.charAt(0)}{c.apellido?.charAt(0) || ""}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <div className="font-bold text-lg line-clamp-1" title={`${c.nombre} ${c.apellido || ""}`}>{c.nombre} {c.apellido || ""}</div>
-                            <div className="text-sm text-muted-foreground truncate">{c.telefono}</div>
-                          </div>
-                        </div>
-                        <ArrowRight className="h-5 w-5 text-muted-foreground group-hover:text-primary transition-colors shrink-0" />
-                      </button>
-                    ))}
-                  </div>
-                  <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => { if (c) { setCliente(c); irAlPasoSiguienteDelCliente(); } setShowNewCliente(false); }} />
-                </div>
-              ) : (
-                <>
-                  {/* SECCION SERVICIOS */}
-                  {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
-                    <div className="space-y-4 animate-in fade-in duration-200">
-                      <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <div className="h-4 w-1 bg-primary rounded-full" />
-                        Servicios
-                      </h3>
-                      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                        {servicesFiltered.map(s => {
-                          const srvCount = serviciosSel.filter(x => x === s.nombre).length;
-                          return (
-                            <button
-                              key={s.id}
-                              onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
-                              className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${srvCount > 0 ? "border-primary bg-primary/10 shadow-glow" : "border-transparent bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
-                                 }`}
-                            >
-                              {s.imagen_url ? (
-                                <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden ring-2 ring-white/20">
-                                  <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
-                                </div>
-                              ) : (
-                                <div className={`flex h-24 w-24 items-center justify-center rounded-2xl text-4xl transition-colors ${srvCount > 0 ? "bg-primary text-white shadow-glow" : "bg-accent/30"}`}>
-                                  {s.icono || "🧺"}
-                                </div>
-                              )}
-                              <div>
-                                <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
-                                <div className="mt-1 text-xs font-black text-primary">+{formatRD(s.precio)}</div>
-                              </div>
-                              {srvCount > 0 && (
-                                <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
-                                  {srvCount}
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
-                  {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
-                    const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
-                    if (itemsInCat.length === 0) return null;
-
-                    return (
-                      <div key={catName} className="space-y-4">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                          <div className="h-4 w-1 bg-primary rounded-full" />
-                          {catName}
-                        </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
-                          {itemsInCat.map(item => (
-                            <button
-                              key={item.id}
-                              onClick={() => addItem({
-                                descripcion: item.nombre,
-                                cantidad: 1,
-                                precio_unitario: item.precio,
-                                es_libra: item.por_libra,
-                                is_exento: item.is_exento
-                              })}
-                              className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
-                            >
-                              {item.imagen_url ? (
-                                <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                                  <img src={item.imagen_url} alt={item.nombre} className="h-full w-full object-cover" />
-                                </div>
-                              ) : (
-                                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
-                                  {item.icono || "👕"}
-                                </div>
-                              )}
-                              <div>
-                                <div className="text-sm font-bold leading-tight line-clamp-2">{item.nombre}</div>
-                                {item.por_libra && (
-                                  <div className="mt-1.5 flex justify-center">
-                                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
-                                      <Scale className="h-3 w-3 text-amber-600" /> Cobro por libra
-                                    </span>
-                                  </div>
-                                )}
-                                <div className="mt-1 text-xs font-black text-primary">
-                                  {formatRD(item.precio)}{item.por_libra ? "/lb" : ""}
-                                </div>
-                              </div>
-                              {items.some(it => it.descripcion === item.nombre) && (
-                                <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
-                                  {items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0)}
-                                </div>
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </>
-              )}
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${
+                  isFullscreen
+                    ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700"
+                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                }`}
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize className="h-3.5 w-3.5" />
+                    <span>Pantalla normal</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize className="h-3.5 w-3.5" />
+                    <span>Pantalla completa</span>
+                  </>
+                )}
+              </button>
             </div>
           </div>
 
-          {/* SIDEBAR ORDER */}
-          <Card className="w-80 md:w-96 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl">
-            {/* Header: Cliente */}
-            <div className="p-4 border-b bg-accent/5">
-              <div className="flex items-center justify-between mb-3">
-                <div className="text-xs font-black uppercase tracking-widest text-muted-foreground/70">Orden</div>
-                <div className="flex gap-2">
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive" onClick={() => { setItems([]); setServiciosSel([]); setCliente(null); }}>
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  {!cliente && (
-                    <Button variant="ghost" size="icon" className="h-6 w-6 text-primary" onClick={() => { setStep(1); }}>
-                      <UserPlus className="h-4 w-4" />
-                    </Button>
+            <DeliveryPOSDialog
+              open={showDeliveryPOS}
+              onOpenChange={setShowDeliveryPOS}
+              enabled={servicioDomicilio}
+              setEnabled={setServicioDomicilio}
+              address={direccionDomicilio}
+              setAddress={setDireccionDomicilio}
+              cost={costoDomicilio}
+              setCost={setCostoDomicilio}
+            />
+
+            <DiscountPOSDialog
+              open={showDiscountPOS}
+              onOpenChange={setShowDiscountPOS}
+              discount={descuento}
+              setDiscount={setDescuento}
+            />
+
+            <Card className="flex-1 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl bg-card">
+              {!(step === 1 && !cliente && !isPosMode) && (
+                <div className="flex flex-col gap-3 pb-2 border-b border-border/40 px-6 pt-4 mb-2">
+                  {/* Filtro Principal de 3 Pestañas */}
+                  {enableServicios && enablePrendas && (
+                    <div className="flex flex-wrap items-center gap-2 mb-2">
+                      {[
+                        { id: "TODOS", label: "Todos", icon: <LayoutGrid className="h-4 w-4" />, activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md hover:bg-[#2c4e82]", bg: "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200" },
+                        { id: "SERVICIOS", label: "Servicios", icon: <Sparkles className="h-4 w-4" />, activeBg: "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700", bg: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
+                        { id: "PRENDAS", label: "Prendas", icon: <Shirt className="h-4 w-4" />, activeBg: "bg-rose-600 text-white border-rose-600 shadow-md hover:bg-rose-700", bg: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" }
+                      ].map(tab => {
+                        const isSelected = posFilterTab === tab.id;
+                        return (
+                          <button
+                            key={tab.id}
+                            onClick={() => {
+                              setPosFilterTab(tab.id as any);
+                              if (tab.id === "PRENDAS") {
+                                setActiveCategory("TODAS LAS PRENDAS");
+                              } else {
+                                setActiveCategory("TODOS");
+                              }
+                            }}
+                            className={`inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[13px] font-semibold transition-all duration-200 active:scale-95 border cursor-pointer hover:shadow-sm ${
+                              isSelected ? tab.activeBg : tab.bg
+                            }`}
+                          >
+                            {tab.icon}
+                            <span>{tab.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* Sub-filtro de Categorías de Prendas */}
+                  {enablePrendas && posFilterTab === "PRENDAS" && (
+                    <div className="flex flex-wrap items-center gap-1.5 pt-2 animate-in slide-in-from-top-1 duration-200">
+                      {categoriesPrendas.map(cat => (
+                        <button
+                          key={cat}
+                          onClick={() => setActiveCategory(cat)}
+                          className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${
+                            activeCategory === cat
+                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                              : "bg-card text-muted-foreground hover:bg-accent border-border/50"
+                          }`}
+                        >
+                          {cat}
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
-              </div>
-              {cliente ? (
-                <div className="flex items-center justify-between bg-background p-3 rounded-xl border border-primary/20 shadow-sm">
-                  <div className="flex items-center gap-3">
-                    <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center text-white text-[10px] font-bold">
-                      {cliente.nombre.charAt(0)}
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold">{cliente.nombre}</div>
-                      <div className="text-[10px] text-muted-foreground">{cliente.telefono}</div>
-                    </div>
-                  </div>
-                  <Button variant="ghost" size="icon" className="h-6 w-6 text-destructive hover:bg-rose-50 rounded-md" onClick={() => setCliente(null)}>
-                    <Trash2 className="h-3.5 w-3.5" />
-                  </Button>
-                </div>
-              ) : (
-                <div className="py-1">
-                  <Button variant="outline" className="w-full justify-start h-10 text-xs bg-accent/20 border-primary/10 hover:bg-primary/5 hover:border-primary/30 transition-all rounded-xl" onClick={() => { setStep(1); }}>
-                    <Search className="mr-1.5 h-3.5 w-3.5 text-muted-foreground" /> Seleccionar cliente...
-                  </Button>
-                </div>
               )}
+
+              <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar space-y-8">
+                <>
+                    {/* SECCION SERVICIOS */}
+                    {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
+                      <div className="space-y-4 animate-in fade-in duration-200">
+                        <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                          <div className="h-4 w-1 bg-primary rounded-full" />
+                          Servicios
+                        </h3>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                          {servicesFiltered.map(s => {
+                            const srvCount = serviciosSel.filter(x => x === s.nombre).length;
+                            return (
+                              <button
+                                key={s.id}
+                                onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
+                                className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${srvCount > 0 ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
+                                   }`}
+                              >
+                                {s.imagen_url ? (
+                                  <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                    <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
+                                  </div>
+                                ) : (
+                                  <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
+                                    {s.icono || "🧹"}
+                                  </div>
+                                )}
+                                <div>
+                                  <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
+                                  <div className="mt-1 text-xs font-black text-primary">+{formatRD(s.precio)}</div>
+                                </div>
+                                {srvCount > 0 && (
+                                  <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
+                                    {srvCount}
+                                  </div>
+                                )}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
+                    {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
+                      const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
+                      if (itemsInCat.length === 0) return null;
+
+                      return (
+                        <div key={catName} className="space-y-4">
+                          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                            <div className="h-4 w-1 bg-primary rounded-full" />
+                            {catName}
+                          </h3>
+                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                            {itemsInCat.map(item => {
+                              const countInCart = items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0);
+
+                              return (
+                                <button
+                                  key={item.id}
+                                  onClick={() => addItem({
+                                    descripcion: item.nombre,
+                                    cantidad: 1,
+                                    precio_unitario: item.precio,
+                                    es_libra: item.por_libra,
+                                    is_exento: item.is_exento
+                                  })}
+                                  className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
+                                >
+                                  {item.imagen_url ? (
+                                    <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                      <img src={item.imagen_url} alt={item.nombre} className="h-full w-full object-cover" />
+                                    </div>
+                                  ) : (
+                                    <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
+                                      {item.icono || "👕"}
+                                    </div>
+                                  )}
+                                  <div>
+                                    <div className="text-sm font-bold leading-tight line-clamp-1">{item.nombre}</div>
+                                    <div className="mt-1 text-xs font-black text-primary">+{formatRD(item.precio)}</div>
+                                  </div>
+                                  
+                                  {countInCart > 0 && (
+                                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
+                                      {countInCart}
+                                    </div>
+                                  )}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </>
+              </div>
+
+            </Card>
+          </div>
+
+          {/* SIDEBAR ORDER */}
+          <Card className="w-80 md:w-96 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl h-full">
+            {/* Header: Cliente */}
+            <div className="p-4 border-b bg-accent/5">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-xs font-black uppercase tracking-wider text-muted-foreground/80">Cliente</span>
+              </div>
+
+              <div className="flex mb-3 justify-center">
+                <div className="inline-flex rounded-full border border-border/60 bg-muted/40 p-0.5">
+                  <button
+                    type="button"
+                    onClick={() => handleSelectGeneric("Persona")}
+                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${
+                      cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                        ? "bg-blue-600 text-white shadow-md"
+                        : "text-blue-700 hover:bg-blue-50"
+                    }`}
+                  >
+                    <UserIcon className="h-4 w-4 mr-1.5 shrink-0" />
+                    Consumidor Final
+                  </button>
+                   <button
+                    type="button"
+                    onClick={() => setEmpresaDialogOpen(true)}
+                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${
+                      cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                        ? "bg-slate-800 text-white shadow-md"
+                        : "text-slate-600 hover:bg-slate-50"
+                    }`}
+                  >
+                    <Building className="h-4 w-4 mr-1.5 shrink-0" />
+                    Empresa
+                  </button>
+                </div>
+              </div>
+
+              <Button
+                variant="outline"
+                className="w-full justify-between h-11 bg-background border-border/50 rounded-xl font-bold shadow-sm px-3 hover:bg-background/90 text-left"
+                onClick={() => setIsClientModalOpen(true)}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <span className="text-slate-500 shrink-0">
+                    {cliente?.tipo === "Empresa" ? <Building className="h-4.5 w-4.5" /> : <UserIcon className="h-4.5 w-4.5" />}
+                  </span>
+                  <span className="truncate text-xs">
+                    {cliente ? `${cliente.nombre} ${cliente.apellido || ""}` : "Seleccionar cliente"}
+                  </span>
+                </div>
+                <Search className="h-4 w-4 shrink-0 text-muted-foreground/65 ml-2" />
+              </Button>
             </div>
 
             {/* List: Items */}
-            <div className="overflow-y-auto p-4 space-y-3 custom-scrollbar">
+            <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
               {items.length === 0 && serviciosSel.length === 0 ? (
-                <div className="h-full flex flex-col items-center justify-center text-center opacity-40 py-10">
-                  <ShoppingCart className="h-10 w-10 mb-2" />
-                  <p className="text-xs font-medium">Carrito vacío</p>
+                <div className="flex flex-col items-center justify-center text-center px-4 h-full animate-in fade-in duration-300 -mt-3">
+                  <Receipt className="h-11 w-11 text-slate-400 mb-3 shrink-0" />
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">La orden está vacía</h4>
+                  <p className="text-xs text-slate-400 mt-1">Agrega artículos desde el catálogo</p>
                 </div>
               ) : (
                 <>
@@ -1441,7 +1351,7 @@ function NuevaOrdenPage() {
                               return prev;
                             })}
                           >
-                            <X className="h-3 w-3" />
+                            <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
                         <div className="flex justify-between items-center">
@@ -1574,6 +1484,23 @@ function NuevaOrdenPage() {
               )}
             </div>
 
+            {/* Toggle Urgente */}
+            <div className="px-4 py-2.5 bg-rose-500/[0.02] border-t border-primary/10 flex items-center justify-between">
+              <label className="flex items-center gap-2 cursor-pointer w-full select-none justify-between">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className={`h-4 w-4 transition-colors duration-200 ${esUrgente ? "text-rose-600 animate-pulse" : "text-muted-foreground/50"}`} />
+                  <span className={`text-xs font-bold transition-colors duration-200 ${esUrgente ? "text-rose-700 font-extrabold" : "text-muted-foreground"}`}>
+                    Marcar orden como urgente {cfg.recargo_urgencia > 0 && `(+${cfg.recargo_urgencia}%)`}
+                  </span>
+                </div>
+                <Switch 
+                  checked={esUrgente} 
+                  onCheckedChange={setEsUrgente}
+                  className="scale-90 data-[state=checked]:bg-rose-600"
+                />
+              </label>
+            </div>
+
             {/* Footer: Totals & Button */}
             <div className="p-4 bg-primary/5 border-t border-primary/10 space-y-2">
               <div className="space-y-2">
@@ -1587,10 +1514,16 @@ function NuevaOrdenPage() {
                     <span>{formatRD(itbis)}</span>
                   </div>
                 )}
-                {descuento > 0 && (
+                {descuentoMonto > 0 && (
                   <div className="flex justify-between text-xs text-rose-600 font-bold">
-                    <span>DESCUENTO</span>
-                    <span>-{formatRD(descuento)}</span>
+                    <span>DESCUENTO ({descuento}%)</span>
+                    <span>-{formatRD(descuentoMonto)}</span>
+                  </div>
+                )}
+                {servicioDomicilio && costoEnvio > 0 && (
+                  <div className="flex justify-between text-xs text-teal-600 font-bold">
+                    <span>ENVÍO A DOMICILIO</span>
+                    <span>+{formatRD(costoEnvio)}</span>
                   </div>
                 )}
                 <div className="flex justify-between items-center pt-2 border-t border-primary/10">
@@ -1598,11 +1531,26 @@ function NuevaOrdenPage() {
                   <span className="text-2xl font-black text-primary">{formatRD(total)}</span>
                 </div>
               </div>
-              {!(isPosMode && step === 5) && (
+              {isPosMode ? (
+                <Button
+                  disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
+                  className="w-full h-14 text-base bg-primary hover:bg-primary/95 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2.5 rounded-2xl relative px-10"
+                  onClick={() => { setIsCobroModalOpen(true); }}
+                >
+                  <div className="flex items-center gap-2 justify-center">
+                    <CreditCard className="h-5.5 w-5.5 text-white" />
+                    <span className="font-black tracking-wide">COBRAR ORDEN</span>
+                  </div>
+                  <kbd className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none rounded bg-white/20 px-2.5 py-1 text-[11px] font-black text-white shadow-sm border-none uppercase flex items-center gap-1">
+                    <span>Enter</span>
+                    <CornerDownLeft className="h-3 w-3 shrink-0" />
+                  </kbd>
+                </Button>
+              ) : (
                 <Button
                   disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
                   className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2"
-                  onClick={() => { setStep(5); }}
+                  onClick={() => { setIsCobroModalOpen(true); }}
                 >
                   COBRAR <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -2121,9 +2069,9 @@ function NuevaOrdenPage() {
                           </div>
                         </div>
 
-                        {descuento > 0 && (
+                        {descuentoMonto > 0 && (
                           <div className="text-sm font-bold text-destructive">
-                            Descuento aplicado: -{formatRD(descuento)}
+                            Descuento aplicado ({descuento}%): -{formatRD(descuentoMonto)}
                           </div>
                         )}
                       </div>
@@ -2149,7 +2097,7 @@ function NuevaOrdenPage() {
                       { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
                       { id: "TARJETA", label: "Tarjeta", icon: "💳" },
                       { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
-                      { id: "CREDITO", label: "Crédito", icon: "📝" }
+                      { id: "CREDITO", label: "Crédito", icon: "📝 " }
                     ].map((m) => (
                       <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
                         className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
@@ -2319,9 +2267,17 @@ function NuevaOrdenPage() {
                     size="lg"
                     className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white shadow-none transition-all active:scale-95"
                     onClick={onCrearOrden}
-                    disabled={metodo === "EFECTIVO" && (faltante > 0)}
+                    disabled={(metodo === "EFECTIVO" && (faltante > 0)) || isCreatingOrden}
                   >
-                    <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
+                    {isCreatingOrden ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" /> PROCESANDO...
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
+                      </>
+                    )}
                   </Button>
                   <Button
                     variant="outline"
@@ -2385,6 +2341,190 @@ function NuevaOrdenPage() {
           }} 
         />
       )}
+      <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
+        <DialogContent className="w-[90vw] sm:max-w-[580px] rounded-3xl p-6 overflow-hidden flex flex-col gap-4">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-display font-bold flex items-center gap-2">
+              <Search className="h-5 w-5 text-primary" />
+              <span>Buscar Cliente</span>
+            </DialogTitle>
+            <DialogDescription className="text-xs">
+              Busca por nombre o teléfono, o utiliza una de las opciones rápidas.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-1 space-y-4 w-full">
+            <div className="relative w-full">
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+              <Input
+                value={clientSearchQuery}
+                onChange={(e) => setClientSearchQuery(e.target.value)}
+                placeholder="Escribe el nombre o teléfono del cliente..."
+                className="w-full pl-10 h-11 bg-accent/20 border-border/50 focus-visible:ring-primary/20 rounded-xl text-sm"
+                autoFocus
+              />
+            </div>
+
+            <div className="max-h-60 overflow-y-auto space-y-1.5 custom-scrollbar text-xs pr-1 w-full">
+              <div className="flex items-center gap-2 mt-2.5 mb-2.5 px-1.5">
+                <div className="h-3.5 w-1 bg-primary rounded-full" />
+                <span className="text-xs font-black uppercase tracking-widest text-primary">
+                  Clientes Rápidos
+                </span>
+                <div className="flex-1 h-px bg-primary/10" />
+              </div>
+              
+              <div className="grid grid-cols-2 gap-3 mb-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleSelectGeneric("Persona");
+                    setIsClientModalOpen(false);
+                  }}
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${
+                    cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                      ? "bg-primary border-transparent text-white font-bold shadow-sm"
+                      : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                  }`}
+                >
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                    cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                      ? "bg-white/20 text-white"
+                      : "bg-emerald-500/10 text-emerald-600 group-hover:bg-white/20 group-hover:text-white"
+                  }`}>
+                    <UserIcon className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-xs truncate leading-tight">Consumidor Final (Persona)</div>
+                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${
+                      cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                        ? "text-white/80"
+                        : "text-muted-foreground group-hover:text-white/85"
+                    }`}>
+                      Venta rápida de mostrador
+                    </div>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsClientModalOpen(false);
+                    setEmpresaDialogOpen(true);
+                  }}
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${
+                    cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                      ? "bg-primary border-transparent text-white font-bold shadow-sm"
+                      : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                  }`}
+                >
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
+                    cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                      ? "bg-white/20 text-white"
+                      : "bg-blue-500/10 text-blue-600 group-hover:bg-white/20 group-hover:text-white"
+                  }`}>
+                    <Building className="h-4.5 w-4.5" />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="font-bold text-xs truncate leading-tight">Empresa (Buscar por RNC)</div>
+                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${
+                      cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                        ? "text-white/80"
+                        : "text-muted-foreground group-hover:text-white/85"
+                    }`}>
+                      Buscar por RNC o Cédula
+                    </div>
+                  </div>
+                </button>
+              </div>
+
+              <div className="flex items-center gap-2 mt-4 mb-2.5 px-1.5">
+                <div className="h-3.5 w-1 bg-primary rounded-full animate-pulse" />
+                <span className="text-xs font-black uppercase tracking-widest text-primary">
+                  Base de Datos
+                </span>
+                <div className="flex-1 h-px bg-primary/10" />
+              </div>
+
+              {filteredClients
+                .filter(c =>
+                  c.id !== (tenantId.substring(0, 24) + "f000" + tenantId.substring(28)) &&
+                  c.id !== (tenantId.substring(0, 24) + "e000" + tenantId.substring(28))
+                )
+                .map(c => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    onClick={() => {
+                      setCliente(c);
+                      setIsClientModalOpen(false);
+                      const isEmpresa = c.tipo === "Empresa" || (c.cedula && c.cedula.length >= 9);
+                      const target = isElectronic ? (isEmpresa ? "E31" : "E32") : (isEmpresa ? "B01" : "B02");
+                      if (validTipos.includes(target)) {
+                        setTipoECF(target);
+                      }
+                    }}
+                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all text-left border ${
+                      cliente?.id === c.id 
+                        ? "bg-primary border-transparent text-white font-bold shadow-sm" 
+                        : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${
+                        cliente?.id === c.id 
+                          ? "bg-white/20 text-white" 
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-white/20 group-hover:text-white"
+                      }`}>
+                        {c.tipo === "Empresa" ? <Building className="h-4.5 w-4.5" /> : <UserIcon className="h-4.5 w-4.5" />}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-sm truncate leading-snug">{c.nombre} {c.apellido || ""}</div>
+                        <div className={`text-xs transition-colors mt-0.5 ${
+                          cliente?.id === c.id 
+                            ? "text-white/80" 
+                            : "text-muted-foreground group-hover:text-white/85"
+                        }`}>{c.telefono}</div>
+                      </div>
+                    </div>
+                    {cliente?.id === c.id && <Check className="h-4.5 w-4.5 text-white shrink-0 transition-colors" />}
+                  </button>
+                ))}
+
+              {filteredClients.length === 0 && (
+                <div className="py-6 text-center text-muted-foreground text-[10px]">No se encontraron clientes</div>
+              )}
+            </div>
+          </div>
+
+          <div className="h-px bg-border my-1" />
+          <div className="grid grid-cols-2 gap-3 w-full">
+            <Button
+              variant="default"
+              size="sm"
+              className="h-10 text-xs font-bold rounded-xl bg-primary hover:bg-primary/90 text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98]"
+              onClick={() => {
+                setIsClientModalOpen(false);
+                setShowNewCliente(true);
+              }}
+            >
+              <UserPlus className="h-4 w-4" /> Nuevo Cliente
+            </Button>
+            <Button
+              variant="default"
+              size="sm"
+              className="h-10 text-xs font-bold rounded-xl bg-slate-600 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98]"
+              onClick={() => {
+                setIsClientModalOpen(false);
+                setEmpresaDialogOpen(true);
+              }}
+            >
+              <Search className="h-4 w-4" /> Buscar RNC (DGII)
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <PlanLimitModal
         open={showLimitModal}
         onOpenChange={setShowLimitModal}
@@ -2482,6 +2622,204 @@ function NuevaOrdenPage() {
         isDesglose
         onAddDesglose={addItemDesglose}
       />
+
+      <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
+        <DialogContent className="max-w-4xl p-6 rounded-3xl overflow-y-auto max-h-[90vh] custom-scrollbar">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-display font-bold text-foreground">Panel de Cobro</DialogTitle>
+            <DialogDescription className="sr-only">
+              Selecciona el método de pago y confirma la creación de la orden.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="py-2 space-y-6">
+            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-4">
+              {[
+                { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️" },
+                { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
+                { id: "TARJETA", label: "Tarjeta", icon: "💳" },
+                { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
+                { id: "CREDITO", label: "Crédito", icon: "📝" }
+              ].map((m) => (
+                <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
+                  className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
+                      ? "border-primary bg-primary/5 ring-1 ring-primary shadow-glow"
+                      : "border-border bg-card hover:border-primary/40"
+                    }`}>
+                  <span className="text-2xl">{m.icon}</span>
+                  <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
+                  {opcionPagoSelected === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
+                </button>
+              ))}
+            </div>
+
+            {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
+              <div className="space-y-4 mb-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-500/[0.03] p-4 text-teal-800">
+                  <Timer className="h-8 w-8 text-teal-600 shrink-0" />
+                  <div>
+                    <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
+                    <span className="text-xs">La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a retirar su ropa.</span>
+                  </div>
+                </div>
+              </div>
+            )}
+            
+            {cfg.ncf_facturacion_activa && (
+              <div className="mb-4 p-4 rounded-2xl border-2 border-primary/10 bg-primary/5">
+                <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">Tipo de Comprobante Fiscal</Label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    onClick={() => setTipoECF(isElectronic ? "E32" : "B02")}
+                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${(tipoECF === "E32" || tipoECF === "B02") ? "bg-primary text-white" : "bg-background border border-border"}`}
+                  >
+                    CONSUMO ({isElectronic ? "E32" : "B02"})
+                  </button>
+                  <button
+                    onClick={() => setTipoECF(isElectronic ? "E31" : "B01")}
+                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${(tipoECF === "E31" || tipoECF === "B01") ? "bg-primary text-white" : "bg-background border border-border"}`}
+                  >
+                    CRÉDITO FISCAL ({isElectronic ? "E31" : "B01"})
+                  </button>
+                </div>
+                {(tipoECF === "E31" || tipoECF === "B01") && !cliente?.cedula && (
+                  <p className="mt-2 text-[10px] text-destructive font-bold flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" /> El cliente debe tener RNC/Cédula para Crédito Fiscal.
+                  </p>
+                )}
+              </div>
+            )}
+
+            {metodo === "EFECTIVO" && (
+              <div className="rounded-3xl border-2 border-border/60 bg-accent/5 p-4 mb-4">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+                  <Field label="Monto recibido">
+                    <div className="relative h-24">
+                      <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">RD$</span>
+                      <PriceInput
+                        className="!h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30 rounded-2xl"
+                        value={recibido}
+                        onChange={(val) => {
+                          if (val > 100000000) return;
+                          setRecibido(val);
+                        }}
+                        placeholder="0.00"
+                      />
+                    </div>
+                  </Field>
+
+                  <div className={`flex flex-col items-center justify-center h-28 px-4 rounded-2xl border-2 transition-all duration-300 ${faltante > 0
+                      ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
+                      : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
+                    }`}>
+                    <div className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1 text-center">
+                      {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
+                    </div>
+                    <div className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 9999999 ? "text-xl" :
+                        (faltante > 0 ? faltante : vuelto) > 999999 ? "text-2xl" : "text-4xl"
+                      }`}>
+                      {formatRD(faltante > 0 ? faltante : vuelto)}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {opcionPagoSelected === "CREDITO" && (
+              <div className="space-y-4 mb-4">
+                <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-4 text-warning-foreground">
+                  <AlertTriangle className="h-8 w-8 text-warning shrink-0" />
+                  <div>
+                    <strong className="block text-lg">Venta a crédito</strong>
+                    Se registrará en el balance de <span className="font-bold">{cliente?.nombre}</span>.
+                  </div>
+                </div>
+
+                <div className="rounded-[1.75rem] border border-amber-200 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center gap-2 mb-4">
+                    <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
+                    <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800">
+                      PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-6 gap-2.5">
+                    {OPCIONES_CREDITO.map((op) => (
+                      <button
+                        key={op.dias}
+                        type="button"
+                        onClick={() => actualizarLimiteDias(op.dias)}
+                        className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+                          limiteDiasSel === op.dias
+                            ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                            : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                        }`}
+                      >
+                        <span className={`text-xl font-display font-black leading-none mb-1 ${
+                          limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                        }`}>{op.dias}</span>
+                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                          limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
+                        }`}>DÍAS</span>
+                        {limiteDiasSel === op.dias && (
+                          <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="rounded-3xl border-2 border-warning/20 bg-warning/5 p-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <Label className="mb-2 block text-xs font-black uppercase tracking-widest text-amber-600">
+                    ¿Monto a abonar inicialmente? (Opcional)
+                  </Label>
+                  <div className="relative h-20">
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
+                    <PriceInput
+                      className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 font-bold"
+                      value={abonoCredito}
+                      onChange={(val) => {
+                        if (val > total) {
+                          toast.warning("El abono no puede exceder el total de la orden");
+                          return;
+                        }
+                        setAbonoCredito(val);
+                      }}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-amber-600/70 font-medium">
+                    El monto abonado se registrará en la caja activa. El saldo restante (<strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <div className="flex justify-center pt-4">
+              <Button
+                size="lg"
+                className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white hover:-translate-y-0.5 transition-all shadow-none relative px-10"
+                onClick={onCrearOrden}
+                disabled={(metodo === "EFECTIVO" && faltante > 0) || isCreatingOrden}
+              >
+                {isCreatingOrden ? (
+                  <>
+                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> PROCESANDO...
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
+                  </>
+                )}
+                {!isCreatingOrden && (
+                  <kbd className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none rounded bg-white/20 px-2.5 py-1 text-[11px] font-black text-white shadow-sm border-none uppercase">
+                    Espacio
+                  </kbd>
+                )}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2769,7 +3107,12 @@ function DiscountPOSDialog({
   }, [open, discount]);
 
   function apply() {
-    setDiscount(parseAmount(val) || 0);
+    const num = parseFloat(val) || 0;
+    if (num < 0 || num > 100) {
+      toast.warning("El porcentaje de descuento debe estar entre 0% y 100%");
+      return;
+    }
+    setDiscount(num);
     onOpenChange(false);
   }
 
@@ -2778,27 +3121,30 @@ function DiscountPOSDialog({
       <DialogContent className="max-w-[400px] rounded-3xl p-6">
         <DialogHeader>
           <DialogTitle className="text-xl font-display font-bold flex items-center gap-2">
-            <Plus className="h-6 w-6 text-amber-500" />
+            <Percent className="h-6 w-6 text-amber-500" />
             Aplicar Descuento
           </DialogTitle>
           <DialogDescription className="sr-only">
-            Ingresa el monto del descuento que deseas aplicar.
+            Ingresa el porcentaje del descuento que deseas aplicar.
           </DialogDescription>
         </DialogHeader>
         <div className="space-y-4 py-4">
           <div className="relative h-24">
-            <span className="absolute left-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">RD$</span>
             <Input
-              className="!h-full pl-24 !text-5xl font-black font-display bg-accent/5 border-2 border-primary/20 focus-visible:ring-primary/30 rounded-3xl text-center"
+              className="!h-full pr-16 pl-6 !text-5xl font-black font-display bg-accent/5 border-2 border-primary/20 focus-visible:ring-primary/30 rounded-3xl text-center"
               value={val}
-              onChange={(e) => setVal(formatAmountInput(e.target.value))}
+              onChange={(e) => {
+                const text = e.target.value.replace(/[^0-9.]/g, "");
+                setVal(text);
+              }}
               placeholder="0"
               autoFocus
               type="text"
               inputMode="decimal"
             />
+            <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">%</span>
           </div>
-          <p className="text-xs text-muted-foreground text-center">El descuento se restará del total final de la orden.</p>
+          <p className="text-xs text-muted-foreground text-center">El descuento se calculará como un porcentaje del total final de la orden.</p>
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => { setDiscount(0); onOpenChange(false); }} className="flex-1 h-11 rounded-md border-rose-200 text-rose-600 hover:bg-rose-50 font-bold">
@@ -2828,10 +3174,18 @@ function TicketPrintPortal({
   serviciosList: any[]; 
   onClose: () => void 
 }) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.print();
+      onClose();
+    }, 150);
+    return () => clearTimeout(timer);
+  }, [onClose]);
+
   return createPortal(
     <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
       <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
-        <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000]">
+        <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000] hidden">
           <Button 
             variant="outline" 
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}

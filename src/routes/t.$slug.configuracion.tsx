@@ -441,13 +441,7 @@ function ConfigPage() {
                 />
               </label>
 
-              <label className="flex items-center justify-between rounded-xl border border-input p-3">
-                <span className="text-sm font-medium">Habilitar modo POS por defecto (en lugar de clásico)</span>
-                <Switch 
-                  checked={cfg.pos_modo_defecto !== false} 
-                  onCheckedChange={(v) => updateCfg({ pos_modo_defecto: v })} 
-                />
-              </label>
+
             </div>
             <Button className="mt-6" onClick={() => save(tenant)}>
               <Save className="mr-2 h-4 w-4" /> Guardar cambios

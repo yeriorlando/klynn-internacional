@@ -418,7 +418,13 @@ export function TenantShell() {
           <UserMenu nombre={empleado.nombre} rol={empleado.rol} empleadoId={empleado.id} onLogout={onLogout} />
         </header>
 
-        <main className={`flex flex-col ${pathname.endsWith('/conversations') ? 'flex-1 overflow-hidden p-0' : 'min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8'}`}>
+        <main className={`flex flex-col ${
+          pathname.endsWith('/conversations') 
+            ? 'flex-1 overflow-hidden p-0' 
+            : pathname.endsWith('/nueva-orden')
+              ? 'h-[calc(100vh-4rem)] overflow-hidden p-4 md:p-5'
+              : 'min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8'
+        }`}>
           <Outlet />
         </main>
       </div>
