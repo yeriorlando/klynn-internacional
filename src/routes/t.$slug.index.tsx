@@ -11,7 +11,7 @@ import {
 } from "@/lib/storage";
 import {
   Receipt, Package, Wallet, AlertCircle, ArrowUpRight, FilePlus2, Truck, TrendingUp,
-  Inbox, RefreshCw, CircleCheck, Ban
+  Inbox, RefreshCw, CircleCheck, Ban, ChevronLeft, ChevronRight
 } from "lucide-react";
 import { useOrdenes, useCajaAbierta, useGastos, useClientes, useMovimientos } from "@/hooks/use-queries";
 import { TenantShell } from "@/components/klynn/TenantShell";
@@ -30,9 +30,15 @@ function DashboardPage() {
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: movs = [], isLoading: loadingMovs } = useMovimientos(tenantId, caja?.id);
 
+  const [currentPage, setCurrentPage] = useState(1);
+
   const loading = loadingOrdenes || loadingCaja || loadingGastos || loadingClientes;
 
   const tenant = user?.tenant;
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [ordenes.length]);
 
   const stats = useMemo(() => {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
@@ -60,6 +66,18 @@ function DashboardPage() {
   }, [ordenes, movs, gastos]);
 
   const { ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, ventas7dias, max } = stats;
+
+  const sortedOrdenes = useMemo(() => {
+    return [...ordenes].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+  }, [ordenes]);
+
+  const ordersPerPage = 5;
+  const totalPages = Math.ceil(sortedOrdenes.length / ordersPerPage);
+
+  const paginatedOrdenes = useMemo(() => {
+    const startIndex = (currentPage - 1) * ordersPerPage;
+    return sortedOrdenes.slice(startIndex, startIndex + ordersPerPage);
+  }, [sortedOrdenes, currentPage]);
 
   if (!user || user.tenant.id === '__loading__') return null;
 
@@ -161,12 +179,16 @@ function DashboardPage() {
         </Card>
       </div>
 
-      {/* Órdenes recientes */}
       <Card className="mt-6 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <div className="font-display text-xl">Órdenes recientes</div>
-            <div className="text-sm text-muted-foreground">Últimas {Math.min(8, ordenes.length)} de {ordenes.length}</div>
+            <div className="text-sm text-muted-foreground">
+              {sortedOrdenes.length > 0 
+                ? `Mostrando ${ (currentPage - 1) * ordersPerPage + 1 } a ${ Math.min(currentPage * ordersPerPage, sortedOrdenes.length) } de ${ sortedOrdenes.length }`
+                : "0 órdenes"
+              }
+            </div>
           </div>
           <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
             Ver todas <ArrowUpRight className="h-3.5 w-3.5" />
@@ -184,7 +206,7 @@ function DashboardPage() {
               </tr>
             </thead>
             <tbody>
-              {[...ordenes].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en)).slice(0, 8).map((o) => {
+              {paginatedOrdenes.map((o) => {
                 const c = clientes.find((x) => x.id === o.cliente_id);
                 return (
                   <tr key={o.id} className="border-b border-border/50 transition hover:bg-accent/40">
@@ -222,6 +244,34 @@ function DashboardPage() {
             </tbody>
           </table>
         </div>
+        
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between border-t pt-4">
+            <div className="text-xs text-muted-foreground">
+              Página {currentPage} de {totalPages}
+            </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+              >
+                <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                disabled={currentPage === totalPages}
+                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+              >
+                Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
+              </Button>
+            </div>
+          </div>
+        )}
       </Card>
     </div>
   );

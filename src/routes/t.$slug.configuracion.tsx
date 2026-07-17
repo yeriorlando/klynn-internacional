@@ -425,7 +425,7 @@ function ConfigPage() {
                 <Input className={FIELD} value={formatAmountInput(String(cfg.monto_max_caja_chica))} onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} />
               </Field>
 
-              <label className="flex items-center justify-between rounded-xl border border-input p-3">
+              <label className="flex items-center justify-between rounded-xl border border-input p-3 w-full h-fit self-end">
                 <span className="text-sm font-medium">Habilitar selección de servicios en nueva orden</span>
                 <Switch 
                   checked={cfg.pos_habilitar_servicios !== false} 
@@ -438,6 +438,14 @@ function ConfigPage() {
                 <Switch 
                   checked={cfg.pos_habilitar_prendas !== false} 
                   onCheckedChange={(v) => updateCfg({ pos_habilitar_prendas: v })} 
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-xl border border-input p-3">
+                <span className="text-sm font-medium">Habilitar interfaz de venta POS (Modo POS)</span>
+                <Switch 
+                  checked={cfg.pos_modo_defecto !== false} 
+                  onCheckedChange={(v) => updateCfg({ pos_modo_defecto: v })} 
                 />
               </label>
 

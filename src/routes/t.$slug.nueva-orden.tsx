@@ -7,7 +7,7 @@ import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
   Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
   ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles,
-  CreditCard, CornerDownLeft, Percent
+  CreditCard, CornerDownLeft, Percent, Box
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -79,10 +79,16 @@ function NuevaOrdenPage() {
   }
 
   const [step, setStep] = useState(1);
-  const isPosMode = true;
+  const [isPosMode, setIsPosMode] = useState(cfg.pos_modo_defecto !== false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLDivElement | null>(null);
   const wrapperRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (user?.tenant?.config) {
+      setIsPosMode(user.tenant.config.pos_modo_defecto !== false);
+    }
+  }, [user?.tenant?.config?.pos_modo_defecto]);
 
   useEffect(() => {
     const headerDiv = document.querySelector(".main-header > div.flex-1");
@@ -469,7 +475,7 @@ function NuevaOrdenPage() {
       if (!state) return;
       const target = e.target as HTMLElement;
       const isInput = ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
-      
+
       // Enter to cobrar (open checkout modal) or confirm pay (if modal is open)
       if (e.key === "Enter") {
         const isTextarea = target.tagName === "TEXTAREA";
@@ -644,7 +650,7 @@ function NuevaOrdenPage() {
       if (idx > -1) {
         return arr.map((item, i) => i === idx ? { ...item, cantidad: item.cantidad + it.cantidad } : item);
       }
-      
+
       const result = [...arr];
       if (indexDesglose === -1) {
         return [...result, it];
@@ -803,8 +809,8 @@ function NuevaOrdenPage() {
         empleado_id: empleado.id,
         servicios: serviciosSel,
         servicios_precios: serviciosSel.reduce((acc, sName) => {
-          const sPrice = customServicePrices[sName] !== undefined 
-            ? customServicePrices[sName] 
+          const sPrice = customServicePrices[sName] !== undefined
+            ? customServicePrices[sName]
             : (servicios.find(x => x.nombre === sName)?.precio || 0);
           acc[sName] = sPrice;
           return acc;
@@ -977,14 +983,26 @@ function NuevaOrdenPage() {
 
   return (
     <div className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}>
-      {isPosMode && (
-        <style dangerouslySetInnerHTML={{ __html: `
+      {isPosMode ? (
+        <style dangerouslySetInnerHTML={{
+          __html: `
           main {
             padding: 0px !important;
             height: calc(100vh - 4rem) !important;
             min-height: calc(100vh - 4rem) !important;
             max-height: calc(100vh - 4rem) !important;
             overflow: hidden !important;
+          }
+        `}} />
+      ) : (
+        <style dangerouslySetInnerHTML={{
+          __html: `
+          main {
+            height: auto !important;
+            min-height: calc(100vh - 4rem) !important;
+            max-height: none !important;
+            overflow-y: auto !important;
+            overflow-x: hidden !important;
           }
         `}} />
       )}
@@ -1025,22 +1043,22 @@ function NuevaOrdenPage() {
       )}
 
       {isPosMode ? (
-        <div 
+        <div
           className="flex gap-6 overflow-hidden min-h-0 w-full flex-1"
         >
           {/* CATALOG GRID */}
           <div className="flex-1 flex flex-col gap-4 overflow-hidden h-full">
             {/* Top row of POS: Search, Badges, and Fullscreen inside the grid column */}
             <div className="flex flex-wrap items-center gap-2.5 py-1 w-full justify-between sm:justify-start">
-               {/* Search input */}
-               <div className="relative flex-grow max-w-[260px] w-full animate-in fade-in slide-in-from-left-4 duration-500">
-                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-                 <Input
-                   value={posSearch}
-                   onChange={(e) => setPosSearch(e.target.value)}
-                   placeholder="Buscar prenda o servicio..."
-                   className={`pl-10 h-10 bg-background border shadow-sm rounded-xl transition-all duration-200 ${searchGlow ? 'border-primary ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]' : 'border-border focus-visible:border-primary/30 focus-visible:ring-1 focus-visible:ring-primary/10'}`}
-                 />
+              {/* Search input */}
+              <div className="relative flex-grow max-w-[260px] w-full animate-in fade-in slide-in-from-left-4 duration-500">
+                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+                <Input
+                  value={posSearch}
+                  onChange={(e) => setPosSearch(e.target.value)}
+                  placeholder="Buscar prenda o servicio..."
+                  className={`pl-10 h-10 bg-background border shadow-sm rounded-xl transition-all duration-200 ${searchGlow ? 'border-primary ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]' : 'border-border focus-visible:border-primary/30 focus-visible:ring-1 focus-visible:ring-primary/10'}`}
+                />
                 {posSearch ? (
                   <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent" onClick={() => setPosSearch("")}>
                     <X className="h-3.5 w-3.5 text-muted-foreground/30" />
@@ -1055,54 +1073,60 @@ function NuevaOrdenPage() {
                 <button
                   type="button"
                   onClick={() => setShowDeliveryPOS(true)}
-                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${
-                    servicioDomicilio
-                      ? "bg-teal-600 text-white border-teal-600 shadow-md hover:bg-teal-700"
-                      : "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
-                  }`}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${servicioDomicilio
+                    ? "bg-teal-600 text-white border-teal-600 shadow-md hover:bg-teal-700"
+                    : "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+                    }`}
                 >
                   <Truck className="h-3.5 w-3.5" />
                   <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
                 </button>
 
-              <button
-                type="button"
-                onClick={() => setShowDiscountPOS(true)}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${
-                  descuento > 0
+                <button
+                  type="button"
+                  onClick={() => setShowDiscountPOS(true)}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${descuento > 0
                     ? "bg-amber-600 text-white border-amber-600 shadow-md hover:bg-amber-700"
                     : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
-                }`}
-              >
-                <Percent className="h-3.5 w-3.5" />
-                <span>{descuento > 0 ? `Desc. ${descuento}%` : "Descuento"}</span>
-              </button>
+                    }`}
+                >
+                  <Percent className="h-3.5 w-3.5" />
+                  <span>{descuento > 0 ? `Desc. ${descuento}%` : "Descuento"}</span>
+                </button>
 
 
 
-              <button
-                type="button"
-                onClick={toggleFullscreen}
-                className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${
-                  isFullscreen
+                <button
+                  type="button"
+                  onClick={toggleFullscreen}
+                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${isFullscreen
                     ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700"
                     : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
-                }`}
-              >
-                {isFullscreen ? (
-                  <>
-                    <Minimize className="h-3.5 w-3.5" />
-                    <span>Pantalla normal</span>
-                  </>
-                ) : (
-                  <>
-                    <Maximize className="h-3.5 w-3.5" />
-                    <span>Pantalla completa</span>
-                  </>
-                )}
-              </button>
+                    }`}
+                >
+                  {isFullscreen ? (
+                    <>
+                      <Minimize className="h-3.5 w-3.5" />
+                      <span>Pantalla normal</span>
+                    </>
+                  ) : (
+                    <>
+                      <Maximize className="h-3.5 w-3.5" />
+                      <span>Pantalla completa</span>
+                    </>
+                  )}
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setIsPosMode(false)}
+                  title="Modo Clásico"
+                  className="flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:shadow-sm h-9 w-9 text-slate-700 transition-all duration-200 cursor-pointer shrink-0"
+                >
+                  <Box className="h-4 w-4" />
+                </button>
+              </div>
             </div>
-          </div>
 
             <DeliveryPOSDialog
               open={showDeliveryPOS}
@@ -1145,9 +1169,8 @@ function NuevaOrdenPage() {
                                 setActiveCategory("TODOS");
                               }
                             }}
-                            className={`inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[13px] font-semibold transition-all duration-200 active:scale-95 border cursor-pointer hover:shadow-sm ${
-                              isSelected ? tab.activeBg : tab.bg
-                            }`}
+                            className={`inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[13px] font-semibold transition-all duration-200 active:scale-95 border cursor-pointer hover:shadow-sm ${isSelected ? tab.activeBg : tab.bg
+                              }`}
                           >
                             {tab.icon}
                             <span>{tab.label}</span>
@@ -1164,11 +1187,10 @@ function NuevaOrdenPage() {
                         <button
                           key={cat}
                           onClick={() => setActiveCategory(cat)}
-                          className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${
-                            activeCategory === cat
-                              ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                              : "bg-card text-muted-foreground hover:bg-accent border-border/50"
-                          }`}
+                          className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${activeCategory === cat
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                            : "bg-card text-muted-foreground hover:bg-accent border-border/50"
+                            }`}
                         >
                           {cat}
                         </button>
@@ -1180,39 +1202,92 @@ function NuevaOrdenPage() {
 
               <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar space-y-8">
                 <>
-                    {/* SECCION SERVICIOS */}
-                    {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
-                      <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* SECCION SERVICIOS */}
+                  {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
+                    <div className="space-y-4 animate-in fade-in duration-200">
+                      <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
+                        <div className="h-4 w-1 bg-primary rounded-full" />
+                        Servicios
+                      </h3>
+                      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
+                        {servicesFiltered.map(s => {
+                          const srvCount = serviciosSel.filter(x => x === s.nombre).length;
+                          return (
+                            <button
+                              key={s.id}
+                              onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
+                              className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${srvCount > 0 ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
+                                }`}
+                            >
+                              {s.imagen_url ? (
+                                <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                  <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
+                                </div>
+                              ) : (
+                                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
+                                  {s.icono || "🧹"}
+                                </div>
+                              )}
+                              <div className="w-full text-center">
+                                <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
+                                <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(s.precio)}</div>
+                              </div>
+                              {srvCount > 0 && (
+                                <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
+                                  {srvCount}
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
+                  {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
+                    const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
+                    if (itemsInCat.length === 0) return null;
+
+                    return (
+                      <div key={catName} className="space-y-4">
                         <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
                           <div className="h-4 w-1 bg-primary rounded-full" />
-                          Servicios
+                          {catName}
                         </h3>
                         <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
-                          {servicesFiltered.map(s => {
-                            const srvCount = serviciosSel.filter(x => x === s.nombre).length;
+                          {itemsInCat.map(item => {
+                            const countInCart = items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0);
+
                             return (
                               <button
-                                key={s.id}
-                                onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
-                                className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${srvCount > 0 ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
-                                   }`}
+                                key={item.id}
+                                onClick={() => addItem({
+                                  descripcion: item.nombre,
+                                  cantidad: 1,
+                                  precio_unitario: item.precio,
+                                  es_libra: item.por_libra,
+                                  is_exento: item.is_exento
+                                })}
+                                className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
                               >
-                                {s.imagen_url ? (
+                                {item.imagen_url ? (
                                   <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                                    <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
+                                    <img src={item.imagen_url} alt={item.nombre} className="h-full w-full object-cover" />
                                   </div>
                                 ) : (
                                   <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
-                                    {s.icono || "🧹"}
+                                    {item.icono || "👕"}
                                   </div>
                                 )}
                                 <div className="w-full text-center">
-                                  <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
-                                  <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(s.precio)}</div>
+                                  <div className="text-sm font-bold leading-tight line-clamp-1">{item.nombre}</div>
+                                  <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(item.precio)}</div>
                                 </div>
-                                {srvCount > 0 && (
-                                  <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
-                                    {srvCount}
+
+                                {countInCart > 0 && (
+                                  <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
+                                    {countInCart}
                                   </div>
                                 )}
                               </button>
@@ -1220,62 +1295,9 @@ function NuevaOrdenPage() {
                           })}
                         </div>
                       </div>
-                    )}
-
-                    {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
-                    {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
-                      const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
-                      if (itemsInCat.length === 0) return null;
-
-                      return (
-                        <div key={catName} className="space-y-4">
-                          <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                            <div className="h-4 w-1 bg-primary rounded-full" />
-                            {catName}
-                          </h3>
-                          <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
-                            {itemsInCat.map(item => {
-                              const countInCart = items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0);
-
-                              return (
-                                <button
-                                  key={item.id}
-                                  onClick={() => addItem({
-                                    descripcion: item.nombre,
-                                    cantidad: 1,
-                                    precio_unitario: item.precio,
-                                    es_libra: item.por_libra,
-                                    is_exento: item.is_exento
-                                  })}
-                                  className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
-                                >
-                                  {item.imagen_url ? (
-                                    <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                                      <img src={item.imagen_url} alt={item.nombre} className="h-full w-full object-cover" />
-                                    </div>
-                                  ) : (
-                                    <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
-                                      {item.icono || "👕"}
-                                    </div>
-                                  )}
-                                  <div className="w-full text-center">
-                                    <div className="text-sm font-bold leading-tight line-clamp-1">{item.nombre}</div>
-                                    <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(item.precio)}</div>
-                                  </div>
-                                  
-                                  {countInCart > 0 && (
-                                    <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
-                                      {countInCart}
-                                    </div>
-                                  )}
-                                </button>
-                              );
-                            })}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </>
+                    );
+                  })}
+                </>
               </div>
 
             </Card>
@@ -1294,23 +1316,21 @@ function NuevaOrdenPage() {
                   <button
                     type="button"
                     onClick={() => handleSelectGeneric("Persona")}
-                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${
-                      cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                        ? "bg-blue-600 text-white shadow-md"
-                        : "text-blue-700 hover:bg-blue-50"
-                    }`}
+                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                      ? "bg-blue-600 text-white shadow-md"
+                      : "text-blue-700 hover:bg-blue-50"
+                      }`}
                   >
                     <UserIcon className="h-4 w-4 mr-1.5 shrink-0" />
                     Consumidor Final
                   </button>
-                   <button
+                  <button
                     type="button"
                     onClick={() => setEmpresaDialogOpen(true)}
-                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${
-                      cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                        ? "bg-slate-800 text-white shadow-md"
-                        : "text-slate-600 hover:bg-slate-50"
-                    }`}
+                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                      ? "bg-slate-800 text-white shadow-md"
+                      : "text-slate-600 hover:bg-slate-50"
+                      }`}
                   >
                     <Building className="h-4 w-4 mr-1.5 shrink-0" />
                     Empresa
@@ -1350,7 +1370,7 @@ function NuevaOrdenPage() {
                     const count = serviciosSel.filter(x => x === srv.nombre).length;
                     const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
                     return (
-                      <div key={'pos-srv-'+idx} className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-primary/20 bg-primary/5 mb-3 transition-all animate-in fade-in duration-200">
+                      <div key={'pos-srv-' + idx} className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-primary/20 bg-primary/5 mb-3 transition-all animate-in fade-in duration-200">
                         <div className="flex justify-between items-start">
                           <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
                             <span>🧺</span>
@@ -1383,7 +1403,7 @@ function NuevaOrdenPage() {
                               <Plus className="h-2.5 w-2.5" />
                             </Button>
                           </div>
-                          
+
                           <div className="flex flex-col items-end gap-0.5 shrink-0">
                             {srv.permitir_editar_precio ? (
                               <div className="flex flex-col items-end gap-1">
@@ -1419,9 +1439,8 @@ function NuevaOrdenPage() {
                     const isDetail = it.descripcion.startsWith("↳");
                     const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
                     return (
-                      <div key={i} className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all ${
-                        isDetail ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground" : "bg-card shadow-sm hover:border-primary/25"
-                      }`}>
+                      <div key={i} className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all ${isDetail ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground" : "bg-card shadow-sm hover:border-primary/25"
+                        }`}>
                         <div className="flex justify-between items-start">
                           <div className="flex flex-col flex-1 min-w-0">
                             <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
@@ -1512,8 +1531,8 @@ function NuevaOrdenPage() {
                     Marcar orden como urgente {cfg.recargo_urgencia > 0 && `(+${cfg.recargo_urgencia}%)`}
                   </span>
                 </div>
-                <Switch 
-                  checked={esUrgente} 
+                <Switch
+                  checked={esUrgente}
                   onCheckedChange={setEsUrgente}
                   className="scale-90 data-[state=checked]:bg-rose-600"
                 />
@@ -1579,9 +1598,39 @@ function NuevaOrdenPage() {
         </div>
       ) : (
         <>
-          <Stepper step={step} enableServicios={enableServicios} enablePrendas={enablePrendas} />
+          {/* Header Bar */}
+          <div className="relative flex items-center justify-between gap-4 bg-slate-50 dark:bg-slate-800/40 p-4 rounded-2xl border border-border max-w-4xl mx-auto w-full">
+            {/* Left element spacer */}
+            <div className="w-8 md:w-36 shrink-0" />
 
-          <Card className="w-full mt-6 p-6 md:p-8">
+            {/* Centered Mode indicator */}
+            <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-2.5 whitespace-nowrap">
+              <span className="relative flex h-2.5 w-2.5">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span className="font-display text-sm font-black uppercase tracking-[0.15em] text-slate-800 dark:text-slate-200">
+                Modo Clásico
+              </span>
+            </div>
+
+            {cfg.pos_modo_defecto !== false && (
+              <Button
+                onClick={() => setIsPosMode(true)}
+                className="bg-primary text-white hover:bg-primary/90 rounded-xl font-bold text-xs gap-1.5 h-10 shadow-sm active:scale-95 transition-all shrink-0"
+              >
+                <LayoutGrid className="h-4 w-4" />
+                <span>Cambiar a Modo POS</span>
+              </Button>
+            )}
+          </div>
+
+          {/* Centered Stepper Wizard */}
+          <div className="mt-4 mb-3 flex justify-center w-full">
+            <Stepper step={step} enableServicios={enableServicios} enablePrendas={enablePrendas} />
+          </div>
+
+          <Card className="w-full max-w-4xl mx-auto mt-0 p-6 md:p-8">
             <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="w-full">
               {step === 1 && (
                 <>
@@ -1596,8 +1645,8 @@ function NuevaOrdenPage() {
                     {validTipos.map((tipo) => {
                       const isConsumo = tipo === "E32" || tipo === "B02";
                       const isCredito = tipo === "E31" || tipo === "B01";
-                      const name = NCF_NOMBRES[tipo.substring(0,3)]?.replace("FISCAL", "")?.trim() || "Empresa";
-                      
+                      const name = NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() || "Empresa";
+
                       const label = isConsumo ? "Consumidor Final" : (isCredito ? "Empresa / RNC" : name);
                       const subLabel = isConsumo ? "Factura Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
                       const Icon = isConsumo ? UserIcon : (isCredito ? Truck : Building);
@@ -1611,24 +1660,24 @@ function NuevaOrdenPage() {
 
                       if (isConsumo) {
                         bgClass = isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/20" : "bg-emerald-50/20 dark:bg-emerald-950/5";
-                        borderClass = isSelected 
-                          ? "border-emerald-500 ring-2 ring-emerald-500/20" 
+                        borderClass = isSelected
+                          ? "border-emerald-500 ring-2 ring-emerald-500/20"
                           : "border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-300";
                         bgIconClass = isSelected ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
                         textClass = isSelected ? "text-emerald-700 dark:text-emerald-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
                         subTextClass = isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400";
                       } else if (isCredito) {
                         bgClass = isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "bg-blue-50/20 dark:bg-blue-950/5";
-                        borderClass = isSelected 
-                          ? "border-blue-500 ring-2 ring-blue-500/20" 
+                        borderClass = isSelected
+                          ? "border-blue-500 ring-2 ring-blue-500/20"
                           : "border-blue-200/80 dark:border-blue-900/40 hover:border-blue-300";
                         bgIconClass = isSelected ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
                         textClass = isSelected ? "text-blue-700 dark:text-blue-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
                         subTextClass = isSelected ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400";
                       } else {
                         bgClass = isSelected ? "bg-amber-50/70 dark:bg-amber-950/20" : "bg-amber-50/20 dark:bg-amber-950/5";
-                        borderClass = isSelected 
-                          ? "border-amber-500 ring-2 ring-amber-500/20" 
+                        borderClass = isSelected
+                          ? "border-amber-500 ring-2 ring-amber-500/20"
                           : "border-amber-200/80 dark:border-amber-900/40 hover:border-amber-300";
                         bgIconClass = isSelected ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
                         textClass = isSelected ? "text-amber-700 dark:text-amber-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
@@ -1641,7 +1690,7 @@ function NuevaOrdenPage() {
                       }
 
                       return (
-                        <button 
+                        <button
                           key={tipo}
                           onClick={() => {
                             setTipoECF(tipo);
@@ -1651,10 +1700,10 @@ function NuevaOrdenPage() {
                               setEmpresaDialogOpen(true);
                             }
                           }}
-                          className={`relative flex items-center gap-3.5 p-4 rounded-2xl border transition-all group text-left shadow-sm ${bgClass} ${borderClass}`}
+                          className={`relative flex items-center gap-2.5 p-3 rounded-2xl border transition-all group text-left shadow-sm ${bgClass} ${borderClass}`}
                         >
-                          <div className={`h-10 w-10 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}>
-                            <Icon className="h-5 w-5" />
+                          <div className={`h-8 w-8 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}>
+                            <Icon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0 flex-1 pr-4">
                             <div className={`font-bold text-sm leading-tight line-clamp-1 ${textClass}`}>{label}</div>
@@ -1688,10 +1737,15 @@ function NuevaOrdenPage() {
                     {filtrados.map((c) => (
                       <button
                         key={c.id}
-                        onClick={() => setCliente(c)}
+                        onClick={() => {
+                          setCliente(c);
+                          if (!isPosMode) {
+                            irAlPasoSiguienteDelCliente();
+                          }
+                        }}
                         className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all min-w-0 ${cliente?.id === c.id
-                            ? "border-primary bg-primary/10 ring-1 ring-primary shadow-sm"
-                            : "border-border bg-card hover:border-primary/50 hover:bg-accent/30 hover:shadow-elegant"
+                          ? "border-primary bg-primary/10 ring-1 ring-primary shadow-sm"
+                          : "border-border bg-card hover:border-primary/50 hover:bg-accent/30 hover:shadow-elegant"
                           }`}
                       >
                         <div className="flex items-center gap-4 min-w-0 flex-1">
@@ -1786,18 +1840,18 @@ function NuevaOrdenPage() {
                       const count = serviciosSel.filter(x => x === srv.nombre).length;
                       const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
                       return (
-                        <div key={'srv-'+idx} className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200">
+                        <div key={'srv-' + idx} className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200">
                           <div className="flex-1">
                             <div className="font-semibold text-primary flex items-center gap-1.5 text-sm sm:text-base">
                               <span>🧺</span> Servicio: {srv.nombre}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {srv.permitir_desglose 
+                              {srv.permitir_desglose
                                 ? "Servicio de la orden · Haz clic en \"+\" para detallar sus prendas"
                                 : "Servicio de la orden"}
                             </div>
                           </div>
-                          
+
                           <div className="flex items-center gap-2">
                             <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
                               <Minus className="h-2.5 w-2.5" />
@@ -1866,9 +1920,8 @@ function NuevaOrdenPage() {
                       const isDetail = it.descripcion.startsWith("↳");
                       const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
                       return (
-                        <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-all ${
-                          isDetail ? "bg-accent/5 ml-8 border-dashed border-primary/20 text-muted-foreground" : "bg-surface-elevated"
-                        }`}>
+                        <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-all ${isDetail ? "bg-accent/5 ml-8 border-dashed border-primary/20 text-muted-foreground" : "bg-surface-elevated"
+                          }`}>
                           <div className="flex-1">
                             <div className="font-medium flex items-center gap-2">
                               {isDetail && <Shirt className="h-3 w-3 text-primary" />}
@@ -1947,26 +2000,38 @@ function NuevaOrdenPage() {
                   <h2 className="mb-1 text-2xl font-display">Resumen</h2>
                   <p className="mb-5 text-sm text-muted-foreground">Revisa precios, fecha de entrega y opciones.</p>
 
-                  <div className="space-y-1 rounded-xl border border-border/60 bg-accent/5 p-4">
-                    <div className="mb-3 flex items-center gap-2 border-b border-border/40 pb-2">
-                      <div className="h-1.5 w-1.5 rounded-full bg-primary" />
-                      <span className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Detalles de la orden</span>
+                  <div className="space-y-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-5 shadow-sm">
+                    <div className="mb-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
+                      <div className="flex items-center gap-2">
+                        <Receipt className="h-4 w-4 text-primary" />
+                        <span className="text-xs font-black uppercase tracking-wider text-slate-800 dark:text-slate-250">
+                          Detalles de la orden
+                        </span>
+                      </div>
+                      <Badge className="bg-primary text-white hover:bg-primary/90 border-none shadow-sm text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
+                        {serviciosSel.length + items.length} {(serviciosSel.length + items.length) === 1 ? "artículo" : "artículos"}
+                      </Badge>
                     </div>
-                    <div className="space-y-2">
+                    <div className="space-y-0 divide-y divide-dashed divide-slate-200 dark:divide-slate-800">
                       {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
                         const count = serviciosSel.filter(x => x === srv.nombre).length;
-                        const sPrice = customServicePrices[srv.nombre] !== undefined 
-                          ? customServicePrices[srv.nombre] 
+                        const sPrice = customServicePrices[srv.nombre] !== undefined
+                          ? customServicePrices[srv.nombre]
                           : (srv.precio || 0);
                         return (
-                          <div key={`srv-${idx}`} className="flex justify-between items-center text-sm group">
-                            <div className="flex flex-col">
-                              <span className="font-medium text-foreground">Servicio: {srv.nombre}</span>
-                              <span className="text-[10px] text-muted-foreground uppercase">
-                                {count} {count > 1 ? "servicios" : "servicio"} de la orden
-                              </span>
+                          <div key={`srv-${idx}`} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-450 shrink-0">
+                                <LayoutGrid className="h-4 w-4" />
+                              </div>
+                              <div className="min-w-0">
+                                <div className="font-bold text-sm text-foreground truncate">{srv.nombre}</div>
+                                <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
+                                  Servicio • {count} {count > 1 ? "unidades" : "unidad"}
+                                </div>
+                              </div>
                             </div>
-                            <div className="font-display font-semibold text-primary font-bold">
+                            <div className="font-display font-black text-base text-primary font-bold">
                               {formatRD(count * sPrice)}
                             </div>
                           </div>
@@ -1974,12 +2039,19 @@ function NuevaOrdenPage() {
                       })}
 
                       {items.map((it, i) => (
-                        <div key={i} className="flex justify-between items-center text-sm group">
-                          <div className="flex flex-col">
-                            <span className="font-medium text-foreground">{it.descripcion}</span>
-                            <span className="text-[10px] text-muted-foreground uppercase">{it.cantidad} {it.es_libra ? "lb" : "unid."}</span>
+                        <div key={i} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-450 shrink-0">
+                              <Shirt className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-bold text-sm text-foreground truncate">{it.descripcion}</div>
+                              <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
+                                Prenda • {it.cantidad} {it.es_libra ? "lb" : "unid."}
+                              </div>
+                            </div>
                           </div>
-                          <div className="font-display font-semibold text-foreground">
+                          <div className="font-display font-bold text-base text-foreground">
                             {formatRD(it.cantidad * it.precio_unitario)}
                           </div>
                         </div>
@@ -1988,68 +2060,99 @@ function NuevaOrdenPage() {
                   </div>
 
                   <div className="mt-5 grid gap-5 grid-cols-1 lg:grid-cols-2">
-                    <div className="space-y-3">
-                      <Field label="Fecha de entrega"><DatePicker date={fechaEntrega} setDate={setFechaEntrega} /></Field>
-                      <Field label="Notas">
-                        <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Observaciones..." rows={3} />
-                      </Field>
-                      <Field label="Descuento (RD$)"><Input type="number" value={descuento} onChange={(e) => setDescuento(Number(e.target.value) || 0)} /></Field>
+                    <div className="space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Field label="Fecha de entrega">
+                          <DatePicker date={fechaEntrega} setDate={setFechaEntrega} />
+                        </Field>
+                        <Field label="Descuento (%)">
+                          <Input
+                            type="number"
+                            value={descuento}
+                            onChange={(e) => {
+                              const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                              setDescuento(val);
+                            }}
+                            placeholder="0"
+                            className="h-9"
+                          />
+                        </Field>
+                      </div>
 
-                      <div className="rounded-lg border border-border p-3 space-y-3 bg-accent/5">
-                        <label className="flex items-center justify-between cursor-pointer">
-                          <div className="flex items-center gap-2">
-                            <Truck className="h-4 w-4 text-primary" />
-                            <span className="text-sm font-medium">Servicio a domicilio</span>
+                      <div className="rounded-2xl border border-border/80 bg-accent/5 p-4 space-y-4">
+                        {/* Option 1: Servicio a domicilio */}
+                        <div className="space-y-3">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3">
+                              <div className="h-9 w-9 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-450 shrink-0">
+                                <Truck className="h-4.5 w-4.5" />
+                              </div>
+                              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Servicio a domicilio</span>
+                            </div>
+                            <Switch checked={servicioDomicilio} onCheckedChange={setServicioDomicilio} />
                           </div>
-                          <Switch checked={servicioDomicilio} onCheckedChange={setServicioDomicilio} />
-                        </label>
 
-                        {servicioDomicilio && (
-                          <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-3">
-                            <Field label="Dirección de entrega">
-                              <Input
-                                value={direccionDomicilio}
-                                onChange={(e) => setDireccionDomicilio(e.target.value)}
-                                placeholder="Calle, No., Sector..."
-                                className="bg-background"
-                              />
-                            </Field>
-                            <p className="mt-1 text-[10px] text-muted-foreground">
-                              Se guardará en la ficha del cliente si es nueva.
-                            </p>
-                            <Field label="Costo de envío (RD$)">
-                              <PriceInput
-                                value={costoDomicilio}
-                                onChange={setCostoDomicilio}
-                                placeholder="0.00"
-                                className="bg-background"
-                              />
-                            </Field>
-                          </motion.div>
+                          {servicioDomicilio && (
+                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-3 pl-12 pt-2 border-t border-dashed">
+                              <Field label="Dirección de entrega">
+                                <Input
+                                  value={direccionDomicilio}
+                                  onChange={(e) => setDireccionDomicilio(e.target.value)}
+                                  placeholder="Calle, No., Sector..."
+                                  className="bg-background"
+                                />
+                              </Field>
+                              <p className="mt-1 text-[10px] text-muted-foreground">
+                                Se guardará en la ficha del cliente si es nueva.
+                              </p>
+                              <Field label="Costo de envío (RD$)">
+                                <PriceInput
+                                  value={costoDomicilio}
+                                  onChange={setCostoDomicilio}
+                                  placeholder="0.00"
+                                  className="bg-background"
+                                />
+                              </Field>
+                            </motion.div>
+                          )}
+                        </div>
+
+                        {/* Divider */}
+                        <div className="h-px bg-border/60" />
+
+                        {/* Option 2: Urgente */}
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-3">
+                            <div className="h-9 w-9 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-450 shrink-0">
+                              <AlertTriangle className="h-4.5 w-4.5" />
+                            </div>
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Pedido Urgente (+{cfg.recargo_urgencia}%)</span>
+                          </div>
+                          <Switch checked={esUrgente} onCheckedChange={setEsUrgente} />
+                        </div>
+
+                        {/* Divider if ITBIS is active */}
+                        {cfg.ncf_facturacion_activa && (
+                          <>
+                            <div className="h-px bg-border/60" />
+                            {/* Option 3: ITBIS */}
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-3">
+                                <div className="h-9 w-9 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-450 shrink-0">
+                                  <Percent className="h-4 w-4" />
+                                </div>
+                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Aplicar ITBIS ({cfg.itbis_porcentaje}%)</span>
+                              </div>
+                              <Switch checked={aplicarItbis} onCheckedChange={setAplicarItbis} />
+                            </div>
+                          </>
                         )}
                       </div>
 
-                      <div className="rounded-lg border border-border p-3 space-y-3 bg-accent/5">
-                        <label className="flex items-center justify-between cursor-pointer">
-                          <div className="flex items-center gap-2">
-                            <AlertTriangle className="h-4 w-4 text-amber-500" />
-                            <span className="text-sm font-medium">Urgente (+{cfg.recargo_urgencia}%)</span>
-                          </div>
-                          <Switch checked={esUrgente} onCheckedChange={setEsUrgente} />
-                        </label>
-                      </div>
-
-                      {cfg.ncf_facturacion_activa && (
-                        <div className="rounded-lg border border-border p-3 space-y-3 bg-accent/5">
-                          <label className="flex items-center justify-between cursor-pointer">
-                            <div className="flex items-center gap-2">
-                              <Badge className="h-4 w-4 px-0 justify-center bg-primary/20 text-primary hover:bg-primary/20 border-none text-[10px]">Tax</Badge>
-                              <span className="text-sm font-medium">Aplicar ITBIS {cfg.itbis_porcentaje}%</span>
-                            </div>
-                            <Switch checked={aplicarItbis} onCheckedChange={setAplicarItbis} />
-                          </label>
-                        </div>
-                      )}
+                      {/* Notas (Observaciones) at the end */}
+                      <Field label="Notas">
+                        <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Observaciones..." rows={3} />
+                      </Field>
                     </div>
 
                     <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-6">
@@ -2108,24 +2211,41 @@ function NuevaOrdenPage() {
                     <p className="text-sm font-bold text-muted-foreground/80">Selecciona el método de pago</p>
                   </div>
 
-                  <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5">
+                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 max-w-4xl mx-auto w-full">
                     {[
-                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️" },
-                      { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
-                      { id: "TARJETA", label: "Tarjeta", icon: "💳" },
-                      { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
-                      { id: "CREDITO", label: "Crédito", icon: "📝 " }
-                    ].map((m) => (
-                      <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
-                        className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
-                            ? "border-primary bg-primary/5 ring-1 ring-primary shadow-sm"
-                            : "border-border bg-card hover:border-primary/40"
-                          }`}>
-                        <span className="text-2xl">{m.icon}</span>
-                        <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
-                        {opcionPagoSelected === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
-                      </button>
-                    ))}
+                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️", color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
+                      { id: "EFECTIVO", label: "Efectivo", icon: "💵", color: "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700" },
+                      { id: "TARJETA", label: "Tarjeta", icon: "💳", color: "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700" },
+                      { id: "TRANSFERENCIA", label: "Transferencia", icon: "🏦", color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700" },
+                      { id: "CREDITO", label: "Crédito", icon: "📝", color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700" }
+                    ].map((m) => {
+                      const isSelected = opcionPagoSelected === m.id;
+                      return (
+                        <button
+                          key={m.id}
+                          type="button"
+                          onClick={() => handleOpcionPagoChange(m.id)}
+                          className={`relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-5 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${isSelected
+                            ? `bg-gradient-to-br ${m.color} ring-2 ring-primary/20 shadow-md scale-102`
+                            : "border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm"
+                            }`}
+                        >
+                          <div className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl transition-transform duration-300 group-hover:scale-105 shadow-inner ${isSelected ? "bg-white dark:bg-slate-900" : "bg-slate-100 dark:bg-slate-800"
+                            }`}>
+                            {m.icon}
+                          </div>
+                          <div className={`font-black text-xs uppercase tracking-wider ${isSelected ? "font-black" : "text-slate-600 dark:text-slate-400"
+                            }`}>
+                            {m.label}
+                          </div>
+                          {isSelected && (
+                            <div className="absolute top-3 right-3 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
+                              <Check className="h-2.5 w-2.5 stroke-[3]" />
+                            </div>
+                          )}
+                        </button>
+                      );
+                    })}
                   </div>
 
                   {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
@@ -2189,8 +2309,8 @@ function NuevaOrdenPage() {
                         </Field>
 
                         <div className={`flex flex-col items-center justify-center h-28 rounded-xl border-2 transition-all duration-300 ${faltante > 0
-                            ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                            : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
+                          ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
+                          : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
                           }`}>
                           <div className="text-xs font-black uppercase tracking-widest opacity-70">
                             {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
@@ -2228,18 +2348,15 @@ function NuevaOrdenPage() {
                               key={op.dias}
                               type="button"
                               onClick={() => actualizarLimiteDias(op.dias)}
-                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
-                                limiteDiasSel === op.dias
-                                  ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                                  : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                              }`}
+                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${limiteDiasSel === op.dias
+                                ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                                : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                                }`}
                             >
-                              <span className={`text-xl font-display font-black leading-none mb-1 ${
-                                limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
-                              }`}>{op.dias}</span>
-                              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
-                                limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
-                              }`}>DÍAS</span>
+                              <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                                }`}>{op.dias}</span>
+                              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
+                                }`}>DÍAS</span>
                               {limiteDiasSel === op.dias && (
                                 <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
                               )}
@@ -2297,8 +2414,8 @@ function NuevaOrdenPage() {
                     )}
                   </Button>
                   <Button
-                    variant="outline"
-                    className="h-10 px-8 rounded-xl bg-accent/50 border-border/50 font-bold text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-all"
+                    variant="default"
+                    className="h-10 px-8 rounded-xl bg-blue-50 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 text-blue-600 dark:text-slate-300 font-bold text-xs active:scale-95 border border-blue-100 dark:border-transparent shadow-sm transition-all duration-200"
                     onClick={prev}
                   >
                     <ArrowLeft className="mr-2 h-3 w-3" /> VOLVER ATRÁS
@@ -2307,8 +2424,8 @@ function NuevaOrdenPage() {
               ) : (
                 <>
                   <Button
-                    variant="outline"
-                    className="rounded-xl bg-accent/50 border-border/50 font-bold text-xs px-6 h-10 transition-all hover:bg-accent"
+                    variant="default"
+                    className="rounded-xl bg-blue-50 dark:bg-slate-800 hover:bg-blue-100 dark:hover:bg-slate-700 text-blue-600 dark:text-slate-300 font-bold text-xs px-6 h-10 transition-all active:scale-95 border border-blue-100 dark:border-transparent shadow-sm disabled:opacity-50 disabled:pointer-events-none"
                     onClick={prev}
                     disabled={step === 1}
                   >
@@ -2346,16 +2463,16 @@ function NuevaOrdenPage() {
       </Dialog>
 
       {showPrintPortal && (
-        <TicketPrintPortal 
-          orden={showPrintPortal} 
-          tenant={tenant} 
-          cliente={cliente} 
-          empleado={empleado} 
-          serviciosList={servicios} 
+        <TicketPrintPortal
+          orden={showPrintPortal}
+          tenant={tenant}
+          cliente={cliente}
+          empleado={empleado}
+          serviciosList={servicios}
           onClose={() => {
             setShowPrintPortal(null);
             navigate({ to: "/t/$slug/ordenes", params: { slug: tenant.slug } });
-          }} 
+          }}
         />
       )}
       <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
@@ -2390,7 +2507,7 @@ function NuevaOrdenPage() {
                 </span>
                 <div className="flex-1 h-px bg-primary/10" />
               </div>
-              
+
               <div className="grid grid-cols-2 gap-3 mb-2">
                 <button
                   type="button"
@@ -2398,26 +2515,23 @@ function NuevaOrdenPage() {
                     handleSelectGeneric("Persona");
                     setIsClientModalOpen(false);
                   }}
-                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${
-                    cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                      ? "bg-primary border-transparent text-white font-bold shadow-sm"
-                      : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                  }`}
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                    ? "bg-primary border-transparent text-white font-bold shadow-sm"
+                    : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                    }`}
                 >
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                    cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                      ? "bg-white/20 text-white"
-                      : "bg-emerald-500/10 text-emerald-600 group-hover:bg-white/20 group-hover:text-white"
-                  }`}>
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                    ? "bg-white/20 text-white"
+                    : "bg-emerald-500/10 text-emerald-600 group-hover:bg-white/20 group-hover:text-white"
+                    }`}>
                     <UserIcon className="h-4.5 w-4.5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-xs truncate leading-tight">Consumidor Final (Persona)</div>
-                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${
-                      cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                        ? "text-white/80"
-                        : "text-muted-foreground group-hover:text-white/85"
-                    }`}>
+                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                      ? "text-white/80"
+                      : "text-muted-foreground group-hover:text-white/85"
+                      }`}>
                       Venta rápida de mostrador
                     </div>
                   </div>
@@ -2429,26 +2543,23 @@ function NuevaOrdenPage() {
                     setIsClientModalOpen(false);
                     setEmpresaDialogOpen(true);
                   }}
-                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${
-                    cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                      ? "bg-primary border-transparent text-white font-bold shadow-sm"
-                      : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                  }`}
+                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                    ? "bg-primary border-transparent text-white font-bold shadow-sm"
+                    : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                    }`}
                 >
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${
-                    cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                      ? "bg-white/20 text-white"
-                      : "bg-blue-500/10 text-blue-600 group-hover:bg-white/20 group-hover:text-white"
-                  }`}>
+                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                    ? "bg-white/20 text-white"
+                    : "bg-blue-500/10 text-blue-600 group-hover:bg-white/20 group-hover:text-white"
+                    }`}>
                     <Building className="h-4.5 w-4.5" />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="font-bold text-xs truncate leading-tight">Empresa (Buscar por RNC)</div>
-                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${
-                      cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                        ? "text-white/80"
-                        : "text-muted-foreground group-hover:text-white/85"
-                    }`}>
+                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                      ? "text-white/80"
+                      : "text-muted-foreground group-hover:text-white/85"
+                      }`}>
                       Buscar por RNC o Cédula
                     </div>
                   </div>
@@ -2481,27 +2592,24 @@ function NuevaOrdenPage() {
                         setTipoECF(target);
                       }
                     }}
-                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all text-left border ${
-                      cliente?.id === c.id 
-                        ? "bg-primary border-transparent text-white font-bold shadow-sm" 
-                        : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                    }`}
+                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all text-left border ${cliente?.id === c.id
+                      ? "bg-primary border-transparent text-white font-bold shadow-sm"
+                      : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                      }`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${
-                        cliente?.id === c.id 
-                          ? "bg-white/20 text-white" 
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-white/20 group-hover:text-white"
-                      }`}>
+                      <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${cliente?.id === c.id
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-white/20 group-hover:text-white"
+                        }`}>
                         {c.tipo === "Empresa" ? <Building className="h-4.5 w-4.5" /> : <UserIcon className="h-4.5 w-4.5" />}
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="font-bold text-sm truncate leading-snug">{c.nombre} {c.apellido || ""}</div>
-                        <div className={`text-xs transition-colors mt-0.5 ${
-                          cliente?.id === c.id 
-                            ? "text-white/80" 
-                            : "text-muted-foreground group-hover:text-white/85"
-                        }`}>{c.telefono}</div>
+                        <div className={`text-xs transition-colors mt-0.5 ${cliente?.id === c.id
+                          ? "text-white/80"
+                          : "text-muted-foreground group-hover:text-white/85"
+                          }`}>{c.telefono}</div>
                       </div>
                     </div>
                     {cliente?.id === c.id && <Check className="h-4.5 w-4.5 text-white shrink-0 transition-colors" />}
@@ -2542,7 +2650,15 @@ function NuevaOrdenPage() {
         </DialogContent>
       </Dialog>
 
-      <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => { if (c) { setCliente(c); } setShowNewCliente(false); }} />
+      <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => {
+        if (c) {
+          setCliente(c);
+          if (!isPosMode) {
+            irAlPasoSiguienteDelCliente();
+          }
+        }
+        setShowNewCliente(false);
+      }} />
 
       <PlanLimitModal
         open={showLimitModal}
@@ -2662,8 +2778,8 @@ function NuevaOrdenPage() {
               ].map((m) => (
                 <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
                   className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
-                      ? "border-primary bg-primary/5 ring-1 ring-primary shadow-glow"
-                      : "border-border bg-card hover:border-primary/40"
+                    ? "border-primary bg-primary/5 ring-1 ring-primary shadow-glow"
+                    : "border-border bg-card hover:border-primary/40"
                     }`}>
                   <span className="text-2xl">{m.icon}</span>
                   <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
@@ -2683,7 +2799,7 @@ function NuevaOrdenPage() {
                 </div>
               </div>
             )}
-            
+
             {cfg.ncf_facturacion_activa && (
               <div className="mb-4 p-4 rounded-2xl border-2 border-primary/10 bg-primary/5">
                 <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">Tipo de Comprobante Fiscal</Label>
@@ -2728,14 +2844,14 @@ function NuevaOrdenPage() {
                   </Field>
 
                   <div className={`flex flex-col items-center justify-center h-28 px-4 rounded-2xl border-2 transition-all duration-300 ${faltante > 0
-                      ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                      : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
+                    ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
+                    : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
                     }`}>
                     <div className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1 text-center">
                       {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
                     </div>
                     <div className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 9999999 ? "text-xl" :
-                        (faltante > 0 ? faltante : vuelto) > 999999 ? "text-2xl" : "text-4xl"
+                      (faltante > 0 ? faltante : vuelto) > 999999 ? "text-2xl" : "text-4xl"
                       }`}>
                       {formatRD(faltante > 0 ? faltante : vuelto)}
                     </div>
@@ -2767,18 +2883,15 @@ function NuevaOrdenPage() {
                         key={op.dias}
                         type="button"
                         onClick={() => actualizarLimiteDias(op.dias)}
-                        className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
-                          limiteDiasSel === op.dias
-                            ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                            : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                        }`}
+                        className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${limiteDiasSel === op.dias
+                          ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                          : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                          }`}
                       >
-                        <span className={`text-xl font-display font-black leading-none mb-1 ${
-                          limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
-                        }`}>{op.dias}</span>
-                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
-                          limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
-                        }`}>DÍAS</span>
+                        <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                          }`}>{op.dias}</span>
+                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
+                          }`}>DÍAS</span>
                         {limiteDiasSel === op.dias && (
                           <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
                         )}
@@ -2845,31 +2958,51 @@ function NuevaOrdenPage() {
 
 function Stepper({ step, enableServicios, enablePrendas }: { step: number; enableServicios: boolean; enablePrendas: boolean }) {
   const stepsList = [
-    { id: 1, label: "Cliente" },
-    enableServicios && { id: 2, label: "Servicios" },
-    enablePrendas && { id: 3, label: "Prendas" },
-    { id: 4, label: "Resumen" },
-    { id: 5, label: "Cobro" }
-  ].filter(Boolean) as { id: number; label: string }[];
+    { id: 1, label: "Cliente", icon: UserIcon },
+    enableServicios && { id: 2, label: "Servicios", icon: LayoutGrid },
+    enablePrendas && { id: 3, label: "Prendas", icon: Shirt },
+    { id: 4, label: "Resumen", icon: Receipt },
+    { id: 5, label: "Cobro", icon: CreditCard }
+  ].filter(Boolean) as { id: number; label: string; icon: any }[];
 
   return (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center justify-center gap-y-4 gap-x-2 md:gap-x-4 max-w-4xl mx-auto w-full py-4 px-2">
       {stepsList.map((stepItem, index) => {
         const done = step > stepItem.id;
         const cur = step === stepItem.id;
-        const visibleNum = index + 1;
+        const Icon = stepItem.icon;
+
         return (
-          <div key={stepItem.label} className="flex flex-1 items-center">
-            <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-              done ? "bg-success text-white" : cur ? "bg-gradient-primary text-white shadow-glow" : "bg-muted text-muted-foreground"
-            }`}>
-              {done ? <Check className="h-4 w-4" /> : visibleNum}
+          <div key={stepItem.label} className="flex items-center">
+            {/* Step circle */}
+            <div className="flex flex-col items-center text-center group">
+              <div
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300 ${done
+                  ? "bg-emerald-600 text-white shadow-md scale-105"
+                  : cur
+                    ? "bg-primary text-white shadow-glow ring-4 ring-primary/20 scale-110"
+                    : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-250 dark:border-slate-700"
+                  }`}
+                title={stepItem.label}
+              >
+                {done ? (
+                  <Check className="h-5 w-5 stroke-[2.5]" />
+                ) : (
+                  <Icon className="h-5 w-5 stroke-[1.8]" />
+                )}
+              </div>
+              <div className={`mt-2 text-[10px] md:text-[11px] font-black uppercase tracking-wider ${cur ? "text-primary font-black animate-pulse" : done ? "text-emerald-700 font-bold" : "text-muted-foreground font-medium"
+                }`}>
+                {stepItem.label}
+              </div>
             </div>
-            <div className={`ml-2 hidden text-xs sm:block ${cur ? "font-semibold text-foreground" : "text-muted-foreground"}`}>
-              {stepItem.label}
-            </div>
+
+            {/* Connector Line */}
             {index < stepsList.length - 1 && (
-              <div className={`mx-2 h-0.5 flex-1 ${done ? "bg-success" : "bg-border"}`} />
+              <div className="flex items-center justify-center px-1 md:px-3">
+                <div className={`h-1 w-6 md:w-12 rounded-full transition-all duration-500 -mt-4 ${done ? "bg-emerald-600" : "bg-slate-200 dark:bg-slate-800"
+                  }`} />
+              </div>
             )}
           </div>
         );
@@ -2946,7 +3079,10 @@ function AddItemDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh] p-0 overflow-hidden flex flex-col rounded-3xl">
+      <DialogContent
+        className="max-w-4xl p-0 overflow-hidden rounded-3xl"
+        style={{ display: "flex", flexDirection: "column", height: "95vh", maxHeight: "90vh" }}
+      >
         <DialogHeader className="p-6 pb-2 border-b border-border/50">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="text-2xl font-display font-bold">
@@ -2955,11 +3091,11 @@ function AddItemDialog({
             <DialogDescription className="sr-only">
               Selecciona las prendas que deseas agregar a la orden.
             </DialogDescription>
-            <div className="relative flex-1 max-w-sm">
+            <div className="relative flex-1 max-w-xs mr-10">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 placeholder="Buscar por nombre..."
-                className="pl-9 h-11 bg-accent/5 rounded-2xl border-primary/10 shadow-sm"
+                className="pl-9 h-9 bg-accent/5 rounded-xl border-primary/10 shadow-sm text-sm"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
               />
@@ -2997,8 +3133,8 @@ function AddItemDialog({
                     key={it.id}
                     onClick={() => handleItemClick(it)}
                     className={`group relative flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border-2 transition-all active:scale-90 text-center ${count > 0
-                        ? "border-primary bg-primary/5"
-                        : "border-border bg-background hover:border-primary/40"
+                      ? "border-primary bg-primary/5"
+                      : "border-border bg-background hover:border-primary/40"
                       }`}
                   >
                     {it.imagen_url ? (
@@ -3178,20 +3314,20 @@ function DiscountPOSDialog({
   );
 }
 
-function TicketPrintPortal({ 
-  orden, 
-  tenant, 
-  cliente, 
-  empleado, 
-  serviciosList, 
-  onClose 
-}: { 
-  orden: Orden; 
-  tenant: any; 
-  cliente: any; 
-  empleado: any; 
-  serviciosList: any[]; 
-  onClose: () => void 
+function TicketPrintPortal({
+  orden,
+  tenant,
+  cliente,
+  empleado,
+  serviciosList,
+  onClose
+}: {
+  orden: Orden;
+  tenant: any;
+  cliente: any;
+  empleado: any;
+  serviciosList: any[];
+  onClose: () => void
 }) {
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -3205,32 +3341,33 @@ function TicketPrintPortal({
     <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
       <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
         <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000] hidden">
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
             className="cursor-pointer"
           >
             Cerrar vista de impresión
           </Button>
-          <Button 
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }} 
+          <Button
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }}
             className="bg-primary text-white gap-2 cursor-pointer"
           >
             <Printer className="h-4 w-4" /> Imprimir ahora
           </Button>
         </div>
 
-        <Ticket 
-          orden={orden} 
-          tenant={tenant} 
-          empleado={empleado} 
-          cliente={cliente} 
-          formato={tenant.config?.formato_ticket || "80mm"} 
+        <Ticket
+          orden={orden}
+          tenant={tenant}
+          empleado={empleado}
+          cliente={cliente}
+          formato={tenant.config?.formato_ticket || "80mm"}
           serviciosList={serviciosList}
         />
       </div>
 
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         @media print {
           @page {
             size: ${tenant.config?.formato_ticket === "57mm" ? "57mm auto" : "80mm auto"};
