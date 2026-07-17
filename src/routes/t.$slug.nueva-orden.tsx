@@ -103,6 +103,7 @@ function NuevaOrdenPage() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
+  const [searchGlow, setSearchGlow] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -500,9 +501,10 @@ function NuevaOrdenPage() {
         }
       }
 
-      // Ctrl+K or / to focus search
-      if ((e.ctrlKey && e.key.toLowerCase() === "k") || e.key === "/") {
+      // Ctrl alone to focus search
+      if (e.key === "Control") {
         e.preventDefault();
+        setSearchGlow(true);
         const searchInput = document.querySelector('input[placeholder*="Buscar prenda"]') as HTMLInputElement;
         if (searchInput) searchInput.focus();
         return;
@@ -538,9 +540,17 @@ function NuevaOrdenPage() {
       }
     };
 
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === "Control") {
+        setSearchGlow(false);
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown, true);
+    window.addEventListener("keyup", handleKeyUp, true);
     return () => {
       window.removeEventListener("keydown", handleKeyDown, true);
+      window.removeEventListener("keyup", handleKeyUp, true);
     };
   }, [isPosMode]);
 
@@ -1020,14 +1030,14 @@ function NuevaOrdenPage() {
                    value={posSearch}
                    onChange={(e) => setPosSearch(e.target.value)}
                    placeholder="Buscar prenda o servicio..."
-                   className="pl-10 h-10 bg-background border border-border shadow-sm focus-visible:border-primary/30 focus-visible:ring-1 focus-visible:ring-primary/10 rounded-xl"
+                   className={`pl-10 h-10 bg-background border shadow-sm rounded-xl transition-all duration-200 ${searchGlow ? 'border-primary ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]' : 'border-border focus-visible:border-primary/30 focus-visible:ring-1 focus-visible:ring-primary/10'}`}
                  />
                 {posSearch ? (
                   <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent" onClick={() => setPosSearch("")}>
                     <X className="h-3.5 w-3.5 text-muted-foreground/30" />
                   </Button>
                 ) : (
-                  <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded bg-card border border-border px-1.5 py-0.5 text-[9px] font-bold text-muted-foreground/50 shadow-sm">Ctrl K</kbd>
+                  <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-primary px-2 py-0.5 text-[9px] font-black text-white shadow-sm">Ctrl</kbd>
                 )}
               </div>
 
@@ -1168,7 +1178,7 @@ function NuevaOrdenPage() {
                           <div className="h-4 w-1 bg-primary rounded-full" />
                           Servicios
                         </h3>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                        <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
                           {servicesFiltered.map(s => {
                             const srvCount = serviciosSel.filter(x => x === s.nombre).length;
                             return (
@@ -1187,9 +1197,9 @@ function NuevaOrdenPage() {
                                     {s.icono || "🧹"}
                                   </div>
                                 )}
-                                <div>
+                                <div className="w-full text-center">
                                   <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
-                                  <div className="mt-1 text-xs font-black text-primary">+{formatRD(s.precio)}</div>
+                                  <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(s.precio)}</div>
                                 </div>
                                 {srvCount > 0 && (
                                   <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
@@ -1214,7 +1224,7 @@ function NuevaOrdenPage() {
                             <div className="h-4 w-1 bg-primary rounded-full" />
                             {catName}
                           </h3>
-                          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
+                          <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
                             {itemsInCat.map(item => {
                               const countInCart = items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0);
 
@@ -1239,9 +1249,9 @@ function NuevaOrdenPage() {
                                       {item.icono || "👕"}
                                     </div>
                                   )}
-                                  <div>
+                                  <div className="w-full text-center">
                                     <div className="text-sm font-bold leading-tight line-clamp-1">{item.nombre}</div>
-                                    <div className="mt-1 text-xs font-black text-primary">+{formatRD(item.precio)}</div>
+                                    <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(item.precio)}</div>
                                   </div>
                                   
                                   {countInCart > 0 && (
