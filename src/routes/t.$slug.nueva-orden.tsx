@@ -80,28 +80,37 @@ function NuevaOrdenPage() {
 
   const [step, setStep] = useState(1);
   const isPosMode = true;
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLDivElement | null>(null);
+  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     const headerDiv = document.querySelector(".main-header > div.flex-1");
     if (!headerDiv) return;
 
     const wrapper = document.createElement("div");
-    wrapper.className = "hidden lg:flex items-center gap-3 ml-auto mr-4 animate-in fade-in duration-300";
+    wrapperRef.current = wrapper;
     headerDiv.appendChild(wrapper);
     setHeaderPortalTarget(wrapper);
 
     return () => {
       wrapper.remove();
+      wrapperRef.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    if (!wrapperRef.current) return;
+    wrapperRef.current.className = isFullscreen
+      ? "absolute left-1/2 -translate-x-1/2 top-3.5 hidden lg:flex items-center gap-3 animate-in fade-in duration-300"
+      : "hidden lg:flex items-center gap-3 ml-auto mr-4 animate-in fade-in duration-300";
+  }, [isFullscreen]);
 
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
   const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
   const [posSearch, setPosSearch] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
 
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
   const [searchGlow, setSearchGlow] = useState(false);
 
@@ -979,29 +988,29 @@ function NuevaOrdenPage() {
           }
         `}} />
       )}
-      {isFullscreen && headerPortalTarget && createPortal(
+      {headerPortalTarget && createPortal(
         <div className="flex items-center gap-3 text-xs bg-slate-100 dark:bg-slate-800/80 py-1.5 px-4 rounded-full border border-border/60 shadow-sm animate-in fade-in duration-200">
           <span className="text-rose-700 dark:text-rose-400 font-extrabold uppercase text-[10px] tracking-wider shrink-0 mr-1">Atajos:</span>
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">F2</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">F2</kbd>
               <span className="text-[11px] font-bold text-muted-foreground">Cliente</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">F4</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">F4</kbd>
               <span className="text-[11px] font-bold text-muted-foreground">Descuento</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">Ctrl+Z</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">Ctrl+Z</kbd>
               <span className="text-[11px] font-bold text-muted-foreground">Deshacer</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">Enter</kbd>
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">Enter</kbd>
               <span className="text-[11px] font-bold text-muted-foreground">Cobrar</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-background border border-border/80 text-[10px] font-black text-slate-700 dark:text-slate-200 shadow-sm">Espacio</kbd>
-              <span className="text-[11px] font-bold text-muted-foreground">Confirmar</span>
+              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">Espacio</kbd>
+              <span className="text-[11px] font-bold text-muted-foreground">Facturar</span>
             </div>
           </div>
         </div>,
@@ -1710,8 +1719,6 @@ function NuevaOrdenPage() {
                       </button>
                     ))}
                   </div>
-
-                  <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => { if (c) { setCliente(c); } setShowNewCliente(false); }} />
                 </>
               )}
 
@@ -2512,7 +2519,7 @@ function NuevaOrdenPage() {
             <Button
               variant="default"
               size="sm"
-              className="h-10 text-xs font-bold rounded-xl bg-primary hover:bg-primary/90 text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98]"
+              className="h-10 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-700"
               onClick={() => {
                 setIsClientModalOpen(false);
                 setShowNewCliente(true);
@@ -2523,7 +2530,7 @@ function NuevaOrdenPage() {
             <Button
               variant="default"
               size="sm"
-              className="h-10 text-xs font-bold rounded-xl bg-slate-600 hover:bg-slate-700 dark:bg-slate-700 dark:hover:bg-slate-600 text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98]"
+              className="h-10 text-xs font-bold rounded-xl bg-[#1e293b] hover:bg-[#0f172a] text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98] dark:bg-[#0f172a] dark:hover:bg-slate-950"
               onClick={() => {
                 setIsClientModalOpen(false);
                 setEmpresaDialogOpen(true);
@@ -2534,6 +2541,8 @@ function NuevaOrdenPage() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => { if (c) { setCliente(c); } setShowNewCliente(false); }} />
 
       <PlanLimitModal
         open={showLimitModal}

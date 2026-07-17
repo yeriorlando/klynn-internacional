@@ -406,7 +406,7 @@ export function TenantShell() {
                 Prueba gratis · {trialDays} días
               </Badge>
             )}
-            <CloudSync tenantId={tenant.id} />
+            {!pathname.endsWith('/nueva-orden') && <CloudSync tenantId={tenant.id} />}
           </div>
 
           <ThemeSwitch />
