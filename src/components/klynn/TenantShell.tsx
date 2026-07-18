@@ -4,7 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import {
   LayoutDashboard, Wallet, Users, Truck, Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone, HelpCircle,
-  Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3
+  Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3, Keyboard
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -37,6 +37,7 @@ interface NavItem {
   hasArrow?: boolean;
   onClick?: () => void;
   isSoporte?: boolean;
+  shortcut?: string;
 }
 
 const NAV: (slug: string) => NavItem[] = (slug) => [
@@ -60,6 +61,7 @@ export function TenantShell() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showSoporteModal, setShowSoporteModal] = useState(false);
+  const [showAtajosModal, setShowAtajosModal] = useState(false);
 
   const { data: cajaData } = useCajaAbierta(user?.tenant?.id || '');
   const cajaAbierta = !!cajaData;
@@ -161,6 +163,56 @@ export function TenantShell() {
       }
     }
   }, [pathname, user, navigate, hasLogistica, hasWhatsApp]);
+
+  useEffect(() => {
+    const slug = user?.tenant?.slug;
+    if (!slug) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setShowAtajosModal(false);
+      }
+
+      if ((e.key === "k" || e.key === "K") && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
+        e.preventDefault();
+        setShowAtajosModal(prev => !prev);
+        return;
+      }
+
+      const target = e.target as HTMLElement;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+         target.tagName === "TEXTAREA" ||
+         target.isContentEditable)
+      ) {
+        return;
+      }
+
+      if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) {
+        return;
+      }
+
+      const key = e.key.toUpperCase();
+      if (key === "N") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/nueva-orden` });
+      } else if (key === "D") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}` });
+      } else if (key === "O") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/ordenes` });
+      } else if (key === "C") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/caja` });
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [user?.tenant?.slug, navigate]);
 
   if (!user || user.tenant.id === '__loading__') {
     return (
@@ -371,6 +423,61 @@ export function TenantShell() {
         </div>
       )}
 
+      {/* Modal Atajos de Teclado */}
+      {showAtajosModal && (
+        <div
+          className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/25 backdrop-blur-[2px] p-4"
+          onClick={() => setShowAtajosModal(false)}
+        >
+          <div
+            className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white dark:bg-slate-950 shadow-2xl p-7 space-y-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pr-10">
+              <h3 className="font-display text-xl font-black text-slate-900 dark:text-white">
+                Atajos de Teclado del Sistema Klynn
+              </h3>
+            </div>
+            <button
+              onClick={() => setShowAtajosModal(false)}
+              className="absolute right-4 top-4 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-90 transition-all hover:opacity-100 hover:scale-105 focus:outline-none shadow-sm"
+              aria-label="Cerrar"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            {/* Grid of Shortcuts */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {[
+                { label: "Ir a POS / Ventas", key: "N" },
+                { label: "Ir a Dashboard", key: "D" },
+                { label: "Ir a Órdenes", key: "O" },
+                { label: "Ver/Abrir Caja", key: "C" },
+              ].map(({ label, key }) => (
+                <div key={key} className="py-2 px-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
+                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-snug">{label}</span>
+                  <kbd className="px-3 py-1 flex items-center justify-center rounded-xl bg-primary text-xs font-bold text-white border-0 shadow-sm select-none shrink-0 tracking-wide whitespace-nowrap">
+                    {key}
+                  </kbd>
+                </div>
+              ))}
+            </div>
+
+            {/* Footer */}
+            <div className="flex justify-end pt-1">
+              <Button
+                className="bg-primary hover:bg-primary/90 text-white rounded-xl h-8 text-sm px-7 font-bold shadow-sm transition-colors"
+                onClick={() => setShowAtajosModal(false)}
+              >
+                Entendido
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+
       {/* Sidebar desktop */}
       <aside id="tour-sidebar" className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out">
         <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} setShowSoporteModal={setShowSoporteModal} hasLogistica={hasLogistica} hasWhatsApp={hasWhatsApp} />
@@ -407,6 +514,19 @@ export function TenantShell() {
               </Badge>
             )}
             {!pathname.endsWith('/nueva-orden') && <CloudSync tenantId={tenant.id} />}
+            {!pathname.endsWith('/nueva-orden') && (
+              <button 
+                onClick={() => setShowAtajosModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
+                title="Mostrar atajos de teclado (Alt+K)"
+              >
+                <Keyboard className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <span>Atajos</span>
+                <kbd className="h-4 px-1.5 flex items-center justify-center rounded-md bg-primary text-[9px] font-bold text-white select-none border-0">
+                  Alt+K
+                </kbd>
+              </button>
+            )}
           </div>
 
           <ThemeSwitch />
@@ -501,10 +621,10 @@ function SidebarContent({
       {
         title: "OPERACIÓN",
         items: [
-          {to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard"},
+          {to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard", shortcut: "D"},
           { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
-          {to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes"},
-          { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
+          {to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes", shortcut: "O"},
+          { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
           { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
           { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
         ]
@@ -620,10 +740,15 @@ function SidebarContent({
               id="tour-nav-nueva-orden"
               onClick={onNavigate}
               onMouseEnter={() => prefetch('nueva-orden')}
-              className="w-full h-11 px-4 rounded-xl text-white shadow-md flex items-center justify-center gap-2.5 font-bold text-[14.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
+              className="w-full h-11 px-4 rounded-xl text-white shadow-md flex items-center justify-between font-bold text-[14.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
             >
-              <PlusCircle className="h-5.5 w-5.5 shrink-0" strokeWidth={2.2} />
-              <span>Nueva orden</span>
+              <div className="flex items-center gap-2.5">
+                <PlusCircle className="h-5.5 w-5.5 shrink-0" strokeWidth={2.2} />
+                <span>Nueva orden</span>
+              </div>
+              <kbd className="hidden sm:inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-extrabold text-white/95 border border-white/10 shadow-sm shrink-0">
+                N
+              </kbd>
             </Link>
           </div>
         )}
@@ -693,6 +818,12 @@ function SidebarContent({
                       }`}>
                         {unreadCount}
                       </Badge>
+                    )}
+
+                    {item.shortcut && (
+                      <kbd className="hidden sm:inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black shadow-sm shrink-0 uppercase select-none bg-primary text-white border-none">
+                        {item.shortcut}
+                      </kbd>
                     )}
                   </Link>
                 );

@@ -28,6 +28,82 @@ import { toast } from "sonner";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
 
+function BoringAvatar({ name, size }: { name: string; size: number }) {
+  const colors = ["#00686c", "#32c2b9", "#edecb3", "#fad928", "#ff9915"];
+  
+  let hash = 0;
+  const seed = name || "User";
+  for (let i = 0; i < seed.length; i++) {
+    hash = seed.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  hash = Math.abs(hash);
+
+  const bg = colors[hash % colors.length];
+  const color1 = colors[(hash + 1) % colors.length];
+  const color2 = colors[(hash + 2) % colors.length];
+  
+  const cx1 = 10 + (hash % 20);
+  const cy1 = 10 + ((hash >> 2) % 20);
+  const r1 = 12 + ((hash >> 4) % 12);
+
+  const cx2 = 5 + ((hash >> 6) % 30);
+  const cy2 = 5 + ((hash >> 8) % 30);
+  const r2 = 8 + ((hash >> 10) % 10);
+
+  const isSmile = (hash >> 12) % 2 === 0;
+  const mouthY = 22 + ((hash >> 14) % 3);
+  const mouthPath = isSmile 
+    ? `M 15 ${mouthY} Q 20 ${mouthY + 4.5} 25 ${mouthY}`
+    : `M 15 ${mouthY + 2} Q 20 ${mouthY} 25 ${mouthY + 2}`;
+
+  const eyeXOffset = (hash >> 16) % 3;
+  const eyeY = 17 + ((hash >> 18) % 2);
+  const faceColor = "#000000";
+
+  return (
+    <svg 
+      viewBox="0 0 40 40" 
+      width={size} 
+      height={size} 
+      style={{ borderRadius: 'inherit', display: 'block' }}
+    >
+      <mask id={`mask-${hash}`}>
+        <rect width="40" height="40" rx="20" fill="white" />
+      </mask>
+      <g mask={`url(#mask-${hash})`}>
+        <rect width="40" height="40" fill={bg} />
+        <circle cx={cx1} cy={cy1} r={r1} fill={color1} opacity="0.85" />
+        <circle cx={cx2} cy={cy2} r={r2} fill={color2} opacity="0.75" />
+        
+        <g transform={`rotate(${(hash >> 20) % 30 - 15} 20 20)`}>
+          <circle cx={15 + eyeXOffset} cy={eyeY} r="1.8" fill={faceColor} />
+          <circle cx={25 - eyeXOffset} cy={eyeY} r="1.8" fill={faceColor} />
+          <path 
+            d={mouthPath} 
+            stroke={faceColor} 
+            strokeWidth="1.8" 
+            fill="none" 
+            strokeLinecap="round" 
+          />
+        </g>
+      </g>
+    </svg>
+  );
+}
+
+function formatPhoneNumber(phone: string): string {
+  if (!phone) return "";
+  const clean = phone.replace(/\D/g, "");
+  
+  if (clean.length === 11 && clean.startsWith("1")) {
+    return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`;
+  } else if (clean.length === 10) {
+    return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
+  }
+  
+  return phone.startsWith("+") ? phone : `+${phone}`;
+}
+
 interface DBConversation {
   id: string;
   tenant_id: string;
@@ -822,12 +898,15 @@ function ConversationsPage() {
                   conv.id === selectedConvId ? "bg-accent" : "hover:bg-muted/40"
                 }`}
               >
-                <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-xs font-bold text-primary shrink-0 mt-0.5">
-                  {(conv.name || "U").split(" ").map((n) => n[0]).join("").toUpperCase()}
+                <div className="shrink-0 mt-0.5 rounded-xl overflow-hidden h-10 w-10">
+                  <BoringAvatar
+                    size={40}
+                    name={conv.name || conv.phone || "U"}
+                  />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
-                    <p className="text-sm font-bold text-foreground truncate">{conv.name || conv.phone}</p>
+                    <p className="text-sm font-bold text-foreground truncate">{conv.name || formatPhoneNumber(conv.phone)}</p>
                     <span className="text-[10px] text-muted-foreground shrink-0 uppercase">
                       {conv.time ? formatDistanceToNow(new Date(conv.time), { addSuffix: false, locale: es }) : ""}
                     </span>
@@ -867,14 +946,17 @@ function ConversationsPage() {
             {/* Header info bar */}
             <div className="border-b border-border bg-card shrink-0 z-10 shadow-sm">
               <div className="h-14 px-5 flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-primary/10 flex items-center justify-center text-xs font-bold text-primary">
-                  {(selectedConversation.name || "U").split(" ").map((n) => n[0]).join("").toUpperCase()}
+                <div className="shrink-0 rounded-xl overflow-hidden h-9 w-9">
+                  <BoringAvatar
+                    size={36}
+                    name={selectedConversation.name || selectedConversation.phone || "U"}
+                  />
                 </div>
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 overflow-hidden">
                   <p className="text-sm font-bold text-foreground truncate">{selectedConversation.name || selectedConversation.phone}</p>
-                  <p className="text-[10px] text-muted-foreground flex items-center gap-1">
-                    <span className="h-2 w-2 rounded-full inline-block bg-emerald-500" />
-                    +{selectedConversation.phone}
+                  <p className="text-xs text-muted-foreground flex items-center gap-1.5 truncate mt-0.5">
+                    <span className="h-2 w-2 rounded-full inline-block bg-emerald-500 shrink-0" />
+                    <span className="font-medium tracking-wide">{formatPhoneNumber(selectedConversation.phone)}</span>
                   </p>
                 </div>
 

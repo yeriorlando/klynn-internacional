@@ -379,7 +379,7 @@ function ConfigPage() {
                 </Select>
               </Field>
 
-              <Field label="Pie de página del ticket" span>
+              <Field label="Pie de página del ticket">
                 <Textarea 
                   className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
                   value={cfg.ticket_pie || ""} 
@@ -398,11 +398,25 @@ function ConfigPage() {
                 />
               </Field>
 
-              <label className="flex items-center justify-between rounded-md border border-input p-3">
-                <span className="text-sm font-medium">Mostrar empleado en ticket</span>
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Mostrar empleado en ticket</span>
+                  <p className="text-[10px] text-muted-foreground">Imprime el nombre del cajero que procesó la orden en la parte inferior del recibo.</p>
+                </div>
                 <Switch 
                   checked={cfg.ticket_mostrar_empleado} 
                   onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Ubicación de la ropa en Conveyor</span>
+                  <p className="text-[10px] text-muted-foreground">Permite al cajero ingresar dónde está la ropa. Se mostrará en el ticket.</p>
+                </div>
+                <Switch 
+                  checked={cfg.usar_ubicacion_ropa || false} 
+                  onCheckedChange={(v) => updateCfg({ usar_ubicacion_ropa: v })} 
                 />
               </label>
             </div>
@@ -425,24 +439,33 @@ function ConfigPage() {
                 <Input className={FIELD} value={formatAmountInput(String(cfg.monto_max_caja_chica))} onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} />
               </Field>
 
-              <label className="flex items-center justify-between rounded-xl border border-input p-3 w-full h-fit self-end">
-                <span className="text-sm font-medium">Habilitar selección de servicios en nueva orden</span>
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 w-full h-fit self-end">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Habilitar selección de servicios</span>
+                  <p className="text-[10px] text-muted-foreground">Muestra los botones de servicios (lavado, secado) en nueva orden.</p>
+                </div>
                 <Switch 
                   checked={cfg.pos_habilitar_servicios !== false} 
                   onCheckedChange={(v) => updateCfg({ pos_habilitar_servicios: v })} 
                 />
               </label>
 
-              <label className="flex items-center justify-between rounded-xl border border-input p-3">
-                <span className="text-sm font-medium">Habilitar selección de prendas en nueva orden</span>
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Habilitar selección de prendas</span>
+                  <p className="text-[10px] text-muted-foreground">Permite desglosar prendas individuales en nueva orden.</p>
+                </div>
                 <Switch 
                   checked={cfg.pos_habilitar_prendas !== false} 
                   onCheckedChange={(v) => updateCfg({ pos_habilitar_prendas: v })} 
                 />
               </label>
 
-              <label className="flex items-center justify-between rounded-xl border border-input p-3">
-                <span className="text-sm font-medium">Habilitar interfaz de venta POS (Modo POS)</span>
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Interfaz de venta POS (Modo POS)</span>
+                  <p className="text-[10px] text-muted-foreground">Activa el modo de cobro rápido optimizado para pantallas táctiles.</p>
+                </div>
                 <Switch 
                   checked={cfg.pos_modo_defecto !== false} 
                   onCheckedChange={(v) => updateCfg({ pos_modo_defecto: v })} 
@@ -1328,13 +1351,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                 onChange={(e) => updateCfg({ itbis_porcentaje: Number(e.target.value) })} 
               />
             </Field>
-            <div className="flex items-center justify-between p-4 border rounded-2xl bg-accent/5">
+            <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
               <div className="space-y-0.5">
-                <div className="text-sm font-bold">Precios incluyen ITBIS</div>
-                <div className="text-xs text-muted-foreground">Si está activo, el ITBIS se desglosa del total.</div>
+                <span className="text-sm font-bold text-primary">Precios incluyen ITBIS</span>
+                <p className="text-[10px] text-muted-foreground">Si está activo, el ITBIS se desglosará internamente del total de la orden.</p>
               </div>
               <Switch checked={cfg.itbis_incluido} onCheckedChange={(v) => updateCfg({ itbis_incluido: v })} />
-            </div>
+            </label>
           </div>
         </Card>
 

@@ -113,6 +113,7 @@ export interface TenantConfig {
   pos_habilitar_servicios?: boolean;
   pos_habilitar_prendas?: boolean;
   pos_modo_defecto?: boolean;
+  usar_ubicacion_ropa?: boolean;
   modulos_override?: {
     whatsapp?: boolean;
     facturacion_fiscal?: boolean;
@@ -192,6 +193,7 @@ export interface Orden {
   estado: EstadoOrden;
   fecha_entrega: string;
   es_urgente: boolean;
+  ubicacion_ropa?: string;
   notas?: string;
   creado_en: string;
   ncf?: string;

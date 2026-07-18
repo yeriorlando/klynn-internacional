@@ -439,7 +439,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
           {cliente && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button type="button" variant="ghost" className="text-destructive hover:bg-destructive/10 rounded-xl h-10 text-xs"><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar</Button>
+                <Button type="button" className="bg-red-500 hover:bg-red-600 text-white border border-red-600 hover:border-red-700 rounded-xl h-10 text-xs px-4 font-bold shadow-sm transition-colors"><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar</Button>
               </AlertDialogTrigger>
               <AlertDialogContent className="rounded-2xl border-none shadow-card">
                 <AlertDialogHeader>

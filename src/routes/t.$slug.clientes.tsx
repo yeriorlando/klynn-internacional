@@ -135,21 +135,35 @@ function ClientesPage() {
           const deuda = deudaCliente(c.id);
           const total = totalGastado(c.id);
           return (
-            <Card key={c.id} className="cursor-pointer p-5 transition hover:shadow-elegant" onClick={() => setEdit(c)}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-display text-lg">{c.nombre} {c.apellido || ""}</div>
-                  <div className="mt-1 flex items-center gap-1 text-xs text-muted-foreground"><Phone className="h-3 w-3" /> {c.telefono}</div>
-                  {c.email && <div className="flex items-center gap-1 text-xs text-muted-foreground"><Mail className="h-3 w-3" /> {c.email}</div>}
-                  {c.direccion && <div className="flex items-center gap-1 text-xs text-muted-foreground"><MapPin className="h-3 w-3" /> {c.direccion}</div>}
+            <Card key={c.id} className="cursor-pointer p-5 transition hover:shadow-elegant flex flex-col h-full" onClick={() => setEdit(c)}>
+              <div className="flex items-start justify-between gap-3 flex-1">
+                <div className="min-w-0 flex-1">
+                  <div className="font-display text-lg line-clamp-2 leading-tight" title={`${c.nombre} ${c.apellido || ""}`.trim()}>
+                    {c.nombre} {c.apellido || ""}
+                  </div>
+                  <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Phone className="h-3 w-3 shrink-0" /> <span className="truncate">{c.telefono}</span>
+                  </div>
+                  {c.email && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Mail className="h-3 w-3 shrink-0" /> <span className="truncate">{c.email}</span>
+                    </div>
+                  )}
+                  {c.direccion && (
+                    <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <MapPin className="h-3 w-3 shrink-0" /> <span className="truncate">{c.direccion}</span>
+                    </div>
+                  )}
                 </div>
-                {c.tipo === "Empresa" ? (
-                  <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-600">Empresa</Badge>
-                ) : (
-                  <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600">Consumidor Final</Badge>
-                )}
+                <div className="shrink-0">
+                  {c.tipo === "Empresa" ? (
+                    <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-600 whitespace-nowrap">Empresa</Badge>
+                  ) : (
+                    <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600 whitespace-nowrap">Consumidor Final</Badge>
+                  )}
+                </div>
               </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs">
+              <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs shrink-0">
                 <div><div className="text-muted-foreground">Total gastado</div><div className="font-display text-base">{formatRD(total)}</div></div>
                 <div><div className="text-muted-foreground">Deuda</div><div className={`font-display text-base ${deuda > 0 ? "text-destructive" : ""}`}>{formatRD(deuda)}</div></div>
               </div>

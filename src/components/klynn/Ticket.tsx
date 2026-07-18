@@ -88,7 +88,14 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div>
-        <div><b>ORDEN:</b> {orden.numero}</div>
+        {orden.ubicacion_ropa && (
+          <div className="font-black uppercase text-[12px] mb-1 border-b border-dashed border-black pb-0.5 text-center bg-black/5">
+            UBICACIÓN: {orden.ubicacion_ropa}
+          </div>
+        )}
+        <div className="flex justify-between items-center">
+          <div><b>ORDEN:</b> {orden.numero}</div>
+        </div>
         {orden.nota_credito_ncf ? (
           <>
             <div className="text-destructive font-bold">
