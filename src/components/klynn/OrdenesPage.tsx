@@ -185,12 +185,12 @@ export function OrdenesPage() {
 
   if (!user || user.tenant.id === '__loading__') return null;
 
-  async function cambiarEstado(o: Orden, estado: EstadoOrden) {
+  async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
     // If marking as LISTA and conveyor is enabled, show the modal first
     if (estado === "LISTA" && tenant?.config?.usar_ubicacion_ropa) {
       setConveyorOrden(o);
       setConveyorUbicacion("");
-      return;
+      return false; // Don't close the current modal immediately
     }
     try {
       await updateOrdenEstado(o.id, estado);
@@ -210,8 +210,10 @@ export function OrdenesPage() {
           notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada");
         }
       }
+      return true;
     } catch (err: any) {
       toast.error("Error al actualizar estado");
+      return true;
     }
   }
 
@@ -1124,10 +1126,15 @@ export function OrdenesPage() {
               return (
                 <button
                   key={s.value}
-                  onClick={() => {
+                  onClick={async () => {
                     if (!isCurrent && estadoModal) {
-                      cambiarEstado(estadoModal, s.value);
-                      setEstadoModal(null);
+                      const shouldCloseImmediately = await cambiarEstado(estadoModal, s.value);
+                      if (shouldCloseImmediately) {
+                        setEstadoModal(null);
+                      } else {
+                        // Delay closing the current modal slightly so the conveyor modal can mount properly
+                        setTimeout(() => setEstadoModal(null), 100);
+                      }
                     }
                   }}
                   disabled={isCurrent}
@@ -1148,9 +1155,22 @@ export function OrdenesPage() {
             })}
           </div>
 
-          <div className="flex justify-center">
-            <Button variant="outline" className="text-sm text-slate-700 font-semibold h-9 px-8 rounded-xl border-slate-200 hover:bg-slate-50" onClick={() => setEstadoModal(null)}>
+          <div className="flex justify-center gap-3">
+            <Button variant="outline" className="text-sm text-slate-700 font-semibold h-9 px-6 rounded-xl border-slate-200 hover:bg-slate-50" onClick={() => setEstadoModal(null)}>
               Cancelar
+            </Button>
+            <Button 
+              className="text-sm font-semibold h-9 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm gap-2" 
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setTimeout(() => {
+                  window.print();
+                  setTimeout(() => setEstadoModal(null), 500);
+                }, 50);
+              }}
+            >
+              <Printer className="h-4 w-4" /> Imprimir Ticket
             </Button>
           </div>
         </DialogContent>
@@ -1191,6 +1211,17 @@ export function OrdenesPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {estadoModal && (
+        <TicketPrintPortal 
+          orden={estadoModal} 
+          tenant={tenant} 
+          clientes={clientes} 
+          empleados={empleados} 
+          onClose={() => {}}
+          hiddenPreview={true}
+        />
+      )}
     </div>
   );
 }
@@ -1264,7 +1295,12 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
             <div className="mb-2 text-xs uppercase text-muted-foreground">Cambiar estado</div>
             <div className="flex flex-wrap gap-1.5">
               {(["RECIBIDA", "EN_PROCESO", "LISTA", "ENTREGADA"] as EstadoOrden[]).map((s) => (
-                <Button key={s} size="sm" variant={view.estado === s ? "default" : "outline"} onClick={() => { cambiarEstado(view, s); setView({ ...view, estado: s }); }}>{s.replace("_", " ")}</Button>
+                <Button key={s} size="sm" variant={view.estado === s ? "default" : "outline"} onClick={async () => { 
+                  const shouldChange = await cambiarEstado(view, s); 
+                  if (shouldChange) {
+                    setView({ ...view, estado: s }); 
+                  }
+                }}>{s.replace("_", " ")}</Button>
               ))}
             </div>
           </div>
@@ -1307,19 +1343,23 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
   );
 }
 
-export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose, pagoRecibido }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void; pagoRecibido?: number }) {
-  const [emp, setEmp] = useState<any>(null);
-  const [cli, setCli] = useState<any>(null);
+export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose, pagoRecibido, hiddenPreview = false }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void; pagoRecibido?: number; hiddenPreview?: boolean }) {
+  const initialEmp = empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" };
+  const initialCli = clientes.find(c => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" };
+  
+  const [emp, setEmp] = useState<any>(initialEmp);
+  const [cli, setCli] = useState<any>(initialCli);
   const [srvList, setSrvList] = useState<any[]>([]);
 
+  // Async data fetch for extra details
   useEffect(() => {
     Promise.all([
       getEmpleadoById(orden.empleado_id).catch(() => null),
       Promise.resolve(clientes.find(c => c.id === orden.cliente_id)),
       getServicios(tenant.id)
     ]).then(([e, c, s]) => {
-      setEmp(e || empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" });
-      setCli(c || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
+      if (e) setEmp(e);
+      if (c) setCli(c);
       setSrvList(s);
     });
   }, [orden, tenant.id, clientes, empleados]);
@@ -1327,7 +1367,7 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
   if (!emp || !cli) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
+    <div className={`fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target ${hiddenPreview ? 'opacity-0 pointer-events-none print:opacity-100' : ''}`}>
       <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
         <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000]">
           <Button 

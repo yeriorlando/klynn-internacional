@@ -1211,23 +1211,27 @@ export async function saveOrden(o: Orden) {
   }
 }
 
-/** Update only the estado (and optionally ubicacion_ropa) without touching saldo/pagado/total */
 export async function updateOrdenEstado(id: string, estado: EstadoOrden, ubicacion_ropa?: string) {
   const updates: Record<string, any> = { estado };
   if (ubicacion_ropa !== undefined) updates.ubicacion_ropa = ubicacion_ropa;
+  
+  // Siempre intentar actualizar localmente por si la orden no se ha sincronizado
+  const local = read<Orden[]>(KEY.ordenes, []);
+  const idx = local.findIndex(x => x.id === id);
+  let localUpdated = false;
+  if (idx >= 0) {
+    local[idx].estado = estado;
+    if (ubicacion_ropa !== undefined) local[idx].ubicacion_ropa = ubicacion_ropa;
+    write(KEY.ordenes, local);
+    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    localUpdated = true;
+  }
+
   try {
     const { error } = await supabase.from('ordenes').update(updates).eq('id', id);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: updating order estado locally", err);
-    const local = read<Orden[]>(KEY.ordenes, []);
-    const idx = local.findIndex(x => x.id === id);
-    if (idx >= 0) {
-      local[idx].estado = estado;
-      if (ubicacion_ropa !== undefined) local[idx].ubicacion_ropa = ubicacion_ropa;
-      write(KEY.ordenes, local);
-      window.dispatchEvent(new CustomEvent('klynn-offline-save'));
-    }
+    console.error("Offline fallback: updating order estado locally failed", err);
   }
 }
 

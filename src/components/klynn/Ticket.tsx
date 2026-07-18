@@ -89,7 +89,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       <Sep />
       <div>
         {orden.ubicacion_ropa && pagoRecibido === undefined && (
-          <div className="font-black uppercase text-[12px] mb-1 border-b border-dashed border-black pb-0.5 text-center bg-black/5">
+          <div className="font-black uppercase text-[13px] py-1.5 mb-2 border-y border-dashed border-black text-center bg-black/10">
             UBICACIÓN: {orden.ubicacion_ropa}
           </div>
         )}
