@@ -141,7 +141,6 @@ function NuevaOrdenPage() {
   const [items, setItems] = useState<OrdenItem[]>([]);
   const [showAddItem, setShowAddItem] = useState(false);
   const [esUrgente, setEsUrgente] = useState(false);
-  const [ubicacionRopa, setUbicacionRopa] = useState("");
   const [aplicarItbis, setAplicarItbis] = useState(true);
   const [descuento, setDescuento] = useState(0);
   const [fechaEntrega, setFechaEntrega] = useState<Date | undefined>(new Date());
@@ -827,7 +826,6 @@ function NuevaOrdenPage() {
         estado: "RECIBIDA",
         fecha_entrega: deliveryDate.toISOString(),
         es_urgente: esUrgente,
-        ubicacion_ropa: ubicacionRopa || undefined,
         notas: notas || undefined,
         creado_en: new Date().toISOString(),
         ncf: finalNCF,
@@ -1540,18 +1538,6 @@ function NuevaOrdenPage() {
                 />
               </label>
             </div>
-
-            {cfg.usar_ubicacion_ropa && (
-              <div className="px-4 py-3 border-t border-primary/10 bg-primary/[0.02]">
-                <label className="text-xs font-bold text-muted-foreground mb-1.5 block">Ubicación de la ropa</label>
-                <Input 
-                  value={ubicacionRopa} 
-                  onChange={(e) => setUbicacionRopa(e.target.value)} 
-                  placeholder="Ej. Casillero 4, Estante A..." 
-                  className="h-8 text-sm bg-white"
-                />
-              </div>
-            )}
 
             {/* Footer: Totals & Button */}
             <div className="p-4 bg-primary/5 border-t border-primary/10 space-y-2">

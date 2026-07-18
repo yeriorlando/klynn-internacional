@@ -1211,6 +1211,26 @@ export async function saveOrden(o: Orden) {
   }
 }
 
+/** Update only the estado (and optionally ubicacion_ropa) without touching saldo/pagado/total */
+export async function updateOrdenEstado(id: string, estado: EstadoOrden, ubicacion_ropa?: string) {
+  const updates: Record<string, any> = { estado };
+  if (ubicacion_ropa !== undefined) updates.ubicacion_ropa = ubicacion_ropa;
+  try {
+    const { error } = await supabase.from('ordenes').update(updates).eq('id', id);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Offline fallback: updating order estado locally", err);
+    const local = read<Orden[]>(KEY.ordenes, []);
+    const idx = local.findIndex(x => x.id === id);
+    if (idx >= 0) {
+      local[idx].estado = estado;
+      if (ubicacion_ropa !== undefined) local[idx].ubicacion_ropa = ubicacion_ropa;
+      write(KEY.ordenes, local);
+      window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    }
+  }
+}
+
 export async function getOrdenById(id: string): Promise<Orden | undefined> {
   const { data, error } = await supabase.from('ordenes').select('*').eq('id', id).single();
   if (error) return undefined;
@@ -1301,8 +1321,18 @@ export async function getMovimientos(tenant_id: string, caja_id?: string): Promi
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
-  const { error } = await supabase.from('movimientos_caja').insert(m);
-  if (error) throw error;
+  try {
+    const { error } = await supabase.from('movimientos_caja').insert(m);
+    if (error) throw error;
+  } catch (err) {
+    console.error("Offline fallback: saving movimiento locally", err);
+    const local = read<MovimientoCaja[]>(KEY.movimientos, []);
+    if (!local.some(x => x.id === m.id)) {
+      local.push(m);
+    }
+    write(KEY.movimientos, local);
+    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+  }
 }
 
 // ============ Gastos (Supabase) ============
@@ -1817,7 +1847,7 @@ export function can(empleado: Empleado, action: string): boolean {
 }
 
 export async function migrateLocalDataToSupabase(tenant_id: string) {
-  const results = { ordenes: 0, clientes: 0, catalogo: 0, gastos: 0 };
+  const results = { ordenes: 0, clientes: 0, catalogo: 0, gastos: 0, movimientos: 0 };
   if (!isBrowser()) return results;
 
   // 1. Clientes
@@ -1929,11 +1959,31 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
     }
   }
 
+  // 5. Movimientos
+  const localMovs = read<MovimientoCaja[]>(KEY.movimientos, []);
+  const toMigrateMovs = localMovs.filter(x => x.tenant_id === tenant_id);
+  const failedMovsIds = new Set<string>();
+  for (const m of toMigrateMovs) {
+    try {
+      const { error } = await supabase.from('movimientos_caja').upsert(m);
+      if (error) {
+        console.error("Migrate Movimiento error:", error);
+        failedMovsIds.add(m.id);
+      } else {
+        results.movimientos++;
+      }
+    } catch (e) {
+      console.error("Migrate Movimiento network error:", e);
+      failedMovsIds.add(m.id);
+    }
+  }
+
   // Limpiar solo lo que se migró exitosamente
   if (results.clientes > 0) write(KEY.clientes, localClientes.filter(x => x.tenant_id !== tenant_id || failedClientesIds.has(x.id)));
   if (results.ordenes > 0) write(KEY.ordenes, localOrds.filter(x => x.tenant_id !== tenant_id || failedOrdsIds.has(x.id)));
   if (results.catalogo > 0) write(KEY.catalogo, localCat.filter(x => x.tenant_id !== tenant_id || failedCatIds.has(x.id)));
   if (results.gastos > 0) write(KEY.gastos, localGastos.filter(x => x.tenant_id !== tenant_id || failedGastosIds.has(x.id)));
+  if (results.movimientos > 0) write(KEY.movimientos, localMovs.filter(x => x.tenant_id !== tenant_id || failedMovsIds.has(x.id)));
 
   return results;
 }

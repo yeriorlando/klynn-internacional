@@ -18,7 +18,8 @@ import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, getServicios,
   type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago,
-  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE
+  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
+  updateOrdenEstado
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import { toast } from "sonner";
@@ -75,6 +76,10 @@ export function OrdenesPage() {
   const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
   const navigate = useNavigate();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [conveyorOrden, setConveyorOrden] = useState<Orden | null>(null);
+  const [conveyorUbicacion, setConveyorUbicacion] = useState("");
+  const [savingConveyor, setSavingConveyor] = useState(false);
+  const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
 
   useEffect(() => {
     if (!openMenuId) return;
@@ -181,21 +186,56 @@ export function OrdenesPage() {
   if (!user || user.tenant.id === '__loading__') return null;
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden) {
+    // If marking as LISTA and conveyor is enabled, show the modal first
+    if (estado === "LISTA" && tenant?.config?.usar_ubicacion_ropa) {
+      setConveyorOrden(o);
+      setConveyorUbicacion("");
+      return;
+    }
     try {
-      await saveOrden({ ...o, estado });
+      await updateOrdenEstado(o.id, estado);
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      const labels: Record<EstadoOrden, string> = {
+        RECIBIDA: "Orden recibida",
+        EN_PROCESO: "Orden en proceso",
+        LISTA: "Orden lista",
+        ENTREGADA: "Orden entregada",
+        ANULADA: "Orden anulada",
+      };
+      toast.success(labels[estado]);
+      // Notificar silenciosamente por WhatsApp si aplica
       if (estado === "LISTA" || estado === "ENTREGADA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
         if (cli) {
-          toast.success(estado === "LISTA" ? "Orden lista — notificando al cliente..." : "Orden entregada — notificando al cliente...");
-          notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada").then((r) => {
-            if (r.ok) toast.success("WhatsApp enviado al cliente \u2705");
-          });
+          notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada");
         }
       }
     } catch (err: any) {
       toast.error("Error al actualizar estado");
     }
+  }
+
+  async function confirmarConveyor() {
+    if (!conveyorOrden) return;
+    setSavingConveyor(true);
+    try {
+      await updateOrdenEstado(conveyorOrden.id, "LISTA" as EstadoOrden, conveyorUbicacion || undefined);
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      const ordenActualizada = { ...conveyorOrden, estado: "LISTA" as EstadoOrden, ubicacion_ropa: conveyorUbicacion || undefined };
+      const cli = clientes.find((c) => c.id === conveyorOrden.cliente_id);
+      if (cli) {
+        notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then((r) => {
+          if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+        });
+      }
+      toast.success("Orden marcada como Lista ✓");
+      setShowPrint(ordenActualizada);
+      setConveyorOrden(null);
+      setConveyorUbicacion("");
+    } catch (err: any) {
+      toast.error("Error al guardar ubicación");
+    }
+    setSavingConveyor(false);
   }
 
   async function anularOrden() {
@@ -667,7 +707,16 @@ export function OrdenesPage() {
               {paginatedOrders.map((o) => {
                 const c = clientes.find((x) => x.id === o.cliente_id);
                 return (
-                  <tr key={o.id} className="border-b border-border/50 hover:bg-accent/30">
+                  <tr 
+                    key={o.id} 
+                    className="border-b border-border/50 hover:bg-accent/40 cursor-pointer transition-colors duration-100"
+                    onClick={(e) => {
+                      // Don't open modal if clicking on action buttons or badges
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button') || target.closest('[role="menuitem"]') || target.closest('.action-menu-container')) return;
+                      if (o.estado !== "ANULADA") setEstadoModal(o);
+                    }}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
@@ -688,57 +737,23 @@ export function OrdenesPage() {
                     </td>
                     <td className="px-4 py-3 text-center">
                       {o.estado === "ANULADA" ? (
-                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600 dark:border-red-800 dark:bg-red-950/30 dark:text-red-400">
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[11px] font-bold text-red-600">
                           <Ban className="h-3 w-3" /> ANULADA
                         </span>
                       ) : (
-                        <DropdownMenu modal={false}>
-                          <DropdownMenuTrigger asChild>
-                            <button className="cursor-pointer transition-transform duration-100 active:scale-90 hover:scale-[1.08] focus:outline-none">
-                              <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors duration-150 ${
-                                o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400" :
-                                o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" :
-                                o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" :
-                                o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400" :
-                                "border-zinc-200 bg-zinc-50 text-zinc-600"
-                              }`}>
-                                {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
-                                {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
-                                {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
-                                {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
-                                {o.estado.replace("_", " ")}
-                              </span>
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="center" sideOffset={4} className="w-[180px] p-1.5 rounded-xl shadow-lg border border-border/60">
-                            <div className="space-y-1">
-                              {([
-                                { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, solidBg: "bg-blue-600", hoverBg: "hover:bg-blue-50 dark:hover:bg-blue-950/20" },
-                                { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, solidBg: "bg-amber-500", hoverBg: "hover:bg-amber-50 dark:hover:bg-amber-950/20" },
-                                { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, solidBg: "bg-emerald-600", hoverBg: "hover:bg-emerald-50 dark:hover:bg-emerald-950/20" },
-                                { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, solidBg: "bg-purple-600", hoverBg: "hover:bg-purple-50 dark:hover:bg-purple-950/20" },
-                              ]).map((s) => {
-                                const Icon = s.icon;
-                                const isCurrent = o.estado === s.value;
-                                return (
-                                  <button
-                                    key={s.value}
-                                    onClick={() => { if (!isCurrent) cambiarEstado(o, s.value); }}
-                                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors duration-75 ${
-                                      isCurrent ? "bg-accent font-bold" : `${s.hoverBg} text-foreground`
-                                    }`}
-                                  >
-                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${s.solidBg}`}>
-                                      <Icon className="h-3.5 w-3.5 text-white" />
-                                    </span>
-                                    {s.label}
-                                    {isCurrent && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                          o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700" :
+                          o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700" :
+                          o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700" :
+                          o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700" :
+                          "border-zinc-200 bg-zinc-50 text-zinc-600"
+                        }`}>
+                          {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
+                          {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
+                          {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
+                          {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
+                          {o.estado.replace("_", " ")}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
@@ -1051,6 +1066,131 @@ export function OrdenesPage() {
           }}
         />
       )}
+
+      {/* Modal de Estado de Orden */}
+      <Dialog open={!!estadoModal} onOpenChange={(o) => { if (!o) setEstadoModal(null); }}>
+        <DialogContent className="sm:max-w-3xl rounded-[24px] p-6 overflow-hidden bg-white shadow-2xl">
+          {/* Header */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white shrink-0 shadow-sm ${
+              estadoModal?.estado === "RECIBIDA" ? "bg-blue-500" :
+              estadoModal?.estado === "EN_PROCESO" ? "bg-amber-500" :
+              estadoModal?.estado === "LISTA" ? "bg-emerald-500" :
+              "bg-purple-500"
+            }`}>
+              {estadoModal?.estado === "RECIBIDA" && <Inbox className="h-5 w-5" />}
+              {estadoModal?.estado === "EN_PROCESO" && <RefreshCw className="h-5 w-5" />}
+              {estadoModal?.estado === "LISTA" && <CircleCheck className="h-5 w-5" />}
+              {estadoModal?.estado === "ENTREGADA" && <Truck className="h-5 w-5" />}
+            </div>
+            <div>
+              <DialogTitle className="text-lg font-black leading-tight text-slate-900">{estadoModal?.numero}</DialogTitle>
+              <div className="text-xs font-medium mt-0.5 flex items-center gap-1.5">
+                <span className="text-blue-600 uppercase tracking-wide">{clientes.find(c => c.id === estadoModal?.cliente_id)?.nombre || "Consumidor Final"}</span>
+                <span className="text-slate-400">•</span>
+                <span className="text-slate-500">Cambiar estado</span>
+              </div>
+            </div>
+          </div>
+          
+          {/* Título Central */}
+          <div className="text-center mb-5">
+            <h2 className="text-lg font-bold text-slate-900 mb-1">Cambiar estado de la orden</h2>
+            <p className="text-[13px] text-slate-500">Selecciona el nuevo estado para actualizar el progreso de esta orden.</p>
+          </div>
+          
+          {/* Tarjetas */}
+          <div className="grid grid-cols-4 gap-3 mb-6 px-1">
+            {([
+              { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "La orden ha sido recibida y está pendiente de revisión." },
+              { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "La orden está siendo procesada actualmente." },
+              { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, color: "emerald", desc: "La orden está lista para ser entregada." },
+              { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, color: "purple", desc: "La orden ha sido entregada al cliente." },
+            ]).map((s) => {
+              const Icon = s.icon;
+              const isCurrent = estadoModal?.estado === s.value;
+              
+              const colorClasses = {
+                blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/40", activeBorder: "border-blue-400", activeCheckBg: "bg-blue-500" },
+                amber: { iconBg: "bg-amber-100", iconColor: "text-amber-500", activeCardBg: "bg-amber-50/40", activeBorder: "border-amber-400", activeCheckBg: "bg-amber-500" },
+                emerald: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", activeCardBg: "bg-emerald-50/40", activeBorder: "border-emerald-400", activeCheckBg: "bg-emerald-500" },
+                purple: { iconBg: "bg-purple-100", iconColor: "text-purple-600", activeCardBg: "bg-purple-50/40", activeBorder: "border-purple-400", activeCheckBg: "bg-purple-500" }
+              }[s.color]!;
+
+              const cardClass = isCurrent 
+                ? `border-[1.5px] ${colorClasses.activeBorder} ${colorClasses.activeCardBg} shadow-sm`
+                : `border border-slate-200 bg-white hover:shadow-md hover:border-slate-300`;
+
+              return (
+                <button
+                  key={s.value}
+                  onClick={() => {
+                    if (!isCurrent && estadoModal) {
+                      cambiarEstado(estadoModal, s.value);
+                      setEstadoModal(null);
+                    }
+                  }}
+                  disabled={isCurrent}
+                  className={`relative flex flex-col items-center justify-start text-center rounded-[16px] p-4 transition-all duration-200 active:scale-95 cursor-pointer ${cardClass}`}
+                >
+                  {isCurrent && (
+                    <div className={`absolute top-2.5 right-2.5 h-[18px] w-[18px] rounded-full flex items-center justify-center text-white shadow-sm ${colorClasses.activeCheckBg}`}>
+                      <Check className="h-3 w-3" strokeWidth={3} />
+                    </div>
+                  )}
+                  <div className={`h-[52px] w-[52px] rounded-full flex items-center justify-center mb-3 ${colorClasses.iconBg}`}>
+                    <Icon className={`h-6 w-6 ${colorClasses.iconColor}`} strokeWidth={2.5} />
+                  </div>
+                  <h3 className="text-[15px] font-bold text-slate-900 mb-1.5">{s.label}</h3>
+                  <p className="text-[11px] text-slate-500 leading-snug font-medium">{s.desc}</p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex justify-center">
+            <Button variant="outline" className="text-sm text-slate-700 font-semibold h-9 px-8 rounded-xl border-slate-200 hover:bg-slate-50" onClick={() => setEstadoModal(null)}>
+              Cancelar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal Conveyor - Ubicación de la ropa */}
+      <Dialog open={!!conveyorOrden} onOpenChange={(o) => { if (!o) { setConveyorOrden(null); setConveyorUbicacion(""); } }}>
+        <DialogContent className="sm:max-w-sm rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <span className="text-xl">🔄</span>
+              Ubicación en Conveyor
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Orden <span className="font-bold text-foreground">{conveyorOrden?.numero}</span> — Ingresa la posición del conveyor donde quedará colgada la ropa. Se imprimirá en el ticket de logística.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2">
+            <label className="text-xs font-bold text-muted-foreground block mb-1.5">Posición en Conveyor</label>
+            <Input
+              autoFocus
+              value={conveyorUbicacion}
+              onChange={(e) => setConveyorUbicacion(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter" && !savingConveyor) confirmarConveyor(); }}
+              placeholder="Ej. 1909, A-12, Gancho 5..."
+              className="text-lg font-bold h-11 text-center tracking-widest"
+            />
+            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">Puede dejar vacío si no aplica</p>
+          </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" size="sm" onClick={() => { setConveyorOrden(null); setConveyorUbicacion(""); }}>
+              Cancelar
+            </Button>
+            <Button size="sm" onClick={confirmarConveyor} disabled={savingConveyor} className="gap-1.5">
+              {savingConveyor ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleCheck className="h-3.5 w-3.5" />}
+              Guardar e Imprimir Ticket
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

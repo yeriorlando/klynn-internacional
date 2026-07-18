@@ -10,7 +10,7 @@ export function CloudSync({ tenantId }: { tenantId: string }) {
   // Verificar si hay datos locales pendientes ESPECÍFICOS de este tenant
   const checkLocalData = () => {
     try {
-      const keys = ["lvx:ordenes", "lvx:clientes", "lvx:catalogo", "lvx:gastos"];
+      const keys = ["lvx:ordenes", "lvx:clientes", "lvx:catalogo", "lvx:gastos", "lvx:movimientos"];
       const hasDataForTenant = keys.some(k => {
         const val = localStorage.getItem(k);
         if (!val) return false;
