@@ -31,18 +31,29 @@ import {
   type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft } from "@/lib/fiscal";
+import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft } from "@/lib/fiscal";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { createPortal } from "react-dom";
+import { Ticket } from "@/components/klynn/Ticket";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar,
-  User, Palette, FileText, Banknote, Star, Sparkles, ArrowRight, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff,
-  FlaskConical, Globe
+  User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, Zap, Laptop, Wrench,
+  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban
 } from "lucide-react";
+import {
+  connectBluetoothDevice,
+  connectSerialPort,
+  encodeEscPos,
+  simulateEscPosDump,
+  printDirectRaw,
+  isBluetoothSupported,
+  isSerialSupported
+} from "@/lib/impresora";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 export const Route = createFileRoute("/t/$slug/configuracion")({ component: ConfigPage });
@@ -89,6 +100,259 @@ function ConfigPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
+  // Estados para configuración de impresora física
+  const [showPhysicalPrinterConfig, setShowPhysicalPrinterConfig] = useState(false);
+  const [bluetoothDeviceName, setBluetoothDeviceName] = useState("");
+  const [connectionStatus, setConnectionStatus] = useState("No conectada");
+  const [loadingHardware, setLoadingHardware] = useState(false);
+  const [showKioskHelpModal, setShowKioskHelpModal] = useState(false);
+  const [printingFakeTicket, setPrintingFakeTicket] = useState<{ orden: any; cliente: any; empleado: any; isEscPos: boolean } | null>(null);
+
+  function getFriendlyErrorMessage(err: any): string {
+    const msg = err?.message || "";
+    if (msg.includes("No port selected") || msg.includes("requestPort") || msg.includes("cancelled")) {
+      return "Selección de puerto cancelada o sin seleccionar.";
+    }
+    if (msg.includes("requestDevice") || msg.includes("no device selected") || msg.includes("chooser")) {
+      return "Búsqueda de dispositivo cancelada o sin seleccionar.";
+    }
+    if (msg.includes("Bluetooth is not supported") || msg.includes("bluetooth is disabled")) {
+      return "Tu navegador no soporta Bluetooth Web o el Bluetooth está desactivado. Te sugerimos usar Google Chrome.";
+    }
+    if (msg.includes("Serial is not supported") || msg.includes("serial is disabled")) {
+      return "Tu navegador no soporta Puerto Serie Web o está desactivado. Te sugerimos usar Google Chrome.";
+    }
+    if (msg.includes("Failed to open the serial port") || msg.includes("port is busy") || msg.includes("locked")) {
+      return "No se pudo abrir el puerto. Asegúrate de que no esté ocupado por otro programa.";
+    }
+    if (msg.includes("NetworkError")) {
+      return "Error de red al conectar con el dispositivo.";
+    }
+    if (msg.includes("GATT")) {
+      return "Error de comunicación Bluetooth. Re-conecta la impresora.";
+    }
+    if (msg.includes("writable") || msg.includes("writableStream")) {
+      return "El puerto de escritura no está disponible.";
+    }
+    return msg;
+  }
+
+  async function handleBluetoothConnect() {
+    setLoadingHardware(true);
+    try {
+      const device = await connectBluetoothDevice();
+      setBluetoothDeviceName(device.name || "Impresora Bluetooth");
+      setConnectionStatus("Conectada");
+      toast.success("¡Impresora Bluetooth conectada!");
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error de Bluetooth: " + getFriendlyErrorMessage(err));
+    } finally {
+      setLoadingHardware(false);
+    }
+  }
+
+  async function handleSerialConnect() {
+    setLoadingHardware(true);
+    try {
+      await connectSerialPort(cfg.impresora_serial_baud || 9600);
+      setConnectionStatus("Conectada");
+      toast.success(`¡Puerto Serie conectado a ${cfg.impresora_serial_baud || 9600} baudios!`);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error de Puerto Serie: " + getFriendlyErrorMessage(err));
+    } finally {
+      setLoadingHardware(false);
+    }
+  }
+
+  const handleDownloadDiagnostic = () => {
+    const now = new Date();
+    const ua = navigator.userAgent;
+    
+    // 1. Detectar navegador
+    let browserName = "Desconocido";
+    if (ua.includes("Firefox")) {
+      const match = ua.match(/Firefox\/(\d+)/);
+      browserName = `Firefox ${match ? match[1] : ""}`;
+    } else if (ua.includes("Chrome") && !ua.includes("Edg")) {
+      const match = ua.match(/Chrome\/(\d+)/);
+      browserName = `Chrome ${match ? match[1] : ""}`;
+    } else if (ua.includes("Edg")) {
+      const match = ua.match(/Edg\/(\d+)/);
+      browserName = `Edge ${match ? match[1] : ""}`;
+    } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
+      const match = ua.match(/Version\/(\d+)/);
+      browserName = `Safari ${match ? match[1] : ""}`;
+    }
+    
+    // 2. Detectar sistema operativo
+    let osName = "Desconocido";
+    if (ua.includes("Windows NT")) {
+      const match = ua.match(/Windows NT ([\d.]+)/);
+      osName = `Windows NT ${match ? match[1] : ""}`;
+    } else if (ua.includes("Macintosh")) {
+      osName = "macOS";
+    } else if (ua.includes("iPhone") || ua.includes("iPad")) {
+      osName = "iOS";
+    } else if (ua.includes("Android")) {
+      osName = "Android";
+    } else if (ua.includes("Linux")) {
+      osName = "Linux";
+    }
+
+    // 3. Soporte de APIs de hardware
+    const webSerialAvailable = typeof navigator !== "undefined" && "serial" in navigator ? "SI" : "NO";
+    const webUsbAvailable = typeof navigator !== "undefined" && "usb" in navigator ? "SI" : "NO";
+    const webBluetoothAvailable = typeof navigator !== "undefined" && "bluetooth" in navigator ? "SI" : "NO";
+
+    // 4. Nombre de impresora guardada
+    const savedPrinter = cfg.impresora_nombre || bluetoothDeviceName || "Sin impresora guardada";
+
+    // 5. Compilar reporte en base a la plantilla
+    const report = `=== DIAGNÓSTICO IMPRESORA — ${tenant?.nombre?.toUpperCase() || "LAVA Y YA"} ===
+Generado: ${now.toISOString()}
+
+--- ENTORNO ---
+Navegador:  ${browserName}
+Sistema:    ${osName}
+User-Agent: ${ua}
+Pantalla:   ${window.screen.width}×${window.screen.height} (devicePixelRatio ${window.devicePixelRatio})
+
+--- CONTEXTO / SEGURIDAD ---
+URL:             ${window.location.href}
+Contexto seguro (HTTPS): ${window.isSecureContext ? "SI" : "NO"}
+Nivel superior:  ${window.self === window.top ? "SI" : "NO"}
+Navegador integrado (WebView/in-app): ${/wv|Instagram|FBAN|FBAV/.test(ua) ? "SI" : "NO"}
+
+--- CONFIGURACIÓN ACTUAL ---
+Pestaña activa:  ${cfg.impresora_tipo || "ninguna"}
+Perfil impresión: ${cfg.impresora_perfil || "basica"}
+Impresora:       ${savedPrinter}
+
+--- APIs DISPONIBLES ---
+Web Serial:    ${webSerialAvailable}
+Web USB:       ${webUsbAvailable}
+Web Bluetooth: ${webBluetoothAvailable}
+Bluetooth encendido/disponible: ${webBluetoothAvailable === "SI" ? "SI (o listo para emparejar)" : "NO (apagado o sin adaptador)"}
+
+--- DISPOSITIVOS EMPAREJADOS (permiso guardado) ---
+  (no consultable en este navegador)
+
+--- HISTORIAL DE EMPAREJAMIENTO (ticket 123) ---
+Olvidó y re-emparejó:    — nunca
+Última conexión OK:      — nunca
+Servicios del grant:     (ninguno — grant vacío / aún sin conexión exitosa)
+Característica escritura: —
+Última impresión OK:     — nunca
+
+--- REGISTRO DE ERRORES (sesión) ---
+  (sin errores en esta sesión)
+
+--- EVENTOS DE IMPRESIÓN (sesión) ---
+  (ningún evento de impresión registrado)
+
+--- FIN DEL DIAGNÓSTICO ---`;
+
+    // Descargar como archivo .txt
+    const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `diagnostico-impresora-${tenant?.slug || "klynn"}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Diagnóstico descargado con éxito 📄");
+  };
+
+  async function handleTestPrint(isEscPos: boolean) {
+    const fakeOrden = {
+      id: "demo-test",
+      tenant_id: tenant?.id || "",
+      numero: "KL-TEST-0001",
+      cliente_id: "demo-cli",
+      empleado_id: "demo-emp",
+      servicios: ["Lavado y secado"],
+      items: [
+        { descripcion: "Prenda de prueba A", cantidad: 2, precio_unitario: 120 },
+        { descripcion: "Prenda de prueba B", cantidad: 1, precio_unitario: 250 }
+      ],
+      subtotal: 490,
+      itbis: 88.2,
+      descuento: 0,
+      total: 578.2,
+      pagado: 578.2,
+      saldo: 0,
+      metodo_pago: "EFECTIVO" as any,
+      estado: "RECIBIDA" as any,
+      fecha_entrega: new Date(Date.now() + 86400000).toLocaleDateString("es-DO"),
+      es_urgente: false,
+      creado_en: new Date().toISOString()
+    } as any;
+
+    const fakeCliente = {
+      nombre: "Cliente",
+      apellido: "de Prueba",
+      telefono: "809-555-0199",
+      cedula: "223-0101010-1"
+    } as any;
+
+    const fakeEmpleado = {
+      nombre: auth?.user?.user_metadata?.nombre || "Cajero de Prueba"
+    } as any;
+
+    const fakeServiciosList = [
+      { nombre: "Lavado y secado", precio: 150 }
+    ];
+
+    try {
+      if (!tenant) return;
+      const configWithMock = { ...cfg };
+      if (!isEscPos) {
+        configWithMock.impresora_perfil = "basica";
+      }
+
+      const bytes = encodeEscPos(
+        fakeOrden,
+        { ...tenant, config: configWithMock },
+        fakeCliente,
+        fakeEmpleado,
+        fakeServiciosList
+      );
+
+      // Simular ticket en consola del desarrollador
+      const textDump = simulateEscPosDump(bytes);
+      console.log(textDump);
+
+      if (cfg.impresora_tipo === "usb") {
+        setPrintingFakeTicket({
+          orden: fakeOrden,
+          cliente: fakeCliente,
+          empleado: fakeEmpleado,
+          isEscPos
+        });
+        return;
+      }
+
+      setConnectionStatus("Imprimiendo...");
+      const success = await printDirectRaw(bytes, cfg);
+      if (success) {
+        setConnectionStatus("Conectada");
+        toast.success("¡Ticket de prueba enviado!");
+      } else {
+        setConnectionStatus("Error al imprimir");
+        toast.error("No se pudo imprimir. Revisa la conexión de la impresora.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      const friendly = getFriendlyErrorMessage(err);
+      setConnectionStatus("Error: " + friendly);
+      toast.error("Error al imprimir prueba: " + friendly);
+    }
+  }
+
   useEffect(() => {
     if (tenant) {
       const root = document.documentElement;
@@ -103,6 +367,16 @@ function ConfigPage() {
       setTenant(auth.tenant);
     }
   }, [auth, tenant]);
+
+  useEffect(() => {
+    if (printingFakeTicket) {
+      const timer = setTimeout(() => {
+        window.print();
+        setPrintingFakeTicket(null);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [printingFakeTicket]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -123,6 +397,7 @@ function ConfigPage() {
   const hasFiscal = isModuleEnabled(tenant, 'facturacion_fiscal', plan);
   const hasWA = isModuleEnabled(tenant, 'whatsapp', plan);
   const wa: WhatsAppConfig = cfg.whatsapp || DEFAULT_CONFIG.whatsapp!;
+  const isPrinterConnected = cfg.impresora_tipo === "usb" || connectionStatus === "Conectada" || connectionStatus === "Imprimiendo...";
 
   async function save(updates: Partial<Tenant>) {
     try {
@@ -424,6 +699,788 @@ function ConfigPage() {
               <Save className="mr-2 h-4 w-4" /> Guardar cambios
             </Button>
           </Card>
+
+          {/* Configuración de Impresora Física */}
+          {!showPhysicalPrinterConfig ? (
+            <button 
+              onClick={() => setShowPhysicalPrinterConfig(true)}
+              className="w-full mt-6 flex items-center justify-between p-4.5 rounded-2xl border transition-all text-left cursor-pointer hover:shadow-sm"
+              style={{
+                backgroundColor: tenant?.color_primario + "06",
+                borderColor: tenant?.color_primario + "25",
+                borderWidth: "1.5px"
+              }}
+            >
+              <div className="flex items-center gap-4">
+                <div 
+                  className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0 text-white shadow-sm"
+                  style={{ backgroundColor: tenant?.color_primario }}
+                >
+                  <Printer className="h-5.5 w-5.5 text-white" />
+                </div>
+                <div>
+                  <h4 
+                    className="font-display font-bold text-[15px] leading-tight"
+                    style={{ color: tenant?.color_primario }}
+                  >
+                    Configurar impresora física
+                  </h4>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">Conecta tu impresora térmica por Bluetooth o USB para imprimir tickets reales</p>
+                </div>
+              </div>
+              <ArrowRight 
+                className="h-5 w-5" 
+                style={{ color: tenant?.color_primario }}
+              />
+            </button>
+          ) : (
+            <Card className={CARD + " mt-6 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300"}>
+              {/* Encabezado */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                <div className="flex items-center gap-2.5">
+                  <button 
+                    onClick={() => setShowPhysicalPrinterConfig(false)}
+                    className="h-8 w-8 rounded-full text-white flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95 transition-all"
+                    style={{ backgroundColor: tenant?.color_primario }}
+                    title="Volver"
+                  >
+                    <ArrowLeft className="h-4.5 w-4.5 text-white" strokeWidth={3} />
+                  </button>
+                  <h4 className="font-display font-black text-lg text-slate-800">Ajustes de Impresora Física</h4>
+                </div>
+                <div className="flex items-center gap-1.5 bg-slate-50 px-2.5 py-1 rounded-full border">
+                  <span className={`h-2 w-2 rounded-full ${connectionStatus === "Conectada" ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">{connectionStatus}</span>
+                </div>
+              </div>
+
+              {/* Tipo de conexión */}
+              <div className="space-y-4">
+                <div>
+                  <h4 className="text-base font-bold text-slate-800">Tipo de conexion</h4>
+                  <p className="text-xs text-slate-500 mt-1">Selecciona cómo está conectada tu impresora para configurarla.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Bluetooth Card */}
+                  <button
+                    type="button"
+                    onClick={() => updateCfg({ impresora_tipo: "bluetooth" })}
+                    className={`flex flex-col items-center justify-center text-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer hover:shadow-md ${
+                      cfg.impresora_tipo === "bluetooth" ? "" : "hover:border-slate-400"
+                    }`}
+                    style={{
+                      borderWidth: cfg.impresora_tipo === "bluetooth" ? "2px" : "1.5px",
+                      borderColor: cfg.impresora_tipo === "bluetooth" ? tenant.color_primario : "#cbd5e1",
+                      boxShadow: cfg.impresora_tipo === "bluetooth" 
+                        ? `0 4px 14px -3px ${tenant.color_primario}40, 0 2px 6px -2px ${tenant.color_primario}20`
+                        : "0 2px 8px -3px rgba(0, 0, 0, 0.06), 0 1px 4px -2px rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <Bluetooth 
+                      className="h-7 w-7 mb-2 transition-colors animate-in zoom-in-50 duration-300" 
+                      style={{ color: "#0284c7" }}
+                    />
+                    <span 
+                      className="text-sm font-semibold transition-colors"
+                      style={{ color: cfg.impresora_tipo === "bluetooth" ? tenant.color_primario : "#334155" }}
+                    >
+                      Bluetooth
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1 font-medium">Impresoras inalámbricas</span>
+                  </button>
+
+                  {/* Puerto Serie Card */}
+                  <button
+                    type="button"
+                    onClick={() => updateCfg({ impresora_tipo: "serial" })}
+                    className={`flex flex-col items-center justify-center text-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer hover:shadow-md ${
+                      cfg.impresora_tipo === "serial" ? "" : "hover:border-slate-400"
+                    }`}
+                    style={{
+                      borderWidth: cfg.impresora_tipo === "serial" ? "2px" : "1.5px",
+                      borderColor: cfg.impresora_tipo === "serial" ? tenant.color_primario : "#cbd5e1",
+                      boxShadow: cfg.impresora_tipo === "serial" 
+                        ? `0 4px 14px -3px ${tenant.color_primario}40, 0 2px 6px -2px ${tenant.color_primario}20`
+                        : "0 2px 8px -3px rgba(0, 0, 0, 0.06), 0 1px 4px -2px rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <Cable 
+                      className="h-7 w-7 mb-2 transition-colors" 
+                      style={{ color: "#EA580C" }}
+                    />
+                    <span 
+                      className="text-sm font-semibold transition-colors"
+                      style={{ color: cfg.impresora_tipo === "serial" ? tenant.color_primario : "#334155" }}
+                    >
+                      Puerto Serie
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1 font-medium">COM / TTL directo</span>
+                  </button>
+
+                  {/* USB Card */}
+                  <button
+                    type="button"
+                    onClick={() => updateCfg({ impresora_tipo: "usb" })}
+                    className={`flex flex-col items-center justify-center text-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer hover:shadow-md ${
+                      cfg.impresora_tipo === "usb" ? "" : "hover:border-slate-400"
+                    }`}
+                    style={{
+                      borderWidth: cfg.impresora_tipo === "usb" ? "2px" : "1.5px",
+                      borderColor: cfg.impresora_tipo === "usb" ? tenant.color_primario : "#cbd5e1",
+                      boxShadow: cfg.impresora_tipo === "usb" 
+                        ? `0 4px 14px -3px ${tenant.color_primario}40, 0 2px 6px -2px ${tenant.color_primario}20`
+                        : "0 2px 8px -3px rgba(0, 0, 0, 0.06), 0 1px 4px -2px rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    <Monitor 
+                      className="h-7 w-7 mb-2 transition-colors" 
+                      style={{ color: "#0D9488" }}
+                    />
+                    <span 
+                      className="text-sm font-semibold transition-colors"
+                      style={{ color: cfg.impresora_tipo === "usb" ? tenant.color_primario : "#334155" }}
+                    >
+                      USB (Mac/Win)
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1 font-medium">Driver instalado en el equipo</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Paneles de Configuración específicos por tipo de conexión */}
+              {cfg.impresora_tipo === "bluetooth" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* Alerta de Desconexión estilo Captura 1 */}
+                  <a
+                    href="https://developer.chrome.com/docs/web-platform/bluetooth"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center justify-between p-3.5 bg-[#FFFDEB] border border-[#FBEFCD] rounded-xl text-xs text-[#8A6D3B] hover:bg-[#FFFAD6] transition-colors cursor-pointer group"
+                  >
+                    <div className="flex items-center gap-3">
+                      <Plug className="h-4.5 w-4.5 text-[#A2834E] shrink-0 font-bold" />
+                      <span className="font-semibold text-[11px] md:text-xs leading-normal">
+                        ¿Se te desconecta a cada rato? <span className="font-normal text-[#9A7D4C]">Activa una opción de Chrome para que recuerde el emparejamiento entre sesiones.</span>
+                      </span>
+                    </div>
+                    <ArrowRight className="h-4 w-4 text-[#A2834E] group-hover:translate-x-0.5 transition-transform shrink-0" />
+                  </a>
+
+                  {/* Dispositivo actual y búsqueda con border dashed */}
+                  <div className="space-y-3">
+                    <button
+                      type="button"
+                      onClick={handleBluetoothConnect}
+                      disabled={loadingHardware}
+                      className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed rounded-xl hover:bg-slate-50/50 transition-all font-bold text-sm text-slate-800 cursor-pointer"
+                      style={{ borderColor: tenant.color_primario + "40" }}
+                    >
+                      {loadingHardware ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                      ) : (
+                        <Plus className="h-4 w-4 font-black text-slate-900" />
+                      )}
+                      Buscar impresoras
+                    </button>
+                    <p className="text-[11px] font-bold text-slate-400 text-center">
+                      {bluetoothDeviceName ? `Impresora actual: ${bluetoothDeviceName}` : "No se encontraron impresoras"}
+                    </p>
+                  </div>
+                  
+                  {/* WhatsApp Support Link */}
+                  <div className="flex justify-center pt-2.5">
+                    <a
+                      href="https://wa.me/18299416546?text=Hola Klynn, necesito ayuda con la configuración de la impresora Bluetooth."
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 text-sm font-bold hover:underline transition-colors cursor-pointer"
+                      style={{ color: tenant.color_primario }}
+                    >
+                      <MessageCircle className="h-5 w-5" />
+                      ¿Necesitas ayuda? Escríbenos por WhatsApp
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {cfg.impresora_tipo === "serial" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* Velocidad */}
+                  <div className="space-y-1.5 text-left">
+                    <label className="text-sm font-bold text-slate-800">
+                      Velocidad (baud rate)
+                    </label>
+                    <Select 
+                      value={String(cfg.impresora_serial_baud || 9600)} 
+                      onValueChange={(v) => updateCfg({ impresora_serial_baud: Number(v) })}
+                    >
+                      <SelectTrigger className="rounded-xl border-slate-200 h-11 bg-white focus:ring-0">
+                        <SelectValue placeholder="Selecciona velocidad" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="9600">9600 (default)</SelectItem>
+                        <SelectItem value="19200">19200</SelectItem>
+                        <SelectItem value="38400">38400</SelectItem>
+                        <SelectItem value="57600">57600</SelectItem>
+                        <SelectItem value="115200">115200</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="text-[11px] text-slate-400 font-medium leading-normal mt-1">
+                      Prueba 9600 o 115200. Si no imprime, cambia la velocidad y prueba de nuevo.
+                    </p>
+                  </div>
+
+                  {/* Botones de búsqueda */}
+                  <div className="space-y-3 pt-2">
+                    {/* Buscar impresora Serial Button */}
+                    <button
+                      type="button"
+                      onClick={handleSerialConnect}
+                      disabled={loadingHardware}
+                      className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed rounded-xl hover:bg-slate-50/50 transition-all font-bold text-sm text-slate-800 cursor-pointer border-slate-300"
+                    >
+                      {loadingHardware ? (
+                        <Loader2 className="h-4 w-4 animate-spin text-slate-600" />
+                      ) : (
+                        <Printer className="h-4.5 w-4.5 text-slate-900" />
+                      )}
+                      Buscar impresora Serial
+                    </button>
+
+                    {/* Texto informativo */}
+                    <p className="text-[11px] text-slate-400 text-center font-medium">
+                      ¿No aparece ningún puerto? Usa USB Directo (Mac / Linux)
+                    </p>
+
+                    {/* USB Directo (Mac / Linux) Button */}
+                    <button
+                      type="button"
+                      onClick={handleSerialConnect}
+                      disabled={loadingHardware}
+                      className="w-full flex items-center justify-center gap-2 py-4 border-2 border-dashed rounded-xl hover:bg-slate-50/50 transition-all font-bold text-sm cursor-pointer"
+                      style={{ 
+                        borderColor: tenant.color_primario + "40", 
+                        color: tenant.color_primario 
+                      }}
+                    >
+                      {loadingHardware ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <Cable className="h-4.5 w-4.5" style={{ color: tenant.color_primario }} />
+                      )}
+                      USB Directo (Mac / Linux)
+                    </button>
+                  </div>
+
+                  {/* WhatsApp Support Link */}
+                  <div className="flex justify-center pt-2.5">
+                    <a
+                      href="https://wa.me/18299416546?text=Hola Klynn, necesito ayuda con la configuración de la impresora Serial."
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-1.5 text-sm font-bold hover:underline transition-colors cursor-pointer"
+                      style={{ color: tenant.color_primario }}
+                    >
+                      <MessageCircle className="h-5 w-5" />
+                      ¿Necesitas ayuda? Escríbenos por WhatsApp
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {cfg.impresora_tipo === "usb" && (
+                <div className="space-y-4 animate-in fade-in duration-200">
+                  {/* Alerta de drivers */}
+                  <div className="flex items-start gap-3 p-3 bg-amber-50 border border-amber-100 rounded-xl text-xs text-amber-800">
+                    <AlertTriangle className="h-4.5 w-4.5 shrink-0 text-amber-600 mt-0.5" />
+                    <div>
+                      <span className="font-bold">Driver requerido</span> — Si imprime caracteres extraños o código, tu impresora está usando el driver "Generic PostScript". Busca e instala el driver específico de tu modelo (Epson, Star, Xprinter, etc.) desde el sitio del fabricante.
+                    </div>
+                  </div>
+
+                  {/* Instrucciones de sistema */}
+                  <div className="space-y-3 px-1 py-1">
+                    <div className="flex items-start gap-3">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant.color_primario }}
+                      >
+                        1
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Conecta tu impresora por USB e instala el driver del fabricante</p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant.color_primario }}
+                      >
+                        2
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Verifica que funciona imprimiendo una página de prueba desde tu sistema operativo</p>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant.color_primario }}
+                      >
+                        3
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Haz clic en el botón de abajo. Al imprimir un ticket, selecciona tu impresora en el diálogo del navegador</p>
+                    </div>
+                  </div>
+
+                  <button 
+                    type="button" 
+                    onClick={() => save(tenant)}
+                    className="w-full text-white gap-2 rounded-xl font-bold h-11 shadow-sm transition-colors active:scale-[0.99] flex items-center justify-center cursor-pointer"
+                    style={{ backgroundColor: tenant.color_primario }}
+                  >
+                    <Monitor className="h-4.5 w-4.5" />
+                    Guardar como Impresora Windows
+                  </button>
+
+                  {/* Truco Impresión Silenciosa */}
+                  <div className="pt-1.5 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setShowKioskHelpModal(true)}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-700 flex items-center gap-1.5 cursor-pointer transition-colors"
+                    >
+                      <Zap className="h-3.5 w-3.5" style={{ color: tenant.color_primario }} fill="currentColor" />
+                      <span className="underline decoration-dashed underline-offset-4">¿Cómo activar la impresión automática instantánea?</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+              <div className="space-y-4 pt-2">
+                <div>
+                  <h4 className="text-base font-bold text-slate-800">Perfil de impresión</h4>
+                  <p className="text-xs text-slate-500 mt-1">Elige según la calidad de tu impresora térmica.</p>
+                </div>
+                
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  {/* Básica */}
+                  <button
+                    type="button"
+                    onClick={() => updateCfg({ impresora_perfil: "basica" })}
+                    className={`relative flex flex-col items-center justify-center text-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer hover:shadow-md ${
+                      (cfg.impresora_perfil || "basica") === "basica" ? "" : "hover:border-slate-400"
+                    }`}
+                    style={{
+                      borderWidth: (cfg.impresora_perfil || "basica") === "basica" ? "2px" : "1.5px",
+                      borderColor: (cfg.impresora_perfil || "basica") === "basica" ? tenant.color_primario : "#cbd5e1",
+                      boxShadow: (cfg.impresora_perfil || "basica") === "basica"
+                        ? `0 4px 14px -3px ${tenant.color_primario}40, 0 2px 6px -2px ${tenant.color_primario}20`
+                        : "0 2px 8px -3px rgba(0, 0, 0, 0.06), 0 1px 4px -2px rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    {/* Indicador Radio en la esquina superior derecha */}
+                    <div className="absolute top-3.5 right-3.5">
+                      {((cfg.impresora_perfil || "basica") === "basica") ? (
+                        <div className="h-4.5 w-4.5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: tenant.color_primario }}>
+                          <Check className="h-2.5 w-2.5 text-white" strokeWidth={4} />
+                        </div>
+                      ) : (
+                        <div className="h-4.5 w-4.5 rounded-full border-2 border-slate-300 bg-white" />
+                      )}
+                    </div>
+
+                    <FileText 
+                      className="h-8 w-8 mb-2.5 transition-colors duration-300" 
+                      style={{ color: "#64748B" }}
+                    />
+                    <span 
+                      className="text-sm font-semibold transition-colors"
+                      style={{ color: (cfg.impresora_perfil || "basica") === "basica" ? tenant.color_primario : "#334155" }}
+                    >
+                      Básica
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1 font-medium leading-normal">Compatible con todas las impresoras</span>
+                  </button>
+
+                  {/* Estándar */}
+                  <button
+                    type="button"
+                    onClick={() => updateCfg({ impresora_perfil: "estandar" })}
+                    className={`relative flex flex-col items-center justify-center text-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer hover:shadow-md ${
+                      cfg.impresora_perfil === "estandar" ? "" : "hover:border-slate-400"
+                    }`}
+                    style={{
+                      borderWidth: cfg.impresora_perfil === "estandar" ? "2px" : "1.5px",
+                      borderColor: cfg.impresora_perfil === "estandar" ? tenant.color_primario : "#cbd5e1",
+                      boxShadow: cfg.impresora_perfil === "estandar"
+                        ? `0 4px 14px -3px ${tenant.color_primario}40, 0 2px 6px -2px ${tenant.color_primario}20`
+                        : "0 2px 8px -3px rgba(0, 0, 0, 0.06), 0 1px 4px -2px rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    {/* Indicador Radio en la esquina superior derecha */}
+                    <div className="absolute top-3.5 right-3.5">
+                      {cfg.impresora_perfil === "estandar" ? (
+                        <div className="h-4.5 w-4.5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: tenant.color_primario }}>
+                          <Check className="h-2.5 w-2.5 text-white" strokeWidth={4} />
+                        </div>
+                      ) : (
+                        <div className="h-4.5 w-4.5 rounded-full border-2 border-slate-300 bg-white" />
+                      )}
+                    </div>
+
+                    <Receipt 
+                      className="h-8 w-8 mb-2.5 transition-colors duration-300" 
+                      style={{ color: "#16A34A" }}
+                    />
+                    <span 
+                      className="text-sm font-semibold transition-colors"
+                      style={{ color: cfg.impresora_perfil === "estandar" ? tenant.color_primario : "#334155" }}
+                    >
+                      Estándar
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1 font-medium leading-normal">Título y total en tamaño doble</span>
+                  </button>
+
+                  {/* Completa */}
+                  <button
+                    type="button"
+                    onClick={() => updateCfg({ impresora_perfil: "completa" })}
+                    className={`relative flex flex-col items-center justify-center text-center p-6 rounded-2xl border transition-all duration-300 cursor-pointer hover:shadow-md ${
+                      cfg.impresora_perfil === "completa" ? "" : "hover:border-slate-400"
+                    }`}
+                    style={{
+                      borderWidth: cfg.impresora_perfil === "completa" ? "2px" : "1.5px",
+                      borderColor: cfg.impresora_perfil === "completa" ? tenant.color_primario : "#cbd5e1",
+                      boxShadow: cfg.impresora_perfil === "completa"
+                        ? `0 4px 14px -3px ${tenant.color_primario}40, 0 2px 6px -2px ${tenant.color_primario}20`
+                        : "0 2px 8px -3px rgba(0, 0, 0, 0.06), 0 1px 4px -2px rgba(0, 0, 0, 0.04)",
+                      backgroundColor: "#ffffff",
+                    }}
+                  >
+                    {/* Indicador Radio en la esquina superior derecha */}
+                    <div className="absolute top-3.5 right-3.5">
+                      {cfg.impresora_perfil === "completa" ? (
+                        <div className="h-4.5 w-4.5 rounded-full flex items-center justify-center text-white" style={{ backgroundColor: tenant.color_primario }}>
+                          <Check className="h-2.5 w-2.5 text-white" strokeWidth={4} />
+                        </div>
+                      ) : (
+                        <div className="h-4.5 w-4.5 rounded-full border-2 border-slate-300 bg-white" />
+                      )}
+                    </div>
+
+                    <Sparkles 
+                      className="h-8 w-8 mb-2.5 transition-colors duration-300" 
+                      style={{ color: "#7C3AED" }}
+                    />
+                    <span 
+                      className="text-sm font-semibold transition-colors"
+                      style={{ color: cfg.impresora_perfil === "completa" ? tenant.color_primario : "#334155" }}
+                    >
+                      Completa
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-1 font-medium leading-normal">Todo en tamaño doble + logo grande</span>
+                  </button>
+                </div>
+
+                <p className="text-[11px] text-center text-slate-400 mt-3 font-medium">
+                  Si el ticket sale cortado o con símbolos raros, cambia a <span className="font-bold text-slate-500">Básica</span>.
+                </p>
+              </div>
+
+              {/* Botón Guardar Configuración */}
+              <div className="pt-2">
+                <button 
+                  type="button" 
+                  onClick={() => save(tenant)}
+                  className="w-full h-11 rounded-xl font-bold flex items-center justify-center gap-2 text-white shadow-sm hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer"
+                  style={{ backgroundColor: tenant.color_primario }}
+                >
+                  <Check className="h-4.5 w-4.5" strokeWidth={3} />
+                  Guardar configuración
+                </button>
+              </div>
+
+              {/* Imprimir prueba */}
+              <div className="space-y-4 pt-3 border-t border-slate-100">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800">Imprimir prueba</h4>
+                    <p className="text-xs text-slate-500 mt-1">Realiza un test para verificar que la conexión y el formato de impresión sean correctos.</p>
+                  </div>
+                  <div 
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-[10px] font-bold uppercase tracking-wider select-none shrink-0 ${
+                      isPrinterConnected 
+                        ? "bg-emerald-50 border-emerald-200 text-emerald-700" 
+                        : "bg-slate-50 border-slate-200 text-slate-500"
+                    }`}
+                  >
+                    <span className={`h-2 w-2 rounded-full ${isPrinterConnected ? "bg-emerald-500 animate-pulse" : "bg-slate-300"}`} />
+                    {isPrinterConnected ? "Conectada" : "No conectada"}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => handleTestPrint(false)}
+                    disabled={!isPrinterConnected}
+                    className={`flex items-center justify-between py-3 px-4 rounded-xl border transition-all text-left ${
+                      !isPrinterConnected ? "opacity-50 cursor-not-allowed" : "cursor-pointer active:scale-[0.99]"
+                    }`}
+                    style={{
+                      backgroundColor: "#F0F7FF",
+                      borderColor: "#D0E7FF",
+                      borderWidth: "1.5px"
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 bg-[#0284c7] text-white">
+                        <Printer className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <span className="text-sm font-bold text-slate-800 block">Prueba básica</span>
+                        <span className="text-[11px] text-slate-500 font-medium leading-none mt-0.5 block">Texto sin formato</span>
+                      </div>
+                    </div>
+                    <ArrowRight className="h-4.5 w-4.5 text-[#0284c7]" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleTestPrint(true)}
+                    disabled={!isPrinterConnected}
+                    className={`flex items-center justify-between py-3 px-4 rounded-xl border transition-all text-left ${
+                      !isPrinterConnected ? "opacity-50 cursor-not-allowed" : "cursor-pointer active:scale-[0.99]"
+                    }`}
+                    style={{
+                      backgroundColor: tenant.color_primario + "10",
+                      borderColor: tenant.color_primario + "40",
+                      borderWidth: "1.5px"
+                    }}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div 
+                        className="h-9 w-9 rounded-full flex items-center justify-center shrink-0 text-white"
+                        style={{ backgroundColor: tenant.color_primario }}
+                      >
+                        <Printer className="h-4 w-4 text-white" />
+                      </div>
+                      <div>
+                        <span 
+                          className="text-sm font-bold block"
+                          style={{ color: tenant.color_primario }}
+                        >
+                          Prueba ESC/POS
+                        </span>
+                        <span className="text-[11px] text-slate-500 font-medium leading-none mt-0.5 block">Negritas, alineación y corte</span>
+                      </div>
+                    </div>
+                    <ArrowRight 
+                      className="h-4.5 w-4.5" 
+                      style={{ color: tenant.color_primario }}
+                    />
+                  </button>
+                </div>
+
+                {/* Tarjeta de Diagnóstico */}
+                <div 
+                  className="mt-4 p-4.5 rounded-2xl border transition-all text-left bg-white"
+                  style={{
+                    borderColor: tenant.color_primario + "15",
+                    borderWidth: "1.5px"
+                  }}
+                >
+                  <h5 className="font-bold text-slate-800 text-[14px]">¿Problemas con tu impresora?</h5>
+                  <p className="text-xs text-slate-500 mt-1 font-medium leading-normal">
+                    Descarga un archivo de diagnóstico con tu configuración, sistema operativo y registro de errores. Envíaselo a soporte por WhatsApp.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleDownloadDiagnostic}
+                    className="w-full mt-3 h-10 border bg-white hover:bg-slate-50 rounded-xl font-bold flex items-center justify-center gap-1.5 transition-all text-xs cursor-pointer shadow-sm active:scale-[0.99]"
+                    style={{
+                      color: tenant.color_primario,
+                      borderColor: tenant.color_primario + "35"
+                    }}
+                  >
+                    <Wrench className="h-4 w-4" style={{ color: tenant.color_primario }} />
+                    Descargar diagnóstico (.txt)
+                  </button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* Modal de Ayuda para Modo Kiosco */}
+          <Dialog open={showKioskHelpModal} onOpenChange={setShowKioskHelpModal}>
+            <DialogContent className="max-w-md rounded-2xl bg-white p-6 shadow-xl">
+              <DialogHeader className="space-y-2">
+                <DialogTitle className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                  <Zap className="h-5 w-5" style={{ color: tenant?.color_primario }} fill="currentColor" />
+                  Impresión Automática (Modo Kiosco)
+                </DialogTitle>
+                <DialogDescription className="text-xs text-slate-500 leading-normal">
+                  Sigue estos sencillos pasos de 1 minuto en la computadora de tu caja para que los tickets se impriman al instante sin mostrar ventanas de confirmación en el navegador.
+                </DialogDescription>
+              </DialogHeader>
+
+              <div className="space-y-4 my-4 text-left max-h-[350px] overflow-y-auto pr-1">
+                {/* Sección Windows */}
+                <div className="space-y-2.5">
+                  <div className="flex items-center gap-1.5 font-black text-slate-800 text-[11px] uppercase tracking-wider bg-slate-50 p-2 rounded-lg border">
+                    <Monitor className="h-4 w-4 text-slate-650" />
+                    <span>En Windows (Chrome / Edge)</span>
+                  </div>
+                  <div className="space-y-2 pl-1">
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        1
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Cierra todas las ventanas de Google Chrome o Microsoft Edge que tengas abiertas.</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        2
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Haz clic derecho sobre el acceso directo de Google Chrome en tu escritorio y selecciona <span className="font-bold text-slate-800">Propiedades</span>.</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        3
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">En la pestaña "Acceso directo", busca el campo <span className="font-bold text-slate-800">Destino</span>. Ve al final del texto, escribe un espacio en blanco y añade:</p>
+                    </div>
+                    <div className="bg-slate-100 p-2.5 rounded-lg border text-center select-all cursor-pointer font-mono text-[11px] text-slate-700 mx-7 font-semibold">
+                      --kiosk-printing
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        4
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Haz clic en <span className="font-bold text-slate-800">Aplicar</span> y luego en <span className="font-bold text-slate-800">Aceptar</span>.</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        5
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Abre tu navegador usando ese mismo acceso directo. ¡Ahora los tickets se imprimirán al instante!</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Sección macOS */}
+                <div className="space-y-2.5 pt-2">
+                  <div className="flex items-center gap-1.5 font-black text-slate-800 text-[11px] uppercase tracking-wider bg-slate-50 p-2 rounded-lg border">
+                    <Laptop className="h-4 w-4 text-slate-650" />
+                    <span>En macOS (Chrome)</span>
+                  </div>
+                  <div className="space-y-2 pl-1">
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        1
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Cierra por completo el navegador Google Chrome.</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        2
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Abre la aplicación <span className="font-bold text-slate-800">Terminal</span> de tu Mac.</p>
+                    </div>
+                    <div className="flex items-start gap-2.5">
+                      <div 
+                        className="h-5 w-5 rounded-full text-[10px] font-bold text-white flex items-center justify-center shrink-0 mt-0.5"
+                        style={{ backgroundColor: tenant?.color_primario }}
+                      >
+                        3
+                      </div>
+                      <p className="text-xs text-slate-600 leading-normal font-medium">Copia, pega y ejecuta (Enter) el siguiente comando:</p>
+                    </div>
+                    <div className="bg-slate-100 p-2.5 rounded-lg border text-left select-all cursor-pointer font-mono text-[10px] text-slate-700 overflow-x-auto whitespace-nowrap mx-7 font-semibold">
+                      open -a "Google Chrome" --args --kiosk-printing
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <DialogFooter>
+                <button
+                  type="button"
+                  onClick={() => setShowKioskHelpModal(false)}
+                  className="w-full h-10 rounded-xl font-bold flex items-center justify-center text-white cursor-pointer active:scale-[0.99] transition-all"
+                  style={{ backgroundColor: tenant?.color_primario }}
+                >
+                  Entendido
+                </button>
+              </DialogFooter>
+            </DialogContent>
+          </Dialog>
+
+          {/* Portal de Impresión de Ticket de Prueba */}
+          {printingFakeTicket && createPortal(
+            <div className="hidden print:flex fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target justify-center items-start pt-10">
+              {printingFakeTicket.isEscPos ? (
+                <Ticket 
+                  orden={printingFakeTicket.orden}
+                  tenant={tenant}
+                  cliente={printingFakeTicket.cliente}
+                  empleado={printingFakeTicket.empleado}
+                  formato={cfg.impresora_formato || "80mm"}
+                />
+              ) : (
+                <div 
+                  className={`thermal-ticket mx-auto bg-white p-6 font-mono text-[11px] leading-tight text-black border border-dashed border-black/20 ${
+                    (cfg.impresora_formato || "80mm") === "57mm" ? "w-[58mm] max-w-[32ch]" : "w-[80mm] max-w-[44ch]"
+                  }`}
+                  style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}
+                >
+                  {`=== PRUEBA DE IMPRESORA BÁSICA ===
+LAVA Y YA (DEMO)
+Tel: ${tenant.telefono || "---"}
+--------------------------------
+ORDEN: ${printingFakeTicket.orden.numero}
+Fecha: ${new Date().toLocaleString("es-DO")}
+--------------------------------
+1x Lavado y secado       RD$150.00
+2x Prenda de prueba A    RD$240.00
+1x Prenda de prueba B    RD$250.00
+--------------------------------
+Subtotal:                RD$490.00
+ITBIS 18%:                RD$88.20
+TOTAL:                   RD$578.20
+--------------------------------
+ESTADO PAGO: PAGADA
+--------------------------------
+Atendido por: ${printingFakeTicket.empleado.nombre}
+¡Gracias por su preferencia!`}
+                </div>
+              )}
+            </div>,
+            document.body
+          )}
         </TabsContent>
 
         <TabsContent value="caja">
@@ -1169,7 +2226,12 @@ function SuccessModal({ open, onOpenChange, planName }: { open: boolean; onOpenC
 }
 
 function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange }: { 
-  tenant: Tenant; config: ECFConfig | null; sequences: ECFSequence[]; onRefresh: () => void; enabled: boolean; onTabChange: (t: string) => void;
+  tenant: Tenant; 
+  config?: ECFConfig | null; 
+  sequences: ECFSequence[]; 
+  onRefresh: () => void;
+  enabled: boolean;
+  onTabChange: (tab: string) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [showNewSeq, setShowNewSeq] = useState(false);
@@ -1183,8 +2245,15 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
   useEffect(() => { setAlertPhone(cfg.alerta_ncf_telefono || ""); }, [cfg.alerta_ncf_telefono]);
   
   // Local state for instant and responsive tab switching
-  const [localIsElectronic, setLocalIsElectronic] = useState(!!config?.is_active);
-  const isElectronic = localIsElectronic;
+  const [isElectronic, setLocalIsElectronic] = useState(!!config?.is_active);
+
+  // Estados para anulación de secuencias e-NCF
+  const [voidSeq, setVoidSeq] = useState<ECFSequence | null>(null);
+  const [voidStart, setVoidStart] = useState("");
+  const [voidEnd, setVoidEnd] = useState("");
+  const [voidReason, setVoidReason] = useState("");
+
+  const queryClient = useQueryClient();
 
   const [draft, setDraft] = useState<Partial<ECFConfig>>(config || {
     tenant_id: tenant.id,
@@ -1224,7 +2293,8 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
       } as ECFConfig);
 
       // 2. Si es electrónico y no tiene ID de Pronesoft (o tiene el temporal de sandbox), registrar
-      let pTenantId = config?.pronesoft_tenant_id;
+      let pTenantId = draft.pronesoft_tenant_id || config?.pronesoft_tenant_id;
+      // Solo auto-registramos si NO tiene tenant-id Y NO está usando credenciales propias (o las está usando pero lo dejó vacío)
       if (activeValue && (!pTenantId || pTenantId === 'sandbox-tenant')) {
         toast.info("Registrando negocio en el servidor de certificación...");
         pTenantId = await registerTenantInPronesoft(tenant.id);
@@ -1508,8 +2578,16 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                             placeholder="sk_live_..."
                           />
                         </Field>
+                        <Field label="Tenant ID (Opcional si ya existe)" hint="Si ya registraste tu empresa en Pronesoft, pega su ID aquí.">
+                          <Input 
+                            className={FIELD} 
+                            value={draft.pronesoft_tenant_id || ""} 
+                            onChange={(e) => setDraft({ ...draft, pronesoft_tenant_id: e.target.value })} 
+                            placeholder="Ej: 550e8400-e29b-41d4-a716-446655440000"
+                          />
+                        </Field>
                         <p className="text-[10px] text-muted-foreground leading-tight">
-                          Estas credenciales se guardan de forma segura en tu tenant de Klynn. Puedes encontrarlas en tu panel de Pronesoft.
+                          Estas credenciales se guardan de forma segura en tu tenant de Klynn. Puedes encontrarlas en tu panel de Pronesoft. Si dejas el Tenant ID vacío, Klynn registrará tu empresa automáticamente.
                         </p>
                       </div>
                     )}
@@ -1940,6 +3018,15 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                                 {hasAlertEnabled ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
                               </button>
 
+                              {/* Void Sequence Button (Only for Electronic) */}
+                              <button 
+                                onClick={() => setVoidSeq(seq)}
+                                className="h-8 w-8 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-sm"
+                                title="Anular secuencia en DGII"
+                              >
+                                <Ban className="h-3.5 w-3.5" />
+                              </button>
+
                               {/* Trash/Delete Sequence Button */}
                               <button 
                                 onClick={() => setDeleteSeqId(seq.id)}
@@ -1960,6 +3047,92 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
           </div>
         </div>
       </div>
+
+      <Dialog open={!!voidSeq} onOpenChange={(o) => !o && setVoidSeq(null)}>
+        <DialogContent className="rounded-[2rem] border-none shadow-elegant max-w-[420px] p-0 overflow-hidden bg-background">
+          <div className="p-8">
+            <DialogHeader className="mb-6">
+              <div className="h-12 w-12 rounded-2xl bg-red-50 flex items-center justify-center mb-4 text-red-500">
+                <Ban className="h-6 w-6" />
+              </div>
+              <DialogTitle className="text-2xl font-display text-slate-900">Anular Rango e-NCF</DialogTitle>
+              <DialogDescription className="text-xs leading-relaxed text-slate-500 font-sans mt-2">
+                Esta acción notificará permanentemente a la DGII que el rango seleccionado de comprobantes tipo <strong className="text-slate-800">{voidSeq?.tipo_ecf}</strong> no fue ni será utilizado.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="space-y-4 mb-8">
+              <div className="grid grid-cols-2 gap-4">
+                <Field label="Rango Inicial">
+                  <Input 
+                    className={FIELD} 
+                    value={voidStart}
+                    onChange={(e) => setVoidStart(e.target.value)}
+                    placeholder={`Ej. ${voidSeq?.prefijo || 'E'}${voidSeq?.tipo_ecf || '32'}00000040`}
+                  />
+                </Field>
+                <Field label="Rango Final">
+                  <Input 
+                    className={FIELD} 
+                    value={voidEnd}
+                    onChange={(e) => setVoidEnd(e.target.value)}
+                    placeholder={`Ej. ${voidSeq?.prefijo || 'E'}${voidSeq?.tipo_ecf || '32'}00000045`}
+                  />
+                </Field>
+              </div>
+              <Field label="Motivo de Anulación DGII">
+                <Input 
+                  className={FIELD} 
+                  value={voidReason}
+                  onChange={(e) => setVoidReason(e.target.value)}
+                  placeholder="Ej. Salto de secuencia por error técnico"
+                />
+              </Field>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="outline" onClick={() => setVoidSeq(null)} className="rounded-xl border-none bg-slate-100 hover:bg-slate-200 h-10 font-bold text-sm text-slate-700 px-5 transition-all">
+                Cancelar
+              </Button>
+              <Button 
+                disabled={!voidStart || !voidEnd || !voidReason}
+                className="rounded-xl bg-red-500 hover:bg-red-600 h-10 font-bold text-sm px-6 transition-all active:scale-95 text-white"
+                onClick={async () => {
+                  if(!voidSeq) return;
+                  toast.promise(
+                    anularSecuenciasPronesoft(tenant.id, voidSeq.tipo_ecf.replace('E', ''), voidStart, voidEnd, voidReason),
+                    {
+                      loading: 'Enviando anulación a DGII...',
+                      success: () => {
+                        // Extraer el número final, ignorando letras (ej. E3200000045 -> 45)
+                        const parsedEndNum = parseInt(voidEnd.replace(/\D/g, ''), 10);
+                        
+                        // Si el rango anulado alcanza o supera el valor actual local,
+                        // adelantamos el contador local para que la próxima factura no falle
+                        if (!isNaN(parsedEndNum) && parsedEndNum >= voidSeq.valor_actual) {
+                          saveECFSequence({
+                            ...voidSeq,
+                            valor_actual: parsedEndNum
+                          }).then(() => {
+                            queryClient.invalidateQueries({ queryKey: ['ecf-sequences', tenant.id] });
+                          });
+                        }
+
+                        setVoidSeq(null);
+                        setVoidStart("");
+                        setVoidEnd("");
+                        setVoidReason("");
+                        return "Secuencias anuladas en DGII con éxito";
+                      },
+                      error: (err) => `Error al anular: ${err.message}`
+                    }
+                  )
+                }}
+              >
+                Confirmar Anulación
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={!!deleteSeqId} onOpenChange={(o) => !o && setDeleteSeqId(null)}>
         <AlertDialogContent className="rounded-[2rem] border-none shadow-elegant max-w-[420px] p-0 overflow-hidden bg-background">
@@ -2108,17 +3281,17 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
           </div>
 
           {/* Columna Derecha de Entrada */}
-          <div className="md:col-span-7 p-6 bg-background flex flex-col justify-between">
+          <div className="md:col-span-7 p-5 bg-background flex flex-col justify-between">
             <div>
-              <DialogHeader className="mb-4">
+              <DialogHeader className="mb-3">
                 <DialogTitle className="text-xl font-display">{mode === 'traditional' ? "Nueva Secuencia NCF" : "Nueva Secuencia e-CF"}</DialogTitle>
                 <DialogDescription className="text-xs">Establece los rangos de comprobantes autorizados.</DialogDescription>
               </DialogHeader>
               
-              <div className="space-y-3.5">
+              <div className="space-y-3">
                 <Field label="Tipo de Comprobante">
                   <Select value={seq.tipo_ecf} onValueChange={(v) => setSeq({ ...seq, tipo_ecf: v })}>
-                    <SelectTrigger className="w-full h-11 rounded-lg"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="w-full h-10 rounded-lg"><SelectValue /></SelectTrigger>
                     {/* Fixed sideways expansion using popper position & strict width anchoring */}
                     <SelectContent position="popper" className="w-[var(--radix-select-trigger-width)]">
                       {mode === 'traditional' ? (
@@ -2173,7 +3346,7 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
                   return null;
                 })()}
                 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-2 gap-3">
                   <Field label="Desde">
                     <Input type="number" className="h-10 rounded-lg" value={seq.valor_inicial} onChange={(e) => setSeq({ ...seq, valor_inicial: Number(e.target.value) })} />
                   </Field>
@@ -2182,13 +3355,15 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
                   </Field>
                 </div>
                 
-                <Field label="Valor Actual (Último emitido)">
-                  <Input type="number" className="h-10 rounded-lg" value={seq.valor_actual} onChange={(e) => setSeq({ ...seq, valor_actual: Number(e.target.value) })} />
-                </Field>
-                
-                <Field label="Fecha de Vencimiento">
-                  <Input type="date" className="h-10 rounded-lg" value={seq.expiration_date} onChange={(e) => setSeq({ ...seq, expiration_date: e.target.value })} />
-                </Field>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Valor Actual (Último emitido)">
+                    <Input type="number" className="h-10 rounded-lg" value={seq.valor_actual} onChange={(e) => setSeq({ ...seq, valor_actual: Number(e.target.value) })} />
+                  </Field>
+                  
+                  <Field label="Fecha de Vencimiento">
+                    <Input type="date" className="h-10 rounded-lg" value={seq.expiration_date} onChange={(e) => setSeq({ ...seq, expiration_date: e.target.value })} />
+                  </Field>
+                </div>
 
                 {/* Recibir Alertas toggle - defaults to unchecked (false) */}
                 <div className="p-3.5 rounded-2xl border bg-accent/5 flex items-center justify-between gap-4 mt-2">
@@ -2220,9 +3395,9 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
               </div>
             </div>
             
-            <DialogFooter className="mt-6 gap-2">
-              <Button variant="outline" className="rounded-xl border-border hover:bg-accent" onClick={() => onOpenChange(false)}>Cancelar</Button>
-              <Button onClick={save} disabled={loading} className="rounded-xl font-bold">
+            <DialogFooter className="mt-4 gap-2">
+              <Button variant="outline" className="rounded-xl h-9 text-xs border-border hover:bg-accent" onClick={() => onOpenChange(false)}>Cancelar</Button>
+              <Button onClick={save} disabled={loading} className="rounded-xl h-9 text-xs font-bold">
                 {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Crear Secuencia
               </Button>

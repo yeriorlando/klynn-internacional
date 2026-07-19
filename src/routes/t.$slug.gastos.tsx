@@ -380,7 +380,7 @@ function GastosPage() {
                                 className="h-8 w-8 rounded-full border-emerald-500/20 text-emerald-600 hover:bg-emerald-500/10"
                                 onClick={async () => {
                                   try {
-                                    await updateEstadoComercialECF(doc.id, 'APROBADO');
+                                    await updateEstadoComercialECF(doc.id, 'APROBADO', tenantId);
                                     setRefresh(r => r + 1);
                                     toast.success("Factura aprobada comercialmente ✅");
                                   } catch (e) { toast.error("Error al aprobar"); }
@@ -394,7 +394,7 @@ function GastosPage() {
                                 className="h-8 w-8 rounded-full border-destructive/20 text-destructive hover:bg-destructive/10"
                                 onClick={async () => {
                                   try {
-                                    await updateEstadoComercialECF(doc.id, 'RECHAZADO');
+                                    await updateEstadoComercialECF(doc.id, 'RECHAZADO', tenantId);
                                     setRefresh(r => r + 1);
                                     toast.success("Factura rechazada comercialmente ❌");
                                   } catch (e) { toast.error("Error al rechazar"); }

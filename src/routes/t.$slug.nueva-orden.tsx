@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { encodeEscPos, printDirectRaw } from "@/lib/impresora";
 import { supabase } from "@/lib/supabase";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -287,7 +288,7 @@ function NuevaOrdenPage() {
   const [showTicket, setShowTicket] = useState(false);
   const [showPrintPortal, setShowPrintPortal] = useState<Orden | null>(null);
 
-  async function handleSelectGeneric(tipo: "Persona" | "Empresa") {
+  function handleSelectGeneric(tipo: "Persona" | "Empresa") {
     const isPersona = tipo === "Persona";
     const gid = tenantId.substring(0, 24) + (isPersona ? "f000" : "e000") + tenantId.substring(28);
     const c: Cliente = {
@@ -304,16 +305,21 @@ function NuevaOrdenPage() {
       creado_en: new Date().toISOString()
     };
 
-    try {
-      await saveCliente(c);
-      queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
-    } catch (e) {
-      console.warn("Cliente genérico ya existe");
-    }
-
+    // Actualización inmediata e instantánea de UI (0ms delay)
     setCliente(c);
     setTipoECF(isPersona ? (isElectronic ? "E32" : "B02") : (isElectronic ? "E31" : "B01"));
-    irAlPasoSiguienteDelCliente();
+    if (!isPosMode) {
+      irAlPasoSiguienteDelCliente();
+    }
+
+    // Persistencia asíncrona en segundo plano sin congelar/retrasar la UI
+    saveCliente(c)
+      .then(() => {
+        queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+      })
+      .catch((e) => {
+        console.warn("Cliente genérico ya existe", e);
+      });
   }
 
 
@@ -1333,7 +1339,7 @@ function NuevaOrdenPage() {
                       }`}
                   >
                     <Building className="h-4 w-4 mr-1.5 shrink-0" />
-                    Empresa
+                    Crédito Fiscal
                   </button>
                 </div>
               </div>
@@ -3330,12 +3336,33 @@ function TicketPrintPortal({
   onClose: () => void
 }) {
   useEffect(() => {
-    const timer = setTimeout(() => {
-      window.print();
-      onClose();
-    }, 150);
-    return () => clearTimeout(timer);
-  }, [onClose]);
+    const printerType = tenant.config?.impresora_tipo || "usb";
+    if (printerType === "bluetooth" || printerType === "serial") {
+      const runPhysicalPrint = async () => {
+        try {
+          const bytes = encodeEscPos(orden, tenant, cliente, empleado, serviciosList);
+          const success = await printDirectRaw(bytes, tenant.config);
+          if (success) {
+            toast.success("¡Ticket impreso en impresora física!");
+          } else {
+            toast.error("No se pudo imprimir en la impresora física.");
+          }
+        } catch (err: any) {
+          console.error(err);
+          toast.error("Error al imprimir físicamente: " + err.message);
+        } finally {
+          onClose();
+        }
+      };
+      runPhysicalPrint();
+    } else {
+      const timer = setTimeout(() => {
+        window.print();
+        onClose();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [onClose, orden, tenant, cliente, empleado, serviciosList]);
 
   return createPortal(
     <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">

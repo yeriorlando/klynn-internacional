@@ -87,6 +87,9 @@ export interface TenantConfig {
   itbis_incluido: boolean;
   itbis_porcentaje: number;
   formato_ticket: "57mm" | "80mm";
+  impresora_tipo?: "usb" | "bluetooth" | "serial";
+  impresora_perfil?: "basica" | "estandar" | "completa";
+  impresora_serial_baud?: number;
   ticket_mostrar_rnc: boolean;
   mostrar_empleado: boolean;
   pie_pagina_ticket: string;
@@ -203,6 +206,7 @@ export interface Orden {
   motivo_anulacion_codigo?: string; // Código DGII: 01, 02, 03, 04, 05
   nota_credito_ncf?: string; // NCF de la nota de crédito (E34)
   nota_credito_id?: string;  // ID del documento ECF E34
+  nota_credito_monto?: number; // Monto descontado/devuelto
   nota_debito_ncf?: string;  // NCF de la nota de débito (E33)
   nota_debito_id?: string;   // ID del documento ECF E33
   nota_debito_monto?: number; // Monto adicionado
@@ -477,6 +481,9 @@ export const DEFAULT_CONFIG: TenantConfig = {
   itbis_incluido: false,
   itbis_porcentaje: 18,
   formato_ticket: "80mm",
+  impresora_tipo: "usb",
+  impresora_perfil: "basica",
+  impresora_serial_baud: 9600,
   ticket_mostrar_rnc: true,
   mostrar_empleado: true,
   pie_pagina_ticket: "¡Gracias por su preferencia!",
@@ -1812,10 +1819,14 @@ export function formatAmountInput(raw: string): string {
   return `${intFmt}.${dec}`;
 }
 export function formatPhoneRD(raw: string): string {
-  const d = raw.replace(/\D/g, "").slice(0, 10);
-  if (d.length < 4) return d;
-  if (d.length < 7) return `${d.slice(0, 3)}-${d.slice(3)}`;
-  return `${d.slice(0, 3)}-${d.slice(3, 6)}-${d.slice(6)}`;
+  if (!raw) return "";
+  let d = raw.replace(/\D/g, "");
+  if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
+  d = d.slice(0, 10);
+  if (d.length < 3) return d;
+  if (d.length < 4) return `(${d})`;
+  if (d.length < 7) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
 }
 export function formatCedulaRD(raw: string): string {
   const d = raw.replace(/\D/g, "").slice(0, 11);
@@ -2230,7 +2241,45 @@ export async function nextECFNumero(tenantId: string, tipo: string): Promise<{ n
   return { ncf: encf, expiration_date: seq.expiration_date };
 }
 
+import { getProneSoftClient } from './fiscal/pronesoft-client';
+
 export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDocumentRecibido[]> {
+  try {
+    // 1. Obtener desde el SDK de Pronesoft los últimos recibidos
+    const pronesoft = getProneSoftClient(tenantId);
+    const res = await pronesoft.listReceivedDocuments(1, 100);
+    
+    // Si hay datos, upsertarlos en la base de datos local
+    if (res && res.data && res.data.length > 0) {
+      const { data: config } = await supabase.from('ecf_config').select('is_active').eq('tenant_id', tenantId).single();
+      
+      // Solo sincronizar si el módulo e-CF está activo
+      if (config && config.is_active) {
+        const ops = res.data.map((doc: any) => ({
+          tenant_id: tenantId,
+          // documentId o trackId depende de la estructura, normalmente id o eNcf
+          id: doc.id || doc.trackId || doc.eNcf,
+          tipo_ecf: doc.eNcf ? doc.eNcf.substring(0, 3) : 'E31',
+          rnc_emisor: doc.issuerRnc || 'N/A',
+          nombre_emisor: doc.issuerName || 'Proveedor',
+          encf: doc.eNcf || '',
+          monto_total: doc.totalAmount || 0,
+          estado_comercial: doc.commercialStatus === 'ACCEPTED' ? 'APROBADO' : (doc.commercialStatus === 'REJECTED' ? 'RECHAZADO' : 'PENDIENTE'),
+          pdf_url: doc.pdfUrl || null,
+          creado_en: doc.issueDate || new Date().toISOString()
+        }));
+
+        // Guardamos los documentos en batch si no existen
+        for (const op of ops) {
+          await supabase.from('ecf_documentos_recibidos').upsert(op, { onConflict: 'id' });
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Error sincronizando facturas recibidas con Pronesoft:", error);
+  }
+
+  // 2. Obtener de la base de datos local
   const { data, error } = await supabase
     .from('ecf_documentos_recibidos')
     .select('*')
@@ -2252,7 +2301,18 @@ export async function saveECFDocumentoRecibido(doc: Partial<ECFDocumentRecibido>
   return data;
 }
 
-export async function updateEstadoComercialECF(id: string, estado: 'APROBADO' | 'RECHAZADO') {
+export async function updateEstadoComercialECF(id: string, estado: 'APROBADO' | 'RECHAZADO', tenantId?: string) {
+  // Primero notificar al SDK
+  if (tenantId) {
+    try {
+      const pronesoft = getProneSoftClient(tenantId);
+      await pronesoft.submitCommercialApproval(id, estado === 'APROBADO' ? 'ACCEPTED' : 'REJECTED');
+    } catch (err) {
+      console.error("Error al enviar aprobación comercial al SDK:", err);
+      // No lanzamos el error para no bloquear la app, pero idealmente se debería manejar
+    }
+  }
+
   const { error } = await supabase
     .from('ecf_documentos_recibidos')
     .update({ estado_comercial: estado })
@@ -2294,3 +2354,38 @@ export async function validarLicenciaConNube(codigo: string): Promise<{ ok: bool
 
 
 
+export interface Notificacion {
+  id: string;
+  tenant_id: string;
+  titulo: string;
+  mensaje: string;
+  tipo: string;
+  leida: boolean;
+  link: string | null;
+  created_at: string;
+}
+
+export async function getNotificaciones(tenantId: string): Promise<Notificacion[]> {
+  const { data } = await supabase
+    .from("notificaciones")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("created_at", { ascending: false })
+    .limit(50);
+  return data || [];
+}
+
+export async function marcarNotificacionLeida(id: string): Promise<void> {
+  await supabase
+    .from("notificaciones")
+    .update({ leida: true })
+    .eq("id", id);
+}
+
+export async function marcarTodasNotificacionesLeidas(tenantId: string): Promise<void> {
+  await supabase
+    .from("notificaciones")
+    .update({ leida: true })
+    .eq("tenant_id", tenantId)
+    .eq("leida", false);
+}

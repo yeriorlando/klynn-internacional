@@ -289,3 +289,29 @@ export async function importSequencesToPronesoft(
   return res.ok;
 }
 
+export async function anularSecuenciasPronesoft(
+  tenantId: string,
+  invoiceType: string,
+  startNumber: string,
+  endNumber: string,
+  reason: string
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  if (!config?.pronesoft_tenant_id) {
+    throw new Error("El módulo fiscal no está activo");
+  }
+
+  const client = getProneSoftClient(
+    config.pronesoft_tenant_id,
+    config.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
+    config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+  );
+  
+  return client.voidSequences({
+    invoiceType,
+    startNumber,
+    endNumber,
+    reason
+  });
+}

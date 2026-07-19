@@ -170,8 +170,28 @@ export class ProneSoftClient {
     return this.callProxy('import-sequences', { file: fileBase64 });
   }
 
+  async voidSequences(data: { invoiceType: string, startNumber: string, endNumber: string, reason: string }): Promise<any> {
+    return this.callProxy('void-sequences', data);
+  }
+
   async getRNC(rnc: string): Promise<{ name: string; rnc: string; status: string }> {
     return this.callProxy('get-rnc', { rnc });
+  }
+
+  async listReceivedDocuments(page: number = 1, pageSize: number = 50): Promise<any> {
+    return this.callProxy('list-received-documents', { page, pageSize });
+  }
+
+  async submitCommercialApproval(documentId: string, status: 'ACCEPTED' | 'REJECTED', details?: string): Promise<any> {
+    return this.callProxy('commercial-approval', { documentId, status, details });
+  }
+
+  async export606(period: string): Promise<{ text: string; type: string }> {
+    return this.callProxy('export-606', { period });
+  }
+
+  async exportSentDocuments(period: string): Promise<{ base64: string; type: string }> {
+    return this.callProxy('export-sent-documents', { period });
   }
 }
 

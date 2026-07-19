@@ -133,6 +133,34 @@ serve(async (req) => {
       if (!res.ok) throw new Error(`Error de Importación: ${text}`);
       result = JSON.parse(text);
 
+    } else if (action === 'void-sequences') {
+      console.log("[pronesoft-proxy] 🗑️ Anulando secuencia con el SDK...");
+      
+      const { invoiceType, startNumber, endNumber, reason } = payload;
+      
+      // 1. Obtener listado de secuencias para encontrar el sequenceId
+      const sequencesRes = await client.taxSequences.listTaxSequences();
+      const sequences = sequencesRes.data || [];
+      
+      // Encontrar la secuencia activa que coincide con el tipo (ej. '32' o '31')
+      const targetSequence = sequences.find(s => s.invoiceType === invoiceType);
+      
+      if (!targetSequence || !targetSequence.id) {
+        throw new Error(`No se encontró una secuencia activa del tipo ${invoiceType} en Pronesoft`);
+      }
+      
+      // 2. Ejecutar la anulación
+      const res = await client.taxSequences.voidTaxSequence({
+        voidTaxSequenceRequest: {
+          sequenceId: targetSequence.id,
+          startNumber,
+          endNumber,
+          reason
+        }
+      });
+      
+      result = res;
+
     } else if (action === 'test-connection') {
       console.log("[pronesoft-proxy] ⚡ Probando conexión y autenticación con el SDK...");
       // Intentamos validar obteniendo un token del SDK de forma real
@@ -142,6 +170,77 @@ serve(async (req) => {
       } else {
         throw new Error("No se pudo obtener el token de Pronesoft a través del SDK");
       }
+    } else if (action === 'list-received-documents') {
+      console.log("[pronesoft-proxy] 📥 Listando documentos recibidos con el SDK...");
+      const res = await client.documentsReceived.listReceivedDocuments({
+        environment: environmentValue,
+        page: payload.page || 1,
+        pageSize: payload.pageSize || 50,
+      });
+      result = res;
+    } else if (action === 'commercial-approval') {
+      console.log("[pronesoft-proxy] ✍️ Procesando aprobación comercial...");
+      // Aprobación comercial mediante REST directo temporal ya que no está explícito en esta v. del SDK
+      const token = await sdk.getValidToken(false);
+      const headers: any = {
+        "Authorization": `Bearer ${token}`,
+        "Content-Type": "application/json",
+      };
+      if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
+
+      const envMap: Record<number, string> = { 1: 'TesteCF', 2: 'CerteCF', 3: 'eCF' };
+      const apiEnv = envMap[environmentValue as unknown as number] || 'TesteCF';
+
+      // payload: { documentId: string, status: 'ACCEPTED' | 'REJECTED', details?: string }
+      const res = await fetch(`${baseUrl}/commercial-approvals`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          environment: apiEnv,
+          documentId: payload.documentId,
+          status: payload.status, // ej. 'ACCEPTED' o 'REJECTED'
+          details: payload.details || ''
+        })
+      });
+      
+      const text = await res.text();
+      if (!res.ok) throw new Error(`Error en aprobación comercial: ${text}`);
+      result = text ? JSON.parse(text) : { ok: true };
+    } else if (action === 'export-606') {
+      console.log("[pronesoft-proxy] 📊 Exportando 606...");
+      const year = parseInt(payload.period.substring(0, 4));
+      const month = parseInt(payload.period.substring(4, 6));
+      const from = new Date(year, month - 1, 1);
+      const to = new Date(year, month, 0); // Último día del mes
+
+      const blob = await client.reports.export606({
+        from,
+        to,
+        format: 'TXT'
+      });
+      const text = await blob.text();
+      result = { text, type: blob.type };
+    } else if (action === 'export-sent-documents') {
+      console.log("[pronesoft-proxy] 📊 Exportando documentos enviados...");
+      const year = parseInt(payload.period.substring(0, 4));
+      const month = parseInt(payload.period.substring(4, 6));
+      const from = new Date(year, month - 1, 1);
+      const to = new Date(year, month, 0);
+
+      const blob = await client.reports.exportSentDocuments({
+        from,
+        to,
+        env: environmentValue
+      });
+      const buffer = await blob.arrayBuffer();
+      
+      // Convertir a Base64 de forma segura sin overflow
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      result = { base64: btoa(binary), type: blob.type };
     } else {
       throw new Error(`Acción desconocida en el proxy: ${action}`);
     }

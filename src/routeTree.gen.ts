@@ -14,6 +14,7 @@ import { Route as SoftwareLavanderiaSantoDomingoRouteImport } from './routes/sof
 import { Route as SoftwareLavanderiaSantiagoRouteImport } from './routes/software-lavanderia-santiago'
 import { Route as SoftwareLavanderiaPuntaCanaRouteImport } from './routes/software-lavanderia-punta-cana'
 import { Route as RestablecerContrasenaRouteImport } from './routes/restablecer-contrasena'
+import { Route as ReportesRouteImport } from './routes/reportes'
 import { Route as RegistroRouteImport } from './routes/registro'
 import { Route as RecuperarRouteImport } from './routes/recuperar'
 import { Route as PrivacidadRouteImport } from './routes/privacidad'
@@ -69,6 +70,11 @@ const SoftwareLavanderiaPuntaCanaRoute =
 const RestablecerContrasenaRoute = RestablecerContrasenaRouteImport.update({
   id: '/restablecer-contrasena',
   path: '/restablecer-contrasena',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ReportesRoute = ReportesRouteImport.update({
+  id: '/reportes',
+  path: '/reportes',
   getParentRoute: () => rootRouteImport,
 } as any)
 const RegistroRoute = RegistroRouteImport.update({
@@ -223,6 +229,7 @@ export interface FileRoutesByFullPath {
   '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
+  '/reportes': typeof ReportesRoute
   '/restablecer-contrasena': typeof RestablecerContrasenaRoute
   '/software-lavanderia-punta-cana': typeof SoftwareLavanderiaPuntaCanaRoute
   '/software-lavanderia-santiago': typeof SoftwareLavanderiaSantiagoRoute
@@ -258,6 +265,7 @@ export interface FileRoutesByTo {
   '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
+  '/reportes': typeof ReportesRoute
   '/restablecer-contrasena': typeof RestablecerContrasenaRoute
   '/software-lavanderia-punta-cana': typeof SoftwareLavanderiaPuntaCanaRoute
   '/software-lavanderia-santiago': typeof SoftwareLavanderiaSantiagoRoute
@@ -293,6 +301,7 @@ export interface FileRoutesById {
   '/privacidad': typeof PrivacidadRoute
   '/recuperar': typeof RecuperarRoute
   '/registro': typeof RegistroRoute
+  '/reportes': typeof ReportesRoute
   '/restablecer-contrasena': typeof RestablecerContrasenaRoute
   '/software-lavanderia-punta-cana': typeof SoftwareLavanderiaPuntaCanaRoute
   '/software-lavanderia-santiago': typeof SoftwareLavanderiaSantiagoRoute
@@ -330,6 +339,7 @@ export interface FileRouteTypes {
     | '/privacidad'
     | '/recuperar'
     | '/registro'
+    | '/reportes'
     | '/restablecer-contrasena'
     | '/software-lavanderia-punta-cana'
     | '/software-lavanderia-santiago'
@@ -365,6 +375,7 @@ export interface FileRouteTypes {
     | '/privacidad'
     | '/recuperar'
     | '/registro'
+    | '/reportes'
     | '/restablecer-contrasena'
     | '/software-lavanderia-punta-cana'
     | '/software-lavanderia-santiago'
@@ -399,6 +410,7 @@ export interface FileRouteTypes {
     | '/privacidad'
     | '/recuperar'
     | '/registro'
+    | '/reportes'
     | '/restablecer-contrasena'
     | '/software-lavanderia-punta-cana'
     | '/software-lavanderia-santiago'
@@ -435,6 +447,7 @@ export interface RootRouteChildren {
   PrivacidadRoute: typeof PrivacidadRoute
   RecuperarRoute: typeof RecuperarRoute
   RegistroRoute: typeof RegistroRoute
+  ReportesRoute: typeof ReportesRoute
   RestablecerContrasenaRoute: typeof RestablecerContrasenaRoute
   SoftwareLavanderiaPuntaCanaRoute: typeof SoftwareLavanderiaPuntaCanaRoute
   SoftwareLavanderiaSantiagoRoute: typeof SoftwareLavanderiaSantiagoRoute
@@ -480,6 +493,13 @@ declare module '@tanstack/react-router' {
       path: '/restablecer-contrasena'
       fullPath: '/restablecer-contrasena'
       preLoaderRoute: typeof RestablecerContrasenaRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reportes': {
+      id: '/reportes'
+      path: '/reportes'
+      fullPath: '/reportes'
+      preLoaderRoute: typeof ReportesRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/registro': {
@@ -730,6 +750,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacidadRoute: PrivacidadRoute,
   RecuperarRoute: RecuperarRoute,
   RegistroRoute: RegistroRoute,
+  ReportesRoute: ReportesRoute,
   RestablecerContrasenaRoute: RestablecerContrasenaRoute,
   SoftwareLavanderiaPuntaCanaRoute: SoftwareLavanderiaPuntaCanaRoute,
   SoftwareLavanderiaSantiagoRoute: SoftwareLavanderiaSantiagoRoute,

@@ -441,7 +441,6 @@ function DashboardAdminPage() {
               <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 text-left">Marca</th>
-                  <th className="px-4 py-3 text-left">Slug</th>
                   <th className="px-4 py-3 text-right">Órdenes</th>
                   <th className="px-4 py-3 text-right">Ingresos</th>
                   <th className="px-4 py-3 text-right">Acciones</th>
@@ -453,8 +452,7 @@ function DashboardAdminPage() {
                   return (
                     <tr 
                       key={t.id} 
-                      onClick={() => setSelectedInspectTenant(t)}
-                      className="border-b border-border/50 cursor-pointer hover:bg-slate-50/80 transition-colors"
+                      className="border-b border-border/50 hover:bg-slate-50/80 transition-colors"
                     >
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
@@ -476,11 +474,18 @@ function DashboardAdminPage() {
                           </div>
                         </div>
                       </td>
-                      <td className="px-4 py-3 font-mono text-xs text-primary">klynn.com.do/t/{t.slug}</td>
                       <td className="px-4 py-3 text-right text-slate-700">{ts.count}</td>
                       <td className="px-4 py-3 text-right font-medium text-slate-900">{formatRD(ts.total)}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-1">
+                        <div className="flex justify-end gap-2">
+                          <Button 
+                            size="sm" 
+                            variant="secondary" 
+                            onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                            className="h-9 px-4 rounded-lg shadow-sm font-bold transition-all bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
+                          >
+                            Ver Reportes
+                          </Button>
                           <Button 
                             size="sm" 
                             variant="outline" 
@@ -496,7 +501,7 @@ function DashboardAdminPage() {
                 })}
                 {myTenants.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="py-12 text-center text-muted-foreground">
+                    <td colSpan={4} className="py-12 text-center text-muted-foreground">
                       No tienes lavanderías registradas aún.
                     </td>
                   </tr>

@@ -11,7 +11,18 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Download, FileSpreadsheet, Printer } from "lucide-react";
+import { Download, FileSpreadsheet, Printer, FileText } from "lucide-react";
+import { toast } from "sonner";
+import { 
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { Card } from "@/components/ui/card";
 import { 
   TrendingUp, 
@@ -32,7 +43,9 @@ import {
   type Orden, 
   type Gasto, 
   type Empleado, 
-  type MovimientoCaja 
+  type MovimientoCaja,
+  getECFConfig,
+  type ECFConfig
 } from "@/lib/storage";
 
 export const Route = createFileRoute("/t/$slug/reportes")({ component: ReportesPage });
@@ -46,6 +59,14 @@ function ReportesPage() {
   const [cajas, setCajas] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [isPrinting, setIsPrinting] = useState(false);
+  
+  // Estados para exportación DGII
+  const [ecfConfig, setEcfConfig] = useState<ECFConfig | null>(null);
+  const [showDgiiModal, setShowDgiiModal] = useState(false);
+  const [exportType, setExportType] = useState<"606" | "ENVIADOS">("606");
+  const [exportYear, setExportYear] = useState(new Date().getFullYear().toString());
+  const [exportMonth, setExportMonth] = useState((new Date().getMonth() + 1).toString().padStart(2, '0'));
+  const [isExporting, setIsExporting] = useState(false);
 
   const tenant = user?.tenant;
   const primaryColor = tenant?.color_primario || '#0F4C81';
@@ -54,18 +75,20 @@ function ReportesPage() {
     async function load() {
       if (!tenant || tenant.id === '__loading__') return;
       setLoading(true);
-      const [oList, gList, eList, mList, cList] = await Promise.all([
+      const [oList, gList, eList, mList, cList, configList] = await Promise.all([
         getOrdenes(tenant.id),
         getGastos(tenant.id),
         getEmpleados(tenant.id),
         getMovimientos(tenant.id),
-        getCajas(tenant.id)
+        getCajas(tenant.id),
+        getECFConfig(tenant.id)
       ]);
       setOrdenes((oList || []).filter((o) => o.estado !== "ANULADA"));
       setGastos(gList || []);
       setEmps(eList || []);
       setMovs(mList || []);
       setCajas(cList || []);
+      setEcfConfig(configList || null);
       setLoading(false);
     }
     load();
@@ -287,6 +310,55 @@ function ReportesPage() {
     ];
   }, [stats, emps, ordenes]);
 
+  const handleExportDGII = async () => {
+    if (!tenant) return;
+    setIsExporting(true);
+    try {
+      const pronesoft = getProneSoftClient(tenant.id);
+      const period = `${exportYear}${exportMonth}`;
+      
+      if (exportType === "606") {
+        const { text } = await pronesoft.export606(period);
+        // Descargar texto
+        const blob = new Blob([text], { type: "text/plain" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `606_${tenant.rnc}_${period}.txt`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Reporte 606 de ${period} generado exitosamente`);
+      } else {
+        const { base64, type } = await pronesoft.exportSentDocuments(period);
+        // Descargar base64 como archivo
+        const byteCharacters = atob(base64);
+        const byteNumbers = new Array(byteCharacters.length);
+        for (let i = 0; i < byteCharacters.length; i++) {
+          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        }
+        const byteArray = new Uint8Array(byteNumbers);
+        const blob = new Blob([byteArray], { type: type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `Facturas_Enviadas_${tenant.rnc}_${period}.xlsx`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        toast.success(`Reporte de facturas de ${period} generado`);
+      }
+      setShowDgiiModal(false);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e.message || "Error al exportar el reporte DGII");
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   if (!user || user.tenant.id === '__loading__') return null;
 
   if (loading) {
@@ -332,8 +404,87 @@ function ReportesPage() {
           >
             <Printer className="h-4 w-4" /> Imprimir
           </Button>
+
+          {ecfConfig && ecfConfig.is_active && (
+            <>
+              <Button 
+                variant="outline"
+                className="gap-2 bg-white text-slate-700 hover:bg-slate-50 border-slate-200 shadow-sm transition-all duration-200 active:scale-95"
+                onClick={() => { setExportType("606"); setShowDgiiModal(true); }}
+              >
+                <FileText className="h-4 w-4 text-blue-600" /> 606 (TXT)
+              </Button>
+              <Button 
+                variant="outline"
+                className="gap-2 bg-white text-slate-700 hover:bg-slate-50 border-slate-200 shadow-sm transition-all duration-200 active:scale-95"
+                onClick={() => { setExportType("ENVIADOS"); setShowDgiiModal(true); }}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-amber-600" /> Facturas (Excel)
+              </Button>
+            </>
+          )}
         </div>
       </PageHeader>
+
+      <Dialog open={showDgiiModal} onOpenChange={setShowDgiiModal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Exportar Reporte {exportType === "606" ? "606" : "de e-CF Enviados"}</DialogTitle>
+            <DialogDescription>
+              Selecciona el mes y año (periodo) para generar el archivo directamente desde los servidores de facturación electrónica.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="flex gap-4 py-4">
+            <div className="flex-1 space-y-2">
+              <Label>Mes</Label>
+              <select 
+                className="w-full flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={exportMonth}
+                onChange={(e) => setExportMonth(e.target.value)}
+              >
+                <option value="01">01 - Enero</option>
+                <option value="02">02 - Febrero</option>
+                <option value="03">03 - Marzo</option>
+                <option value="04">04 - Abril</option>
+                <option value="05">05 - Mayo</option>
+                <option value="06">06 - Junio</option>
+                <option value="07">07 - Julio</option>
+                <option value="08">08 - Agosto</option>
+                <option value="09">09 - Septiembre</option>
+                <option value="10">10 - Octubre</option>
+                <option value="11">11 - Noviembre</option>
+                <option value="12">12 - Diciembre</option>
+              </select>
+            </div>
+            <div className="flex-1 space-y-2">
+              <Label>Año</Label>
+              <select 
+                className="w-full flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                value={exportYear}
+                onChange={(e) => setExportYear(e.target.value)}
+              >
+                {[...Array(5)].map((_, i) => {
+                  const y = new Date().getFullYear() - i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+            </div>
+          </div>
+
+          <DialogFooter className="sm:justify-end gap-2">
+            <Button variant="outline" onClick={() => setShowDgiiModal(false)} disabled={isExporting}>Cancelar</Button>
+            <Button 
+              style={{ backgroundColor: primaryColor }} 
+              className="text-white"
+              onClick={handleExportDGII} 
+              disabled={isExporting}
+            >
+              {isExporting ? "Generando..." : "Descargar Archivo"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Fila 1: KPIs Financieros */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">

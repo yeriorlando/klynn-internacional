@@ -25,6 +25,11 @@ const NCF_TO_INVOICE_TYPE: Record<string, ECFPayload['invoiceType']> = {
   E33: '33',  // Nota de Débito
   E34: '34',  // Nota de Crédito
   E41: '41',  // Compras
+  E43: '43',  // Gastos Menores
+  E44: '44',  // Regímenes Especiales
+  E45: '45',  // Gubernamental
+  E46: '46',  // Exportaciones
+  E47: '47',  // Pagos al Exterior
 };
 
 // ─── Mapeo de método de pago → código Pronesoft ──────────────────────────────

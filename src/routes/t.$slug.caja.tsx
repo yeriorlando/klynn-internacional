@@ -1,4 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { encodeCuadreEscPos, printDirectRaw } from "@/lib/impresora";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
 import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard, ShieldCheck } from "lucide-react";
@@ -1700,8 +1701,32 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
   rango: string,
   formato: "57mm" | "80mm",
   mostrarRango?: boolean,
-  onBack: () => void 
+  onBack: () => void
 }) {
+  // Hook para impresión física directa del cuadre si está configurada
+  useEffect(() => {
+    const printerType = tenant.config?.impresora_tipo || "usb";
+    if (printerType === "bluetooth" || printerType === "serial") {
+      const runPhysicalPrint = async () => {
+        try {
+          const bytes = encodeCuadreEscPos(ordenes, movimientos, tenant, empleadoName, rango);
+          const success = await printDirectRaw(bytes, tenant.config);
+          if (success) {
+            toast.success("¡Reporte de cuadre impreso en impresora física!");
+          } else {
+            toast.error("No se pudo imprimir en la impresora física.");
+          }
+        } catch (err: any) {
+          console.error(err);
+          toast.error("Error al imprimir físicamente: " + err.message);
+        } finally {
+          onBack();
+        }
+      };
+      runPhysicalPrint();
+    }
+  }, [ordenes, movimientos, tenant, empleadoName, rango, onBack]);
+
   const total = ordenes.reduce((s, o) => s + o.total, 0);
   const cash = ordenes.filter(o => o.metodo_pago === 'EFECTIVO').reduce((s, o) => s + o.total, 0);
   const card = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);

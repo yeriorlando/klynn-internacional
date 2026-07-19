@@ -249,32 +249,32 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[620px] p-0 overflow-hidden border-none shadow-2xl rounded-3xl bg-background flex flex-col gap-0">
+      <DialogContent className="max-w-[520px] p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-2xl rounded-2xl bg-background flex flex-col gap-0 [&>button]:bg-slate-100 [&>button]:text-slate-600 [&>button]:hover:bg-slate-200 [&>button]:border [&>button]:border-slate-200 [&>button]:h-7 [&>button]:w-7 [&>button]:top-3.5 [&>button]:right-3.5 [&>button]:rounded-full">
         {/* Header */}
-        <DialogHeader className="p-5 pb-3 border-b border-border/50 flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-white font-extrabold text-sm shrink-0">
+        <DialogHeader className="p-4 pb-2.5 border-b border-border/50 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary text-white font-extrabold text-xs shrink-0 shadow-xs">
               KL
             </div>
             <div className="text-left">
-              <DialogTitle className="text-base font-bold text-foreground">
+              <DialogTitle className="text-sm font-extrabold text-foreground">
                 {cliente ? "Editar Perfil de Cliente" : "Nuevo Perfil de Cliente"}
               </DialogTitle>
-              <DialogDescription className="text-xs text-muted-foreground mt-0.5">
-                Introduce la información de contacto y detalles de facturación del cliente.
+              <DialogDescription className="text-[11px] text-muted-foreground mt-0.5">
+                Introduce la información de contacto y detalles del cliente.
               </DialogDescription>
             </div>
           </div>
         </DialogHeader>
 
         {/* Form Body */}
-        <div className="p-5 space-y-3">
-          <div className="grid gap-3.5 grid-cols-2">
+        <div className="p-4 space-y-2.5">
+          <div className="grid gap-3 grid-cols-2">
             {/* Tipo de cliente */}
             <div>
-              <Label className="text-xs font-bold text-muted-foreground">Tipo de Cliente</Label>
+              <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Tipo de Cliente</Label>
               <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
-                <SelectTrigger className="h-10 rounded-xl mt-1 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="h-9 rounded-xl mt-1 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
                   <SelectItem value="Consumidor Final">
                     <span className="flex items-center gap-2">
@@ -295,37 +295,37 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
             </div>
             {/* Telefono */}
             <div>
-              <Label className="text-xs font-bold text-muted-foreground">Teléfono / WhatsApp</Label>
+              <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Teléfono / WhatsApp</Label>
               <Input 
                 value={f.telefono} 
                 onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
                 placeholder="809-000-0000" 
-                className="h-10 rounded-xl mt-1 text-xs"
+                className="h-9 rounded-xl mt-1 text-xs"
               />
             </div>
           </div>
 
           {/* Nombre / Apellido / Empresa / RNC (Siempre 2 Columnas) */}
           {f.tipo === "Empresa" ? (
-            <div className="grid gap-3.5 grid-cols-2 animate-in fade-in slide-in-from-left-1 duration-150">
+            <div className="grid gap-3 grid-cols-2 animate-in fade-in duration-150">
               <div>
-                <Label className="text-xs font-bold text-muted-foreground">Nombre de la Empresa</Label>
-                <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-10 rounded-xl mt-1 text-xs" />
+                <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Nombre de la Empresa</Label>
+                <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-9 rounded-xl mt-1 text-xs" />
               </div>
               {tenant.config?.ncf_facturacion_activa ? (
                 <div>
-                  <Label className="text-xs font-bold text-muted-foreground">RNC de la Empresa</Label>
-                  <div className="flex gap-2 mt-1">
+                  <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">RNC de la Empresa</Label>
+                  <div className="flex gap-1.5 mt-1">
                     <Input 
                       value={f.cedula} 
                       onChange={(e) => setF({ ...f, cedula: e.target.value })} 
                       placeholder="131-12345-6"
-                      className="h-10 rounded-xl text-xs flex-1"
+                      className="h-9 rounded-xl text-xs flex-1"
                     />
                     <Button
                       type="button"
                       variant="outline"
-                      className="h-10 rounded-xl px-3 text-xs gap-1.5 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-semibold"
+                      className="h-9 rounded-xl px-2.5 text-xs gap-1 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-semibold"
                       onClick={handleSearchRNC}
                       disabled={loadingRNC}
                     >
@@ -343,78 +343,78 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
               )}
             </div>
           ) : (
-            <div className="grid gap-3.5 grid-cols-2 animate-in fade-in slide-in-from-left-1 duration-150">
+            <div className="grid gap-3 grid-cols-2 animate-in fade-in duration-150">
               <div>
-                <Label className="text-xs font-bold text-muted-foreground">Nombre</Label>
-                <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 rounded-xl mt-1 text-xs" />
+                <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Nombre</Label>
+                <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-9 rounded-xl mt-1 text-xs" />
               </div>
               <div>
-                <Label className="text-xs font-bold text-muted-foreground">Apellido</Label>
-                <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 rounded-xl mt-1 text-xs" />
+                <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Apellido</Label>
+                <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-9 rounded-xl mt-1 text-xs" />
               </div>
             </div>
           )}
 
           {/* Email */}
           <div>
-            <Label className="text-xs font-bold text-muted-foreground">Email (Opcional)</Label>
-            <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-10 rounded-xl mt-1 text-xs" />
+            <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Email (Opcional)</Label>
+            <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-9 rounded-xl mt-1 text-xs" />
           </div>
 
           {/* Switches (Envío a domicilio & Línea de Crédito) */}
-          <div className="grid grid-cols-2 gap-3.5 pt-0.5">
+          <div className="grid grid-cols-2 gap-3 pt-0.5">
             {/* Envío a domicilio */}
-            <div className="flex items-center gap-4 py-0.5 px-0.5">
+            <div className="flex items-center gap-2.5 py-0.5 px-0.5">
               <Switch 
                 checked={hasDelivery} 
                 onCheckedChange={(checked) => {
                   setHasDelivery(checked);
                   if (!checked) setF({ ...f, direccion: "" });
                 }} 
-                className="scale-110 origin-left"
+                className="scale-90 origin-left"
               />
               <div className="flex flex-col text-left">
-                <Label className="text-sm font-bold text-foreground">Envío a domicilio</Label>
-                <span className="text-[11px] text-muted-foreground mt-0.5">¿Requiere delivery?</span>
+                <Label className="text-xs font-extrabold text-foreground">Envío a domicilio</Label>
+                <span className="text-[10px] text-muted-foreground">¿Requiere delivery?</span>
               </div>
             </div>
 
             {/* Línea de crédito */}
-            <div className="flex items-center gap-4 py-0.5 px-0.5">
+            <div className="flex items-center gap-2.5 py-0.5 px-0.5">
               <Switch 
                 checked={f.limite_credito > 0} 
                 onCheckedChange={(checked) => setF({ ...f, limite_credito: checked ? 5000 : 0 })} 
-                className="scale-110 origin-left"
+                className="scale-90 origin-left"
               />
               <div className="flex flex-col text-left">
-                <Label className="text-sm font-bold text-foreground">Línea de Crédito</Label>
-                <span className="text-[11px] text-muted-foreground mt-0.5">Permitir a crédito</span>
+                <Label className="text-xs font-extrabold text-foreground">Línea de Crédito</Label>
+                <span className="text-[10px] text-muted-foreground">Permitir a crédito</span>
               </div>
             </div>
           </div>
 
           {/* Conditional Inputs Grid */}
           {(hasDelivery || f.limite_credito > 0) && (
-            <div className="grid gap-3.5 grid-cols-2 pt-0.5 animate-in fade-in slide-in-from-top-1 duration-150">
+            <div className="grid gap-3 grid-cols-2 pt-0.5 animate-in fade-in duration-150">
               {hasDelivery && (
                 <div className={f.limite_credito > 0 ? "col-span-1" : "col-span-2"}>
-                  <Label className="text-xs font-bold text-muted-foreground">Dirección de entrega</Label>
+                  <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Dirección de entrega</Label>
                   <div className="relative mt-1">
                     <MapPin className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
-                    <Input value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} placeholder="Calle, # Casa, Sector, Referencia..." className="h-10 pl-8 rounded-xl text-xs" />
+                    <Input value={f.direccion} onChange={(e) => setF({ ...f, direccion: e.target.value })} placeholder="Calle, # Casa, Sector..." className="h-9 pl-8 rounded-xl text-xs" />
                   </div>
                 </div>
               )}
               {f.limite_credito > 0 && (
                 <div className={hasDelivery ? "col-span-1" : "col-span-2"}>
-                  <Label className="text-xs font-bold text-muted-foreground">Límite de crédito (RD$)</Label>
+                  <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Límite de crédito (RD$)</Label>
                   <div className="relative mt-1">
                     <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
                     <Input 
                       type="number" 
                       value={f.limite_credito} 
                       onChange={(e) => setF({ ...f, limite_credito: Number(e.target.value) || 0 })} 
-                      className="h-10 pl-8 rounded-xl font-bold text-xs"
+                      className="h-9 pl-8 rounded-xl font-bold text-xs"
                     />
                   </div>
                 </div>
@@ -424,22 +424,22 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
 
           {/* Notas */}
           <div>
-            <Label className="text-xs font-bold text-muted-foreground">Notas / Comentarios Internos</Label>
+            <Label className="text-[11px] font-extrabold text-slate-600 dark:text-slate-400">Notas / Comentarios Internos</Label>
             <Textarea 
               value={f.notas} 
               onChange={(e) => setF({ ...f, notas: e.target.value })} 
               placeholder="Preferencias de lavado, alergias, etc..." 
-              className="mt-1 h-16 min-h-[60px] max-h-[80px] resize-none rounded-xl text-xs py-2 px-3"
+              className="mt-1 h-12 min-h-[44px] max-h-[60px] resize-none rounded-xl text-xs py-1.5 px-3"
             />
           </div>
         </div>
 
         {/* Footer */}
-        <div className="border-t border-border/50 p-5 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30">
+        <div className="border-t border-border/50 p-3.5 px-4 flex items-center justify-between bg-slate-50/50 dark:bg-slate-900/30">
           {cliente && (
             <AlertDialog>
               <AlertDialogTrigger asChild>
-                <Button type="button" className="bg-red-500 hover:bg-red-600 text-white border border-red-600 hover:border-red-700 rounded-xl h-10 text-xs px-4 font-bold shadow-sm transition-colors"><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar</Button>
+                <Button type="button" className="bg-red-500 hover:bg-red-600 text-white border border-red-600 hover:border-red-700 rounded-xl h-8.5 text-xs px-3.5 font-extrabold shadow-xs transition-colors"><Trash2 className="mr-1.5 h-3.5 w-3.5" /> Eliminar</Button>
               </AlertDialogTrigger>
               <AlertDialogContent className="rounded-2xl border-none shadow-card">
                 <AlertDialogHeader>
@@ -455,9 +455,9 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
               </AlertDialogContent>
             </AlertDialog>
           )}
-          <div className="flex gap-2.5 ml-auto">
-            <Button type="button" variant="outline" className="rounded-xl h-10 text-xs px-5 border-slate-300 dark:border-slate-800" onClick={() => onOpenChange(false)}>Cancelar</Button>
-            <Button type="button" onClick={submit} className="bg-[#2c4e82] text-white rounded-xl h-10 text-xs px-6 font-bold shadow-sm hover:bg-[#1e365c] transition-colors">Guardar</Button>
+          <div className="flex gap-2 ml-auto">
+            <Button type="button" variant="outline" className="rounded-xl h-8.5 text-xs px-4 border-slate-300 dark:border-slate-800 font-extrabold" onClick={() => onOpenChange(false)}>Cancelar</Button>
+            <Button type="button" onClick={submit} className="bg-primary text-primary-foreground rounded-xl h-8.5 text-xs px-5 font-black shadow-xs hover:bg-primary/90 transition-colors">Guardar</Button>
           </div>
         </div>
       </DialogContent>

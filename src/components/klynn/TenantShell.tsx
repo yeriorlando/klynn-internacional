@@ -4,19 +4,26 @@ import { supabase } from "@/lib/supabase";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import {
   LayoutDashboard, Wallet, Users, Truck, Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone, HelpCircle,
-  Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3, Keyboard
+  Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3, Keyboard, Inbox, RotateCw, CheckCircle2, Ban
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
 import { Logo } from "@/components/klynn/Logo";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { 
   logout, getCajaAbierta, formatRD, can, getTenantsForUser, 
   setActiveTenant, setSession, switchSession, getPlans,
   getOrdenes, getClientes, getCatalogo, getServicios, 
   getCajas, getMovimientos, getGastos, getGlobalConfig, getECFConfig,
-  isModuleEnabled
+  isModuleEnabled,
+  getNotificaciones, marcarNotificacionLeida, marcarTodasNotificacionesLeidas, type Notificacion
 } from "@/lib/storage";
 import { Toaster, toast } from "sonner";
 import { useEffect } from "react";
@@ -73,6 +80,10 @@ export function TenantShell() {
 
   const [hasLogistica, setHasLogistica] = useState<boolean>(true);
   const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(true);
+
+  // NOTIFICACIONES GENERALES
+  const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
+  const unreadNotifs = notificaciones.filter(n => !n.leida).length;
 
   useEffect(() => {
     if (!user || user.tenant.id === '__loading__') return;
@@ -135,6 +146,78 @@ export function TenantShell() {
     return () => {
       supabase.removeChannel(channel);
     };
+  }, [tenantId]);
+
+  // CARGAR NOTIFICACIONES EN TIEMPO REAL
+  useEffect(() => {
+    if (!tenantId || tenantId === '__loading__') return;
+    
+    // Cargar notificaciones y ordenes para mezclar
+    const loadNotificaciones = async () => {
+      const dbNotifs = await getNotificaciones(tenantId);
+      const orders = await getOrdenes(tenantId) || [];
+      
+      const virtualNotifs: Notificacion[] = [];
+      const today = new Date();
+      today.setHours(0,0,0,0);
+      const tomorrow = new Date(today);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const dayAfter = new Date(tomorrow);
+      dayAfter.setDate(dayAfter.getDate() + 1);
+      
+      // Leer notificaciones virtuales marcadas como leídas
+      const readVirtualsStr = localStorage.getItem('klynn_read_virtuals') || '[]';
+      let readVirtuals: string[] = [];
+      try { readVirtuals = JSON.parse(readVirtualsStr); } catch(e){}
+
+      // Filtrar órdenes pendientes y en proceso (no entregadas, ni anuladas, ni listas)
+      const pendingOrders = orders.filter(o => o.estado !== 'ENTREGADA' && o.estado !== 'ANULADA' && o.estado !== 'LISTA');
+      
+      for (const o of pendingOrders) {
+        if (!o.fecha_entrega) continue;
+        const deliveryDate = new Date(o.fecha_entrega);
+        // Si deliveryDate es HOY o MAÑANA
+        if (deliveryDate >= today && deliveryDate < dayAfter) {
+          const isToday = deliveryDate < tomorrow;
+          const label = isToday ? 'hoy' : 'mañana';
+          const time = deliveryDate.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' });
+          const vId = `virtual-orden-${o.id}`;
+          virtualNotifs.push({
+            id: vId,
+            tenant_id: tenantId,
+            titulo: `Entrega para ${label} 🕒`,
+            mensaje: `La orden #${o.numero} debe entregarse ${label} a las ${time}.`,
+            tipo: 'WARNING',
+            leida: readVirtuals.includes(vId),
+            link: `/ordenes?view=${o.numero}`,
+            created_at: new Date().toISOString()
+          });
+        }
+      }
+      
+      setNotificaciones([...virtualNotifs, ...dbNotifs].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+    };
+
+    loadNotificaciones();
+
+    const channel = supabase
+      .channel('notificaciones-shell')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'notificaciones' },
+        (payload) => {
+          const row = (payload.new || payload.old) as any;
+          if (row && row.tenant_id === tenantId) {
+            if (payload.eventType === 'INSERT') {
+              playNotificationSoundDebounced();
+            }
+            loadNotificaciones();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
   }, [tenantId]);
 
   // Protección de rutas — DEBE estar antes del return condicional
@@ -243,6 +326,22 @@ export function TenantShell() {
       return pathname === toPath && currentSearch.includes(toSearch);
     }
     return exact ? pathname === toPath : pathname === toPath || pathname.startsWith(toPath + "/");
+  };
+
+  const onNotificacionClick = async (n: Notificacion) => {
+    if (!n.leida) {
+      if (n.id.startsWith('virtual-')) {
+        const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
+        if (!readVirtuals.includes(n.id)) {
+          readVirtuals.push(n.id);
+          localStorage.setItem('klynn_read_virtuals', JSON.stringify(readVirtuals));
+        }
+      } else {
+        await marcarNotificacionLeida(n.id);
+      }
+      setNotificaciones(prev => prev.map(x => x.id === n.id ? { ...x, leida: true } : x));
+    }
+    if (n.link) navigate({ to: `/t/${tenant.slug}${n.link}` });
   };
 
 
@@ -531,9 +630,75 @@ export function TenantShell() {
 
           <ThemeSwitch />
 
-          <button className="relative rounded-md p-2 hover:bg-accent" aria-label="Notificaciones">
-            <Bell className="h-5 w-5" />
-          </button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <button className="relative rounded-md p-2 hover:bg-accent transition-colors" aria-label="Notificaciones">
+                <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+                {unreadNotifs > 0 && (
+                  <span className="absolute right-1.5 top-1.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white shadow-sm ring-2 ring-surface">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75"></span>
+                  </span>
+                )}
+              </button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-80 rounded-2xl shadow-elegant p-0 overflow-hidden border-border bg-white dark:bg-slate-950">
+              <div className="bg-slate-50 dark:bg-slate-900 border-b border-border p-3 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">Notificaciones</span>
+                {unreadNotifs > 0 && (
+                  <button 
+                    onClick={async () => {
+                      if (tenantId) await marcarTodasNotificacionesLeidas(tenantId);
+                      
+                      // Marcar virtuales como leídas localmente
+                      const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-') && !n.leida).map(n => n.id);
+                      if (virtualIds.length > 0) {
+                        const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
+                        localStorage.setItem('klynn_read_virtuals', JSON.stringify([...readVirtuals, ...virtualIds]));
+                      }
+
+                      setNotificaciones(prev => prev.map(n => ({...n, leida: true})));
+                    }}
+                    className="text-[10px] font-bold text-primary hover:underline cursor-pointer"
+                  >
+                    Marcar todas leídas
+                  </button>
+                )}
+              </div>
+              <div className="max-h-[350px] overflow-y-auto custom-scrollbar flex flex-col">
+                {notificaciones.length === 0 ? (
+                  <div className="p-8 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
+                    <Bell className="h-8 w-8 text-slate-200 dark:text-slate-800" />
+                    <span className="text-xs font-medium">No hay notificaciones</span>
+                  </div>
+                ) : (
+                  notificaciones.map((n) => (
+                    <div 
+                      key={n.id}
+                      onClick={() => onNotificacionClick(n)}
+                      className={`p-3 border-b border-border/50 transition-colors flex gap-3 ${
+                        n.leida ? 'opacity-70 hover:bg-slate-50 dark:hover:bg-slate-900 cursor-pointer' : 'bg-primary/5 hover:bg-primary/10 cursor-pointer'
+                      }`}
+                    >
+                      <div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${n.leida ? 'bg-transparent' : 'bg-primary shadow-[0_0_8px_rgba(var(--primary-rgb),0.5)]'}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className={`text-xs font-bold truncate ${n.leida ? 'text-slate-700 dark:text-slate-300' : 'text-slate-900 dark:text-white'}`}>
+                          {n.titulo}
+                        </div>
+                        <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-tight mt-0.5 line-clamp-2">
+                          {n.mensaje.split(/(#KL-[a-zA-Z0-9-]+)/).map((part, i) => 
+                            part.startsWith('#KL-') ? <span key={i} className="font-bold text-primary">{part}</span> : part
+                          )}
+                        </div>
+                        <div className="text-[9px] text-slate-400 mt-1.5 font-medium">
+                          {new Date(n.created_at).toLocaleString('es-DO', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                        </div>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
           <UserMenu nombre={empleado.nombre} rol={empleado.rol} empleadoId={empleado.id} onLogout={onLogout} />
         </header>
@@ -882,7 +1047,7 @@ function UserMenu({ nombre, rol, empleadoId, onLogout }: { nombre: string; rol: 
               <div className="text-xs text-muted-foreground">{rol}</div>
             </div>
             <button 
-              onClick={() => { window.open("https://wa.link/53y31w", "_blank"); setOpen(false); }} 
+              onClick={() => { window.open("https://wa.me/18299416546?text=Hola Klynn, necesito soporte.", "_blank"); setOpen(false); }} 
               className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
             >
               <MessageCircle className="h-4 w-4 text-emerald-500 animate-pulse" /> Soporte
@@ -903,18 +1068,61 @@ function UserMenu({ nombre, rol, empleadoId, onLogout }: { nombre: string; rol: 
   );
 }
 
-// Helper: estado badge para reusar
+// Helper: estado badge para reusar con iconos hermosos estilo POS
 export function EstadoBadge({ estado }: { estado: string }) {
-  const map: Record<string, string> = {
-    RECIBIDA: "border-blue-500/40 bg-blue-500/10 text-blue-700 dark:text-blue-300",
-    EN_PROCESO: "border-amber-500/40 bg-amber-500/10 text-amber-700 dark:text-amber-300",
-    LISTA: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    EN_CAMINO: "border-sky-500/40 bg-sky-500/10 text-sky-700 dark:text-sky-300",
-    ENTREGADA: "border-zinc-500/40 bg-zinc-500/10 text-zinc-700 dark:text-zinc-300",
-    PAGADA: "border-emerald-500/40 bg-emerald-500/10 text-emerald-700 dark:text-emerald-300",
-    ANULADA: "border-red-500/40 bg-red-500/10 text-red-700 dark:text-red-300",
+  const norm = estado.replace("_", " ").toUpperCase();
+
+  const config: Record<string, { icon: any; style: string }> = {
+    RECIBIDA: {
+      icon: Inbox,
+      style: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    "EN PROCESO": {
+      icon: RotateCw,
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    EN_PROCESO: {
+      icon: RotateCw,
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    LISTA: {
+      icon: CheckCircle2,
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    EN_CAMINO: {
+      icon: Truck,
+      style: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+    },
+    "EN CAMINO": {
+      icon: Truck,
+      style: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+    },
+    ENTREGADA: {
+      icon: Truck,
+      style: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
+    },
+    PAGADA: {
+      icon: CheckCircle2,
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    ANULADA: {
+      icon: Ban,
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
   };
-  return <Badge variant="outline" className={map[estado] ?? ""}>{estado.replace("_", " ")}</Badge>;
+
+  const item = config[norm] || config[estado] || { icon: CheckCircle2, style: "border-slate-200 bg-slate-50 text-slate-700" };
+  const Icon = item.icon;
+
+  return (
+    <Badge
+      variant="outline"
+      className={`flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider ${item.style}`}
+    >
+      <Icon className="h-3.5 w-3.5 shrink-0" />
+      <span>{norm}</span>
+    </Badge>
+  );
 }
 
 export { formatRD };
