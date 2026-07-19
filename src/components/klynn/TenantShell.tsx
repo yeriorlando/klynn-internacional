@@ -718,7 +718,7 @@ export function TenantShell() {
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[325px] sm:w-[355px] rounded-xl shadow-none p-0 overflow-hidden border-none bg-white dark:bg-slate-950 animate-in fade-in duration-200">
+            <DropdownMenuContent align="end" className="w-[325px] sm:w-[355px] rounded-2xl shadow-elegant shadow-2xl border border-slate-200/80 dark:border-slate-800 p-0 overflow-hidden bg-white dark:bg-slate-950 animate-in fade-in duration-200">
               <div className="bg-primary text-white p-3 flex items-center justify-between shadow-sm">
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span className="font-display font-black text-sm uppercase tracking-wider text-white">Notificaciones</span>
@@ -832,19 +832,51 @@ export function TenantShell() {
                           <div className="text-xs text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
                             {cleanMessage.split(/(#KL-[a-zA-Z0-9-]+)/).map((part, i) => {
                               if (part.startsWith('#KL-')) {
+                                return (
+                                  <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-primary text-white font-black font-mono text-[10px] tracking-tight">
+                                    {part.replace('#', '')}
+                                  </span>
+                                );
+                              }
+
+                              const formatTextSegment = (text: string): React.ReactNode => {
+                                const clientMatch = text.match(/(.*?\bdel cliente\s+)(.*?)(?=\s+(?:debe|ha|se|creada|registrada)\b|\.|$)(.*)/i);
+                                if (clientMatch) {
+                                  const [_, before, clientName, after] = clientMatch;
+
+                                  const formatTimeOnly = (t: string) => {
+                                    const timeRegex = /(\d{1,2}:\d{2}\s*(?:[ap]\.\s*[mr]\.|[ap]m))/i;
+                                    return t.split(timeRegex).map((subpart, j) => {
+                                      if (timeRegex.test(subpart)) {
+                                        return <strong key={j} className="font-extrabold text-slate-800 dark:text-slate-200">{subpart}</strong>;
+                                      }
+                                      return subpart;
+                                    });
+                                  };
+
                                   return (
-                                    <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-primary text-white font-black font-mono text-[10px] tracking-tight">
-                                      {part.replace('#', '')}
-                                    </span>
+                                    <>
+                                      {formatTimeOnly(before)}
+                                      <strong className="font-extrabold text-slate-800 dark:text-slate-200">{clientName}</strong>
+                                      {formatTimeOnly(after)}
+                                    </>
                                   );
                                 }
+
                                 const timeRegex = /(\d{1,2}:\d{2}\s*(?:[ap]\.\s*[mr]\.|[ap]m))/i;
-                                return part.split(timeRegex).map((subpart, j) => {
-                                  if (timeRegex.test(subpart)) {
-                                    return <strong key={j} className="font-extrabold text-slate-800 dark:text-slate-200">{subpart}</strong>;
-                                  }
-                                  return subpart;
-                                });
+                                return (
+                                  <>
+                                    {text.split(timeRegex).map((subpart, j) => {
+                                      if (timeRegex.test(subpart)) {
+                                        return <strong key={j} className="font-extrabold text-slate-800 dark:text-slate-200">{subpart}</strong>;
+                                      }
+                                      return subpart;
+                                    })}
+                                  </>
+                                );
+                              };
+
+                              return <span key={i}>{formatTextSegment(part)}</span>;
                             })}
                           </div>
                           <div className="flex items-center gap-1 text-[10px] text-primary mt-1.5 font-extrabold">
