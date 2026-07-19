@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { encodeCuadreEscPos, printDirectRaw } from "@/lib/impresora";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard, ShieldCheck } from "lucide-react";
+import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard, ShieldCheck, Landmark } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -198,12 +198,40 @@ function CajaPage() {
               )}
             </Card>
             <Card className="p-5">
-              <div className="text-xs uppercase text-muted-foreground">Acciones rápidas</div>
-              <div className="mt-3 grid grid-cols-2 gap-2">
-                <Button variant="outline" size="sm" onClick={() => setShowMov("INGRESO")}><ArrowDownLeft className="mr-1.5 h-3.5 w-3.5" /> Ingreso</Button>
-                <Button variant="outline" size="sm" onClick={() => setShowMov("EGRESO")}><ArrowUpRight className="mr-1.5 h-3.5 w-3.5" /> Egreso</Button>
-                <Button variant="outline" size="sm" onClick={() => setShowMov("RETIRO")}>Retiro</Button>
-                <Button variant="outline" size="sm" onClick={() => setShowMov("GASTO_CAJA_CHICA")}>Caja chica</Button>
+              <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider mb-3">Acciones rápidas</div>
+              <div className="grid grid-cols-2 gap-2">
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowMov("INGRESO")}
+                  className="bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200/80 font-bold dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 shadow-2xs h-9"
+                >
+                  <ArrowDownLeft className="mr-1.5 h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" /> Ingreso
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowMov("EGRESO")}
+                  className="bg-rose-50 hover:bg-rose-100/80 text-rose-700 border-rose-200/80 font-bold dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 shadow-2xs h-9"
+                >
+                  <ArrowUpRight className="mr-1.5 h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" /> Egreso
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowMov("RETIRO")}
+                  className="bg-amber-50 hover:bg-amber-100/80 text-amber-700 border-amber-200/80 font-bold dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800 shadow-2xs h-9"
+                >
+                  <Landmark className="mr-1.5 h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" /> Retiro
+                </Button>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => setShowMov("GASTO_CAJA_CHICA")}
+                  className="bg-indigo-50 hover:bg-indigo-100/80 text-indigo-700 border-indigo-200/80 font-bold dark:bg-indigo-950/40 dark:text-indigo-400 dark:border-indigo-800 shadow-2xs h-9"
+                >
+                  <PiggyBank className="mr-1.5 h-4 w-4 text-indigo-600 dark:text-indigo-400 shrink-0" /> Caja chica
+                </Button>
               </div>
             </Card>
             <Card className="p-5">

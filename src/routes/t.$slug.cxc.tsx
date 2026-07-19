@@ -430,7 +430,7 @@ export default function CuentasPorCobrarPage() {
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Button
               onClick={() => navigate({ to: "/t/$slug/caja", params: { slug: user.tenant.slug } })}
-              className="bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200/80 gap-1.5 font-bold"
+              className="bg-primary hover:bg-primary/95 text-white gap-1.5 font-bold shadow-sm transition-all active:scale-95"
             >
               <ArrowLeft className="h-4 w-4" /> Volver a Caja
             </Button>

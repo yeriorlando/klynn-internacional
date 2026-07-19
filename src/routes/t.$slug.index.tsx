@@ -14,7 +14,7 @@ import {
 import {
   Receipt, Package, Wallet, AlertCircle, ArrowUpRight, FilePlus2, Truck, TrendingUp,
   Inbox, RefreshCw, CircleCheck, Ban, ChevronLeft, ChevronRight,
-  MoreVertical, MoreHorizontal, Eye, DollarSign, Printer, DownloadCloud, AlertTriangle, Zap, Check, CheckCircle2, ArrowLeft, ArrowUpCircle, XCircle
+  MoreVertical, MoreHorizontal, Eye, DollarSign, Printer, DownloadCloud, AlertTriangle, Zap, Check, CheckCircle2, ArrowLeft, ArrowUpCircle, XCircle, Info, ArrowRight, Clock
 } from "lucide-react";
 import { useOrdenes, useCajaAbierta, useGastos, useClientes, useMovimientos, useEmpleados } from "@/hooks/use-queries";
 import { TenantShell } from "@/components/klynn/TenantShell";
@@ -112,6 +112,8 @@ function DashboardPage() {
     setCurrentPage(1);
   }, [ordenes.length]);
 
+  const [periodoChart, setPeriodoChart] = useState<"7D" | "30D" | "TODO">("7D");
+
   const stats = useMemo(() => {
     const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
     const ordenesHoy = ordenes.filter((o) => new Date(o.creado_en) >= hoy);
@@ -125,19 +127,44 @@ function DashboardPage() {
     const efectivo = movs.filter((m) => m.metodo === "EFECTIVO" || m.tipo === "INGRESO").reduce((s, m) => s + m.monto, 0)
       - movs.filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo)).reduce((s, m) => s + m.monto, 0);
 
-    const v7 = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-      const next = new Date(d); next.setDate(next.getDate() + 1);
-      const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next).reduce((s, o) => s + o.total, 0);
-      v7.push({ dia: d.toLocaleDateString("es-DO", { weekday: "long" }), total });
+    const chartData: Array<{ dia: string; total: number }> = [];
+
+    if (periodoChart === "7D") {
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
+        const next = new Date(d); next.setDate(next.getDate() + 1);
+        const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next).reduce((s, o) => s + o.total, 0);
+        chartData.push({ dia: d.toLocaleDateString("es-DO", { weekday: "short" }), total });
+      }
+    } else if (periodoChart === "30D") {
+      for (let i = 5; i >= 0; i--) {
+        const end = new Date(); end.setDate(end.getDate() - (i * 5)); end.setHours(23, 59, 59, 999);
+        const start = new Date(end); start.setDate(start.getDate() - 4); start.setHours(0, 0, 0, 0);
+        const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= start && new Date(o.creado_en) <= end).reduce((s, o) => s + o.total, 0);
+        const label = `${start.getDate()}/${start.getMonth() + 1}`;
+        chartData.push({ dia: label, total });
+      }
+    } else {
+      for (let i = 5; i >= 0; i--) {
+        const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0, 0, 0, 0);
+        const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
+        const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next).reduce((s, o) => s + o.total, 0);
+        chartData.push({ dia: d.toLocaleDateString("es-DO", { month: "short" }), total });
+      }
     }
-    const max = Math.max(1, ...v7.map((v) => v.total));
 
-    return { ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, ventas7dias: v7, max };
-  }, [ordenes, movs, gastos]);
+    const max = Math.max(1, ...chartData.map((v) => v.total));
+    const totalPeriodo = chartData.reduce((s, v) => s + v.total, 0);
+    const diasDivider = periodoChart === "7D" ? 7 : periodoChart === "30D" ? 30 : (chartData.length * 30);
+    const promedioDiario = totalPeriodo / diasDivider;
 
-  const { ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, ventas7dias, max } = stats;
+    return { 
+      ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, 
+      chartData, max, totalPeriodo, promedioDiario 
+    };
+  }, [ordenes, movs, gastos, periodoChart]);
+
+  const { ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, chartData, max, totalPeriodo, promedioDiario } = stats;
 
   const sortedOrdenes = useMemo(() => {
     return [...ordenes].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
@@ -179,50 +206,129 @@ function DashboardPage() {
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <div id="tour-kpi-ventas" className="h-full"><KPI title="Ventas del día" value={formatRD(ventasHoy)} icon={Receipt} accent /></div>
-        <div id="tour-kpi-activas" className="h-full"><KPI title="Órdenes activas" value={String(activas.length)} icon={Package} sub="Pendientes de procesar" /></div>
-        <KPI title="Listas para entregar" value={String(listas.length)} icon={Truck} />
-        <KPI title="Por cobrar" value={formatRD(totalCxC)} icon={AlertCircle} sub={`${cuentasCobrar.length} órdenes`} warn={totalCxC > 0} />
+        <div id="tour-kpi-ventas" className="h-full">
+          <KPI title="Ventas del día" value={formatRD(ventasHoy)} icon={Receipt} sub="Facturado hoy" variant="primary" />
+        </div>
+        <div id="tour-kpi-activas" className="h-full">
+          <KPI title="Órdenes activas" value={String(activas.length)} icon={Package} sub="Pendientes de procesar" variant="amber" />
+        </div>
+        <KPI title="Listas para entregar" value={String(listas.length)} icon={Truck} sub="Listas para retirar" variant="emerald" />
+        <KPI title="Por cobrar" value={formatRD(totalCxC)} icon={AlertCircle} sub={`${cuentasCobrar.length} órdenes pendientes`} variant="rose" />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
-        {/* Gráfica */}
-        <Card className="lg:col-span-2 p-6">
-          <div className="mb-4 flex items-center justify-between">
+        {/* Gráfica VoltFit Style */}
+        <Card className="lg:col-span-2 p-5 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm bg-card">
+          {/* Header con Filtros */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
-              <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Ventas últimos 7 días</div>
-              <div className="font-display text-2xl">{formatRD(ventas7dias.reduce((s, v) => s + v.total, 0))}</div>
+              <div className="text-base font-bold text-foreground leading-tight">Ventas y Tendencia</div>
+              <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
+                <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                Ventas operativas registradas {periodoChart === "7D" ? "en los últimos 7 días" : periodoChart === "30D" ? "en los últimos 30 días" : "en el historial general"}.
+              </p>
             </div>
-            <div className="flex items-center gap-1 text-xs text-success">
-              <TrendingUp className="h-3.5 w-3.5" /> Día activo
+
+            {/* Time toggle pill */}
+            <div className="inline-flex items-center p-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold shrink-0 self-start sm:self-auto border border-slate-200/50 dark:border-slate-700/50">
+              <button 
+                type="button" 
+                onClick={() => setPeriodoChart("7D")} 
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "7D" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                7D
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setPeriodoChart("30D")} 
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "30D" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                30D
+              </button>
+              <button 
+                type="button" 
+                onClick={() => setPeriodoChart("TODO")} 
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "TODO" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+              >
+                Todo
+              </button>
             </div>
           </div>
-          <div className="flex h-48 items-end gap-3 pt-4">
-            {ventas7dias.map((v, i) => {
-              // Scale to 70% to leave room for tooltip at the top
-              const heightPct = (v.total / max) * 70;
-              return (
-                <div key={i} className="group relative flex h-full flex-1 flex-col items-center justify-end gap-1">
-                  {/* Tooltip Bubble - Dynamic position based on height */}
-                  <div 
-                    className="absolute opacity-0 group-hover:opacity-100 transition-all duration-300 pointer-events-none z-10 scale-90 group-hover:scale-100 origin-bottom"
-                    style={{ bottom: `calc(${heightPct}% + 2.8rem)` }}
-                  >
-                    <div className="bg-slate-900 text-white text-[10px] font-bold px-2 py-1 rounded-lg shadow-xl whitespace-nowrap">
-                      {formatRD(v.total)}
-                      <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
-                    </div>
-                  </div>
 
-                  <div className="text-[10px] font-bold text-slate-500 z-0">{v.total > 0 ? `${(v.total / 1000).toFixed(1)}k` : ""}</div>
-                  <div 
-                    className="w-full rounded-t-lg bg-gradient-primary transition-all duration-500 hover:brightness-110 shadow-sm cursor-pointer" 
-                    style={{ height: `${Math.max(4, heightPct)}%` }} 
-                  />
-                  <div className="text-[10px] font-bold capitalize text-slate-400 mt-1">{v.dia}</div>
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-4 items-center">
+            {/* Columna Izquierda: Bloques de Información (Stats Compactos) */}
+            <div className="md:col-span-5 space-y-2">
+              <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">
+                  {periodoChart === "7D" ? "Últimos 7 Días" : periodoChart === "30D" ? "Últimos 30 Días" : "Ventas Totales"}
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-lg font-display font-black text-foreground">{formatRD(totalPeriodo)}</span>
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
+                    <TrendingUp className="h-2.5 w-2.5" /> +4.1%
+                  </span>
                 </div>
-              );
-            })}
+              </div>
+
+              <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">Promedio Diario</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-lg font-display font-black text-foreground">{formatRD(promedioDiario)}</span>
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
+                    <TrendingUp className="h-2.5 w-2.5" /> +2.6%
+                  </span>
+                </div>
+              </div>
+
+              <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">Pico Máximo</span>
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-lg font-display font-black text-foreground">{formatRD(max)}</span>
+                  <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
+                    <TrendingUp className="h-2.5 w-2.5" /> +5.4%
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Columna Derecha: Gráfica de Barras Limpia y Profesional */}
+            <div className="md:col-span-7 flex flex-col justify-end pt-2">
+              <div className="flex items-end justify-between gap-1.5 sm:gap-2 h-36 px-1 border-b border-slate-200 dark:border-slate-800 pb-1">
+                {chartData.map((v, i) => {
+                  const pct = max > 0 ? (v.total / max) * 100 : 0;
+                  return (
+                    <div key={i} className="group relative flex flex-col items-center justify-end h-full flex-1">
+                      {/* Tooltip Hover */}
+                      <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-30 scale-90 group-hover:scale-100 origin-bottom">
+                        <div className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xl whitespace-nowrap">
+                          {formatRD(v.total)}
+                        </div>
+                      </div>
+
+                      {/* Monto sobre la barra */}
+                      <span className="text-[9.5px] font-extrabold text-slate-500 dark:text-slate-400 mb-1 opacity-80 group-hover:opacity-100 transition-opacity">
+                        {v.total > 0 ? (v.total >= 1000 ? `${(v.total / 1000).toFixed(1)}k` : v.total) : ""}
+                      </span>
+
+                      {/* Barra limpia sin cápsula ni contenedor gris */}
+                      <div 
+                        className="w-full max-w-[32px] sm:max-w-[40px] bg-primary rounded-t-lg transition-all duration-500 hover:bg-primary/90 shadow-2xs"
+                        style={{ height: `${Math.max(v.total > 0 ? 6 : 2, pct)}%` }} 
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Labels de Días debajo de la línea base */}
+              <div className="flex justify-between gap-1.5 sm:gap-2 px-1 pt-2">
+                {chartData.map((v, i) => (
+                  <span key={i} className="flex-1 text-center text-[10px] font-bold capitalize text-slate-500 dark:text-slate-400 truncate">
+                    {v.dia}
+                  </span>
+                ))}
+              </div>
+            </div>
           </div>
         </Card>
 
@@ -235,14 +341,22 @@ function DashboardPage() {
           {caja ? (
             <>
               <div className="font-display text-3xl">{formatRD(efectivo)}</div>
-              <div className="mt-1 text-xs text-muted-foreground">Abierta {formatDateTimeRD(caja.abierta_en)}</div>
+              <div className="mt-1.5 flex items-center">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/80 shadow-2xs">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <Clock className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  Abierta: {formatDateTimeRD(caja.abierta_en)}
+                </span>
+              </div>
               <div className="mt-4 space-y-1.5 text-sm">
                 <Row k="Apertura" v={formatRD(caja.monto_inicial)} />
                 <Row k="Movimientos" v={String(movs.length)} />
                 <Row k="Gastos hoy" v={formatRD(gastosHoy)} />
               </div>
               <Link to="/t/$slug/caja" params={{ slug: tenant.slug }} className="mt-4 block">
-                <Button variant="outline" className="w-full">Ver detalle</Button>
+                <Button className="w-full bg-primary hover:bg-primary/95 text-white font-bold rounded-xl h-9 text-xs gap-1.5 shadow-sm transition-all active:scale-[0.98]">
+                  Ver detalle <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
               </Link>
             </>
           ) : (
@@ -537,15 +651,58 @@ function DashboardPage() {
   );
 }
 
-function KPI({ title, value, sub, icon: Icon, accent, warn }: { title: string; value: string; sub?: string; icon: typeof Receipt; accent?: boolean; warn?: boolean }) {
+function KPI({ 
+  title, 
+  value, 
+  sub, 
+  icon: Icon, 
+  variant = "primary" 
+}: { 
+  title: string; 
+  value: string; 
+  sub?: string; 
+  icon: typeof Receipt; 
+  variant?: "primary" | "amber" | "emerald" | "rose";
+}) {
+  const styles = {
+    primary: {
+      card: "bg-gradient-primary text-white shadow-md border-0",
+      title: "text-white/80 font-semibold",
+      value: "text-white",
+      sub: "text-white/70",
+      icon: "text-white/80"
+    },
+    amber: {
+      card: "bg-amber-500/10 border border-amber-500/20 shadow-2xs",
+      title: "text-amber-800 dark:text-amber-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-amber-700/70 dark:text-amber-400/70",
+      icon: "text-amber-600 dark:text-amber-400"
+    },
+    emerald: {
+      card: "bg-emerald-500/10 border border-emerald-500/20 shadow-2xs",
+      title: "text-emerald-800 dark:text-emerald-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-emerald-700/70 dark:text-emerald-400/70",
+      icon: "text-emerald-600 dark:text-emerald-400"
+    },
+    rose: {
+      card: "bg-rose-500/10 border border-rose-500/20 shadow-2xs",
+      title: "text-rose-800 dark:text-rose-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-rose-700/70 dark:text-rose-400/70",
+      icon: "text-rose-600 dark:text-rose-400"
+    }
+  }[variant];
+
   return (
-    <Card className={`p-5 h-full ${accent ? "bg-gradient-primary text-white" : ""} ${warn ? "border-warning/40" : ""}`}>
-      <div className="flex items-start justify-between">
-        <div className={`text-xs font-semibold uppercase tracking-wider ${accent ? "text-white/80" : "text-muted-foreground"}`}>{title}</div>
-        <Icon className={`h-4 w-4 ${accent ? "text-white/80" : "text-muted-foreground"}`} />
+    <Card className={`p-5 h-full ${styles.card}`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className={`text-xs uppercase tracking-wider ${styles.title}`}>{title}</div>
+        <Icon className={`h-4 w-4 shrink-0 mt-0.5 ${styles.icon}`} />
       </div>
-      <div className="mt-2 font-display text-3xl tracking-tight">{value}</div>
-      {sub && <div className={`mt-1 text-xs ${accent ? "text-white/70" : "text-muted-foreground"}`}>{sub}</div>}
+      <div className="mt-2 font-display text-3xl font-bold tracking-tight">{value}</div>
+      {sub && <div className={`mt-1 text-sm font-medium ${styles.sub}`}>{sub}</div>}
     </Card>
   );
 }

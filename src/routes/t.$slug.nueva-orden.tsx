@@ -8,7 +8,7 @@ import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
   Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
   ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles,
-  CreditCard, CornerDownLeft, Percent, Box
+  CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -25,6 +25,8 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Calendar } from "@/components/ui/calendar";
+import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
   getClientes, saveCliente, getCatalogo, getServicios, getCajaAbierta, saveOrden, saveMovimiento,
@@ -145,6 +147,15 @@ function NuevaOrdenPage() {
   const [aplicarItbis, setAplicarItbis] = useState(true);
   const [descuento, setDescuento] = useState(0);
   const [fechaEntrega, setFechaEntrega] = useState<Date | undefined>(new Date());
+  const [showDeliveryDatePickerPOS, setShowDeliveryDatePickerPOS] = useState(false);
+
+  const getFormattedDeliveryLabel = (date?: Date) => {
+    if (!date) return "No seleccionada";
+    return date.toLocaleString('es-DO', { 
+      month: 'short',
+      day: 'numeric'
+    });
+  };
 
   const [notas, setNotas] = useState("");
   const [showDeliveryPOS, setShowDeliveryPOS] = useState(false);
@@ -615,7 +626,7 @@ function NuevaOrdenPage() {
 
   // Aliases for missing variables in UI
   const subtotalBase = subtotalGravableBase + subtotalExentoBase;
-  const subtotalBruto = subtotal;
+  const subtotalBruto = subtotalGravableBase + subtotalExentoBase + costoServicios;
   const recargo = recargoTotal;
 
   if (cfg.ncf_facturacion_activa && aplicarItbis && itbisRate > 0) {
@@ -1081,7 +1092,7 @@ function NuevaOrdenPage() {
                   onClick={() => setShowDeliveryPOS(true)}
                   className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${servicioDomicilio
                     ? "bg-teal-600 text-white border-teal-600 shadow-md hover:bg-teal-700"
-                    : "bg-teal-50 text-teal-700 border-teal-200 hover:bg-teal-100"
+                    : "bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/40"
                     }`}
                 >
                   <Truck className="h-3.5 w-3.5" />
@@ -1093,7 +1104,7 @@ function NuevaOrdenPage() {
                   onClick={() => setShowDiscountPOS(true)}
                   className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${descuento > 0
                     ? "bg-amber-600 text-white border-amber-600 shadow-md hover:bg-amber-700"
-                    : "bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100"
+                    : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40"
                     }`}
                 >
                   <Percent className="h-3.5 w-3.5" />
@@ -1107,7 +1118,7 @@ function NuevaOrdenPage() {
                   onClick={toggleFullscreen}
                   className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${isFullscreen
                     ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700"
-                    : "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100"
+                    : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40"
                     }`}
                 >
                   {isFullscreen ? (
@@ -1127,7 +1138,7 @@ function NuevaOrdenPage() {
                   type="button"
                   onClick={() => setIsPosMode(false)}
                   title="Modo Clásico"
-                  className="flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 hover:bg-slate-100 hover:shadow-sm h-9 w-9 text-slate-700 transition-all duration-200 cursor-pointer shrink-0"
+                  className="flex items-center justify-center rounded-full border border-border bg-accent/50 hover:bg-accent hover:shadow-sm h-9 w-9 text-muted-foreground transition-all duration-200 cursor-pointer shrink-0"
                 >
                   <Box className="h-4 w-4" />
                 </button>
@@ -1152,39 +1163,53 @@ function NuevaOrdenPage() {
               setDiscount={setDescuento}
             />
 
+            <DeliveryDatePickerPOSDialog
+              open={showDeliveryDatePickerPOS}
+              onOpenChange={setShowDeliveryDatePickerPOS}
+              fechaEntrega={fechaEntrega}
+              setFechaEntrega={setFechaEntrega}
+              esUrgente={esUrgente}
+              setEsUrgente={setEsUrgente}
+              cfg={cfg}
+            />
+
             <Card className="flex-1 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl bg-card">
               {!(step === 1 && !cliente && !isPosMode) && (
                 <div className="flex flex-col gap-3 pb-2 border-b border-border/40 px-6 pt-4 mb-2">
                   {/* Filtro Principal de 3 Pestañas */}
-                  {enableServicios && enablePrendas && (
-                    <div className="flex flex-wrap items-center gap-2 mb-2">
-                      {[
-                        { id: "TODOS", label: "Todos", icon: <LayoutGrid className="h-4 w-4" />, activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md hover:bg-[#2c4e82]", bg: "bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200" },
-                        { id: "SERVICIOS", label: "Servicios", icon: <Sparkles className="h-4 w-4" />, activeBg: "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700", bg: "bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100" },
-                        { id: "PRENDAS", label: "Prendas", icon: <Shirt className="h-4 w-4" />, activeBg: "bg-rose-600 text-white border-rose-600 shadow-md hover:bg-rose-700", bg: "bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-100" }
-                      ].map(tab => {
-                        const isSelected = posFilterTab === tab.id;
-                        return (
-                          <button
-                            key={tab.id}
-                            onClick={() => {
-                              setPosFilterTab(tab.id as any);
-                              if (tab.id === "PRENDAS") {
-                                setActiveCategory("TODAS LAS PRENDAS");
-                              } else {
-                                setActiveCategory("TODOS");
-                              }
-                            }}
-                            className={`inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[13px] font-semibold transition-all duration-200 active:scale-95 border cursor-pointer hover:shadow-sm ${isSelected ? tab.activeBg : tab.bg
-                              }`}
-                          >
-                            {tab.icon}
-                            <span>{tab.label}</span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
+                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                    {enableServicios && enablePrendas ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        {[
+                          { id: "TODOS", label: "Todos", icon: <LayoutGrid className="h-4 w-4" />, activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md hover:bg-[#2c4e82]", bg: "bg-accent text-foreground/80 border-border hover:bg-accent/80" },
+                          { id: "SERVICIOS", label: "Servicios", icon: <Sparkles className="h-4 w-4" />, activeBg: "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700", bg: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40" },
+                          { id: "PRENDAS", label: "Prendas", icon: <Shirt className="h-4 w-4" />, activeBg: "bg-rose-600 text-white border-rose-600 shadow-md hover:bg-rose-700", bg: "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40" }
+                        ].map(tab => {
+                          const isSelected = posFilterTab === tab.id;
+                          return (
+                            <button
+                              key={tab.id}
+                              onClick={() => {
+                                setPosFilterTab(tab.id as any);
+                                if (tab.id === "PRENDAS") {
+                                  setActiveCategory("TODAS LAS PRENDAS");
+                                } else {
+                                  setActiveCategory("TODOS");
+                                }
+                              }}
+                              className={`inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[13px] font-semibold transition-all duration-200 active:scale-95 border cursor-pointer hover:shadow-sm ${isSelected ? tab.activeBg : tab.bg
+                                }`}
+                            >
+                              {tab.icon}
+                              <span>{tab.label}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    ) : (
+                      <div />
+                    )}
+                  </div>
 
                   {/* Sub-filtro de Categorías de Prendas */}
                   {enablePrendas && posFilterTab === "PRENDAS" && (
@@ -1226,7 +1251,7 @@ function NuevaOrdenPage() {
                                 }`}
                             >
                               {s.imagen_url ? (
-                                <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                <div className="h-24 w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
                                   <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
                                 </div>
                               ) : (
@@ -1278,7 +1303,7 @@ function NuevaOrdenPage() {
                                 className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
                               >
                                 {item.imagen_url ? (
-                                  <div className="h-24 w-24 rounded-2xl bg-white shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                  <div className="h-24 w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
                                     <img src={item.imagen_url} alt={item.nombre} className="h-full w-full object-cover" />
                                   </div>
                                 ) : (
@@ -1311,53 +1336,49 @@ function NuevaOrdenPage() {
 
           {/* SIDEBAR ORDER */}
           <Card className="w-80 md:w-96 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl h-full">
-            {/* Header: Cliente */}
-            <div className="p-4 border-b bg-accent/5">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-black uppercase tracking-wider text-muted-foreground/80">Cliente</span>
-              </div>
-
-              <div className="flex mb-3 justify-center">
-                <div className="inline-flex rounded-full border border-border/60 bg-muted/40 p-0.5">
+            <div className="p-3 border-b bg-accent/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground/80">Cliente</span>
+                <div className="inline-flex rounded-full border border-border/60 bg-muted/40 p-0.5 scale-95 origin-right shrink-0">
                   <button
                     type="button"
                     onClick={() => handleSelectGeneric("Persona")}
-                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                      ? "bg-blue-600 text-white shadow-md"
-                      : "text-blue-700 hover:bg-blue-50"
+                    className={`inline-flex items-center justify-center py-1.5 px-3 rounded-full text-[11.5px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
+                      ? "bg-primary text-white shadow-xs"
+                      : "text-primary hover:bg-primary/5"
                       }`}
                   >
-                    <UserIcon className="h-4 w-4 mr-1.5 shrink-0" />
-                    Consumidor Final
+                    <UserIcon className="h-3.5 w-3.5 mr-1 shrink-0" />
+                    Consumidor Final (01)
                   </button>
                   <button
                     type="button"
                     onClick={() => setEmpresaDialogOpen(true)}
-                    className={`inline-flex items-center justify-center py-2 px-5 rounded-full text-[13px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                      ? "bg-slate-800 text-white shadow-md"
-                      : "text-slate-600 hover:bg-slate-50"
+                    className={`inline-flex items-center justify-center py-1.5 px-3 rounded-full text-[11.5px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
+                      ? "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-xs"
+                      : "text-slate-600 dark:text-slate-355 hover:bg-slate-50 dark:hover:bg-slate-800/50"
                       }`}
                   >
-                    <Building className="h-4 w-4 mr-1.5 shrink-0" />
-                    Crédito Fiscal
+                    <Building className="h-3.5 w-3.5 mr-1 shrink-0" />
+                    Crédito Fiscal (02)
                   </button>
                 </div>
               </div>
 
               <Button
                 variant="outline"
-                className="w-full justify-between h-11 bg-background border-border/50 rounded-xl font-bold shadow-sm px-3 hover:bg-background/90 text-left"
+                className="w-full justify-between h-9 bg-background border-border/50 rounded-xl font-bold shadow-xs px-3 hover:bg-background/90 text-left"
                 onClick={() => setIsClientModalOpen(true)}
               >
-                <div className="flex items-center gap-2.5 truncate">
-                  <span className="text-slate-500 shrink-0">
-                    {cliente?.tipo === "Empresa" ? <Building className="h-4.5 w-4.5" /> : <UserIcon className="h-4.5 w-4.5" />}
+                <div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
+                  <span className="text-muted-foreground shrink-0">
+                    {cliente?.tipo === "Empresa" ? <Building className="h-4 w-4" /> : <UserIcon className="h-4 w-4" />}
                   </span>
-                  <span className="truncate text-xs">
+                  <span className="truncate text-xs text-slate-700 dark:text-slate-200 font-bold">
                     {cliente ? `${cliente.nombre} ${cliente.apellido || ""}` : "Seleccionar cliente"}
                   </span>
                 </div>
-                <Search className="h-4 w-4 shrink-0 text-muted-foreground/65 ml-2" />
+                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ml-2" />
               </Button>
             </div>
 
@@ -1385,7 +1406,7 @@ function NuevaOrdenPage() {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className="h-5 w-5 text-destructive hover:bg-rose-50 rounded-md shrink-0"
+                            className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
                             onClick={() => setServiciosSel(prev => {
                               const index = prev.indexOf(srv.nombre);
                               if (index > -1) {
@@ -1459,7 +1480,7 @@ function NuevaOrdenPage() {
                               </div>
                             )}
                           </div>
-                          <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:bg-rose-50 rounded-md" onClick={() => removeItem(i)}>
+                          <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md" onClick={() => removeItem(i)}>
                             <Trash2 className="h-3.5 w-3.5" />
                           </Button>
                         </div>
@@ -1470,19 +1491,19 @@ function NuevaOrdenPage() {
                             </div>
                           ) : it.es_libra ? (
                             <div className="flex items-center gap-1.5 text-xs font-semibold">
-                              <span className="text-muted-foreground text-[10px]">Peso:</span>
+                              <span className="text-slate-850 dark:text-slate-300 text-[10px] font-black">Peso:</span>
                               <Input
                                 type="number"
                                 step="any"
                                 min="0.1"
-                                className="w-14 h-7 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-sm p-1"
+                                className="w-20 h-7 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-sm p-1"
                                 value={it.cantidad}
                                 onChange={(e) => {
                                   const val = parseFloat(e.target.value) || 0;
                                   setItems(prev => prev.map((item, idx) => idx === i ? { ...item, cantidad: val } : item));
                                 }}
                               />
-                              <span className="text-muted-foreground text-[10px] font-bold">lb</span>
+                              <span className="text-muted-foreground text-[10px] font-bold">Libras</span>
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
@@ -1528,12 +1549,63 @@ function NuevaOrdenPage() {
               )}
             </div>
 
-            {/* Toggle Urgente */}
+            {/* Sección de Fecha Estimada de Entrega */}
+            <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/60 border-t border-border/40 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <CalendarIcon className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-350">
+                    Fecha estimada de entrega
+                  </span>
+                </div>
+                <Switch
+                  checked={!!fechaEntrega}
+                  onCheckedChange={(checked) => {
+                    if (checked) {
+                      const d = new Date();
+                      d.setHours(12, 0, 0, 0);
+                      const standardHrs = cfg.tiempo_entrega_estandar || 24;
+                      d.setTime(d.getTime() + standardHrs * 3600000);
+                      setFechaEntrega(d);
+                    } else {
+                      setFechaEntrega(undefined);
+                    }
+                  }}
+                  className="scale-90 data-[state=checked]:bg-primary"
+                />
+              </div>
+
+              {fechaEntrega && (
+                <div 
+                  onClick={() => setShowDeliveryDatePickerPOS(true)}
+                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl border border-transparent bg-primary text-white shadow-md hover:bg-primary/95 transition-all cursor-pointer group"
+                >
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <CalendarIcon className="h-4 w-4 text-white shrink-0" />
+                    <span className="text-[13px] font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">
+                      {(() => {
+                        const weekday = fechaEntrega.toLocaleDateString("es-DO", { weekday: "long" });
+                        const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+                        const day = fechaEntrega.getDate();
+                        const month = fechaEntrega.toLocaleDateString("es-DO", { month: "long" });
+                        const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+                        return `${capWeekday}, ${day} de ${capMonth}`;
+                      })()}
+                    </span>
+                  </div>
+                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-yellow-400 text-black shrink-0 transition-all hover:bg-yellow-300 shadow-2xs ml-2">
+                    Cambiar
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* TODO: Descomentar para restaurar "Marcar orden como urgente" si el usuario lo vuelve a solicitar.
             <div className="px-4 py-2.5 bg-rose-500/[0.02] border-t border-primary/10 flex items-center justify-between">
               <label className="flex items-center gap-2 cursor-pointer w-full select-none justify-between">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className={`h-4 w-4 transition-colors duration-200 ${esUrgente ? "text-rose-600 animate-pulse" : "text-muted-foreground/50"}`} />
-                  <span className={`text-xs font-bold transition-colors duration-200 ${esUrgente ? "text-rose-700 font-extrabold" : "text-muted-foreground"}`}>
+                  <span className={`text-xs font-bold transition-colors duration-200 ${esUrgente ? "text-rose-600 dark:text-rose-400 font-extrabold" : "text-muted-foreground"}`}>
                     Marcar orden como urgente {cfg.recargo_urgencia > 0 && `(+${cfg.recargo_urgencia}%)`}
                   </span>
                 </div>
@@ -1544,14 +1616,21 @@ function NuevaOrdenPage() {
                 />
               </label>
             </div>
+            */}
 
             {/* Footer: Totals & Button */}
-            <div className="p-4 bg-primary/5 border-t border-primary/10 space-y-2">
-              <div className="space-y-2">
+            <div className="p-3 bg-primary/5 border-t border-primary/10 space-y-1.5">
+              <div className="space-y-1">
                 <div className="flex justify-between text-xs text-muted-foreground font-bold">
                   <span>SUBTOTAL</span>
                   <span>{formatRD(subtotalBruto)}</span>
                 </div>
+                {esUrgente && recargoTotal > 0 && (
+                  <div className="flex justify-between text-xs text-rose-600 font-bold">
+                    <span>RECARGO URGENTE (+{cfg.recargo_urgencia}%)</span>
+                    <span>+{formatRD(recargoTotal)}</span>
+                  </div>
+                )}
                 {itbis > 0 && (
                   <div className="flex justify-between text-xs text-muted-foreground font-bold">
                     <span>ITBIS ({cfg.itbis_porcentaje}%)</span>
@@ -1653,7 +1732,7 @@ function NuevaOrdenPage() {
                       const isCredito = tipo === "E31" || tipo === "B01";
                       const name = NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() || "Empresa";
 
-                      const label = isConsumo ? "Consumidor Final" : (isCredito ? "Empresa / RNC" : name);
+                      const label = isConsumo ? "Consumidor Final (01)" : (isCredito ? "Crédito Fiscal (02)" : name);
                       const subLabel = isConsumo ? "Factura Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
                       const Icon = isConsumo ? UserIcon : (isCredito ? Truck : Building);
 
@@ -1911,7 +1990,7 @@ function NuevaOrdenPage() {
                             <Button
                               variant="ghost"
                               size="icon"
-                              className="h-8 w-8 text-destructive hover:bg-rose-50 rounded-md"
+                              className="h-8 w-8 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
                               onClick={() => setServiciosSel(prev => prev.filter(x => x !== srv.nombre))}
                             >
                               <Trash2 className="h-4 w-4" />
@@ -2256,7 +2335,7 @@ function NuevaOrdenPage() {
 
                   {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
                     <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                      <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-500/[0.03] p-4 text-teal-800">
+                      <div className="flex items-center gap-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-500/[0.03] p-4 text-teal-800 dark:text-teal-200">
                         <Timer className="h-8 w-8 text-teal-600 shrink-0" />
                         <div>
                           <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
@@ -2341,10 +2420,10 @@ function NuevaOrdenPage() {
                       </motion.div>
 
                       {/* --- CREDIT LIMIT CARD --- */}
-                      <div className="rounded-[1.75rem] border border-amber-200 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                      <div className="rounded-[1.75rem] border border-amber-200 dark:border-amber-800 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
                         <div className="flex items-center gap-2 mb-4">
                           <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
-                          <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800">
+                          <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800 dark:text-amber-300">
                             PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
                           </span>
                         </div>
@@ -2355,11 +2434,11 @@ function NuevaOrdenPage() {
                               type="button"
                               onClick={() => actualizarLimiteDias(op.dias)}
                               className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${limiteDiasSel === op.dias
-                                ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                                ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
                                 : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
                                 }`}
                             >
-                              <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                              <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700 dark:text-amber-300" : "text-foreground"
                                 }`}>{op.dias}</span>
                               <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
                                 }`}>DÍAS</span>
@@ -2378,7 +2457,7 @@ function NuevaOrdenPage() {
                         <div className="relative h-20">
                           <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
                           <PriceInput
-                            className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 font-bold"
+                            className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 dark:text-amber-300 font-bold"
                             value={abonoCredito}
                             onChange={(val) => {
                               if (val > total) {
@@ -2533,7 +2612,7 @@ function NuevaOrdenPage() {
                     <UserIcon className="h-4.5 w-4.5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-xs truncate leading-tight">Consumidor Final (Persona)</div>
+                    <div className="font-bold text-xs truncate leading-tight">Consumidor Final (01)</div>
                     <div className={`text-[9px] truncate transition-colors mt-0.5 ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
                       ? "text-white/80"
                       : "text-muted-foreground group-hover:text-white/85"
@@ -2561,7 +2640,7 @@ function NuevaOrdenPage() {
                     <Building className="h-4.5 w-4.5" />
                   </div>
                   <div className="min-w-0 flex-1">
-                    <div className="font-bold text-xs truncate leading-tight">Empresa (Buscar por RNC)</div>
+                    <div className="font-bold text-xs truncate leading-tight">Crédito Fiscal (02)</div>
                     <div className={`text-[9px] truncate transition-colors mt-0.5 ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
                       ? "text-white/80"
                       : "text-muted-foreground group-hover:text-white/85"
@@ -2796,7 +2875,7 @@ function NuevaOrdenPage() {
 
             {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
               <div className="space-y-4 mb-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex items-center gap-4 rounded-xl border border-teal-200 bg-teal-500/[0.03] p-4 text-teal-800">
+                <div className="flex items-center gap-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-500/[0.03] p-4 text-teal-800 dark:text-teal-200">
                   <Timer className="h-8 w-8 text-teal-600 shrink-0" />
                   <div>
                     <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
@@ -2876,10 +2955,10 @@ function NuevaOrdenPage() {
                   </div>
                 </div>
 
-                <div className="rounded-[1.75rem] border border-amber-200 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="rounded-[1.75rem] border border-amber-200 dark:border-amber-800 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
                   <div className="flex items-center gap-2 mb-4">
                     <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
-                    <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800">
+                    <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800 dark:text-amber-300">
                       PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
                     </span>
                   </div>
@@ -2890,11 +2969,11 @@ function NuevaOrdenPage() {
                         type="button"
                         onClick={() => actualizarLimiteDias(op.dias)}
                         className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${limiteDiasSel === op.dias
-                          ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                          ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
                           : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
                           }`}
                       >
-                        <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700" : "text-foreground"
+                        <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700 dark:text-amber-300" : "text-foreground"
                           }`}>{op.dias}</span>
                         <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
                           }`}>DÍAS</span>
@@ -2913,7 +2992,7 @@ function NuevaOrdenPage() {
                   <div className="relative h-20">
                     <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
                     <PriceInput
-                      className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 font-bold"
+                      className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 dark:text-amber-300 font-bold"
                       value={abonoCredito}
                       onChange={(val) => {
                         if (val > total) {
@@ -3308,7 +3387,7 @@ function DiscountPOSDialog({
           <p className="text-xs text-muted-foreground text-center">El descuento se calculará como un porcentaje del total final de la orden.</p>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => { setDiscount(0); onOpenChange(false); }} className="flex-1 h-11 rounded-md border-rose-200 text-rose-600 hover:bg-rose-50 font-bold">
+          <Button variant="outline" onClick={() => { setDiscount(0); onOpenChange(false); }} className="flex-1 h-11 rounded-md border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold">
             Quitar Desc.
           </Button>
           <Button onClick={apply} className="flex-1 h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none">
@@ -3439,5 +3518,226 @@ function TicketPrintPortal({
       `}} />
     </div>,
     document.body
+  );
+}
+
+function DeliveryDatePickerPOSDialog({
+  open,
+  onOpenChange,
+  fechaEntrega,
+  setFechaEntrega,
+  esUrgente,
+  setEsUrgente,
+  cfg
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  fechaEntrega: Date | undefined;
+  setFechaEntrega: (d: Date | undefined) => void;
+  esUrgente: boolean;
+  setEsUrgente: (u: boolean) => void;
+  cfg: any;
+}) {
+  const [tempDate, setTempDate] = useState<Date | undefined>(fechaEntrega || new Date());
+  const [tempIsUrgente, setTempIsUrgente] = useState(esUrgente);
+
+  // Sync internal state when opened
+  useEffect(() => {
+    if (open) {
+      setTempDate(fechaEntrega || new Date());
+      setTempIsUrgente(esUrgente);
+    }
+  }, [open, fechaEntrega, esUrgente]);
+
+  const aplicarAtajo = (horas: number, deUrgencia: boolean) => {
+    const d = new Date();
+    d.setHours(d.getHours() + horas);
+    // Reiniciar horas para basarnos solo en fecha limpia
+    d.setHours(12, 0, 0, 0);
+    setTempDate(d);
+    setTempIsUrgente(deUrgencia);
+  };
+
+  const handleSave = () => {
+    if (tempDate) {
+      // Forzar hora neutra (12:00 PM) para evitar desfases de zona horaria al basarse solo en fecha
+      const cleanDate = new Date(tempDate);
+      cleanDate.setHours(12, 0, 0, 0);
+      setFechaEntrega(cleanDate);
+    } else {
+      setFechaEntrega(undefined);
+    }
+    setEsUrgente(tempIsUrgente);
+    onOpenChange(false);
+  };
+
+  const tiempoEstandar = cfg.tiempo_entrega_estandar || 24;
+  const tiempoUrgente = cfg.tiempo_entrega_urgente || 6;
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[90vw] sm:max-w-[530px] rounded-xl p-4.5 border-none bg-white dark:bg-slate-950 shadow-2xl">
+        <DialogHeader className="pb-2.5 border-b border-border/40">
+          <DialogTitle className="text-sm font-black tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2 uppercase">
+            <CalendarDays className="h-4 w-4 text-primary" />
+            Programar Entrega
+          </DialogTitle>
+        </DialogHeader>
+
+        <div className="flex flex-col sm:flex-row gap-4 py-3">
+          {/* Columna Izquierda: Atajos + Resumen */}
+          <div className="flex-1 flex flex-col justify-between gap-3">
+            <div>
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-2">
+                Atajos Rápidos
+              </span>
+              
+              <div className="grid grid-cols-2 gap-3">
+                {/* COLUMNA URGENTE */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => aplicarAtajo(tiempoUrgente, true)}
+                    className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-semibold tracking-tight transition-all text-center flex items-center justify-center gap-1 cursor-pointer h-9.5 ${
+                      tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000)) < 60000
+                        ? "bg-rose-500 border-rose-500 text-white shadow-xs"
+                        : "bg-rose-50 border-rose-100 text-rose-700 hover:bg-rose-100/70 hover:text-rose-800 dark:bg-rose-950/20 dark:border-rose-900/40 dark:text-rose-400"
+                    }`}
+                  >
+                    <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000)) < 60000 ? "text-white" : "text-rose-500"}`} />
+                    <span>Urgente ({tiempoUrgente}h)</span>
+                  </button>
+
+                  <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 block mb-1">
+                    Otros plazos urgentes:
+                  </div>
+                  <div className="grid grid-cols-2 gap-1">
+                    {[3, 6, 12].filter(h => h !== tiempoUrgente).map(h => {
+                      const isAct = tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) < 60000;
+                      return (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => aplicarAtajo(h, true)}
+                          className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
+                            isAct
+                              ? "bg-rose-500 border-rose-500 text-white shadow-xs"
+                              : "border-rose-100 bg-rose-50/20 text-rose-600 hover:bg-rose-50 dark:border-rose-900/20 dark:bg-rose-950/10 dark:text-rose-400"
+                          }`}
+                        >
+                          {h}h
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* COLUMNA ESTÁNDAR */}
+                <div className="space-y-2">
+                  <button
+                    type="button"
+                    onClick={() => aplicarAtajo(tiempoEstandar, false)}
+                    className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-semibold tracking-tight transition-all text-center flex items-center justify-center gap-1 cursor-pointer h-9.5 ${
+                      !tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoEstandar * 3600000)) < 60000
+                        ? "bg-primary border-primary text-white shadow-xs"
+                        : "bg-primary/5 border-primary/10 text-primary hover:bg-primary/10 dark:bg-primary/20 dark:border-primary/40 dark:text-primary-foreground"
+                    }`}
+                  >
+                    <span>Estándar ({tiempoEstandar >= 24 ? `${tiempoEstandar / 24}d` : `${tiempoEstandar}h`})</span>
+                  </button>
+
+                  <div className="text-[9px] font-bold text-slate-400 dark:text-slate-550 block mb-1">
+                    Otros plazos estándar:
+                  </div>
+                  <div className="grid grid-cols-3 gap-1">
+                    {[24, 48, 72, 96].filter(h => h !== tiempoEstandar).map(h => {
+                      const isAct = !tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) < 60000;
+                      const labelMap: Record<number, string> = {
+                        24: "1d",
+                        48: "2d",
+                        72: "3d",
+                        96: "4d"
+                      };
+                      return (
+                        <button
+                          key={h}
+                          type="button"
+                          onClick={() => aplicarAtajo(h, false)}
+                          className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
+                            isAct
+                              ? "bg-primary border-primary text-white shadow-xs"
+                              : "border-primary/10 bg-primary/5 text-primary hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-primary-foreground"
+                          }`}
+                        >
+                          {labelMap[h]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Resumen */}
+            <div className="p-3 rounded-xl border border-primary/10 bg-gradient-to-r from-primary/5 to-transparent relative overflow-hidden shadow-xs">
+              <div className="absolute top-0 left-0 bottom-0 w-1 bg-primary" />
+              <div className="pl-2">
+                <div className="text-[9px] font-black uppercase tracking-widest text-primary/70 mb-1">
+                  Fecha de entrega
+                </div>
+                <div className="text-[13px] font-black text-slate-800 dark:text-slate-100 capitalize">
+                  {tempDate ? tempDate.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' }) : 'No definida'}
+                </div>
+                {tempIsUrgente && (
+                  <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-455 text-[8px] font-black uppercase tracking-wider">
+                    Urgente (+{cfg.recargo_urgencia}%)
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Columna Derecha: Calendario */}
+          <div className="flex justify-center items-center border-t sm:border-t-0 sm:border-l border-border/40 pt-3 sm:pt-0 sm:pl-4">
+            <div className="flex flex-col items-center">
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-1.5 self-start sm:ml-1">
+                Selección de Fecha
+              </span>
+              <Calendar
+                mode="single"
+                selected={tempDate}
+                onSelect={(d) => {
+                  if (d) {
+                    const newD = new Date(d);
+                    newD.setHours(12, 0, 0, 0); // Limpio a mediodía neutro
+                    setTempDate(newD);
+                  }
+                }}
+                locale={es}
+                className="rounded-xl border border-primary/20 shadow-lg shadow-primary/5 bg-white dark:bg-slate-900 p-2.5 scale-90 sm:scale-95 origin-center"
+              />
+            </div>
+          </div>
+        </div>
+
+        <DialogFooter className="pt-3 border-t border-border/40 gap-1.5 flex-row justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border-border hover:bg-slate-100 dark:hover:bg-slate-900 text-xs font-bold cursor-pointer h-8 px-3"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            className="rounded-lg bg-primary hover:bg-primary/95 text-white text-xs font-bold cursor-pointer h-8 px-3"
+          >
+            Aplicar Fecha
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

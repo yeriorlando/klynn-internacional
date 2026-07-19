@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { compressImage } from "@/lib/compressImage";
 import { useMemo, useState, useEffect } from "react";
-import { Plus, Pencil, Trash2, Shirt, Sparkles, Image as ImageIcon, PackagePlus, Search } from "lucide-react";
+import { Plus, Pencil, Trash2, Shirt, Sparkles, Image as ImageIcon, PackagePlus, Search, ArrowLeft, ArrowRight, CheckCircle2, X, Tag, Wrench } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -391,14 +391,16 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
   open: boolean; onOpenChange: (o: boolean) => void; tenantId: string;
   initial: CatalogoItem | null; onSaved: () => void;
 }) {
+  const [step, setStep] = useState<1 | 2>(1);
   const [f, setF] = useState<Partial<CatalogoItem>>({});
   const [imgError, setImgError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState<"emoji" | "image">("emoji");
   const [iconSearch, setIconSearch] = useState("");
-  
+
   useEffect(() => { 
     if (open) {
+      setStep(1);
       setF(initial ? { ...initial } : { categoria: "", nombre: "", precio: 0, activo: true, icono: "👕", is_exento: false, es_muestra: false, permitir_desglose: false, permitir_editar_precio: false });
       setMode(initial?.imagen_url ? "image" : "emoji");
       setImgError(false);
@@ -418,15 +420,12 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
     
     try {
       setUploading(true);
-      
-      // Comprimir imagen antes de subir
       const compressedDataUrl = await compressImage(file, 800, 800, 0.75);
       const res = await fetch(compressedDataUrl);
       const blob = await res.blob();
       
       const path = `${tenantId}/${uid("img")}.webp`;
-      
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('catalogo')
         .upload(path, blob, { contentType: 'image/webp' });
         
@@ -436,17 +435,29 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
         .from('catalogo')
         .getPublicUrl(path);
         
-      setF({ ...f, imagen_url: publicUrl });
+      setF(prev => ({ ...prev, imagen_url: publicUrl }));
       toast.success("Imagen subida y comprimida");
     } catch (err: any) {
-      toast.error("Error al subir: " + (err.message || "Asegúrate de que el bucket 'catalogo' sea público"));
+      toast.error("Error al subir: " + (err.message || "Verifica el almacenamiento"));
     } finally {
       setUploading(false);
     }
   }
 
+  const handleNextStep = () => {
+    if (!f.nombre?.trim() || !f.categoria?.trim()) {
+      toast.error("Nombre y Categoría requeridos");
+      return;
+    }
+    setStep(2);
+  };
+
   async function submit() {
-    if (!f.nombre?.trim() || !f.categoria?.trim()) { toast.error("Nombre y categoría requeridos"); return; }
+    if (!f.nombre?.trim() || !f.categoria?.trim()) {
+      toast.error("Nombre y categoría requeridos");
+      setStep(1);
+      return;
+    }
     const item: CatalogoItem = {
       id: initial?.id ?? uid("cat"),
       tenant_id: tenantId,
@@ -469,104 +480,167 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl">
-        <div className="flex flex-col md:flex-row h-full max-h-[90vh] overflow-hidden">
-          {/* COLUMNA IZQUIERDA: FORMULARIO */}
-          <div className="flex-1 p-8 border-r border-border/50 space-y-6 bg-background overflow-y-auto">
-            <div className="space-y-1">
-              <h2 className="text-2xl font-display font-bold text-primary">{initial ? "Editar prenda" : "Nueva prenda"}</h2>
-              <p className="text-sm text-muted-foreground">Configura los detalles de la prenda en el catálogo.</p>
-            </div>
-
-            <div className="grid gap-5 pt-2">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Categoría</Label>
-                  <Input value={f.categoria || ""} onChange={(e) => setF({ ...f, categoria: e.target.value })} placeholder="Ej: Camisas" className="h-11 rounded-xl bg-white border-border/60 focus-visible:ring-primary/30 shadow-sm" />
-                </div>
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Nombre</Label>
-                  <Input value={f.nombre || ""} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej: Camisa Manga Larga" className="h-11 rounded-xl bg-white border-border/60 focus-visible:ring-primary/30 shadow-sm" />
-                </div>
+      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+        {/* STEPPER HEADER */}
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-1.5 relative">
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
+                {step === 1 ? <Shirt className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Precio base (RD$)</Label>
-                  <Input type="number" value={f.precio ?? 0} onChange={(e) => setF({ ...f, precio: Number(e.target.value) })} className="h-11 rounded-xl bg-white border-border/60 focus-visible:ring-primary/30 shadow-sm font-bold text-lg" />
-                </div>
-                <div className="flex flex-col justify-end gap-3 pb-1">
-                  <div className="flex items-center gap-3 px-1">
-                    <Switch checked={!!f.por_libra} onCheckedChange={(v) => setF({ ...f, por_libra: v })} />
-                    <Label className="text-sm font-medium">Cobrar por libra</Label>
-                  </div>
-                </div>
+              <div>
+                <DialogTitle className="text-base font-display text-foreground">
+                  {initial ? "Editar prenda" : "Nueva prenda"}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">
+                  {step === 1 ? "Paso 1: Información general y precio" : "Paso 2: Identificador visual e imagen"}
+                </p>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-primary/5 border border-primary/10 shadow-sm">
-                  <Switch checked={!!f.is_exento} onCheckedChange={(v) => setF({ ...f, is_exento: v })} />
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-bold text-primary">Exento de ITBIS</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">No aplica impuesto (DGII Ind: 3)</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-border/60 shadow-sm">
-                  <Switch checked={f.activo ?? true} onCheckedChange={(v) => setF({ ...f, activo: v })} />
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-bold">Estado Activo</Label>
-                    <p className="text-[11px] text-muted-foreground leading-none">Visible al crear órdenes.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-border/60 shadow-sm">
-                  <Switch checked={!!f.permitir_desglose} onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })} />
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-bold">Habilitar desglose</Label>
-                    <p className="text-[11px] text-muted-foreground leading-none">Permitir desglosar esta prenda al crear una orden.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-white border border-border/60 shadow-sm">
-                  <Switch checked={!!f.permitir_editar_precio} onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })} />
-                  <div className="space-y-0.5">
-                    <Label className="text-sm font-bold">Permitir editar precio</Label>
-                    <p className="text-[11px] text-muted-foreground leading-none">Permitir modificar el precio de esta prenda al crear una orden.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-6">
-              <Button 
-                variant="outline" 
-                onClick={() => onOpenChange(false)} 
-                style={{ borderRadius: '0.7rem', paddingInline: 'calc(var(--spacing) * 5)', height: 'calc(var(--spacing) * 9)' }}
-                className="font-bold bg-white border-primary/10 shadow-sm text-muted-foreground hover:bg-accent/5"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={submit} 
-                style={{ borderRadius: '0.7rem', paddingInline: 'calc(var(--spacing) * 5)', height: 'calc(var(--spacing) * 9)' }}
-                className="bg-[#1a3eb3] hover:bg-[#1a3eb3]/90 text-white font-bold shadow-sm"
-              >
-                {initial ? "Guardar" : "Crear prenda"}
-              </Button>
             </div>
           </div>
 
-          {/* COLUMNA DERECHA: IDENTIFICADOR VISUAL */}
-          <div className="w-full md:w-[420px] bg-primary/5 p-8 flex flex-col gap-6 overflow-y-auto border-l border-primary/10">
-            <div className="space-y-1">
-              <h3 className="text-lg font-display font-bold text-primary">Identificador Visual</h3>
-              <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-bold">Personaliza cómo se verá la prenda</p>
-            </div>
+          {/* Stepper Buttons (Centered) */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 1
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                step === 1 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}>
+                1
+              </span>
+              <span>Información General</span>
+            </button>
 
-            <div className="space-y-6">
+            <button
+              type="button"
+              onClick={handleNextStep}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 2
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                step === 2 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}>
+                2
+              </span>
+              <span>Identificador Visual</span>
+            </button>
+          </div>
+        </div>
+
+        {/* DIALOG BODY */}
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-1.5">
+          {step === 1 ? (
+            /* STEP 1: INFORMACIÓN Y PRECIO */
+            <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Categoría *</Label>
+                  <Input 
+                    value={f.categoria || ""} 
+                    onChange={(e) => setF({ ...f, categoria: e.target.value })} 
+                    placeholder="Ej: Camisas" 
+                    className="h-9 rounded-xl text-xs" 
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre *</Label>
+                  <Input 
+                    value={f.nombre || ""} 
+                    onChange={(e) => setF({ ...f, nombre: e.target.value })} 
+                    placeholder="Ej: Camisa Manga Larga" 
+                    className="h-9 rounded-xl text-xs" 
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 items-center">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Precio (RD$)</Label>
+                  <Input 
+                    type="number" 
+                    value={f.precio ?? 0} 
+                    onChange={(e) => setF({ ...f, precio: Number(e.target.value) })} 
+                    className="h-9 rounded-xl text-xs font-bold text-base" 
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-4">
+                  <Switch checked={!!f.por_libra} onCheckedChange={(v) => setF({ ...f, por_libra: v })} />
+                  <Label className="text-xs font-medium cursor-pointer">Cobrar por libra</Label>
+                </div>
+              </div>
+
+              {/* Switches Grid */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-primary/5 border border-primary/15">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold text-primary block leading-none">Exento ITBIS</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">Ind: 3</p>
+                  </div>
+                  <Switch checked={!!f.is_exento} onCheckedChange={(v) => setF({ ...f, is_exento: v })} />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold block leading-none">Estado Activo</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">En catálogo</p>
+                  </div>
+                  <Switch checked={f.activo ?? true} onCheckedChange={(v) => setF({ ...f, activo: v })} />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold block leading-none">Desglose</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">En órdenes</p>
+                  </div>
+                  <Switch checked={!!f.permitir_desglose} onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })} />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold block leading-none">Editar precio</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">Al facturar</p>
+                  </div>
+                  <Switch checked={!!f.permitir_editar_precio} onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })} />
+                </div>
+              </div>
+
+              {/* Step 1 Footer */}
+              <div className="pt-2 flex justify-between items-center">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => onOpenChange(false)} 
+                  className="rounded-xl h-8.5 px-4 text-xs font-medium"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={handleNextStep} 
+                  className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                >
+                  Siguiente: Identificador <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* STEP 2: IDENTIFICADOR VISUAL */
+            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
               {/* Selector de Modo */}
-              <div className="flex items-center justify-between p-4 rounded-2xl bg-background border border-primary/10 shadow-sm">
-                <div className="flex flex-col gap-1">
-                  <Label className="font-bold text-sm">Usar Imagen</Label>
-                  <p className="text-[10px] text-muted-foreground leading-none">Activa para subir foto propia</p>
+              <div className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
+                <div>
+                  <span className="text-xs font-bold text-foreground block">Usar Foto / Imagen</span>
+                  <span className="text-[10px] text-muted-foreground">Alternar entre Emoji o foto subida</span>
                 </div>
                 <Switch 
                   id="mode-toggle-item-split"
@@ -576,29 +650,33 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
                 />
               </div>
 
-              {/* Contenido según Modo */}
+              {/* Contenido según modo */}
               {mode === "emoji" ? (
-                <div className="space-y-4 animate-in fade-in zoom-in-95 duration-300">
-                  <div className="relative group">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground group-focus-within:text-primary transition-colors" />
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <input 
                       type="text"
                       placeholder="Buscar icono..."
                       value={iconSearch}
                       onChange={(e) => setIconSearch(e.target.value)}
-                      className="w-full h-10 pl-9 pr-4 rounded-xl bg-background border border-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/20 text-sm shadow-sm"
+                      className="w-full h-8 pl-8 pr-3 rounded-lg bg-background border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
-                  <div className="grid grid-cols-4 gap-2 max-h-56 overflow-y-auto p-2 rounded-2xl bg-background/50 border border-primary/5 shadow-inner no-scrollbar">
+                  <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border">
                     {filteredIcons.map(i => (
                       <button
                         key={i.char}
                         type="button"
                         onClick={() => setF({ ...f, icono: f.icono === i.char ? undefined : i.char })}
-                        className={`flex flex-col items-center gap-1.5 p-2 rounded-xl transition-all hover:bg-primary/5 active:scale-90 ${f.icono === i.char ? 'bg-primary text-white shadow-lg shadow-primary/20 ring-2 ring-primary/10' : 'bg-background shadow-sm grayscale-[0.5] hover:grayscale-0'}`}
+                        className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all border ${
+                          f.icono === i.char 
+                            ? 'bg-primary text-white border-primary shadow-md font-bold' 
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs'
+                        }`}
                       >
-                        <span className="text-xl">{i.char}</span>
-                        <span className={`text-[8px] font-bold truncate w-full text-center leading-none ${f.icono === i.char ? 'text-white/90' : 'text-muted-foreground'}`}>
+                        <span className="text-lg">{i.char}</span>
+                        <span className={`text-[8px] font-bold truncate w-full text-center leading-none ${f.icono === i.char ? 'text-white' : 'text-muted-foreground'}`}>
                           {i.label}
                         </span>
                       </button>
@@ -606,54 +684,82 @@ function ItemDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-3 animate-in fade-in zoom-in-95 duration-300">
+                <div className="space-y-2">
                   <div className="flex gap-2">
                     <Input 
                       value={f.imagen_url || ""} 
                       onChange={(e) => setF({ ...f, imagen_url: e.target.value })} 
-                      placeholder="Pegar URL de imagen..." 
-                      className="flex-1 h-12 rounded-xl bg-background shadow-sm border-primary/10"
+                      placeholder="Pegar URL de la imagen..." 
+                      className="flex-1 h-9 rounded-xl text-xs"
                     />
                     <div className="relative">
                       <input type="file" id="item-upload" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={uploading} />
                       <Button 
                         type="button"
-                        variant="outline" 
-                        className="h-12 w-12 rounded-xl border-primary/10 hover:bg-primary/5 bg-background shadow-sm group"
+                        className="h-9 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95"
                         disabled={uploading}
                         onClick={() => document.getElementById('item-upload')?.click()}
                       >
-                        {uploading ? <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <ImageIcon className="h-5 w-5 text-primary group-hover:scale-110 transition-transform" />}
+                        {uploading ? (
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        ) : (
+                          <>
+                            <ImageIcon className="h-4 w-4" /> Subir imagen
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Previsualización Grande */}
-              <div className="mt-auto pt-4 border-t border-primary/10">
-                <Label className="text-[10px] uppercase tracking-wider text-muted-foreground font-bold mb-3 block text-center px-1">Vista Previa</Label>
-                <div className="relative aspect-square w-48 mx-auto grid place-items-center rounded-3xl bg-background border-4 border-white shadow-xl overflow-hidden group">
-                  <div className="absolute inset-0 bg-primary/5 group-hover:bg-transparent transition-colors" />
+              {/* Vista Previa Destacada */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border flex items-center justify-center gap-4">
+                <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-border shadow-sm flex items-center justify-center overflow-hidden shrink-0">
                   {mode === "image" && f.imagen_url && !imgError ? (
-                    <img 
-                      src={f.imagen_url} 
-                      alt="preview" 
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110" 
-                      onError={() => setImgError(true)}
-                    />
+                    <img src={f.imagen_url} alt="Vista previa" className="h-full w-full object-cover" onError={() => setImgError(true)} />
                   ) : (
-                    <div className="flex flex-col items-center gap-2 relative z-10">
-                      <span className="text-7xl animate-bounce-slow drop-shadow-lg">{f.icono || "👕"}</span>
-                      {mode === "image" && imgError && (
-                        <p className="text-[10px] font-bold text-destructive px-4 text-center">Error al cargar imagen</p>
-                      )}
-                    </div>
+                    <span className="text-3xl">{f.icono || "👕"}</span>
                   )}
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-foreground block">{f.nombre || "Nombre de Prenda"}</span>
+                  <span className="text-[11px] text-muted-foreground">{f.categoria || "Categoría"} · {formatRD(f.precio || 0)}</span>
+                </div>
+              </div>
+
+              {/* Step 2 Footer */}
+              <div className="pt-2 flex justify-between items-center border-t border-border/50">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setStep(1)} 
+                  className="rounded-xl h-8.5 px-4 text-xs font-medium gap-1"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => onOpenChange(false)} 
+                    className="rounded-xl h-8.5 px-4 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  >
+                    Cancelar
+                  </Button>
+
+                  <Button 
+                    type="button" 
+                    onClick={submit} 
+                    className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                  >
+                    Guardar Prenda <CheckCircle2 className="h-3.5 w-3.5" />
+                  </Button>
                 </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>
@@ -664,6 +770,7 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
   open: boolean; onOpenChange: (o: boolean) => void; tenantId: string;
   initial: Servicio | null; onSaved: () => void;
 }) {
+  const [step, setStep] = useState<1 | 2>(1);
   const [f, setF] = useState<Partial<Servicio>>({});
   const [imgError, setImgError] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -672,6 +779,7 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
 
   useEffect(() => { 
     if (open) {
+      setStep(1);
       setF(initial ? { ...initial } : { nombre: "", descripcion: "", icono: "🧺", activo: true, precio: 0, is_exento: false, es_muestra: false, permitir_desglose: false, permitir_editar_precio: false });
       setMode(initial?.imagen_url ? "image" : "emoji");
       setImgError(false);
@@ -691,15 +799,12 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
     
     try {
       setUploading(true);
-      
-      // Comprimir imagen antes de subir
       const compressedDataUrl = await compressImage(file, 800, 800, 0.75);
       const res = await fetch(compressedDataUrl);
       const blob = await res.blob();
       
       const path = `${tenantId}/serv-${uid("img")}.webp`;
-      
-      const { data, error } = await supabase.storage
+      const { error } = await supabase.storage
         .from('catalogo')
         .upload(path, blob, { contentType: 'image/webp' });
         
@@ -709,17 +814,29 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
         .from('catalogo')
         .getPublicUrl(path);
         
-      setF({ ...f, imagen_url: publicUrl });
+      setF(prev => ({ ...prev, imagen_url: publicUrl }));
       toast.success("Imagen de servicio subida y comprimida");
     } catch (err: any) {
-      toast.error("Error al subir: " + (err.message || "Verifica el bucket 'catalogo'"));
+      toast.error("Error al subir: " + (err.message || "Verifica el almacenamiento"));
     } finally {
       setUploading(false);
     }
   }
 
+  const handleNextStep = () => {
+    if (!f.nombre?.trim()) {
+      toast.error("Nombre del Servicio requerido");
+      return;
+    }
+    setStep(2);
+  };
+
   async function submit() {
-    if (!f.nombre?.trim()) { toast.error("Nombre requerido"); return; }
+    if (!f.nombre?.trim()) {
+      toast.error("Nombre requerido");
+      setStep(1);
+      return;
+    }
     const isCloning = initial?.tenant_id === 'admin';
     const s: Servicio = {
       id: isCloning ? uid("srv") : (initial?.id ?? uid("srv")),
@@ -741,124 +858,199 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl p-0 overflow-hidden rounded-[2rem] border-none shadow-2xl">
-        <div className="flex flex-col md:flex-row h-full overflow-hidden">
-          {/* COLUMNA IZQUIERDA: FORMULARIO */}
-          <div className="flex-1 p-6 space-y-4 bg-background">
-            <div className="space-y-0.5">
-              <h2 className="text-xl font-display font-bold text-primary">{initial ? "Editar servicio" : "Nuevo servicio"}</h2>
-              <p className="text-xs text-muted-foreground">Define los servicios de limpieza y arreglos.</p>
-            </div>
-
-            <div className="grid gap-4">
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Nombre del Servicio</Label>
-                <Input value={f.nombre || ""} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej: Lavado y Secado" className="h-11 rounded-xl bg-white border-border/60 focus-visible:ring-primary/30 shadow-sm" />
+      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+        {/* STEPPER HEADER */}
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-1.5 relative">
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
+                {step === 1 ? <Wrench className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Descripción (opcional)</Label>
-                <Textarea value={f.descripcion || ""} onChange={(e) => setF({ ...f, descripcion: e.target.value })} placeholder="Breve descripción..." rows={2} className="rounded-xl bg-white border-border/60 focus-visible:ring-primary/30 shadow-sm resize-none text-sm" />
+              <div>
+                <DialogTitle className="text-base font-display text-foreground">
+                  {initial ? "Editar servicio" : "Nuevo servicio"}
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">
+                  {step === 1 ? "Paso 1: Información del servicio y precio" : "Paso 2: Identificador visual e imagen"}
+                </p>
               </div>
-
-              <div className="space-y-1.5">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground ml-1">Precio adicional (RD$)</Label>
-                <Input type="number" value={f.precio ?? 0} onChange={(e) => setF({ ...f, precio: Number(e.target.value) })} className="h-11 rounded-xl bg-white border-border/60 focus-visible:ring-primary/30 shadow-sm font-bold" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4 pt-2 border-t">
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-primary/5 border border-primary/10 shadow-sm">
-                  <Switch checked={!!f.is_exento} onCheckedChange={(v) => setF({ ...f, is_exento: v })} />
-                  <div className="space-y-0">
-                    <Label className="text-xs font-bold text-primary">Exento ITBIS</Label>
-                    <p className="text-[9px] text-muted-foreground leading-none">Ind: 3</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-border/60 shadow-sm">
-                  <Switch checked={f.activo ?? true} onCheckedChange={(v) => setF({ ...f, activo: v })} />
-                  <div className="space-y-0">
-                    <Label className="text-xs font-bold text-primary">Servicio Activo</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Disponible.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-border/60 shadow-sm">
-                  <Switch checked={!!f.permitir_desglose} onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })} />
-                  <div className="space-y-0">
-                    <Label className="text-xs font-bold text-primary">Habilitar desglose</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Permitir desglosar este servicio al crear una orden.</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-3 p-3 rounded-xl bg-white border border-border/60 shadow-sm">
-                  <Switch checked={!!f.permitir_editar_precio} onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })} />
-                  <div className="space-y-0">
-                    <Label className="text-xs font-bold text-primary">Permitir editar precio</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Permitir modificar el precio de este servicio al crear una orden.</p>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-4">
-              <Button 
-                variant="outline" 
-                onClick={() => onOpenChange(false)} 
-                style={{ borderRadius: '0.7rem', paddingInline: 'calc(var(--spacing) * 5)', height: 'calc(var(--spacing) * 9)' }}
-                className="font-bold bg-white border-primary/10 shadow-sm text-muted-foreground hover:bg-accent/5"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={submit} 
-                style={{ borderRadius: '0.7rem', paddingInline: 'calc(var(--spacing) * 5)', height: 'calc(var(--spacing) * 9)' }}
-                className="bg-[#1a3eb3] hover:bg-[#1a3eb3]/90 text-white font-bold shadow-sm"
-              >
-                {initial ? "Guardar" : "Crear servicio"}
-              </Button>
             </div>
           </div>
 
-          {/* COLUMNA DERECHA: IDENTIFICADOR VISUAL */}
-          <div className="w-full md:w-[360px] bg-primary/5 p-6 flex flex-col gap-4 border-l border-primary/10">
-            <div className="space-y-0.5 text-center md:text-left">
-              <h3 className="text-md font-display font-bold text-primary">Iconografía</h3>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-bold">Identidad visual</p>
-            </div>
+          {/* Stepper Buttons (Centered) */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 1
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                step === 1 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}>
+                1
+              </span>
+              <span>Información Servicio</span>
+            </button>
 
-            <div className="space-y-4">
-              {/* Selector de Modo */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-background border border-primary/10 shadow-sm">
-                <Label className="font-bold text-xs">Usar Imagen</Label>
-                <Switch 
-                  id="mode-toggle-serv-split-v2"
-                  checked={mode === "image"} 
-                  onCheckedChange={(v) => setMode(v ? "image" : "emoji")}
-                  className="data-[state=checked]:bg-primary scale-90"
+            <button
+              type="button"
+              onClick={handleNextStep}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 2
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                step === 2 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}>
+                2
+              </span>
+              <span>Identificador Visual</span>
+            </button>
+          </div>
+        </div>
+
+        {/* DIALOG BODY */}
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-1.5">
+          {step === 1 ? (
+            /* STEP 1: INFORMACIÓN SERVICIO */
+            <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1 sm:col-span-2">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre del Servicio *</Label>
+                  <Input 
+                    value={f.nombre || ""} 
+                    onChange={(e) => setF({ ...f, nombre: e.target.value })} 
+                    placeholder="Ej: Lavado y Secado" 
+                    className="h-9 rounded-xl text-xs" 
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Descripción (opcional)</Label>
+                <Textarea 
+                  value={f.descripcion || ""} 
+                  onChange={(e) => setF({ ...f, descripcion: e.target.value })} 
+                  placeholder="Breve descripción del servicio..." 
+                  rows={2} 
+                  className="rounded-xl text-xs resize-none" 
                 />
               </div>
 
-              {/* Contenido según Modo */}
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Precio (RD$)</Label>
+                <Input 
+                  type="number" 
+                  value={f.precio ?? 0} 
+                  onChange={(e) => setF({ ...f, precio: Number(e.target.value) })} 
+                  className="h-9 rounded-xl text-xs font-bold text-base" 
+                />
+              </div>
+
+              {/* Switches Grid */}
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-primary/5 border border-primary/15">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold text-primary block leading-none">Exento ITBIS</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">Ind: 3</p>
+                  </div>
+                  <Switch checked={!!f.is_exento} onCheckedChange={(v) => setF({ ...f, is_exento: v })} />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold block leading-none">Servicio Activo</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">Disponible</p>
+                  </div>
+                  <Switch checked={f.activo ?? true} onCheckedChange={(v) => setF({ ...f, activo: v })} />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold block leading-none">Desglose</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">En órdenes</p>
+                  </div>
+                  <Switch checked={!!f.permitir_desglose} onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })} />
+                </div>
+
+                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="space-y-0.5">
+                    <Label className="text-xs font-bold block leading-none">Editar precio</Label>
+                    <p className="text-[10px] text-muted-foreground leading-none">Al facturar</p>
+                  </div>
+                  <Switch checked={!!f.permitir_editar_precio} onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })} />
+                </div>
+              </div>
+
+              {/* Step 1 Footer */}
+              <div className="pt-2 flex justify-between items-center">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => onOpenChange(false)} 
+                  className="rounded-xl h-8.5 px-4 text-xs font-medium"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  type="button" 
+                  onClick={handleNextStep} 
+                  className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                >
+                  Siguiente: Identificador <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* STEP 2: IDENTIFICADOR VISUAL */
+            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
+              {/* Selector de Modo */}
+              <div className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
+                <div>
+                  <span className="text-xs font-bold text-foreground block">Usar Foto / Imagen</span>
+                  <span className="text-[10px] text-muted-foreground">Alternar entre Emoji o foto subida</span>
+                </div>
+                <Switch 
+                  id="mode-toggle-serv-split"
+                  checked={mode === "image"} 
+                  onCheckedChange={(v) => setMode(v ? "image" : "emoji")}
+                  className="data-[state=checked]:bg-primary"
+                />
+              </div>
+
+              {/* Contenido según modo */}
               {mode === "emoji" ? (
-                <div className="space-y-3 animate-in fade-in zoom-in-95 duration-300">
-                  <div className="relative group">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3 w-3 text-muted-foreground" />
+                <div className="space-y-2">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
                     <input 
                       type="text"
-                      placeholder="Buscar..."
+                      placeholder="Buscar icono..."
                       value={iconSearch}
                       onChange={(e) => setIconSearch(e.target.value)}
-                      className="w-full h-9 pl-9 pr-3 rounded-lg bg-background border border-primary/10 focus:outline-none focus:ring-2 focus:ring-primary/20 text-[11px]"
+                      className="w-full h-8 pl-8 pr-3 rounded-lg bg-background border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
                     />
                   </div>
-                  <div className="grid grid-cols-4 gap-2 max-h-40 overflow-y-auto p-2 rounded-xl bg-background/50 border border-primary/5 shadow-inner no-scrollbar">
+                  <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border">
                     {filteredIcons.map(i => (
                       <button
                         key={i.char}
                         type="button"
                         onClick={() => setF({ ...f, icono: f.icono === i.char ? undefined : i.char })}
-                        className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all ${f.icono === i.char ? 'bg-primary text-white shadow-md ring-2 ring-primary/10' : 'bg-background hover:bg-primary/5 shadow-sm'}`}
+                        className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all border ${
+                          f.icono === i.char 
+                            ? 'bg-primary text-white border-primary shadow-md font-bold' 
+                            : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs'
+                        }`}
                       >
                         <span className="text-lg">{i.char}</span>
-                        <span className={`text-[7px] font-bold truncate w-full text-center leading-none ${f.icono === i.char ? 'text-white' : 'text-muted-foreground'}`}>
+                        <span className={`text-[8px] font-bold truncate w-full text-center leading-none ${f.icono === i.char ? 'text-white' : 'text-muted-foreground'}`}>
                           {i.label}
                         </span>
                       </button>
@@ -866,53 +1058,82 @@ function ServDialog({ open, onOpenChange, tenantId, initial, onSaved }: {
                   </div>
                 </div>
               ) : (
-                <div className="space-y-2 animate-in fade-in zoom-in-95 duration-300">
+                <div className="space-y-2">
                   <div className="flex gap-2">
                     <Input 
                       value={f.imagen_url || ""} 
                       onChange={(e) => setF({ ...f, imagen_url: e.target.value })} 
-                      placeholder="URL..." 
-                      className="flex-1 h-10 rounded-lg bg-background text-xs"
+                      placeholder="Pegar URL de la imagen..." 
+                      className="flex-1 h-9 rounded-xl text-xs"
                     />
                     <div className="relative">
-                      <input type="file" id="serv-upload-v2" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={uploading} />
+                      <input type="file" id="serv-upload" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={uploading} />
                       <Button 
                         type="button"
-                        variant="outline" 
-                        className="h-10 w-10 rounded-lg border-primary/10 bg-background shadow-sm"
+                        className="h-9 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95"
                         disabled={uploading}
-                        onClick={() => document.getElementById('serv-upload-v2')?.click()}
+                        onClick={() => document.getElementById('serv-upload')?.click()}
                       >
-                        {uploading ? <div className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : <ImageIcon className="h-4 w-4 text-primary" />}
+                        {uploading ? (
+                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+                        ) : (
+                          <>
+                            <ImageIcon className="h-4 w-4" /> Subir imagen
+                          </>
+                        )}
                       </Button>
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Previsualización Compacta */}
-              <div className="pt-2 border-t border-primary/10">
-                <div className="relative aspect-square w-32 mx-auto grid place-items-center rounded-2xl bg-background border-4 border-white shadow-lg overflow-hidden group">
+              {/* Vista Previa Destacada */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border flex items-center justify-center gap-4">
+                <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-border shadow-sm flex items-center justify-center overflow-hidden shrink-0">
                   {mode === "image" && f.imagen_url && !imgError ? (
-                    <img 
-                      src={f.imagen_url} 
-                      alt="preview" 
-                      className="h-full w-full object-cover" 
-                      onError={() => setImgError(true)}
-                    />
+                    <img src={f.imagen_url} alt="Vista previa" className="h-full w-full object-cover" onError={() => setImgError(true)} />
                   ) : (
-                    <div className="flex flex-col items-center gap-1 relative z-10">
-                      <span className="text-5xl drop-shadow-md">{f.icono || "🧺"}</span>
-                      {mode === "image" && imgError && (
-                        <p className="text-[8px] font-bold text-destructive px-2 text-center">Error</p>
-                      )}
-                    </div>
+                    <span className="text-3xl">{f.icono || "🧺"}</span>
                   )}
                 </div>
-                <Label className="text-[9px] uppercase tracking-wider text-muted-foreground font-bold mt-2 block text-center">Vista Previa</Label>
+                <div>
+                  <span className="text-xs font-bold text-foreground block">{f.nombre || "Nombre de Servicio"}</span>
+                  <span className="text-[11px] text-muted-foreground">{formatRD(f.precio || 0)}</span>
+                </div>
+              </div>
+
+              {/* Step 2 Footer */}
+              <div className="pt-2 flex justify-between items-center border-t border-border/50">
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  onClick={() => setStep(1)} 
+                  className="rounded-xl h-8.5 px-4 text-xs font-medium gap-1"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior
+                </Button>
+
+                <div className="flex items-center gap-2">
+                  <Button 
+                    type="button" 
+                    variant="outline" 
+                    onClick={() => onOpenChange(false)} 
+                    className="rounded-xl h-8.5 px-4 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                  >
+                    Cancelar
+                  </Button>
+
+                  <Button 
+                    type="button" 
+                    onClick={submit} 
+                    className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                  >
+                    Guardar Servicio <CheckCircle2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
               </div>
             </div>
-          </div>
+          )}
         </div>
       </DialogContent>
     </Dialog>

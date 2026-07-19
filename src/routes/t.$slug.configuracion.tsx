@@ -649,7 +649,6 @@ Característica escritura: —
                     <SelectItem value="3">3 HORAS</SelectItem>
                     <SelectItem value="6">6 HORAS</SelectItem>
                     <SelectItem value="12">12 HORAS</SelectItem>
-                    <SelectItem value="24">1 DÍA (24 HORAS)</SelectItem>
                   </SelectContent>
                 </Select>
               </Field>

@@ -160,17 +160,7 @@ export function OrdenesPage() {
       const c = clientes.find((x) => x.id === o.cliente_id);
       const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
       return o.numero.toLowerCase().includes(q.toLowerCase()) || nombreCompleto.toLowerCase().includes(q.toLowerCase());
-    }).sort((a, b) => {
-      const getPriority = (order: any) => {
-        if (order.es_urgente) return 2;
-        if (esParaHoy(order.fecha_entrega)) return 1;
-        return 0;
-      };
-      const pA = getPriority(a);
-      const pB = getPriority(b);
-      if (pA !== pB) return pB - pA;
-      return +new Date(b.creado_en) - +new Date(a.creado_en);
-    });
+    }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
   }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, q]);
 
   const [currentPage, setCurrentPage] = useState(1);

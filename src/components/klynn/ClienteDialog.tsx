@@ -249,7 +249,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[520px] p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-2xl rounded-2xl bg-background flex flex-col gap-0 [&>button]:bg-slate-100 [&>button]:text-slate-600 [&>button]:hover:bg-slate-200 [&>button]:border [&>button]:border-slate-200 [&>button]:h-7 [&>button]:w-7 [&>button]:top-3.5 [&>button]:right-3.5 [&>button]:rounded-full">
+      <DialogContent className="max-w-[520px] p-0 overflow-hidden border border-slate-200/80 dark:border-slate-800 shadow-2xl rounded-2xl bg-background flex flex-col gap-0 [&>button]:bg-primary [&>button]:text-white [&>button]:hover:bg-primary/90 [&>button]:hover:scale-105 [&>button]:transition-all [&>button]:h-8 [&>button]:w-8 [&>button]:top-3.5 [&>button]:right-3.5 [&>button]:rounded-full [&>button]:border-none [&>button]:shadow-xs">
         {/* Header */}
         <DialogHeader className="p-4 pb-2.5 border-b border-border/50 flex flex-row items-center justify-between">
           <div className="flex items-center gap-2.5">

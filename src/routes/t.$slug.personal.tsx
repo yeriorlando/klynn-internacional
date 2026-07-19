@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { UserPlus, Trash2, Shield, Eye, EyeOff, Loader2 } from "lucide-react";
+import { UserPlus, Trash2, Shield, Eye, EyeOff, Loader2, User, ShieldCheck, ArrowRight, ArrowLeft, CheckCircle2, RotateCcw, Check, Lock, KeyRound, Sparkles } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -33,6 +33,23 @@ import {
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 
+function getRoleBadgeClass(rol: RolEmpleado) {
+  switch (rol) {
+    case "ADMIN":
+      return "bg-rose-600 text-white border-rose-700 shadow-2xs";
+    case "SUPERVISOR":
+      return "bg-indigo-600 text-white border-indigo-700 shadow-2xs";
+    case "VENDEDOR":
+      return "bg-emerald-600 text-white border-emerald-700 shadow-2xs";
+    case "RECEPCIONISTA":
+      return "bg-amber-500 text-white border-amber-600 shadow-2xs";
+    case "REPARTIDOR":
+      return "bg-sky-600 text-white border-sky-700 shadow-2xs";
+    default:
+      return "bg-slate-700 text-white";
+  }
+}
+
 export const Route = createFileRoute("/t/$slug/personal")({ component: PersonalPage });
 
 function PersonalPage() {
@@ -51,12 +68,12 @@ function PersonalPage() {
 
   useEffect(() => {
     async function load() {
-      if (!tenantId || tenantId === '__loading__') return;
+      if (!user || !tenant || !tenantId || tenantId === '__loading__') return;
       setLoading(true);
       const [eList, oList, lim] = await Promise.all([
         getEmpleados(tenantId),
         getOrdenes(tenantId),
-        checkPlanLimits(user.tenant)
+        checkPlanLimits(tenant)
       ]);
       setEmps(eList);
       setOrdenes(oList);
@@ -100,7 +117,7 @@ function PersonalPage() {
                   <div className="font-display text-lg">{e.nombre} {e.apellido || ""}</div>
                   <div className="text-xs text-muted-foreground">{e.email}</div>
                 </div>
-                <Badge variant={e.activo ? "default" : "outline"} className={e.activo ? "bg-success" : ""}>{e.rol}</Badge>
+                <Badge className={`border-none text-[10px] ${getRoleBadgeClass(e.rol)}`}>{e.rol}</Badge>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs">
                 <div><div className="text-muted-foreground">Órdenes</div><div className="font-display text-base">{stats.length}</div></div>
@@ -126,12 +143,14 @@ function PersonalPage() {
 function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; empleado: Empleado | null; tenantId: string; onDone: () => void }) {
   const empty = { nombre: "", apellido: "", email: "", password: "", pin: "", rol: "VENDEDOR" as RolEmpleado, activo: true, permisos: getPermisosPorRol("VENDEDOR") };
   const [f, setF] = useState(empleado ? { ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol) } : empty);
+  const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
   useEffect(() => {
+    setStep(1);
     if (empleado) {
-      setF({ ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), password: "" }); // Limpiamos password al editar
+      setF({ ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), password: "" });
     } else {
       setF(empty);
     }
@@ -144,13 +163,45 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
     setF({ ...f, permisos: next });
   };
 
-  async function submit() {
-    if (!f.nombre.trim() || !f.apellido.trim() || !f.email.includes("@")) {
-      toast.error("Nombre, apellido y email válidos requeridos");
+  const selectAllPermisos = () => {
+    setF({ ...f, permisos: PERMISOS_SISTEMA.map(p => p.id) });
+  };
+
+  const deselectAllPermisos = () => {
+    setF({ ...f, permisos: [] });
+  };
+
+  const resetRoleDefaults = () => {
+    const defaults = getPermisosPorRol(f.rol);
+    setF({ ...f, permisos: defaults });
+    toast.info(`Permisos restablecidos para el rol ${f.rol}`);
+  };
+
+  function handleNext() {
+    if (!f.nombre.trim() || !f.apellido.trim()) {
+      toast.error("Por favor ingresa nombre y apellido del empleado");
+      return;
+    }
+    if (!f.email.trim() || !f.email.includes("@")) {
+      toast.error("Ingresa un correo electrónico válido");
       return;
     }
     if (!empleado && f.password.length < 8) {
       toast.error("La contraseña inicial debe tener al menos 8 caracteres");
+      return;
+    }
+    setStep(2);
+  }
+
+  async function submit() {
+    if (!f.nombre.trim() || !f.apellido.trim() || !f.email.includes("@")) {
+      toast.error("Nombre, apellido y email válidos requeridos");
+      setStep(1);
+      return;
+    }
+    if (!empleado && f.password.length < 8) {
+      toast.error("La contraseña inicial debe tener al menos 8 caracteres");
+      setStep(1);
       return;
     }
 
@@ -162,7 +213,7 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
         nombre: f.nombre,
         apellido: f.apellido || undefined,
         email: f.email,
-        password: f.password || (empleado ? '***' : ""), // Si estamos editando y no hay pass, mandamos '***' para no cambiarla
+        password: f.password || (empleado ? '***' : ""),
         pin: f.pin || undefined,
         rol: f.rol,
         activo: f.activo,
@@ -197,180 +248,331 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl max-w-4xl p-0 overflow-hidden border-none shadow-2xl">
-        <div className="flex flex-col md:flex-row h-full max-h-[90vh]">
-          {/* LEFT: FORM DATA */}
-          <div className="flex-1 flex flex-col h-full overflow-hidden bg-surface">
-            <div className="p-8 pb-4">
-              <DialogHeader className="mb-2">
-                <DialogTitle className="text-2xl font-display">
+      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+        {/* STEPPER HEADER (PREMIUM LIGHT REDESIGN) */}
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-1.5 relative">
+          {/* Title row with right padding to clear the close icon */}
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
+                {step === 1 ? <User className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+              </div>
+              <div>
+                <DialogTitle className="text-base font-display text-foreground">
                   {empleado ? "Editar empleado" : "Nuevo empleado"}
                 </DialogTitle>
-                <p className="text-sm text-muted-foreground">Define los datos básicos de acceso.</p>
-              </DialogHeader>
-            </div>
-
-            <ScrollArea className="flex-1 px-8">
-              <div className="space-y-4 pb-6">
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Nombre</Label>
-                    <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 rounded-xl bg-background border-border/50" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Apellido</Label>
-                    <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 rounded-xl bg-background border-border/50" />
-                  </div>
-                </div>
-
-                <div className="space-y-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Correo Electrónico</Label>
-                  <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="empleado@klynn.do" className="h-10 rounded-xl bg-background border-border/50" />
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                      {empleado ? "Cambiar contraseña" : "Contraseña"}
-                    </Label>
-                    <div className="relative">
-                      <Input
-                        type={showPassword ? "text" : "password"}
-                        value={f.password}
-                        onChange={(e) => setF({ ...f, password: e.target.value })}
-                        placeholder={empleado ? "••••••••" : "Mínimo 8 caracteres"}
-                        className="h-10 rounded-xl bg-background border-border/50 pr-10"
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors"
-                      >
-                        {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">PIN Acceso Rápido</Label>
-                    <Input value={f.pin} onChange={(e) => setF({ ...f, pin: e.target.value.slice(0, 4) })} placeholder="4 dígitos" className="h-10 rounded-xl bg-background border-border/50" />
-                  </div>
-                </div>
-
-                <div className="grid gap-4 md:grid-cols-2 items-end">
-                  <div className="space-y-2">
-                    <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Rol en el negocio</Label>
-                    <Select
-                      value={f.rol}
-                      onValueChange={(v) => {
-                        const rol = v as RolEmpleado;
-                        setF({ ...f, rol, permisos: getPermisosPorRol(rol) });
-                      }}
-                    >
-                      <SelectTrigger className="h-10 rounded-xl bg-background border-border/50"><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        {(["ADMIN", "SUPERVISOR", "VENDEDOR", "RECEPCIONISTA", "REPARTIDOR"] as RolEmpleado[]).map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex items-center gap-3 h-10 px-4 rounded-xl border border-border/50 bg-background/50">
-                    <Checkbox id="activo" checked={f.activo} onCheckedChange={(v) => setF({ ...f, activo: !!v })} />
-                    <Label htmlFor="activo" className="text-sm font-medium cursor-pointer">Empleado Activo</Label>
-                  </div>
-                </div>
-
-                <div className="pt-2">
-                  <PasswordStrengthIndicator password={f.password} />
-                </div>
-              </div>
-            </ScrollArea>
-
-            <div className="p-8 pt-4 flex items-center justify-between border-t border-border/50 bg-surface-elevated/50">
-              {empleado ? (
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" className="text-destructive hover:bg-destructive/10 rounded-xl px-4 transition-colors h-10">
-                      <Trash2 className="mr-2 h-4 w-4" /> Eliminar
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent className="rounded-[2rem] border-none shadow-2xl">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle className="text-xl">¿Eliminar a {empleado.nombre}?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        Esta acción es irreversible. Se eliminará el acceso y todo el registro vinculado.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter className="gap-2">
-                      <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={remove} className="bg-destructive text-white rounded-xl hover:bg-destructive/90">Confirmar eliminación</AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              ) : <div />}
-
-              <div className="flex gap-3">
-                <Button
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  className="rounded-xl h-10 px-5 border-slate-200 text-sm font-medium transition-all active:scale-95"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={submit}
-                  disabled={loading}
-                  className="bg-gradient-primary text-white rounded-xl h-10 px-6 font-bold shadow-glow hover:opacity-95 disabled:opacity-50 transition-all active:scale-95"
-                >
-                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Guardar Empleado"}
-                </Button>
+                <p className="text-xs text-muted-foreground">
+                  {step === 1 ? "Paso 1: Datos personales y de acceso" : "Paso 2: Permisos por módulo del sistema"}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* RIGHT: PERMISSIONS */}
-          <div className="w-full md:w-80 bg-slate-50/50 border-l border-border/50 p-8">
-            <div className="mb-6">
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary mb-3">
-                <Shield className="h-5 w-5" />
+          {/* Stepper Buttons (Perfectly Centered across full width) */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 1
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                step === 1 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}>
+                1
+              </span>
+              <span>Información Básica</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNext}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 2
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                step === 2 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+              }`}>
+                2
+              </span>
+              <span>Permisos ({f.permisos.length})</span>
+            </button>
+          </div>
+        </div>
+
+        {/* DIALOG BODY (ULTRA COMPACT NO GAP) */}
+        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-1.5">
+          {step === 1 ? (
+            /* STEP 1: INFORMACIÓN Y ACCESO */
+            <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre *</Label>
+                  <Input
+                    value={f.nombre}
+                    onChange={(e) => setF({ ...f, nombre: e.target.value })}
+                    placeholder="Ej. Juan"
+                    className="h-9 rounded-xl bg-surface border-border/60 text-xs focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Apellido *</Label>
+                  <Input
+                    value={f.apellido}
+                    onChange={(e) => setF({ ...f, apellido: e.target.value })}
+                    placeholder="Ej. Pérez"
+                    className="h-9 rounded-xl bg-surface border-border/60 text-xs focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
               </div>
-              <h3 className="font-display text-lg">Permisos de Acceso</h3>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">Personaliza qué secciones puede ver este empleado.</p>
+
+              <div className="space-y-1">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Correo Electrónico *</Label>
+                <Input
+                  type="email"
+                  value={f.email}
+                  onChange={(e) => setF({ ...f, email: e.target.value })}
+                  placeholder="empleado@klynn.do"
+                  className="h-9 rounded-xl bg-surface border-border/60 text-xs focus:ring-1 focus:ring-primary/20"
+                />
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {empleado ? "Cambiar contraseña" : "Contraseña *"}
+                  </Label>
+                  <div className="relative">
+                    <Input
+                      type={showPassword ? "text" : "password"}
+                      value={f.password}
+                      onChange={(e) => setF({ ...f, password: e.target.value })}
+                      placeholder={empleado ? "••••••••" : "Mín. 8 caracteres"}
+                      className="h-9 rounded-xl bg-surface border-border/60 pr-8 text-xs focus:ring-1 focus:ring-primary/20"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors p-0.5"
+                    >
+                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">PIN Acceso Rápido (POS)</Label>
+                  <Input
+                    value={f.pin}
+                    onChange={(e) => setF({ ...f, pin: e.target.value.slice(0, 4) })}
+                    placeholder="4 dígitos"
+                    maxLength={4}
+                    className="h-9 rounded-xl bg-surface border-border/60 tracking-widest font-mono text-center text-xs focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 items-center">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Rol en el negocio</Label>
+                  <Select
+                    value={f.rol}
+                    onValueChange={(v) => {
+                      const rol = v as RolEmpleado;
+                      setF({ ...f, rol, permisos: getPermisosPorRol(rol) });
+                    }}
+                  >
+                    <SelectTrigger className="h-9 rounded-xl bg-surface border-border/60 text-xs">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl">
+                      {(["ADMIN", "SUPERVISOR", "VENDEDOR", "RECEPCIONISTA", "REPARTIDOR"] as RolEmpleado[]).map((r) => (
+                        <SelectItem key={r} value={r} className="rounded-lg text-xs">
+                          {r}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex items-center justify-between h-9 px-3 rounded-xl border border-border/60 bg-surface/50 mt-4 sm:mt-4">
+                  <div className="flex items-center gap-2">
+                    <Checkbox id="activo" checked={f.activo} onCheckedChange={(v) => setF({ ...f, activo: !!v })} />
+                    <Label htmlFor="activo" className="text-xs font-bold cursor-pointer">Empleado Activo</Label>
+                  </div>
+                  <Badge variant={f.activo ? "default" : "outline"} className={f.activo ? "bg-emerald-600 text-white text-[9px] px-1.5 py-0" : "text-[9px] px-1.5 py-0"}>
+                    {f.activo ? "Activo" : "Inactivo"}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <PasswordStrengthIndicator password={f.password} />
+              </div>
+            </div>
+          ) : (
+            /* STEP 2: PERMISOS DE ACCESO */
+            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
+              {/* Toolbar Actions (Primary Brand Background Card) */}
+              <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <Badge className={`font-semibold text-[10px] px-2.5 py-0.5 border-none ${getRoleBadgeClass(f.rol)}`}>
+                    Rol: {f.rol}
+                  </Badge>
+                  <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
+                    ({f.permisos.length}/{PERMISOS_SISTEMA.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={resetRoleDefaults}
+                    disabled={f.rol === "ADMIN"}
+                    className="h-7 rounded-lg text-[10px] text-primary hover:bg-primary/10 gap-1 px-2"
+                  >
+                    <RotateCcw className="h-3 w-3" />
+                    Valores del Rol
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={selectAllPermisos}
+                    disabled={f.rol === "ADMIN"}
+                    className="h-7 rounded-lg text-[10px] text-slate-700 hover:bg-slate-200 dark:text-slate-300 px-2"
+                  >
+                    Todos
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={deselectAllPermisos}
+                    disabled={f.rol === "ADMIN"}
+                    className="h-7 rounded-lg text-[10px] text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-800 px-2"
+                  >
+                    Ninguno
+                  </Button>
+                </div>
+              </div>
+
+              {f.rol === "ADMIN" && (
+                <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center gap-2.5">
+                  <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
+                  <p className="text-[11px] text-primary-dark font-medium leading-tight">
+                    Los usuarios con rol <strong>ADMINISTRADOR</strong> tienen acceso total a todos los módulos.
+                  </p>
+                </div>
+              )}
+
+              {/* Grid of Permissions */}
+              <ScrollArea className="h-[220px] pr-1.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-1">
+                  {PERMISOS_SISTEMA.map((p) => {
+                    const isChecked = f.permisos.includes(p.id);
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => f.rol !== "ADMIN" && togglePermiso(p.id)}
+                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                          isChecked
+                            ? "bg-white dark:bg-slate-900 border-primary/40 shadow-xs ring-1 ring-primary/20"
+                            : "bg-surface/50 border-border/50 hover:bg-white hover:border-border"
+                        } ${f.rol === "ADMIN" ? "opacity-90 pointer-events-none" : ""}`}
+                      >
+                        <Checkbox
+                          id={p.id}
+                          checked={isChecked}
+                          onCheckedChange={() => togglePermiso(p.id)}
+                          disabled={f.rol === "ADMIN"}
+                          className="mt-0.5 rounded-md h-3.5 w-3.5"
+                        />
+                        <div className="grid gap-0.5">
+                          <Label htmlFor={p.id} className="text-xs font-bold leading-tight cursor-pointer">
+                            {p.nombre}
+                          </Label>
+                          <p className="text-[10px] text-muted-foreground leading-tight">{p.descripcion}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+            </div>
+          )}
+
+          {/* FOOTER ACTIONS (COMPACT) */}
+          <div className="pt-3 mt-3 border-t border-border/50 flex items-center justify-between gap-2">
+            <div>
+              {empleado && step === 1 ? (
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 rounded-xl px-2.5 text-xs h-8.5">
+                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="rounded-3xl border-none shadow-2xl">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle className="text-lg">¿Eliminar a {empleado.nombre}?</AlertDialogTitle>
+                      <AlertDialogDescription className="text-xs">
+                        Esta acción es irreversible. Se eliminará el acceso del empleado.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="gap-2">
+                      <AlertDialogCancel className="rounded-xl h-9 text-xs">Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={remove} className="bg-destructive text-white rounded-xl h-9 text-xs hover:bg-destructive/90">Confirmar eliminación</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              ) : step === 2 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(1)}
+                  className="rounded-xl h-8.5 px-3 text-xs font-bold gap-1 border-slate-300"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior
+                </Button>
+              ) : null}
             </div>
 
-            <ScrollArea className="h-[400px] pr-4">
-              <div className="space-y-3">
-                {PERMISOS_SISTEMA.map((p) => (
-                  <div
-                    key={p.id}
-                    className={`flex items-start gap-3 p-3 rounded-2xl border transition-all ${f.permisos.includes(p.id)
-                      ? "bg-white border-primary/20 shadow-sm"
-                      : "bg-transparent border-transparent opacity-60"
-                      }`}
-                  >
-                    <Checkbox
-                      id={p.id}
-                      checked={f.permisos.includes(p.id)}
-                      onCheckedChange={() => togglePermiso(p.id)}
-                      disabled={f.rol === "ADMIN"}
-                      className="mt-0.5"
-                    />
-                    <div className="grid gap-1">
-                      <Label htmlFor={p.id} className="text-xs font-bold leading-none cursor-pointer">
-                        {p.nombre}
-                      </Label>
-                      <p className="text-[9px] text-muted-foreground leading-tight">{p.descripcion}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </ScrollArea>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="rounded-xl h-8.5 px-3 text-xs font-medium border-slate-200"
+              >
+                Cancelar
+              </Button>
 
-            {f.rol === "ADMIN" && (
-              <div className="mt-4 p-3 rounded-xl bg-primary/5 border border-primary/10">
-                <p className="text-[10px] text-primary font-medium text-center italic">
-                  Los administradores tienen acceso total por defecto.
-                </p>
-              </div>
-            )}
+              {step === 1 ? (
+                <Button
+                  type="button"
+                  onClick={handleNext}
+                  className="bg-primary hover:bg-primary/95 text-white rounded-xl h-8.5 px-4 text-xs font-bold shadow-sm gap-1 transition-all active:scale-95"
+                >
+                  Siguiente: Permisos <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={submit}
+                  disabled={loading}
+                  className="bg-gradient-primary text-white rounded-xl h-8.5 px-5 text-xs font-bold shadow-glow hover:opacity-95 disabled:opacity-50 transition-all active:scale-95 gap-1"
+                >
+                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Guardar Empleado <CheckCircle2 className="h-3.5 w-3.5" /></>}
+                </Button>
+              )}
+            </div>
           </div>
         </div>
       </DialogContent>

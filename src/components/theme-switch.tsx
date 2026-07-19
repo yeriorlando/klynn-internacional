@@ -1,126 +1,123 @@
 "use client";
 
 import { MoonIcon, SunIcon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { flushSync } from "react-dom";
-import { motion, AnimatePresence } from "framer-motion";
 import { cn } from "@/lib/utils";
 
 const ThemeSwitch = ({
   className,
   ...props
-}: React.HTMLAttributes<HTMLButtonElement>) => {
+}: React.HTMLAttributes<HTMLDivElement>) => {
   const { resolvedTheme, setTheme } = useTheme();
+  const [checked, setChecked] = useState(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => setMounted(true), []);
+  useEffect(() => setChecked(resolvedTheme === "dark"), [resolvedTheme]);
 
-  const handleToggle = (e: React.MouseEvent<HTMLButtonElement>) => {
-    const isDark = resolvedTheme === "dark";
-    const newTheme = isDark ? "light" : "dark";
+  const handleCheckedChange = useCallback(
+    (isChecked: boolean) => {
+      setChecked(isChecked);
+      const newTheme = isChecked ? "dark" : "light";
 
-    // If document.startViewTransition is not supported, just setTheme
-    if (
-      typeof document === "undefined" ||
-      !document.startViewTransition ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
-      setTheme(newTheme);
-      return;
-    }
-
-    // Capture the exact button center compensating for any page zoom
-    const zoom = parseFloat(getComputedStyle(document.documentElement).zoom || "1") || 1;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = (rect.left + rect.width / 2) / zoom;
-    const y = (rect.top + rect.height / 2) / zoom;
-
-    const docWidth = window.innerWidth / zoom;
-    const docHeight = window.innerHeight / zoom;
-    const endRadius = Math.hypot(
-      Math.max(x, docWidth - x),
-      Math.max(y, docHeight - y)
-    );
-
-    // Disable CSS transitions during the view transition to prevent lag/half-transitioned captures
-    document.documentElement.classList.add("no-transitions");
-
-    const transition = document.startViewTransition(() => {
-      flushSync(() => {
+      if (
+        typeof document === "undefined" ||
+        !document.startViewTransition ||
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches
+      ) {
         setTheme(newTheme);
+        return;
+      }
+
+      document.documentElement.classList.add("no-transitions");
+      const transition = document.startViewTransition(() => {
+        flushSync(() => {
+          setTheme(newTheme);
+        });
       });
-    });
 
-    transition.ready.then(() => {
-      const clipPath = [
-        `circle(0px at ${x}px ${y}px)`,
-        `circle(${endRadius}px at ${x}px ${y}px)`,
-      ];
-      document.documentElement.animate(
-        {
-          clipPath: clipPath,
-        },
-        {
-          duration: 500,
-          easing: "cubic-bezier(0.65, 0, 0.35, 1)",
-          pseudoElement: "::view-transition-new(root)",
-        }
-      );
-    });
+      transition.ready.then(() => {
+        const docWidth = window.innerWidth;
+        const docHeight = window.innerHeight;
+        const endRadius = Math.hypot(docWidth, docHeight);
+        document.documentElement.animate(
+          {
+            clipPath: [
+              `circle(0px at ${docWidth / 2}px ${docHeight / 2}px)`,
+              `circle(${endRadius}px at ${docWidth / 2}px ${docHeight / 2}px)`,
+            ],
+          },
+          {
+            duration: 500,
+            easing: "cubic-bezier(0.65, 0, 0.35, 1)",
+            pseudoElement: "::view-transition-new(root)",
+          }
+        );
+      });
 
-    transition.finished.finally(() => {
-      document.documentElement.classList.remove("no-transitions");
-    });
-  };
+      transition.finished.finally(() => {
+        document.documentElement.classList.remove("no-transitions");
+      });
+    },
+    [setTheme]
+  );
 
-  if (!mounted) {
-    return (
-      <div
-        className={cn(
-          "h-9 w-9 rounded-full border border-border bg-background shadow-sm",
-          className
-        )}
-      />
-    );
-  }
+  if (!mounted) return null;
 
   return (
-    <button
-      onClick={handleToggle}
+    <div
       className={cn(
-        "relative flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background shadow-sm transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring overflow-hidden cursor-pointer",
+        "relative flex items-center justify-center shrink-0 cursor-pointer select-none",
+        "h-8 w-16",
         className
       )}
-      aria-label="Cambiar tema"
-      {...(props as any)}
+      {...props}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        {resolvedTheme === "dark" ? (
-          <motion.div
-            key="moon"
-            initial={{ y: 15, opacity: 0, rotate: -20 }}
-            animate={{ y: 0, opacity: 1, rotate: 0 }}
-            exit={{ y: -15, opacity: 0, rotate: 20 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="flex items-center justify-center"
-          >
-            <MoonIcon className="h-[18px] w-[18px]" />
-          </motion.div>
-        ) : (
-          <motion.div
-            key="sun"
-            initial={{ y: 15, opacity: 0, rotate: 20 }}
-            animate={{ y: 0, opacity: 1, rotate: 0 }}
-            exit={{ y: -15, opacity: 0, rotate: -20 }}
-            transition={{ duration: 0.3, ease: "easeInOut" }}
-            className="flex items-center justify-center"
-          >
-            <SunIcon className="h-[18px] w-[18px]" />
-          </motion.div>
+      {/* The real shadcn Switch */}
+      <Switch
+        checked={checked}
+        onCheckedChange={handleCheckedChange}
+        className={cn(
+          "peer absolute inset-0 h-full w-full rounded-full bg-slate-200 dark:bg-slate-800 transition-colors border-none cursor-pointer",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          "[&>span]:h-6 [&>span]:w-6 [&>span]:rounded-full [&>span]:bg-white dark:[&>span]:bg-slate-950 [&>span]:shadow-md [&>span]:z-10",
+          "data-[state=unchecked]:[&>span]:translate-x-1",
+          "data-[state=checked]:[&>span]:translate-x-[35px]"
         )}
-      </AnimatePresence>
-    </button>
+      />
+
+      {/* Icons overlaid inside the track */}
+      <span
+        className={cn(
+          "pointer-events-none absolute left-2 inset-y-0 z-0 flex items-center justify-center"
+        )}
+      >
+        <SunIcon
+          size={14}
+          className={cn(
+            "transition-all duration-200 ease-out",
+            checked ? "text-slate-400 opacity-60" : "text-amber-500 scale-110"
+          )}
+        />
+      </span>
+
+      <span
+        className={cn(
+          "pointer-events-none absolute right-2 inset-y-0 z-0 flex items-center justify-center"
+        )}
+      >
+        <MoonIcon
+          size={14}
+          className={cn(
+            "transition-all duration-200 ease-out",
+            checked ? "text-indigo-400 scale-110" : "text-slate-400 opacity-60"
+          )}
+        />
+      </span>
+    </div>
   );
 };
 
