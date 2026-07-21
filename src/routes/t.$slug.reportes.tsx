@@ -11,7 +11,38 @@ import {
   DropdownMenuTrigger 
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
-import { Download, FileSpreadsheet, Printer, FileText } from "lucide-react";
+import { 
+  Download, 
+  FileSpreadsheet, 
+  Printer, 
+  FileText,
+  TrendingUp, 
+  DollarSign, 
+  Wallet, 
+  Shield, 
+  Sparkles, 
+  Calendar,
+  RefreshCw,
+  CreditCard,
+  Tag,
+  Shirt,
+  Package,
+  Bell,
+  Users,
+  BarChart3,
+  Zap,
+  Truck,
+  MapPin,
+  XCircle,
+  Coins,
+  Info,
+  WashingMachine,
+  ListTodo,
+  Home,
+  CheckCircle2,
+  AlertCircle,
+  Landmark
+} from "lucide-react";
 import { toast } from "sonner";
 import { 
   Dialog,
@@ -24,15 +55,6 @@ import {
 import { Label } from "@/components/ui/label";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { Card } from "@/components/ui/card";
-import { 
-  TrendingUp, 
-  DollarSign, 
-  Wallet, 
-  Shield, 
-  Sparkles, 
-  Calendar,
-  RefreshCw
-} from "lucide-react";
 import { 
   getOrdenes, 
   getGastos, 
@@ -215,19 +237,47 @@ function ReportesPage() {
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
       .slice(0, 10); // Límite de 10
 
-    // --- 1. Top de Servicios Más Vendidos ---
-    const serviceCounts: Record<string, { count: number; total: number }> = {};
+    // --- 1. Top de Prendas Más Solicitadas (Ropa) ---
+    const garmentCounts: Record<string, { count: number; total: number }> = {};
+    let totalPiezas = 0;
+    let totalLibras = 0;
     ordenes.forEach(o => {
       if (Array.isArray(o.items)) {
         o.items.forEach((item: any) => {
           const desc = item.descripcion || "Otros";
           const qty = item.cantidad || 1;
           const sub = (item.precio_unitario || 0) * qty;
-          if (!serviceCounts[desc]) {
-            serviceCounts[desc] = { count: 0, total: 0 };
+          if (!garmentCounts[desc]) {
+            garmentCounts[desc] = { count: 0, total: 0 };
           }
-          serviceCounts[desc].count += qty;
-          serviceCounts[desc].total += sub;
+          garmentCounts[desc].count += qty;
+          garmentCounts[desc].total += sub;
+
+          if (item.es_libra) {
+            totalLibras += qty;
+          } else {
+            totalPiezas += qty;
+          }
+        });
+      }
+    });
+
+    const topPrendas = Object.entries(garmentCounts)
+      .map(([name, data]) => ({ name, ...data }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
+    // --- 1b. Top de Servicios Más Solicitados (Operaciones) ---
+    const serviceCounts: Record<string, { count: number; total: number }> = {};
+    ordenes.forEach(o => {
+      if (Array.isArray(o.servicios)) {
+        o.servicios.forEach((sName) => {
+          const price = o.servicios_precios?.[sName] || 0;
+          if (!serviceCounts[sName]) {
+            serviceCounts[sName] = { count: 0, total: 0 };
+          }
+          serviceCounts[sName].count += 1;
+          serviceCounts[sName].total += price;
         });
       }
     });
@@ -235,7 +285,7 @@ function ReportesPage() {
     const topServicios = Object.entries(serviceCounts)
       .map(([name, data]) => ({ name, ...data }))
       .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+      .slice(0, 10);
 
     // --- 2. Canal de Entrega ---
     const totalOrds = ordenes.length || 1;
@@ -275,6 +325,9 @@ function ReportesPage() {
       cierresCaja,
       recientes,
       topServicios,
+      topPrendas,
+      totalPiezas,
+      totalLibras,
       ordsDomicilio,
       ordsLocal,
       pctDomicilio,
@@ -301,7 +354,10 @@ function ReportesPage() {
       ["Ticket promedio", formatRD(stats.ticketPromedio)],
       ["Cuentas por cobrar (Clientes)", formatRD(stats.totalDeuda)],
       ["Abonos de clientes", formatRD(stats.totalAbonado + stats.totalAbonosCaja)],
-      ...stats.topServicios.map(s => [`Top Servicio: ${s.name}`, `${s.count} cant. (${formatRD(s.total)})`]),
+      ["Prendas por pieza procesadas", `${stats.totalPiezas} piezas`],
+      ["Prendas por libra procesadas", `${stats.totalLibras} libras`],
+      ...stats.topServicios.map(s => [`Top Servicio: ${s.name}`, `${s.count} ordenes (${formatRD(s.total)})`]),
+      ...stats.topPrendas.map(p => [`Top Prenda: ${p.name}`, `${p.count} cant. (${formatRD(p.total)})`]),
       ...emps.map(e => {
         const empOrds = ordenes.filter(o => o.empleado_id === e.id);
         const total = empOrds.reduce((s, o) => s + (o.total || 0), 0);
@@ -546,7 +602,7 @@ function ReportesPage() {
           {/* Estado de las Órdenes */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              📋 Estado de las Órdenes
+              <ListTodo className="h-5 w-5 text-indigo-500" /> Estado de las Órdenes
             </h3>
             <div className="space-y-4">
               {[
@@ -576,23 +632,24 @@ function ReportesPage() {
           {/* Métodos de Pago Preferidos */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              💳 Métodos de Pago
+              <CreditCard className="h-5 w-5 text-emerald-500" /> Métodos de Pago
             </h3>
             <div className="space-y-3">
               {["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"].map((m) => {
                 const v = stats.porMetodo[m] || 0;
                 const pct = stats.totalVentas > 0 ? (v / stats.totalVentas) * 100 : 0;
-                const icons: Record<string, string> = {
-                  EFECTIVO: "💵",
-                  TARJETA: "💳",
-                  TRANSFERENCIA: "🏦",
-                  MIXTO: "💰"
+                const renderIcon = () => {
+                  const size = "h-4 w-4 text-slate-500 shrink-0";
+                  if (m === "EFECTIVO") return <Coins className={size} />;
+                  if (m === "TARJETA") return <CreditCard className={size} />;
+                  if (m === "TRANSFERENCIA") return <Landmark className={size} />;
+                  return <Wallet className={size} />;
                 };
                 return (
                   <div key={m}>
                     <div className="mb-1 flex justify-between text-xs font-semibold text-slate-700">
                       <span className="flex items-center gap-1.5">
-                        <span>{icons[m] || "💰"}</span> {m}
+                        {renderIcon()} {m}
                       </span>
                       <span>{formatRD(v)} ({Math.round(pct)}%)</span>
                     </div>
@@ -614,7 +671,7 @@ function ReportesPage() {
           {/* Gastos por Categoría */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              🏷️ Gastos por Categoría
+              <Tag className="h-5 w-5 text-rose-500" /> Gastos por Categoría
             </h3>
             <div className="space-y-3">
               {Object.entries(stats.porCategoria).length > 0 ? (
@@ -643,7 +700,7 @@ function ReportesPage() {
           {/* Servicios Más Populares */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              🧺 Servicios Más Populares
+              <WashingMachine className="h-5 w-5 text-blue-500" /> Servicios Más Populares
             </h3>
             <div className="space-y-3">
               {stats.topServicios.length > 0 ? (
@@ -653,11 +710,16 @@ function ReportesPage() {
                     const pct = (srv.count / maxQty) * 100;
                     return (
                       <div key={srv.name} className="space-y-1">
-                        <div className="flex justify-between text-xs font-semibold text-slate-700">
-                          <span className="truncate max-w-[180px]">{srv.name}</span>
-                          <span className="text-[10px] text-muted-foreground shrink-0">
-                            {srv.count} cant. ({formatRD(srv.total)})
-                          </span>
+                        <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
+                          <span className="truncate max-w-[160px] font-bold text-slate-800">{srv.name}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 font-semibold border border-slate-200/50">
+                              Cant. órdenes: {srv.count}
+                            </span>
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-100/80">
+                              Monto: {formatRD(srv.total)}
+                            </span>
+                          </div>
                         </div>
                         <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
                           <div 
@@ -680,10 +742,86 @@ function ReportesPage() {
             </div>
           </Card>
 
+          {/* Prendas Más Solicitadas */}
+          <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
+            <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
+              <Shirt className="h-5 w-5 text-indigo-500" /> Prendas Más Solicitadas
+            </h3>
+            
+            {/* Desglose de piezas vs libras */}
+            <div className="mb-4 p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-1.5">
+              <div className="flex justify-between text-xs font-bold text-slate-800">
+                <span>Distribución por Formato</span>
+                <span className="text-[10px] text-slate-500 font-semibold">
+                  {stats.totalPiezas} pz | {stats.totalLibras} lb
+                </span>
+              </div>
+              <div className="h-2 overflow-hidden rounded-full bg-slate-100 flex">
+                {stats.totalPiezas + stats.totalLibras > 0 ? (
+                  <>
+                    <div 
+                      className="h-full bg-blue-500 transition-all" 
+                      style={{ width: `${(stats.totalPiezas / (stats.totalPiezas + stats.totalLibras || 1)) * 100}%` }}
+                    />
+                    <div 
+                      className="h-full bg-indigo-400 transition-all" 
+                      style={{ width: `${(stats.totalLibras / (stats.totalPiezas + stats.totalLibras || 1)) * 100}%` }}
+                    />
+                  </>
+                ) : (
+                  <div className="h-full w-full bg-slate-200" />
+                )}
+              </div>
+              <div className="flex justify-between text-[9px] font-bold text-slate-500">
+                <span className="flex items-center"><span className="inline-block h-2 w-2 rounded-full bg-blue-500 mr-1.5" /> Por Pieza ({stats.totalPiezas})</span>
+                <span className="flex items-center"><span className="inline-block h-2 w-2 rounded-full bg-indigo-400 mr-1.5" /> Por Libra ({stats.totalLibras})</span>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {stats.topPrendas.length > 0 ? (
+                (() => {
+                  const maxQty = Math.max(...stats.topPrendas.map(p => p.count), 1);
+                  return stats.topPrendas.map((garment: any) => {
+                    const pct = (garment.count / maxQty) * 100;
+                    return (
+                      <div key={garment.name} className="space-y-1">
+                        <div className="flex justify-between items-center text-xs font-semibold text-slate-700">
+                          <span className="truncate max-w-[160px] font-bold text-slate-800">{garment.name}</span>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-slate-50 text-slate-600 font-semibold border border-slate-200/50">
+                              Cantidad: {garment.count}
+                            </span>
+                            <span className="text-[9px] px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 font-extrabold border border-emerald-100/80">
+                              Monto: {formatRD(garment.total)}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
+                          <div 
+                            className="h-full" 
+                            style={{ 
+                              width: `${pct}%`,
+                              backgroundColor: primaryColor 
+                            }} 
+                          />
+                        </div>
+                      </div>
+                    );
+                  });
+                })()
+              ) : (
+                <div className="text-center text-xs text-muted-foreground py-6">
+                  Sin prendas registradas en las órdenes de este período.
+                </div>
+              )}
+            </div>
+          </Card>
+
           {/* Cierres de Caja Recientes */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              📦 Cierres de Caja Recientes
+              <Package className="h-5 w-5 text-amber-500" /> Cierres de Caja Recientes
             </h3>
             <div className="space-y-3">
               {stats.cierresCaja.length > 0 ? (
@@ -750,7 +888,7 @@ function ReportesPage() {
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <div className="flex justify-between items-center mb-4">
               <h3 className="font-display text-lg text-slate-800 flex items-center gap-2">
-                🔔 Actividad Reciente (48h)
+                <Bell className="h-5 w-5 text-indigo-500" /> Actividad Reciente (48h)
               </h3>
               <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
                 Autolimpieza activa
@@ -791,7 +929,7 @@ function ReportesPage() {
           {/* Equipo Registrado */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              👥 Equipo de Trabajo
+              <Users className="h-5 w-5 text-indigo-500" /> Equipo de Trabajo
             </h3>
             <div className="space-y-3">
               {emps.length > 0 ? (
@@ -825,7 +963,7 @@ function ReportesPage() {
           {/* Ventas por Empleado */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              📊 Ventas por Empleado
+              <BarChart3 className="h-5 w-5 text-blue-500" /> Ventas por Empleado
             </h3>
             <div className="space-y-3">
               {emps.length > 0 ? (
@@ -887,7 +1025,7 @@ function ReportesPage() {
           {/* Logística y Eficiencia Operativa */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              ⚡ Logística y Eficiencia
+              <Zap className="h-5 w-5 text-indigo-500" /> Logística y Eficiencia
             </h3>
             <div className="space-y-4">
               {/* Canal de Entrega */}
@@ -900,14 +1038,14 @@ function ReportesPage() {
                 </div>
                 <div className="h-3 overflow-hidden rounded-full bg-slate-100 flex">
                   <div 
-                    className="h-full text-[8px] font-bold text-white flex items-center justify-center transition-all" 
+                    className="h-full text-[8px] font-bold text-white flex items-center justify-center transition-all animate-pulse" 
                     style={{ 
                       width: `${stats.pctDomicilio}%`,
                       backgroundColor: primaryColor
                     }} 
                     title={`Delivery: ${stats.pctDomicilio}%`}
                   >
-                    {stats.pctDomicilio >= 15 && `${stats.pctDomicilio}% 🚚`}
+                    {stats.pctDomicilio >= 15 && `${stats.pctDomicilio}%`}
                   </div>
                   <div 
                     className="h-full text-[8px] font-bold text-white flex items-center justify-center bg-slate-400 transition-all" 
@@ -916,27 +1054,27 @@ function ReportesPage() {
                     }} 
                     title={`En Local: ${stats.pctLocal}%`}
                   >
-                    {stats.pctLocal >= 15 && `${stats.pctLocal}% 🧺`}
+                    {stats.pctLocal >= 15 && `${stats.pctLocal}%`}
                   </div>
                 </div>
                 <div className="flex justify-between text-[8px] text-muted-foreground px-1">
-                  <span>🚚 Delivery ({stats.pctDomicilio}%)</span>
-                  <span>🧺 En Local ({stats.pctLocal}%)</span>
+                  <span>Delivery ({stats.pctDomicilio}%)</span>
+                  <span>En Local ({stats.pctLocal}%)</span>
                 </div>
               </div>
 
               {/* Desglose de Delivery a Domicilio */}
               <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-dashed border-slate-100 text-[10px] text-slate-600">
                 <div className="bg-emerald-50/70 p-2 rounded-xl border border-emerald-100 flex flex-col justify-between">
-                  <span className="text-[9px] text-emerald-800 font-medium">Entregados 🚚</span>
+                  <span className="text-[9px] text-emerald-800 font-medium">Entregados</span>
                   <strong className="text-emerald-700 font-bold text-xs mt-1">{stats.deliveryEntregados}</strong>
                 </div>
                 <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100 flex flex-col justify-between">
-                  <span className="text-[9px] text-amber-800 font-medium">En Ruta 📍</span>
+                  <span className="text-[9px] text-amber-800 font-medium">En Ruta</span>
                   <strong className="text-amber-700 font-bold text-xs mt-1">{stats.deliveryPendientes}</strong>
                 </div>
                 <div className="bg-rose-50/70 p-2 rounded-xl border border-rose-100 flex flex-col justify-between">
-                  <span className="text-[9px] text-rose-800 font-medium">Cancelados ❌</span>
+                  <span className="text-[9px] text-rose-800 font-medium">Cancelados</span>
                   <strong className="text-rose-700 font-bold text-xs mt-1">{stats.deliveryCancelados}</strong>
                 </div>
               </div>
@@ -959,12 +1097,16 @@ function ReportesPage() {
                   />
                 </div>
                 <div className="flex justify-between items-center text-[9px] text-muted-foreground pt-0.5">
-                  <span>⚡ Prioridad Express: {stats.pctUrgencia}%</span>
+                  <span>Prioridad Express: {stats.pctUrgencia}%</span>
                   <span>
                     {stats.pctUrgencia > 20 ? (
-                      <span className="text-amber-600 font-medium">⚠️ Alta demanda express</span>
+                      <span className="text-amber-600 font-medium flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3" /> Alta demanda express
+                      </span>
                     ) : (
-                      <span className="text-emerald-600 font-medium">🟢 Carga de trabajo estable</span>
+                      <span className="text-emerald-600 font-medium flex items-center gap-1">
+                        <CheckCircle2 className="h-3 w-3" /> Carga de trabajo estable
+                      </span>
                     )}
                   </span>
                 </div>
@@ -975,7 +1117,7 @@ function ReportesPage() {
           {/* Créditos, Deudas y Abonos de Clientes */}
           <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
             <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-              🏦 Créditos y Cuentas por Cobrar
+              <Landmark className="h-5 w-5 text-emerald-600" /> Créditos y Cuentas por Cobrar
             </h3>
             <div className="space-y-3">
               {/* Deuda Pendiente */}
@@ -1005,8 +1147,9 @@ function ReportesPage() {
               </div>
 
               {/* Nota aclaratoria con estilo */}
-              <div className="text-[9px] text-slate-500 bg-slate-50 border border-slate-100/80 p-2.5 rounded-xl text-center leading-normal">
-                ℹ️ <strong>Cuentas por cobrar:</strong> Representa los saldos pendientes de pago de tus clientes. Los abonos reflejan pagos parciales aplicados a órdenes vigentes.
+              <div className="text-[9px] text-slate-500 bg-slate-50 border border-slate-100/80 p-2.5 rounded-xl text-center leading-normal flex items-center justify-center gap-1.5">
+                <Info className="h-3.5 w-3.5 text-blue-500 shrink-0" />
+                <span><strong>Cuentas por cobrar:</strong> Representa los saldos pendientes de pago de tus clientes. Los abonos reflejan pagos parciales aplicados a órdenes vigentes.</span>
               </div>
             </div>
           </Card>
@@ -1132,7 +1275,7 @@ function ReportesPrintPortal({
               {/* Estado de Órdenes */}
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                  📋 Estado de las Órdenes
+                  Estado de las Órdenes
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
@@ -1167,7 +1310,7 @@ function ReportesPrintPortal({
               {/* Métodos de Pago */}
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                  💳 Métodos de Pago
+                  Métodos de Pago
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
@@ -1196,7 +1339,7 @@ function ReportesPrintPortal({
               {/* Gastos por Categoría */}
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                  🏷️ Gastos por Categoría
+                  Gastos por Categoría
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
@@ -1233,13 +1376,13 @@ function ReportesPrintPortal({
               {/* Servicios Populares */}
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                  🧺 Servicios Más Populares
+                  Servicios Más Populares
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-[9px] text-slate-400 font-bold uppercase border-b border-slate-100">
                       <th className="text-left py-1.5">Servicio</th>
-                      <th className="text-right py-1.5">Cantidad</th>
+                      <th className="text-right py-1.5">Órdenes</th>
                       <th className="text-right py-1.5">Total</th>
                     </tr>
                   </thead>
@@ -1261,10 +1404,41 @@ function ReportesPrintPortal({
                 </table>
               </div>
 
+              {/* Prendas Populares */}
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
+                  Prendas Más Solicitadas
+                </h3>
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-[9px] text-slate-400 font-bold uppercase border-b border-slate-100">
+                      <th className="text-left py-1.5">Prenda</th>
+                      <th className="text-right py-1.5">Cantidad</th>
+                      <th className="text-right py-1.5">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {stats.topPrendas.length > 0 ? (
+                      stats.topPrendas.map((garment: any) => (
+                        <tr key={garment.name} className="border-b border-slate-100/50">
+                          <td className="py-1.5 font-medium text-slate-700 truncate max-w-[140px]">{garment.name}</td>
+                          <td className="py-1.5 text-right text-slate-800">{garment.count}</td>
+                          <td className="py-1.5 text-right font-bold text-slate-800">{formatRD(garment.total)}</td>
+                        </tr>
+                      ))
+                    ) : (
+                      <tr>
+                        <td colSpan={3} className="py-4 text-center text-slate-400 italic">Sin prendas populares</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
               {/* Ventas por Empleado */}
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                  👥 Rendimiento del Equipo
+                  Rendimiento del Equipo
                 </h3>
                 <table className="w-full text-xs">
                   <thead>
@@ -1303,7 +1477,7 @@ function ReportesPrintPortal({
               {/* Logística y Urgencias */}
               <div>
                 <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-                  ⚡ Logística y Urgencias
+                  Logística y Urgencias
                 </h3>
                 <div className="space-y-2 text-xs text-slate-700">
                   <div className="flex justify-between py-1 border-b border-slate-100/50">
@@ -1326,7 +1500,7 @@ function ReportesPrintPortal({
           {/* Cierres de Caja Recientes */}
           <div className="mb-8">
             <h3 className="text-xs font-bold text-slate-900 uppercase tracking-wider mb-2 border-b border-slate-200 pb-1">
-              📦 Historial de Cierres de Caja Recientes
+              Historial de Cierres de Caja Recientes
             </h3>
             <table className="w-full text-xs">
               <thead>
@@ -1342,7 +1516,7 @@ function ReportesPrintPortal({
                   stats.cierresCaja.map((c: any) => {
                     const dif = c.diferencia || 0;
                     const statusText = dif === 0 
-                      ? "Cuadrada ✅" 
+                      ? "Cuadrada" 
                       : dif > 0 
                         ? `Sobrante: ${formatRD(dif)}` 
                         : `Faltante: ${formatRD(dif)}`;

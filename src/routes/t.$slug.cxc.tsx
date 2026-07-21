@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
-import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle, Trash2, Building2, Banknote, Receipt } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -8,13 +8,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { formatRD, saveOrden, saveMovimiento, uid } from "@/lib/storage";
+import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, getOrdenes, formatDateTimeRD } from "@/lib/storage";
+import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
 import { useCajaAbierta } from "@/hooks/use-queries";
 import { queryClient } from "@/router";
 import { CobrarOrdenDialog, TicketPrintPortal, CondonarDeudaDialog } from "@/components/klynn/OrdenesPage";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export const Route = createFileRoute("/t/$slug/cxc")({
   component: CuentasPorCobrarPage,
@@ -83,53 +85,64 @@ export default function CuentasPorCobrarPage() {
   const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
 
   const [loading, setLoading] = useState(true);
-  const [savingLimite, setSavingLimite] = useState(false);
   const [enviando, setEnviando] = useState<string | null>(null);
   const [clientes, setClientes] = useState<ClienteDeuda[]>([]);
   const [search, setSearch] = useState("");
   const [filtroMora, setFiltroMora] = useState<string>("TODOS");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
-  const [showLimite, setShowLimite] = useState(false);
   const [formatoPrint, setFormatoPrint] = useState<"A4" | "80mm">("A4");
   const [limiteDias, setLimiteDias] = useState<number>(user?.tenant?.limite_credito_dias ?? 30);
-
-  async function guardarLimite(dias: number) {
-    setSavingLimite(true);
-    try {
-      const { error } = await supabase
-        .from("tenants")
-        .update({ limite_credito_dias: dias })
-        .eq("id", tenantId);
-      if (error) throw error;
-      setLimiteDias(dias);
-      setShowLimite(false);
-      toast.success(`Límite actualizado a ${dias} días ✅`);
-      cargar();
-    } catch {
-      toast.error("Error al guardar el límite");
-    } finally {
-      setSavingLimite(false);
-    }
-  }
+  const [seccion, setSeccion] = useState<"PENDIENTES" | "SALDADAS">("PENDIENTES");
+  const [ordenesSaldadas, setOrdenesSaldadas] = useState<(Orden & { cliente_nombre: string; cliente_telefono: string })[]>([]);
 
   async function cargar() {
     if (!tenantId || tenantId === "__loading__") return;
     setLoading(true);
     try {
-      const { data: ordenes, error } = await supabase
-        .from("ordenes")
-        .select("*, clientes(*)")
-        .eq("tenant_id", tenantId)
-        .gt("saldo", 0)
-        .not("estado", "eq", "ANULADA")
-        .order("creado_en", { ascending: true });
+      const ordenesRaw = await getOrdenes(tenantId);
+      const { data: dbClients, error: errClients } = await supabase
+        .from("clientes")
+        .select("*")
+        .eq("tenant_id", tenantId);
 
-      if (error) throw error;
+      if (errClients) throw errClients;
+
+      const clientsMap = new Map(dbClients?.map(c => [c.id, c]) || []);
+      
+      // Consultar movimientos del tenant para identificar créditos saldados
+      const { data: dbMovs } = await supabase
+        .from("movimientos_caja")
+        .select("orden_id, tipo, concepto")
+        .eq("tenant_id", tenantId);
+
+      const creditOrdenIds = new Set(
+        dbMovs
+          ?.filter(m => m.tipo === "ABONO" || m.concepto?.includes("Abono inicial") || m.concepto?.includes("Cobro de saldo"))
+          ?.map(m => m.orden_id)
+          .filter(Boolean) || []
+      );
+
+      // Filtrar créditos pendientes
+      const ordenesFiltradas = ordenesRaw.filter(o => 
+        o.saldo > 0 && 
+        o.estado !== "ANULADA" && 
+        o.metodo_pago !== "PAGO_AL_RETIRAR"
+      );
+
+      // Filtrar créditos saldados (originalmente crédito y con saldo 0)
+      const ordenesSaldadasRaw = ordenesRaw.filter(o => 
+        (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id)) && 
+        o.saldo === 0 && 
+        o.estado !== "ANULADA"
+      );
 
       const map = new Map<string, ClienteDeuda>();
       const allClientsMap = new Map<string, Cliente>();
-      for (const o of ordenes || []) {
-        const c: Cliente = o.clientes;
+      
+      const sortedOrdenes = [...ordenesFiltradas].sort((a, b) => +new Date(a.creado_en) - +new Date(b.creado_en));
+
+      for (const o of sortedOrdenes) {
+        const c = clientsMap.get(o.cliente_id);
         if (c) allClientsMap.set(c.id, c);
         const dias = diasAntiguedad(o.creado_en);
         const mora = estadoMora(dias, limiteDias);
@@ -157,8 +170,19 @@ export default function CuentasPorCobrarPage() {
         entry.ordenes.push(ord);
       }
 
+      const sortedSaldadas = [...ordenesSaldadasRaw].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+      const saldadasConCliente = sortedSaldadas.map(o => {
+        const c = clientsMap.get(o.cliente_id);
+        return {
+          ...o,
+          cliente_nombre: c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final",
+          cliente_telefono: c?.telefono || ""
+        };
+      });
+
       setDbClientes(Array.from(allClientsMap.values()));
       setClientes(Array.from(map.values()).sort((a, b) => b.total_deuda - a.total_deuda));
+      setOrdenesSaldadas(saldadasConCliente);
     } catch (err: any) {
       toast.error("Error al cargar cuentas por cobrar");
     } finally {
@@ -180,6 +204,15 @@ export default function CuentasPorCobrarPage() {
   const totalOrdenes = filtered.reduce((s, c) => s + c.ordenes_count, 0);
 
   const criticas = clientes.filter(c => c.estado_mora === "CRITICA").length;
+
+  const filteredSaldadas = ordenesSaldadas.filter(o => {
+    const q = search.toLowerCase();
+    return !q || o.numero.toLowerCase().includes(q) || o.cliente_nombre.toLowerCase().includes(q) || o.cliente_telefono.toLowerCase().includes(q);
+  });
+
+  const totalRecuperado = filteredSaldadas.reduce((s, o) => s + o.total, 0);
+  const totalSaldadasCount = filteredSaldadas.length;
+  const promedioRecuperado = totalSaldadasCount > 0 ? totalRecuperado / totalSaldadasCount : 0;
 
   function handlePrint() {
     const is80mm = formatoPrint === "80mm";
@@ -422,26 +455,23 @@ export default function CuentasPorCobrarPage() {
       `}</style>
 
       <div>
-        <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 no-print pb-4 border-b border-border/30">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print pb-4 border-b border-border/30">
           <div>
             <h1 className="font-display text-3xl tracking-tight md:text-4xl font-bold text-foreground">Cuentas x Cobrar</h1>
-            <p className="mt-1 text-sm text-muted-foreground md:text-base">Resumen de facturas a crédito con saldo pendiente.</p>
+            <p className="mt-1 text-xs sm:text-sm text-muted-foreground md:text-base">
+              {seccion === "PENDIENTES" 
+                ? "Resumen de facturas a crédito con saldo pendiente." 
+                : "Historial de créditos completamente saldados por tus clientes."}
+            </p>
           </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-3 shrink-0">
             <Button
               onClick={() => navigate({ to: "/t/$slug/caja", params: { slug: user.tenant.slug } })}
               className="bg-primary hover:bg-primary/95 text-white gap-1.5 font-bold shadow-sm transition-all active:scale-95"
             >
               <ArrowLeft className="h-4 w-4" /> Volver a Caja
             </Button>
-            <Button
-              variant="outline"
-              onClick={() => setShowLimite(true)}
-              className="gap-1.5 border-amber-400/50 text-amber-700 hover:bg-amber-50 font-bold"
-            >
-              <Timer className="h-4 w-4" />
-              Límite: {limiteDias} días
-            </Button>
+            
             <Button
               onClick={cargar}
               className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 gap-1.5 font-bold"
@@ -464,55 +494,122 @@ export default function CuentasPorCobrarPage() {
           </div>
         </div>
 
-        {/* KPIs */}
-        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
-          <Card className="p-5 bg-gradient-to-br from-red-500 to-rose-600 text-white">
-            <div className="text-xs uppercase text-white/70 font-bold tracking-wider">Total por Cobrar</div>
-            <div className="mt-1 font-display text-2xl font-black">{formatRD(totalGeneral)}</div>
-            <div className="text-xs text-white/60 mt-1">{totalOrdenes} órdenes pendientes</div>
-          </Card>
-          <Card className="p-5">
-            <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Clientes con deuda</div>
-            <div className="mt-1 font-display text-2xl font-black">{totalClientes}</div>
-            <div className="text-xs text-muted-foreground mt-1">con saldo pendiente</div>
-          </Card>
-          <Card className={`p-5 ${criticas > 0 ? "border-red-300 bg-red-50/50" : ""}`}>
-            <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Cuentas Críticas</div>
-            <div className={`mt-1 font-display text-2xl font-black ${criticas > 0 ? "text-red-600" : ""}`}>{criticas}</div>
-            <div className="text-xs text-muted-foreground mt-1">más de {limiteDias} días</div>
-          </Card>
-          <Card className="p-5">
-            <div className="text-xs uppercase text-muted-foreground font-bold tracking-wider">Promedio por cliente</div>
-            <div className="mt-1 font-display text-2xl font-black">{formatRD(totalClientes > 0 ? totalGeneral / totalClientes : 0)}</div>
-            <div className="text-xs text-muted-foreground mt-1">deuda promedio</div>
-          </Card>
+        <div className="mb-6 flex justify-center no-print">
+          <div className="flex bg-slate-100 dark:bg-slate-800/60 p-1 rounded-xl border border-border/20 shadow-xs max-w-sm w-full">
+            <button
+              type="button"
+              onClick={() => {
+                setSeccion("PENDIENTES");
+                setSearch("");
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all duration-200 cursor-pointer ${
+                seccion === "PENDIENTES" 
+                  ? "bg-amber-500 text-white shadow-xs" 
+                  : "text-slate-500 hover:text-slate-850 dark:hover:text-slate-350"
+              }`}
+            >
+              <Clock className="h-4 w-4" />
+              Pendientes
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setSeccion("SALDADAS");
+                setSearch("");
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 text-xs font-black uppercase tracking-wider rounded-lg transition-all duration-200 cursor-pointer ${
+                seccion === "SALDADAS" 
+                  ? "bg-emerald-600 text-white shadow-xs" 
+                  : "text-slate-500 hover:text-slate-850 dark:hover:text-slate-350"
+              }`}
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              Saldadas
+            </button>
+          </div>
         </div>
 
+        {/* KPIs */}
+        {seccion === "PENDIENTES" ? (
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+            <Card className="p-5 bg-gradient-to-br from-red-500 to-rose-600 text-white border-red-500/20 shadow-md">
+              <div className="text-xs uppercase text-white/70 font-bold tracking-wider">Total por Cobrar</div>
+              <div className="mt-1 font-display text-2xl font-black">{formatRD(totalGeneral)}</div>
+              <div className="text-xs text-white/60 mt-1">{totalOrdenes} Órdenes pendientes</div>
+            </Card>
+            <Card className="p-5 bg-amber-500/[0.06] border-amber-500/20 text-amber-950 dark:text-amber-100 shadow-sm">
+              <div className="text-xs uppercase text-amber-800/85 dark:text-amber-400 font-bold tracking-wider">Clientes con deuda</div>
+              <div className="mt-1 font-display text-2xl font-black text-amber-900 dark:text-amber-200">{totalClientes}</div>
+              <div className="text-xs text-amber-800/75 dark:text-amber-400/80 mt-1">Con saldo pendiente</div>
+            </Card>
+            <Card className={`p-5 shadow-sm transition-all duration-300 ${
+              criticas > 0 
+                ? "bg-rose-500/[0.08] border-rose-500/30 text-rose-950 dark:text-rose-100" 
+                : "bg-slate-500/[0.04] border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200"
+            }`}>
+              <div className={`text-xs uppercase font-bold tracking-wider ${
+                criticas > 0 ? "text-rose-800/85 dark:text-rose-400" : "text-slate-500 dark:text-slate-400"
+              }`}>Cuentas Críticas</div>
+              <div className={`mt-1 font-display text-2xl font-black ${
+                criticas > 0 ? "text-rose-600 dark:text-rose-350 animate-pulse" : "text-slate-700 dark:text-slate-300"
+              }`}>{criticas}</div>
+              <div className={`text-xs mt-1 ${
+                criticas > 0 ? "text-rose-800/75 dark:text-rose-450" : "text-slate-500 dark:text-slate-450"
+              }`}>Más de {limiteDias} días</div>
+            </Card>
+            <Card className="p-5 bg-teal-500/[0.06] border-teal-500/20 text-teal-950 dark:text-teal-100 shadow-sm">
+              <div className="text-xs uppercase text-teal-800/85 dark:text-teal-400 font-bold tracking-wider">Promedio por cliente</div>
+              <div className="mt-1 font-display text-2xl font-black text-teal-900 dark:text-teal-200">{formatRD(totalClientes > 0 ? totalGeneral / totalClientes : 0)}</div>
+              <div className="text-xs text-teal-800/75 dark:text-teal-400/80 mt-1">Deuda promedio</div>
+            </Card>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3 mb-6">
+            <Card className="p-5 bg-gradient-to-br from-emerald-500 to-teal-600 text-white border-emerald-500/20 shadow-md">
+              <div className="text-xs uppercase text-white/70 font-bold tracking-wider">Total Cobrado / Recuperado</div>
+              <div className="mt-1 font-display text-2xl font-black">{formatRD(totalRecuperado)}</div>
+              <div className="text-xs text-white/60 mt-1">{totalSaldadasCount} créditos cobrados</div>
+            </Card>
+            <Card className="p-5 bg-indigo-500/[0.06] border-indigo-500/20 text-indigo-950 dark:text-indigo-100 shadow-sm">
+              <div className="text-xs uppercase text-indigo-800/85 dark:text-indigo-400 font-bold tracking-wider">Créditos Saldados</div>
+              <div className="mt-1 font-display text-2xl font-black text-indigo-900 dark:text-indigo-200">{totalSaldadasCount}</div>
+              <div className="text-xs text-indigo-800/75 dark:text-indigo-400/80 mt-1">Facturas saldadas</div>
+            </Card>
+            <Card className="p-5 bg-sky-500/[0.06] border-sky-500/20 text-sky-950 dark:text-sky-100 shadow-sm">
+              <div className="text-xs uppercase text-sky-800/85 dark:text-sky-400 font-bold tracking-wider">Promedio Recuperado</div>
+              <div className="mt-1 font-display text-2xl font-black text-sky-900 dark:text-sky-200">{formatRD(promedioRecuperado)}</div>
+              <div className="text-xs text-sky-800/75 dark:text-sky-400/80 mt-1">Monto promedio</div>
+            </Card>
+          </div>
+        )}
+
         {/* Filtros */}
-        <div className="no-print flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <Card className="mb-4 flex flex-wrap items-center gap-3 p-4 bg-card rounded-2xl border border-border/40 shadow-sm no-print">
+          <div className="relative flex-1 min-w-[250px]">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
-              placeholder="Buscar cliente, teléfono..."
+              placeholder={seccion === "PENDIENTES" ? "Buscar cliente, teléfono..." : "Buscar orden, cliente..."}
               value={search}
               onChange={e => setSearch(e.target.value)}
-              className="pl-9"
+              className="pl-10"
             />
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {["TODOS", "AL_DIA", "POR_VENCER", "VENCIDA", "CRITICA"].map(m => (
-              <button
-                key={m}
-                onClick={() => setFiltroMora(m)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border transition-all ${
-                  filtroMora === m ? "bg-primary text-white border-primary" : "border-border text-muted-foreground hover:border-primary/40"
-                }`}
-              >
-                {m === "TODOS" ? "Todos" : MORA_CONFIG[m as keyof typeof MORA_CONFIG]?.label}
-              </button>
-            ))}
-          </div>
-        </div>
+          {seccion === "PENDIENTES" && (
+            <Select value={filtroMora} onValueChange={(v: any) => setFiltroMora(v)}>
+              <SelectTrigger className="w-[185px] font-semibold text-xs shrink-0 rounded-xl h-10 border-border/60 bg-background">
+                <Timer className="h-4 w-4 text-emerald-600 dark:text-emerald-500 shrink-0 mr-1.5" />
+                <SelectValue placeholder="Estado de Mora" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="TODOS">Todos los estados</SelectItem>
+                <SelectItem value="AL_DIA">Al día</SelectItem>
+                <SelectItem value="POR_VENCER">Por vencer</SelectItem>
+                <SelectItem value="VENCIDA">Vencida</SelectItem>
+                <SelectItem value="CRITICA">Crítica</SelectItem>
+              </SelectContent>
+            </Select>
+          )}
+        </Card>
 
         {/* Tabla principal — pantalla */}
         <div className="no-print space-y-3">
@@ -522,7 +619,7 @@ export default function CuentasPorCobrarPage() {
               Cargando cuentas por cobrar...
             </Card>
           )}
-          {!loading && filtered.length === 0 && (
+          {!loading && seccion === "PENDIENTES" && filtered.length === 0 && (
             <Card className="p-12 text-center border border-dashed border-emerald-500/20 bg-emerald-500/5 backdrop-blur-md rounded-2xl py-16 flex flex-col items-center justify-center">
               <div className="rounded-2xl bg-emerald-500/10 p-4 mb-4 text-emerald-600 shadow-sm">
                 <CheckCircle2 className="h-10 w-10" />
@@ -533,7 +630,7 @@ export default function CuentasPorCobrarPage() {
               </p>
             </Card>
           )}
-          {!loading && filtered.map(cli => {
+          {!loading && seccion === "PENDIENTES" && filtered.map(cli => {
             const cfg = MORA_CONFIG[cli.estado_mora];
             const isOpen = expanded[cli.cliente_id];
             return (
@@ -561,7 +658,7 @@ export default function CuentasPorCobrarPage() {
                   <div className="flex items-center gap-3 shrink-0">
                     <div className="text-right">
                       <div className="font-display text-xl font-black text-red-600">{formatRD(cli.total_deuda)}</div>
-                      <div className="text-xs text-muted-foreground">pendiente</div>
+                      <div className="text-xs text-muted-foreground">Pendiente</div>
                     </div>
                     {isOpen ? <ChevronUp className="h-4 w-4 text-muted-foreground shrink-0" /> : <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />}
                   </div>
@@ -573,8 +670,7 @@ export default function CuentasPorCobrarPage() {
                       <table className="w-full text-sm">
                         <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground">
                           <tr>
-                            <th className="px-4 py-2.5 text-left">Orden</th>
-                            <th className="px-4 py-2.5 text-left">Fecha</th>
+                            <th className="px-4 py-2.5 text-left">Orden y Fecha</th>
                             <th className="px-4 py-2.5 text-left">Días</th>
                             <th className="px-4 py-2.5 text-right">Total</th>
                             <th className="px-4 py-2.5 text-right">Pagado</th>
@@ -588,8 +684,21 @@ export default function CuentasPorCobrarPage() {
                             const mc = MORA_CONFIG[o.estado_mora];
                             return (
                               <tr key={o.id} className="border-t border-border/50 hover:bg-accent/20">
-                                <td className="px-4 py-2.5 font-mono text-xs font-bold">{o.numero}</td>
-                                <td className="px-4 py-2.5 text-xs text-muted-foreground">{new Date(o.creado_en).toLocaleDateString("es-DO")}</td>
+                                <td className="px-4 py-2">
+                                  <div className="flex items-center gap-3">
+                                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 border border-[#d6e0ea]/50">
+                                      <Receipt className="h-4.5 w-4.5" />
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                      <span className="font-mono text-xs font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                                        {o.numero}
+                                      </span>
+                                      <span className="text-[10px] text-muted-foreground font-medium whitespace-nowrap">
+                                        {formatDateTimeRD(o.creado_en)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </td>
                                 <td className="px-4 py-2.5">
                                   <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-bold border ${mc.color}`}>
                                     {o.dias_antiguedad} {o.dias_antiguedad === 1 ? "día" : "días"}
@@ -630,7 +739,7 @@ export default function CuentasPorCobrarPage() {
                             );
                           })}
                           <tr className="border-t-2 border-border bg-surface-elevated font-bold">
-                            <td colSpan={5} className="px-4 py-2.5 text-right text-sm">Total deuda de {cli.cliente_nombre}:</td>
+                            <td colSpan={4} className="px-4 py-2.5 text-right text-sm">Total deuda de {cli.cliente_nombre}:</td>
                             <td className="px-4 py-2.5 text-right text-red-600 font-display">{formatRD(cli.total_deuda)}</td>
                             <td colSpan={2} />
                           </tr>
@@ -661,6 +770,76 @@ export default function CuentasPorCobrarPage() {
               </Card>
             );
           })}
+
+          {!loading && seccion === "SALDADAS" && filteredSaldadas.length === 0 && (
+            <Card className="p-12 text-center border border-dashed border-slate-300 dark:border-slate-800 bg-slate-500/5 backdrop-blur-md rounded-2xl py-16 flex flex-col items-center justify-center">
+              <div className="rounded-2xl bg-slate-500/10 p-4 mb-4 text-slate-600 shadow-sm">
+                <CheckCircle2 className="h-10 w-10" />
+              </div>
+              <h3 className="font-display text-xl font-bold text-foreground">No hay créditos saldados</h3>
+              <p className="text-sm text-muted-foreground max-w-md mt-2 leading-relaxed">
+                Aún no tienes facturas a crédito que hayan sido cobradas por completo o que coincidan con la búsqueda.
+              </p>
+            </Card>
+          )}
+
+          {!loading && seccion === "SALDADAS" && filteredSaldadas.length > 0 && (
+            <Card className="overflow-hidden border border-border rounded-2xl bg-card shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-slate-50/50 dark:bg-slate-800/40 text-xs uppercase text-slate-500 border-b border-border">
+                    <tr>
+                      <th className="px-5 py-3.5 text-left font-bold">Orden y Cliente</th>
+                      <th className="px-5 py-3.5 text-right font-bold">Monto Cobrado</th>
+                      <th className="px-5 py-3.5 text-center font-bold">Estado</th>
+                      <th className="px-5 py-3.5 text-center font-bold">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border">
+                    {filteredSaldadas.map(o => (
+                      <tr key={o.id} className="hover:bg-slate-50/30 dark:hover:bg-slate-800/10 transition-colors">
+                        <td className="px-5 py-3">
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
+                              <Receipt className="h-5 w-5" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                                {o.numero}
+                              </span>
+                              <span className="font-bold text-sm text-foreground truncate max-w-[280px]" title={o.cliente_nombre}>
+                                {o.cliente_nombre}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground font-medium">
+                                {formatDateTimeRD(o.creado_en)}
+                              </span>
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-5 py-3 text-right font-display font-bold text-emerald-600">{formatRD(o.total)}</td>
+                        <td className="px-5 py-3 text-center">
+                          <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border bg-emerald-100 text-emerald-700 border-emerald-200">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+                            Saldado
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setShowPrint(o)}
+                            className="h-7 px-3 text-[10px] font-black uppercase tracking-wider gap-1 border-primary/20 hover:bg-primary/5 hover:text-primary rounded-lg"
+                          >
+                            <Printer className="h-3 w-3" /> Ver Recibo
+                          </Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          )}
         </div>
 
         {/* El área de impresión se genera dinámicamente en handlePrint() */}
@@ -767,63 +946,7 @@ export default function CuentasPorCobrarPage() {
         </div>
       </div>
 
-      {/* ===== DIALOG: LÍMITE DE CRÉDITO ===== */}
-      <Dialog open={showLimite} onOpenChange={setShowLimite}>
-        <DialogContent className="max-w-sm">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-xl font-display font-black">
-              <div className="bg-amber-100 p-2 rounded-xl">
-                <Timer className="h-5 w-5 text-amber-600" />
-              </div>
-              Límite de Crédito
-            </DialogTitle>
-            <p className="text-sm text-muted-foreground pt-1">
-              Define cuántos días se permite el crédito antes de marcar una cuenta como vencida.
-              <br />
-              <span className="font-semibold text-foreground">Actual: {limiteDias} días</span>
-            </p>
-          </DialogHeader>
 
-          <div className="grid grid-cols-3 gap-2 py-2">
-            {OPCIONES_LIMITE.map(op => (
-              <button
-                key={op.dias}
-                onClick={() => !savingLimite && guardarLimite(op.dias)}
-                disabled={savingLimite}
-                className={`relative flex flex-col items-center justify-center rounded-2xl border-2 p-3 transition-all duration-200 ${
-                  limiteDias === op.dias
-                    ? "border-amber-500 bg-amber-50 scale-105 shadow-md"
-                    : "border-border hover:border-amber-400/60 hover:bg-amber-50/50"
-                }`}
-              >
-                <span className={`text-lg font-display font-black ${
-                  limiteDias === op.dias ? "text-amber-700" : "text-foreground"
-                }`}>{op.dias}</span>
-                <span className={`text-[10px] font-bold uppercase tracking-wider ${
-                  limiteDias === op.dias ? "text-amber-600" : "text-muted-foreground"
-                }`}>{op.label}</span>
-                {limiteDias === op.dias && (
-                  <span className="absolute -top-1 -right-1 w-3 h-3 bg-amber-500 rounded-full" />
-                )}
-              </button>
-            ))}
-          </div>
-
-          <div className="rounded-xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-800">
-            <span className="font-bold">¿Cómo funciona?</span> Las órdenes se clasifican según el porcentaje del límite consumido:
-            <ul className="mt-1 space-y-0.5 list-disc list-inside">
-              <li><span className="text-emerald-700 font-bold">Al día</span> — primeros 25%</li>
-              <li><span className="text-amber-700 font-bold">Por vencer</span> — entre 25% y 75%</li>
-              <li><span className="text-orange-700 font-bold">Vencida</span> — entre 75% y 100%</li>
-              <li><span className="text-red-700 font-bold">Crítica</span> — superó el límite</li>
-            </ul>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowLimite(false)} className="flex-1">Cancelar</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {cobrarOrden && (
         <CobrarOrdenDialog
@@ -848,6 +971,7 @@ export default function CuentasPorCobrarPage() {
           cliente={cobrarCliente}
           onClose={() => setCobrarCliente(null)}
           tenantId={tenantId}
+          tenant={user.tenant}
           cajaAbierta={cajaAbierta}
           queryClient={queryClient}
           onSuccess={() => {
@@ -863,6 +987,7 @@ export default function CuentasPorCobrarPage() {
           clientes={dbClientes}
           empleados={[]}
           pagoRecibido={pagoRecibidoParaTicket}
+          ocultarUbicacion={true}
           onClose={() => {
             setShowPrint(null);
             setPagoRecibidoParaTicket(undefined);
@@ -884,19 +1009,28 @@ export default function CuentasPorCobrarPage() {
   );
 }
 
+// Strip runtime-only CXCOrden fields before Supabase upsert
+function cleanOrdenCXC(o: any): Orden {
+  const { cliente, dias_antiguedad, estado_mora, cliente_nombre, cliente_telefono, ...rest } = o;
+  return rest;
+}
+
 interface CobrarDeudaClienteDialogProps {
   cliente: ClienteDeuda;
   onClose: () => void;
   tenantId: string;
+  tenant: any;
   cajaAbierta: any;
   queryClient: any;
   onSuccess: () => void;
 }
 
-export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbierta, queryClient, onSuccess }: CobrarDeudaClienteDialogProps) {
+export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbierta, queryClient, onSuccess }: CobrarDeudaClienteDialogProps) {
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(cliente.total_deuda);
   const [loading, setLoading] = useState<boolean>(false);
+  const [referencia, setReferencia] = useState("");
+  const [showRefInput, setShowRefInput] = useState(false);
 
   const formatAmountInput = (val: string) => {
     if (!val) return "";
@@ -935,6 +1069,16 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbier
       const montoAPagar = Math.min(recibido, cliente.total_deuda);
       let restante = montoAPagar;
 
+      // Obtener el cliente full para la facturación fiscal
+      const { data: clienteFull } = await supabase
+        .from("clientes")
+        .select("*")
+        .eq("id", cliente.cliente_id)
+        .single();
+
+      const fiscalConfig = await getECFConfig(tenantId);
+      const isElectronic = !!fiscalConfig?.is_active;
+
       // Ordenar las órdenes del cliente por fecha de creación (FIFO)
       const sortedOrdenes = [...cliente.ordenes].sort((a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime());
 
@@ -950,14 +1094,95 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbier
           ? "ENTREGADA" 
           : (nuevoSaldo === 0 ? "PAGADA" : o.estado);
 
-        // Guardar la orden con los saldos actualizados
-        await saveOrden({
+        let finalNCF: string | undefined = o.ncf;
+        let finalNcfVencimiento: string | undefined = o.ncf_vencimiento;
+        let finalTipoECF: string | undefined = o.tipo_ecf;
+        let finalEcfId: string | undefined = o.ecf_id;
+        let finalEcfQr: string | undefined = o.ecf_qr;
+        let finalEcfSecurityCode: string | undefined = o.ecf_security_code;
+        let finalEcfSignatureDate: string | undefined = o.ecf_signature_date;
+
+        if (tenant.config?.ncf_facturacion_activa && !o.ncf && nuevoSaldo === 0) {
+          const cliObj = clienteFull || { nombre: "Consumidor", apellido: "Final", telefono: "", tipo: "Consumidor Final" };
+          const isEmpresa = cliObj.tipo === "Empresa" || (cliObj.cedula && cliObj.cedula.length >= 9);
+          const tipoECFDefault = isElectronic 
+            ? (isEmpresa ? "E31" : "E32")
+            : (isEmpresa ? "B01" : "B02");
+
+          if (!isElectronic) {
+            try {
+              const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
+              finalNCF = nextNCF;
+              finalNcfVencimiento = expiration_date;
+            } catch (seqErr) {
+              console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
+              finalNCF = `${tenant.config.ncf_secuencia || 'B02'}${String(tenant.config.ncf_proximo || 1).padStart(8, "0")}`;
+              await saveTenant({
+                ...tenant,
+                config: {
+                  ...tenant.config,
+                  ncf_proximo: (tenant.config.ncf_proximo || 1) + 1
+                }
+              });
+            }
+          } else {
+            try {
+              let nextNCF: string | undefined = undefined;
+              if (fiscalConfig?.ambiente === 'produccion') {
+                const { ncf, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
+                nextNCF = ncf;
+                finalNcfVencimiento = expiration_date;
+              }
+
+              const ordenTemporal: Orden = cleanOrdenCXC({
+                ...o,
+                pagado: nuevoPagado,
+                saldo: nuevoSaldo,
+                estado: nuevoEstado,
+                metodo_pago: o.pagado > 0 ? "MIXTO" : metodo,
+                ncf: nextNCF
+              });
+
+              const result = await emitirECF(
+                ordenTemporal,
+                cliObj as Cliente,
+                fiscalConfig?.pronesoft_tenant_id,
+                tenant.config,
+                tenant,
+                tipoECFDefault
+              );
+
+              finalNCF = result.encf;
+              finalTipoECF = tipoECFDefault;
+              finalEcfId = result.document.id;
+              finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
+              finalEcfSecurityCode = result.security_code || '';
+              finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
+
+              toast.success(`✅ Comprobante DGII ${result.encf} emitido para orden #${o.numero}`);
+            } catch (fErr: any) {
+              console.error("Error Fiscal en Cobrar Todo:", fErr);
+              toast.error(`Error al generar comprobante fiscal para orden #${o.numero}: ` + fErr.message);
+            }
+          }
+        }
+
+        // Guardar la orden con los saldos actualizados y datos fiscales
+        await saveOrden(cleanOrdenCXC({
           ...o,
           pagado: nuevoPagado,
           saldo: nuevoSaldo,
           estado: nuevoEstado,
-          metodo_pago: o.pagado > 0 ? "MIXTO" : metodo
-        });
+          metodo_pago: o.pagado > 0 ? "MIXTO" : metodo,
+          ncf: finalNCF,
+          ncf_vencimiento: finalNcfVencimiento,
+          tipo_ecf: finalTipoECF,
+          ecf_id: finalEcfId,
+          ecf_qr: finalEcfQr,
+          ecf_security_code: finalEcfSecurityCode,
+          ecf_signature_date: finalEcfSignatureDate,
+          pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : o.pago_referencia
+        }));
 
         // Registrar el movimiento de entrada en caja para esta orden
         await saveMovimiento({
@@ -967,8 +1192,8 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbier
           empleado_id: o.empleado_id,
           tipo: nuevoSaldo === 0 ? "VENTA" : "ABONO",
           concepto: nuevoSaldo === 0
-            ? `Cobro de saldo orden #${o.numero} desde Cobrar Todo`
-            : `Abono a orden #${o.numero} desde Cobrar Todo (Saldo restante: ${formatRD(nuevoSaldo)})`,
+            ? `Cobro de saldo orden #${o.numero} desde Cobrar Todo${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`
+            : `Abono a orden #${o.numero} desde Cobrar Todo (Saldo restante: ${formatRD(nuevoSaldo)})${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`,
           monto: montoAPagarOrden,
           metodo: metodo,
           orden_id: o.id,
@@ -1021,29 +1246,35 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbier
               <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block mb-1">Método de Pago</label>
               <div className="grid grid-cols-3 gap-2">
                 {[
-                  { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
-                  { id: "TARJETA", label: "Tarjeta", icon: "💳" },
-                  { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" }
-                ].map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => {
-                      setMetodo(m.id as MetodoPago);
-                      if (m.id !== "EFECTIVO" && recibido > cliente.total_deuda) {
-                        setRecibido(cliente.total_deuda);
-                      }
-                    }}
-                    className={`flex flex-col items-center justify-center p-2.5 rounded-xl border-2 transition-all duration-200 active:scale-95 ${
-                      metodo === m.id
-                        ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
-                        : "border-border hover:border-emerald-500/40 hover:bg-emerald-50/20 text-muted-foreground"
-                    }`}
-                  >
-                    <span className="text-lg mb-0.5">{m.icon}</span>
-                    <span className="text-[10px] font-black uppercase tracking-wider">{m.label}</span>
-                  </button>
-                ))}
+                  { id: "EFECTIVO", label: "Efectivo", icon: Banknote },
+                  { id: "TARJETA", label: "Tarjeta", icon: CreditCard },
+                  { id: "TRANSFERENCIA", label: "Transferencia", icon: Building2 }
+                ].map((m) => {
+                  const Icon = m.icon;
+                  const isSelected = metodo === m.id;
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => {
+                        setMetodo(m.id as MetodoPago);
+                        setReferencia("");
+                        setShowRefInput(false);
+                        if (m.id !== "EFECTIVO" && recibido > cliente.total_deuda) {
+                          setRecibido(cliente.total_deuda);
+                        }
+                      }}
+                      className={`flex flex-col items-center justify-center p-3 rounded-xl border-2 transition-all duration-200 active:scale-95 cursor-pointer ${
+                        isSelected
+                          ? "border-emerald-600 bg-emerald-50 text-emerald-800 shadow-sm"
+                          : "border-border hover:border-emerald-500/40 hover:bg-emerald-50/20 text-muted-foreground"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 mb-1 shrink-0" />
+                      <span className="text-[10px] font-black uppercase tracking-wider">{m.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -1063,9 +1294,50 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, cajaAbier
               </div>
             </div>
 
+            {/* Referencia de Transacción para Tarjeta/Transferencia */}
+            {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-muted-foreground uppercase tracking-wider block">
+                  Referencia de Transacción
+                </label>
+                {!showRefInput ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => setShowRefInput(true)}
+                    className="w-full h-10 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer text-xs"
+                  >
+                    <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
+                  </Button>
+                ) : (
+                  <div className="flex gap-2">
+                    <Input
+                      type="text"
+                      value={referencia}
+                      onChange={(e) => setReferencia(e.target.value)}
+                      placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
+                      className="h-10 bg-white border-2 border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium text-xs animate-in slide-in-from-top-1 duration-150"
+                      autoFocus
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      onClick={() => {
+                        setReferencia("");
+                        setShowRefInput(false);
+                      }}
+                      className="h-10 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-1.5 cursor-pointer text-xs border-none"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" /> Quitar
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+
             {metodo === "EFECTIVO" && recibido > cliente.total_deuda && (
               <div className="flex justify-between items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs">
-                <span className="font-medium text-slate-500">Vuelto a entregar:</span>
+                <span className="font-medium text-slate-500">Cambio a entregar:</span>
                 <span className="font-bold text-slate-800 text-sm">{formatRD(vuelto)}</span>
               </div>
             )}

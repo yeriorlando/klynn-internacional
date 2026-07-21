@@ -10,6 +10,7 @@ interface Props {
   formato?: "57mm" | "80mm";
   pagoRecibido?: number;
   serviciosList?: Servicio[];
+  ocultarUbicacion?: boolean;
 }
 
 function humanizeDate(dateStr: string, showTime = true): string {
@@ -37,7 +38,7 @@ function humanizeDate(dateStr: string, showTime = true): string {
  * Ticket imprimible térmico.
  * Usa @media print para ocultar el resto de la página y solo imprimir el ticket.
  */
-export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pagoRecibido, serviciosList = [] }: Props) {
+export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pagoRecibido, serviciosList = [], ocultarUbicacion = false }: Props) {
   const cfg = tenant.config;
   const w = formato === "57mm" ? "w-[58mm]" : "w-[80mm]";
   const cols = formato === "57mm" ? "max-w-[32ch]" : "max-w-[44ch]";
@@ -57,7 +58,13 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
     const nombreOficial = NCF_NOMBRES[prefix];
     
     if (nombreOficial) {
-      tipoDocumento = isECF ? `FACTURA DE ${nombreOficial} ELECTRÓNICA` : `FACTURA DE ${nombreOficial}`;
+      if (prefix === "B02" || prefix === "E32") {
+        tipoDocumento = "FACTURA PARA CONSUMIDOR FINAL";
+      } else if (prefix === "B01" || prefix === "E31") {
+        tipoDocumento = "FACTURA DE CRÉDITO FISCAL";
+      } else {
+        tipoDocumento = isECF ? `FACTURA DE ${nombreOficial} ELECTRÓNICA` : `FACTURA DE ${nombreOficial}`;
+      }
     } else {
       tipoDocumento = "COMPROBANTE FISCAL";
     }
@@ -88,7 +95,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div>
-        {orden.ubicacion_ropa && pagoRecibido === undefined && (
+        {orden.ubicacion_ropa && pagoRecibido === undefined && !ocultarUbicacion && (
           <div className="font-black uppercase text-[13px] py-1.5 mb-2 border-y border-dashed border-black text-center bg-black/10">
             UBICACIÓN: {orden.ubicacion_ropa}
           </div>
@@ -258,11 +265,16 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div>
-        <Row k="Pago" v={orden.metodo_pago === "CREDITO" && orden.pagado === 0 ? "AL RETIRAR" : orden.metodo_pago} />
+        <Row k="Pago" v={orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago} />
         <Row k="Estado Pago" v={orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"} bold />
         {pagoRecibido !== undefined && (
           <>
-            {pagoRecibido < (orden.saldo + pagoRecibido) && pagoRecibido > 0 ? (
+            {orden.saldo === 0 && (pagoRecibido < orden.total || orden.pagado > pagoRecibido) ? (
+              <>
+                <Row k="Saldo pendiente" v="RD$0.00" bold />
+                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} />}
+              </>
+            ) : pagoRecibido < (orden.saldo + pagoRecibido) && pagoRecibido > 0 ? (
               <>
                 <Row k="Abonado" v={formatRD(pagoRecibido).replace("DOP", "RD$")} bold />
                 <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />
@@ -270,13 +282,19 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
             ) : (
               <>
                 <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} />
-                {vuelto > 0 && <Row k="Vuelto" v={formatRD(vuelto).replace("DOP", "RD$")} />}
+                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} />}
               </>
             )}
           </>
         )}
         {pagoRecibido === undefined && orden.saldo > 0 && (
           <Row k="Saldo pendiente" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />
+        )}
+        {pagoRecibido === undefined && orden.saldo === 0 && (orden.metodo_pago === "CREDITO" || orden.metodo_pago === "PAGO_AL_RETIRAR" || orden.metodo_pago === "MIXTO") && (
+          <Row k="Saldo pendiente" v="RD$0.00" bold />
+        )}
+        {orden.pago_referencia && (
+          <Row k="Referencia" v={orden.pago_referencia} />
         )}
       </div>
       <Sep />

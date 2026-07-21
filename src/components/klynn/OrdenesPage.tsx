@@ -23,7 +23,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -60,6 +60,7 @@ export function OrdenesPage() {
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos" | "hoy" | "urgente">("todos");
   const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas">("todas");
   const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar">("todas");
+  const [filtroPago, setFiltroPago] = useState<"todas" | MetodoPago>("todas");
   const [view, setView] = useState<Orden | null>(null);
   const [anular, setAnular] = useState<Orden | null>(null);
   const [motivoAnular, setMotivoAnular] = useState("");
@@ -156,12 +157,17 @@ export function OrdenesPage() {
       if (filtroUrgencia === "urgente" && !o.es_urgente) return false;
       if (filtroUrgencia === "estandar" && o.es_urgente) return false;
 
+      // Filtro de pago
+      if (filtroPago !== "todas" && o.metodo_pago !== filtroPago) return false;
+
       if (!q) return true;
       const c = clientes.find((x) => x.id === o.cliente_id);
       const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
-      return o.numero.toLowerCase().includes(q.toLowerCase()) || nombreCompleto.toLowerCase().includes(q.toLowerCase());
+      return o.numero.toLowerCase().includes(q.toLowerCase()) || 
+             nombreCompleto.toLowerCase().includes(q.toLowerCase()) ||
+             (o.pago_referencia && o.pago_referencia.toLowerCase().includes(q.toLowerCase()));
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, q]);
+  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, q]);
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -757,6 +763,21 @@ export function OrdenesPage() {
             <SelectItem value="estandar">Estándar</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
+          <SelectTrigger className="w-[160px] font-semibold text-xs shrink-0">
+            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Formas de Pago</SelectItem>
+            <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+            <SelectItem value="TARJETA">Tarjeta</SelectItem>
+            <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+            <SelectItem value="CREDITO">Crédito</SelectItem>
+            <SelectItem value="PAGO_AL_RETIRAR">Pago al retirar</SelectItem>
+            <SelectItem value="MIXTO">Mixto</SelectItem>
+          </SelectContent>
+        </Select>
       </Card>
 
       {/* Badge tabs de estado */}
@@ -882,7 +903,18 @@ export function OrdenesPage() {
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center text-xs">{o.metodo_pago}</td>
+                    <td className="px-4 py-3 text-center text-xs">
+                      <div className="flex flex-col items-center">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">
+                          {o.metodo_pago === "PAGO_AL_RETIRAR" ? "PAR" : o.metodo_pago}
+                        </span>
+                        {o.pago_referencia && (
+                          <span className="text-[9px] text-muted-foreground font-mono mt-0.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50" title={`Referencia: ${o.pago_referencia}`}>
+                            Ref: {o.pago_referencia}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="px-4 py-3 text-center text-xs">
                       <div className="flex flex-col items-center gap-1">
                         <span className="font-semibold">
@@ -1586,7 +1618,7 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
   );
 }
 
-export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose, pagoRecibido, hiddenPreview = false }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void; pagoRecibido?: number; hiddenPreview?: boolean }) {
+export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose, pagoRecibido, hiddenPreview = false, ocultarUbicacion = false }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void; pagoRecibido?: number; hiddenPreview?: boolean; ocultarUbicacion?: boolean }) {
   const initialEmp = empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" };
   const initialCli = clientes.find(c => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" };
   
@@ -1614,7 +1646,7 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
       if (printerType === "bluetooth" || printerType === "serial") {
         const runPhysicalPrint = async () => {
           try {
-            const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido);
+            const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion);
             const success = await printDirectRaw(bytes, tenant.config);
             if (success) {
               toast.success("¡Ticket impreso en impresora física!");
@@ -1662,6 +1694,7 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
           formato={tenant.config?.formato_ticket || "80mm"} 
           serviciosList={srvList}
           pagoRecibido={pagoRecibido}
+          ocultarUbicacion={ocultarUbicacion}
         />
       </div>
 
@@ -2150,6 +2183,8 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   const [entregarAlCobrar] = useState<boolean>(true);
   const [loading, setLoading] = useState<boolean>(false);
   const [showCondonar, setShowCondonar] = useState<boolean>(false);
+  const [referencia, setReferencia] = useState("");
+  const [showRefInput, setShowRefInput] = useState(false);
 
   const totalCobrar = orden.saldo;
   const vuelto = metodo === "EFECTIVO" && recibido > totalCobrar ? recibido - totalCobrar : 0;
@@ -2159,6 +2194,8 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
   const handleMetodoChange = (m: MetodoPago) => {
     setMetodo(m);
+    setReferencia("");
+    setShowRefInput(false);
     if (m !== "EFECTIVO" && recibido > totalCobrar) {
       setRecibido(totalCobrar);
     }
@@ -2198,7 +2235,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       const fiscalConfig = await getECFConfig(tenant.id);
       const isElectronic = !!fiscalConfig?.is_active;
 
-      if (tenant.config?.ncf_facturacion_activa && !orden.ncf) {
+      if (tenant.config?.ncf_facturacion_activa && !orden.ncf && nuevoSaldo === 0) {
         const isEmpresa = cli.tipo === "Empresa" || (cli.cedula && cli.cedula.length >= 9);
         const tipoECFDefault = isElectronic 
           ? (isEmpresa ? "E31" : "E32")
@@ -2256,7 +2293,8 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       }
 
       // 1. Guardar la orden con los saldos actualizados, el nuevo estado y datos fiscales
-      const ordenActualizada: Orden = {
+      // Use cleanOrden to strip runtime-only fields (e.g. CXCOrden extras) before Supabase upsert
+      const ordenActualizada: Orden = cleanOrden({
         ...orden,
         pagado: nuevoPagado,
         saldo: nuevoSaldo,
@@ -2268,8 +2306,9 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         ecf_id: finalEcfId,
         ecf_qr: finalEcfQr,
         ecf_security_code: finalEcfSecurityCode,
-        ecf_signature_date: finalEcfSignatureDate
-      };
+        ecf_signature_date: finalEcfSignatureDate,
+        pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : orden.pago_referencia
+      });
 
       await saveOrden(ordenActualizada);
 
@@ -2467,7 +2506,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               {/* Header Title */}
               <div>
                 <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  Registrar Pago <Sparkles className="h-4 w-4 text-amber-500" />
+                  Registrar Pago
                 </h3>
                 <p className="text-[11px] text-slate-600 dark:text-slate-300 font-bold mt-0.5">
                   Selecciona la forma de pago e ingresa el monto.
@@ -2552,6 +2591,47 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 )}
               </div>
 
+              {/* Referencia de Transacción para Tarjeta/Transferencia */}
+              {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                    Referencia de Transacción
+                  </label>
+                  {!showRefInput ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowRefInput(true)}
+                      className="w-full h-10 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer text-xs"
+                    >
+                      <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={referencia}
+                        onChange={(e) => setReferencia(e.target.value)}
+                        placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
+                        className="h-10 bg-white border-2 border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium text-xs"
+                        autoFocus
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          setReferencia("");
+                          setShowRefInput(false);
+                        }}
+                        className="h-10 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-1.5 cursor-pointer text-xs border-none"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Quitar
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Indicador de Vuelto / Faltante */}
               {metodo === "EFECTIVO" ? (
                 <div className={`p-2.5 px-3.5 rounded-xl border transition-all flex items-center justify-between ${
@@ -2565,7 +2645,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                     </div>
                     <div>
                       <span className="text-[11px] font-extrabold uppercase tracking-wider block">
-                        {faltante > 0 ? "Falta por Cobrar" : "Vuelto a Entregar"}
+                        {faltante > 0 ? "Falta por Cobrar" : "Cambio a Entregar"}
                       </span>
                       <span className="text-[9px] font-bold opacity-90 block">
                         {faltante > 0 ? "Saldo restante" : "Cambio para el cliente"}

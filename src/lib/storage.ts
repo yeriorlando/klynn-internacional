@@ -166,7 +166,7 @@ export interface Cliente {
 }
 
 export type EstadoOrden = "RECIBIDA" | "EN_PROCESO" | "LISTA" | "EN_CAMINO" | "ENTREGADA" | "PAGADA" | "ANULADA";
-export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "CREDITO" | "MIXTO";
+export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "CREDITO" | "MIXTO" | "PAGO_AL_RETIRAR";
 
 export interface OrdenItem {
   descripcion: string;
@@ -218,6 +218,7 @@ export interface Orden {
   ecf_security_code?: string;
   ecf_signature_date?: string;
   ncf_vencimiento?: string;
+  pago_referencia?: string;
 }
 
 // ============ ECF Types ============

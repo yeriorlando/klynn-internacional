@@ -1760,6 +1760,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
   const card = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);
   const transfer = ordenes.filter(o => o.metodo_pago === 'TRANSFERENCIA').reduce((s, o) => s + o.total, 0);
   const credit = ordenes.filter(o => o.metodo_pago === 'CREDITO').reduce((s, o) => s + o.total, 0);
+  const retirar = ordenes.filter(o => o.metodo_pago === 'PAGO_AL_RETIRAR').reduce((s, o) => s + o.total, 0);
   const ventasContado = cash + card + transfer;
   const ventasCredito = credit;
   const totalFacturado = total;
@@ -1816,6 +1817,9 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
           <div className="space-y-1">
             <div className="flex justify-between"><span>Ventas al Contado:</span> <span>{formatRD(ventasContado)}</span></div>
             <div className="flex justify-between"><span>Ventas a Crédito:</span> <span>{formatRD(ventasCredito)}</span></div>
+            {retirar > 0 && (
+              <div className="flex justify-between"><span>Pago al Retirar:</span> <span>{formatRD(retirar)}</span></div>
+            )}
             <div className="border-t border-dashed border-black my-1" />
             <div className="flex justify-between font-bold">
               <span>TOTAL FACTURADO:</span> <span>{formatRD(totalFacturado)}</span>
@@ -1857,12 +1861,13 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
              </div>
              {ordenes.map(o => {
                 const isCredito = o.metodo_pago === "CREDITO";
+                const label = o.metodo_pago === "CREDITO" ? "CRE" : o.metodo_pago === "PAGO_AL_RETIRAR" ? "PAR" : o.metodo_pago?.substring(0,3);
                 const abono = movimientos?.find(m => m.concepto.includes(o.numero) && m.concepto.includes("Abono inicial"))?.monto || 0;
                 
                 return (
                   <div key={o.id} className="flex flex-col">
                     <div className="flex justify-between font-medium">
-                      <span>{o.numero} ({isCredito ? 'CRE' : o.metodo_pago?.substring(0,3)})</span>
+                      <span>{o.numero} ({label})</span>
                       <span>{formatRD(o.total)}</span>
                     </div>
                     {isCredito && (

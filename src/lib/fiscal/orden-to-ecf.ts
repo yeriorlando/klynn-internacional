@@ -41,6 +41,7 @@ function metodoPagoToForms(metodo: Orden['metodo_pago'], total: number): Payment
     case 'TARJETA':       return [{ method: '3', amount: total }];
     case 'TRANSFERENCIA': return [{ method: '2', amount: total }];
     case 'CREDITO':       return [{ method: '4', amount: total }];
+    case 'PAGO_AL_RETIRAR': return [{ method: '4', amount: total }];
     case 'MIXTO':
       // Dividimos en efectivo + tarjeta como aproximación
       return [

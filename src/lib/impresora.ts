@@ -165,7 +165,8 @@ export function encodeEscPos(
   cliente: Cliente,
   empleado: Empleado,
   serviciosList: any[],
-  pagoRecibido?: number
+  pagoRecibido?: number,
+  ocultarUbicacion?: boolean
 ): Uint8Array {
   const config = tenant.config || {};
   const formato = config.formato_ticket || "80mm";
@@ -248,7 +249,7 @@ export function encodeEscPos(
   if (cliente.telefono && cliente.telefono !== "---") {
     writeLine(`Tel: ${cliente.telefono}`);
   }
-  if (orden.ubicacion_ropa) {
+  if (orden.ubicacion_ropa && !ocultarUbicacion) {
     writeLine(`Ubicacion Ropa: ${orden.ubicacion_ropa}`);
   }
   writeLine("=".repeat(columns));

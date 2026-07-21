@@ -8,7 +8,8 @@ import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
   Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
   ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles,
-  CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays
+  CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays, FileText,
+  Building2, Banknote
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -258,11 +259,15 @@ function NuevaOrdenPage() {
   const [recibido, setRecibido] = useState<number>(0);
   const [isCreatingOrden, setIsCreatingOrden] = useState(false);
   const [abonoCredito, setAbonoCredito] = useState<number>(0);
+  const [referencia, setReferencia] = useState("");
+  const [showRefInput, setShowRefInput] = useState(false);
 
   const handleOpcionPagoChange = (opcionId: string) => {
     setOpcionPagoSelected(opcionId);
+    setReferencia("");
+    setShowRefInput(false);
     if (opcionId === "PAGO_AL_RETIRAR") {
-      setMetodo("CREDITO");
+      setMetodo("PAGO_AL_RETIRAR");
       setAbonoCredito(0);
     } else {
       setMetodo(opcionId as MetodoPago);
@@ -799,7 +804,7 @@ function NuevaOrdenPage() {
       let ncfVencimiento: string | undefined = undefined;
       let finalNCF: string | undefined = undefined;
 
-      if (cfg.ncf_facturacion_activa && !isElectronic && opcionPagoSelected !== "PAGO_AL_RETIRAR") {
+      if (cfg.ncf_facturacion_activa && !isElectronic && opcionPagoSelected !== "PAGO_AL_RETIRAR" && opcionPagoSelected !== "CREDITO") {
         try {
           const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
           finalNCF = nextNCF;
@@ -849,11 +854,12 @@ function NuevaOrdenPage() {
         ncf_vencimiento: ncfVencimiento,
         entrega_domicilio: servicioDomicilio || undefined,
         costo_envio: servicioDomicilio && costoEnvio > 0 ? costoEnvio : undefined,
+        pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : undefined,
       };
 
       // --- LOGICA FISCAL ELECTRONICA (Pronesoft) ---
       let ordenActualizada = { ...orden };
-      if (isElectronic && activeTipo && opcionPagoSelected !== "PAGO_AL_RETIRAR") {
+      if (isElectronic && activeTipo && opcionPagoSelected !== "PAGO_AL_RETIRAR" && opcionPagoSelected !== "CREDITO") {
         try {
           let nextNCF: string | undefined = undefined;
 
@@ -2298,13 +2304,14 @@ function NuevaOrdenPage() {
 
                   <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 max-w-4xl mx-auto w-full">
                     {[
-                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️", color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
-                      { id: "EFECTIVO", label: "Efectivo", icon: "💵", color: "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700" },
-                      { id: "TARJETA", label: "Tarjeta", icon: "💳", color: "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700" },
-                      { id: "TRANSFERENCIA", label: "Transferencia", icon: "🏦", color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700" },
-                      { id: "CREDITO", label: "Crédito", icon: "📝", color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700" }
+                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: Timer, color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
+                      { id: "EFECTIVO", label: "Efectivo", icon: Banknote, color: "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700" },
+                      { id: "TARJETA", label: "Tarjeta", icon: CreditCard, color: "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700" },
+                      { id: "TRANSFERENCIA", label: "Transferencia", icon: Building2, color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700" },
+                      { id: "CREDITO", label: "Crédito", icon: FileText, color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700" }
                     ].map((m) => {
                       const isSelected = opcionPagoSelected === m.id;
+                      const Icon = m.icon;
                       return (
                         <button
                           key={m.id}
@@ -2312,14 +2319,14 @@ function NuevaOrdenPage() {
                           onClick={() => handleOpcionPagoChange(m.id)}
                           className={`relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-5 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${isSelected
                             ? `bg-gradient-to-br ${m.color} ring-2 ring-primary/20 shadow-md scale-102`
-                            : "border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm"
+                            : "border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm text-slate-500"
                             }`}
                         >
-                          <div className={`flex h-12 w-12 items-center justify-center rounded-full text-2xl transition-transform duration-300 group-hover:scale-105 shadow-inner ${isSelected ? "bg-white dark:bg-slate-900" : "bg-slate-100 dark:bg-slate-800"
+                          <div className={`flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-300 group-hover:scale-105 shadow-inner ${isSelected ? "bg-white dark:bg-slate-900" : "bg-slate-100 dark:bg-slate-800"
                             }`}>
-                            {m.icon}
+                            <Icon className="h-6 w-6 shrink-0" />
                           </div>
-                          <div className={`font-black text-xs uppercase tracking-wider ${isSelected ? "font-black" : "text-slate-600 dark:text-slate-400"
+                          <div className={`font-black text-xs uppercase tracking-wider ${isSelected ? "font-black text-inherit" : "text-slate-600 dark:text-slate-400"
                             }`}>
                             {m.label}
                           </div>
@@ -2404,6 +2411,48 @@ function NuevaOrdenPage() {
                             {formatRD(faltante > 0 ? faltante : vuelto)}
                           </div>
                         </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
+                    <div className="mt-4 rounded-2xl border-2 border-border/60 bg-accent/5 p-6 animate-in fade-in slide-in-from-top-1 duration-200 max-w-4xl mx-auto w-full">
+                      <div className="flex flex-col gap-3">
+                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                          Referencia de Transacción
+                        </Label>
+                        {!showRefInput ? (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => setShowRefInput(true)}
+                            className="w-full h-12 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer"
+                          >
+                            <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
+                          </Button>
+                        ) : (
+                          <div className="flex gap-2">
+                            <Input
+                              type="text"
+                              value={referencia}
+                              onChange={(e) => setReferencia(e.target.value)}
+                              placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
+                              className="h-12 bg-white border-2 border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium"
+                              autoFocus
+                            />
+                            <Button
+                              type="button"
+                              variant="destructive"
+                              onClick={() => {
+                                setReferencia("");
+                                setShowRefInput(false);
+                              }}
+                              className="h-12 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-2 cursor-pointer border-none"
+                            >
+                              <Trash2 className="h-4 w-4" /> Quitar
+                            </Button>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -2844,33 +2893,47 @@ function NuevaOrdenPage() {
       />
 
       <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
-        <DialogContent className="max-w-4xl p-6 rounded-3xl overflow-y-auto max-h-[90vh] custom-scrollbar">
+        <DialogContent className="max-w-2xl p-5 rounded-2xl overflow-y-auto max-h-[95vh] custom-scrollbar">
           <DialogHeader>
-            <DialogTitle className="text-2xl font-display font-bold text-foreground">Panel de Cobro</DialogTitle>
+            <DialogTitle className="text-xl font-display font-bold text-foreground">Panel de Cobro</DialogTitle>
             <DialogDescription className="sr-only">
               Selecciona el método de pago y confirma la creación de la orden.
             </DialogDescription>
           </DialogHeader>
 
-          <div className="py-2 space-y-6">
-            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-4">
+          <div className="py-1 space-y-4">
+            <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-2">
               {[
-                { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: "⏱️" },
-                { id: "EFECTIVO", label: "Efectivo", icon: "💵" },
-                { id: "TARJETA", label: "Tarjeta", icon: "💳" },
-                { id: "TRANSFERENCIA", label: "Transf.", icon: "🏦" },
-                { id: "CREDITO", label: "Crédito", icon: "📝" }
-              ].map((m) => (
-                <button key={m.id} onClick={() => handleOpcionPagoChange(m.id)}
-                  className={`relative flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all active:scale-95 ${opcionPagoSelected === m.id
-                    ? "border-primary bg-primary/5 ring-1 ring-primary shadow-glow"
-                    : "border-border bg-card hover:border-primary/40"
-                    }`}>
-                  <span className="text-2xl">{m.icon}</span>
-                  <div className="font-bold text-xs uppercase tracking-tight">{m.label}</div>
-                  {opcionPagoSelected === m.id && <div className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />}
-                </button>
-              ))}
+                { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: Timer, color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
+                { id: "EFECTIVO", label: "Efectivo", icon: Banknote, color: "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700" },
+                { id: "TARJETA", label: "Tarjeta", icon: CreditCard, color: "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700" },
+                { id: "TRANSFERENCIA", label: "Transf.", icon: Building2, color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700" },
+                { id: "CREDITO", label: "Crédito", icon: FileText, color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700" }
+              ].map((m) => {
+                const isSelected = opcionPagoSelected === m.id;
+                const Icon = m.icon;
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() => handleOpcionPagoChange(m.id)}
+                    className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${isSelected
+                      ? `bg-gradient-to-br ${m.color} ring-1 ring-primary shadow-glow scale-102`
+                      : "border-border bg-card hover:border-primary/40 hover:shadow-xs text-slate-500"
+                      }`}
+                  >
+                    <Icon className="h-5 w-5 transition-transform duration-300 group-hover:scale-105 shrink-0" />
+                    <div className={`font-bold text-xs uppercase tracking-tight ${isSelected ? "font-black text-inherit" : "text-foreground"}`}>
+                      {m.label}
+                    </div>
+                    {isSelected && (
+                      <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
+                        <Check className="h-2 w-2 stroke-[3]" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
@@ -2911,13 +2974,13 @@ function NuevaOrdenPage() {
             )}
 
             {metodo === "EFECTIVO" && (
-              <div className="rounded-3xl border-2 border-border/60 bg-accent/5 p-4 mb-4">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-center">
+              <div className="rounded-2xl border border-border/60 bg-accent/5 p-3 mb-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
                   <Field label="Monto recibido">
-                    <div className="relative h-24">
-                      <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">RD$</span>
+                    <div className="relative h-16">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/50">RD$</span>
                       <PriceInput
-                        className="!h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30 rounded-2xl"
+                        className="!h-full pl-16 !text-3xl font-black font-display bg-background border border-primary/20 focus-visible:ring-primary/30 rounded-xl"
                         value={recibido}
                         onChange={(val) => {
                           if (val > 100000000) return;
@@ -2928,19 +2991,58 @@ function NuevaOrdenPage() {
                     </div>
                   </Field>
 
-                  <div className={`flex flex-col items-center justify-center h-28 px-4 rounded-2xl border-2 transition-all duration-300 ${faltante > 0
-                    ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                    : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
-                    }`}>
-                    <div className="text-[10px] font-black uppercase tracking-widest opacity-70 mb-1 text-center">
-                      {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
-                    </div>
-                    <div className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 9999999 ? "text-xl" :
-                      (faltante > 0 ? faltante : vuelto) > 999999 ? "text-2xl" : "text-4xl"
+                  <Field label={faltante > 0 ? "Faltante" : "Cambio a entregar"}>
+                    <div className={`flex items-center justify-center h-16 px-4 rounded-xl border transition-all duration-300 ${faltante > 0
+                      ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
+                      : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
                       }`}>
-                      {formatRD(faltante > 0 ? faltante : vuelto)}
+                      <div className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 999999 ? "text-lg" : "text-2xl"}`}>
+                        {formatRD(faltante > 0 ? faltante : vuelto)}
+                      </div>
                     </div>
-                  </div>
+                  </Field>
+                </div>
+              </div>
+            )}
+
+            {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
+              <div className="rounded-xl border border-border/60 bg-accent/5 p-4 mb-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex flex-col gap-2">
+                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                    Referencia de Transacción
+                  </Label>
+                  {!showRefInput ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setShowRefInput(true)}
+                      className="w-full h-10 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer text-xs"
+                    >
+                      <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
+                    </Button>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        type="text"
+                        value={referencia}
+                        onChange={(e) => setReferencia(e.target.value)}
+                        placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
+                        className="h-10 bg-white border border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium text-xs"
+                        autoFocus
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        onClick={() => {
+                          setReferencia("");
+                          setShowRefInput(false);
+                        }}
+                        className="h-10 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-2 cursor-pointer border-none text-xs"
+                      >
+                        <Trash2 className="h-4 w-4" /> Quitar
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
