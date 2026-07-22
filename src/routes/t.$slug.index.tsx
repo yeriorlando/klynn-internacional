@@ -120,7 +120,7 @@ function DashboardPage() {
     const ventasHoy = ordenesHoy.filter((o) => o.estado !== "ANULADA").reduce((s, o) => s + o.total, 0);
     const activas = ordenes.filter((o) => ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado));
     const listas = ordenes.filter((o) => o.estado === "LISTA");
-    const cuentasCobrar = ordenes.filter((o) => o.saldo > 0 && o.estado !== "ANULADA");
+    const cuentasCobrar = ordenes.filter((o) => o.saldo > 0 && o.estado !== "ANULADA" && o.metodo_pago === "CREDITO");
     const totalCxC = cuentasCobrar.reduce((s, o) => s + o.saldo, 0);
     const gastosHoy = gastos.filter((g) => new Date(g.fecha) >= hoy).reduce((s, g) => s + g.monto, 0);
 
@@ -473,23 +473,35 @@ function DashboardPage() {
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
                     <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
                         {o.saldo > 0 ? (
-                          <button
-                            onClick={() => o.estado !== "ANULADA" && setCobrarOrden(o)}
-                            className="transition-transform active:scale-95 cursor-pointer"
-                            title="Cobrar saldo de esta orden"
-                          >
-                            <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
-                              {formatRD(o.saldo)}
-                            </Badge>
-                          </button>
+                          <>
+                            <button
+                              onClick={() => o.estado !== "ANULADA" && setCobrarOrden(o)}
+                              className="transition-transform active:scale-95 cursor-pointer"
+                              title="Cobrar saldo de esta orden"
+                            >
+                              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
+                                {formatRD(o.saldo)}
+                              </Badge>
+                            </button>
+                            {o.estado !== "ANULADA" && (o.metodo_pago === "PAGO_AL_RETIRAR" || o.metodo_pago === "CREDITO") && (
+                              <button
+                                onClick={() => setCobrarOrden(o)}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                              >
+                                <DollarSign className="h-2.5 w-2.5" /> Cobrar
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center text-xs">{o.metodo_pago}</td>
+                    <td className="px-4 py-3 text-center text-xs">
+                      {o.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : o.metodo_pago}
+                    </td>
                     <td className="px-4 py-3 text-center text-xs">
                       <div className="flex flex-col items-center gap-1">
                         <span className="font-semibold">

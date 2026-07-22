@@ -36,7 +36,7 @@ import {
   checkPlanLimits, getECFConfig, getECFSequences, nextECFNumero, saveECFDocument,
   isModuleEnabled,
   type Cliente, type OrdenItem, type MetodoPago, type Orden, type CatalogoItem, type Servicio, type Caja,
-  type ECFConfig, type ECFSequence, type ECFDocument, NCF_NOMBRES
+  type ECFConfig, type ECFSequence, type ECFDocument, type Empleado, NCF_NOMBRES
 } from "@/lib/storage";
 import { emitirECF } from "@/lib/fiscal";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
@@ -254,7 +254,7 @@ function NuevaOrdenPage() {
     }
   }, [validTipos, tipoECF]);
 
-  const [metodo, setMetodo] = useState<MetodoPago>("CREDITO");
+  const [metodo, setMetodo] = useState<MetodoPago>("PAGO_AL_RETIRAR");
   const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("PAGO_AL_RETIRAR");
   const [recibido, setRecibido] = useState<number>(0);
   const [isCreatingOrden, setIsCreatingOrden] = useState(false);
@@ -727,7 +727,11 @@ function NuevaOrdenPage() {
   async function onCrearOrden() {
     if (isCreatingOrden) return;
     setIsCreatingOrden(true);
-    if (limits?.ordersReached) { setShowLimitModal(true); setIsCreatingOrden(false); return; }
+    if (opcionPagoSelected === "CREDITO" && (!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))) {
+      toast.error("Las ventas a crédito deben asignarse a un cliente registrado.");
+      setIsCreatingOrden(false);
+      return;
+    }
     let targetCliente: Cliente | null = cliente;
     if (!targetCliente) {
       const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
@@ -783,8 +787,10 @@ function NuevaOrdenPage() {
     }
 
     try {
-      const pagado = metodo === "CREDITO" ? abonoCredito : total;
-      const saldo = total - pagado;
+      const pagado = opcionPagoSelected === "PAGO_AL_RETIRAR" 
+        ? 0 
+        : (opcionPagoSelected === "CREDITO" ? abonoCredito : total);
+      const saldo = +Math.max(0, total - pagado).toFixed(2);
 
       const numero = await nextOrdenNumero(tenant.id);
 
@@ -902,19 +908,18 @@ function NuevaOrdenPage() {
         await saveOrden(orden);
       }
 
-      // Registrar movimiento de caja si se recibió un pago (ventas normales o abono de crédito)
-      if ((metodo !== "CREDITO" || abonoCredito > 0) && caja) {
-        const montoMov = metodo === "CREDITO" ? abonoCredito : total;
+      // Registrar movimiento de caja ÚNICAMENTE si se recibió un pago real (pagado > 0)
+      if (pagado > 0 && caja) {
         await saveMovimiento({
           id: uid("mov"),
           tenant_id: tenant.id,
           caja_id: caja.id,
           empleado_id: empleado.id,
-          tipo: "VENTA",
+          tipo: metodo === "CREDITO" ? "ABONO" : "VENTA",
           concepto: metodo === "CREDITO"
             ? `Abono inicial orden #${ordenActualizada.numero}`
             : `Venta orden #${ordenActualizada.numero}`,
-          monto: montoMov,
+          monto: pagado,
           metodo: metodo === "CREDITO" ? "EFECTIVO" : metodo,
           orden_id: ordenActualizada.id,
           creado_en: new Date().toISOString(),
@@ -1153,7 +1158,19 @@ function NuevaOrdenPage() {
 
             <DeliveryPOSDialog
               open={showDeliveryPOS}
-              onOpenChange={setShowDeliveryPOS}
+              onOpenChange={(isOpen) => {
+                setShowDeliveryPOS(isOpen);
+                if (!isOpen && cliente) {
+                  const isGenericClient = cliente.nombre === "Consumidor" && cliente.apellido === "Final";
+                  if (!isGenericClient && direccionDomicilio.trim() && direccionDomicilio.trim() !== cliente.direccion) {
+                    const updatedCliente = { ...cliente, direccion: direccionDomicilio.trim() };
+                    setCliente(updatedCliente);
+                    saveCliente(updatedCliente).then(() => {
+                      queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+                    });
+                  }
+                }
+              }}
               enabled={servicioDomicilio}
               setEnabled={setServicioDomicilio}
               address={direccionDomicilio}
@@ -1167,6 +1184,7 @@ function NuevaOrdenPage() {
               onOpenChange={setShowDiscountPOS}
               discount={descuento}
               setDiscount={setDescuento}
+              empleado={user?.empleado}
             />
 
             <DeliveryDatePickerPOSDialog
@@ -2162,7 +2180,15 @@ function NuevaOrdenPage() {
                             value={descuento}
                             onChange={(e) => {
                               const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                              setDescuento(val);
+                              const maxLimit = user?.empleado?.rol === "ADMIN" 
+                                ? 100 
+                                : (user?.empleado?.max_descuento_porcentaje ?? 100);
+                              if (val > maxLimit) {
+                                toast.error(`Límite permitido: ${maxLimit}%`);
+                                setDescuento(maxLimit);
+                              } else {
+                                setDescuento(val);
+                              }
                             }}
                             placeholder="0"
                             className="h-9"
@@ -2189,6 +2215,18 @@ function NuevaOrdenPage() {
                                 <Input
                                   value={direccionDomicilio}
                                   onChange={(e) => setDireccionDomicilio(e.target.value)}
+                                  onBlur={() => {
+                                    if (cliente) {
+                                      const isGenericClient = cliente.nombre === "Consumidor" && cliente.apellido === "Final";
+                                      if (!isGenericClient && direccionDomicilio.trim() && direccionDomicilio.trim() !== cliente.direccion) {
+                                        const updatedCliente = { ...cliente, direccion: direccionDomicilio.trim() };
+                                        setCliente(updatedCliente);
+                                        saveCliente(updatedCliente).then(() => {
+                                          queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+                                        });
+                                      }
+                                    }
+                                  }}
                                   placeholder="Calle, No., Sector..."
                                   className="bg-background"
                                 />
@@ -3435,12 +3473,17 @@ function DeliveryPOSDialog({
 }
 
 function DiscountPOSDialog({
-  open, onOpenChange, discount, setDiscount
+  open, onOpenChange, discount, setDiscount, empleado
 }: {
   open: boolean; onOpenChange: (o: boolean) => void;
   discount: number; setDiscount: (d: number) => void;
+  empleado?: Empleado;
 }) {
   const [val, setVal] = useState(discount > 0 ? String(discount) : "");
+
+  const maxLimit = empleado?.rol === "ADMIN" 
+    ? 100 
+    : (empleado?.max_descuento_porcentaje ?? 100);
 
   useEffect(() => {
     if (open) {
@@ -3452,6 +3495,10 @@ function DiscountPOSDialog({
     const num = parseFloat(val) || 0;
     if (num < 0 || num > 100) {
       toast.warning("El porcentaje de descuento debe estar entre 0% y 100%");
+      return;
+    }
+    if (num > maxLimit) {
+      toast.error(`Límite permitido: ${maxLimit}%`);
       return;
     }
     setDiscount(num);
@@ -3486,7 +3533,14 @@ function DiscountPOSDialog({
             />
             <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">%</span>
           </div>
-          <p className="text-xs text-muted-foreground text-center">El descuento se calculará como un porcentaje del total final de la orden.</p>
+          <p className="text-xs text-muted-foreground text-center">
+            El descuento se aplicará al total de la orden.
+            {maxLimit < 100 && (
+              <span className="block mt-1.5 font-bold text-amber-600 dark:text-amber-400">
+                Límite permitido: {maxLimit}%
+              </span>
+            )}
+          </p>
         </div>
         <DialogFooter className="gap-2">
           <Button variant="outline" onClick={() => { setDiscount(0); onOpenChange(false); }} className="flex-1 h-11 rounded-md border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold">

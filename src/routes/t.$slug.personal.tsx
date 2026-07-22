@@ -141,8 +141,8 @@ function PersonalPage() {
 }
 
 function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; empleado: Empleado | null; tenantId: string; onDone: () => void }) {
-  const empty = { nombre: "", apellido: "", email: "", password: "", pin: "", rol: "VENDEDOR" as RolEmpleado, activo: true, permisos: getPermisosPorRol("VENDEDOR") };
-  const [f, setF] = useState(empleado ? { ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol) } : empty);
+  const empty = { nombre: "", apellido: "", email: "", password: "", pin: "", rol: "VENDEDOR" as RolEmpleado, activo: true, permisos: getPermisosPorRol("VENDEDOR"), max_descuento_porcentaje: 10 };
+  const [f, setF] = useState(empleado ? { ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? 10 } : empty);
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -150,7 +150,7 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
   useEffect(() => {
     setStep(1);
     if (empleado) {
-      setF({ ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), password: "" });
+      setF({ ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? (empleado.rol === "ADMIN" ? 100 : 10), password: "" });
     } else {
       setF(empty);
     }
@@ -178,15 +178,19 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
   };
 
   function handleNext() {
-    if (!f.nombre.trim() || !f.apellido.trim()) {
+    const nom = (f.nombre || "").trim();
+    const ape = (f.apellido || "").trim();
+    const em = (f.email || "").trim();
+
+    if (!nom || !ape) {
       toast.error("Por favor ingresa nombre y apellido del empleado");
       return;
     }
-    if (!f.email.trim() || !f.email.includes("@")) {
+    if (!em || !em.includes("@")) {
       toast.error("Ingresa un correo electrónico válido");
       return;
     }
-    if (!empleado && f.password.length < 8) {
+    if (!empleado && (f.password || "").length < 8) {
       toast.error("La contraseña inicial debe tener al menos 8 caracteres");
       return;
     }
@@ -194,12 +198,16 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
   }
 
   async function submit() {
-    if (!f.nombre.trim() || !f.apellido.trim() || !f.email.includes("@")) {
+    const nom = (f.nombre || "").trim();
+    const ape = (f.apellido || "").trim();
+    const em = (f.email || "").trim();
+
+    if (!nom || !ape || !em.includes("@")) {
       toast.error("Nombre, apellido y email válidos requeridos");
       setStep(1);
       return;
     }
-    if (!empleado && f.password.length < 8) {
+    if (!empleado && (f.password || "").length < 8) {
       toast.error("La contraseña inicial debe tener al menos 8 caracteres");
       setStep(1);
       return;
@@ -218,6 +226,7 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
         rol: f.rol,
         activo: f.activo,
         permisos: f.permisos,
+        max_descuento_porcentaje: f.rol === "ADMIN" ? 100 : Number(f.max_descuento_porcentaje) || 0,
         creado_en: empleado?.creado_en || new Date().toISOString(),
       };
       await saveEmpleado(e);
@@ -472,6 +481,33 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                   </p>
                 </div>
               )}
+
+              {/* Límite de Descuento Permitido */}
+              <div className="p-2.5 px-3 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                    Descuento Máximo Permitido
+                  </div>
+                  <p className="text-[10px] text-amber-700/90 dark:text-amber-300/80 leading-tight">
+                    Porcentaje máximo de descuento que este usuario podrá aplicar en POS / Nueva Orden.
+                  </p>
+                </div>
+                <div className="relative w-24 shrink-0">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    disabled={f.rol === "ADMIN"}
+                    value={f.rol === "ADMIN" ? 100 : (f.max_descuento_porcentaje ?? 10)}
+                    onChange={(e) => {
+                      const num = Math.min(100, Math.max(0, Number(e.target.value) || 0));
+                      setF({ ...f, max_descuento_porcentaje: num });
+                    }}
+                    className="h-8 text-center font-black text-xs rounded-xl bg-white dark:bg-slate-900 border-amber-300/80 dark:border-amber-700/80 pr-6"
+                  />
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-600 dark:text-amber-400 pointer-events-none">%</span>
+                </div>
+              </div>
 
               {/* Grid of Permissions */}
               <ScrollArea className="h-[220px] pr-1.5">

@@ -122,11 +122,11 @@ export default function CuentasPorCobrarPage() {
           .filter(Boolean) || []
       );
 
-      // Filtrar créditos pendientes
+      // Filtrar únicamente órdenes a CRÉDITO pendientes (o con movimientos de crédito)
       const ordenesFiltradas = ordenesRaw.filter(o => 
         o.saldo > 0 && 
         o.estado !== "ANULADA" && 
-        o.metodo_pago !== "PAGO_AL_RETIRAR"
+        (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id))
       );
 
       // Filtrar créditos saldados (originalmente crédito y con saldo 0)
@@ -1090,9 +1090,7 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, c
 
         const nuevoPagado = Number((o.pagado + montoAPagarOrden).toFixed(2));
         const nuevoSaldo = Number((totalCobrarOrden - montoAPagarOrden).toFixed(2));
-        const nuevoEstado: EstadoOrden = o.estado === "ENTREGADA" 
-          ? "ENTREGADA" 
-          : (nuevoSaldo === 0 ? "PAGADA" : o.estado);
+        const nuevoEstado: EstadoOrden = o.estado;
 
         let finalNCF: string | undefined = o.ncf;
         let finalNcfVencimiento: string | undefined = o.ncf_vencimiento;
@@ -1173,7 +1171,7 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, c
           pagado: nuevoPagado,
           saldo: nuevoSaldo,
           estado: nuevoEstado,
-          metodo_pago: o.pagado > 0 ? "MIXTO" : metodo,
+          metodo_pago: o.metodo_pago === "CREDITO" ? "CREDITO" : o.metodo_pago,
           ncf: finalNCF,
           ncf_vencimiento: finalNcfVencimiento,
           tipo_ecf: finalTipoECF,

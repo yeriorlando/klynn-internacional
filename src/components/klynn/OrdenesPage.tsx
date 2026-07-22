@@ -19,7 +19,7 @@ import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
   type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago,
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
-  updateOrdenEstado
+  updateOrdenEstado, can
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import { toast } from "sonner";
@@ -110,6 +110,12 @@ export function OrdenesPage() {
   const { data: ecfConfig } = useECFConfig(tenantId);
   const searchParams = useSearch({ strict: false }) as { view?: string };
 
+  const emp = user?.empleado;
+  const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
+  const hasNotaDebito = emp ? can(emp, "nota-debito") : false;
+  const hasAnularOrden = emp ? can(emp, "anular-orden") : false;
+  const hasCondonarDeuda = emp ? can(emp, "condonar-deuda") : false;
+
   const [limits, setLimits] = useState<any>({ orderLimit: null, orderCount: 0, ordersReached: false });
   const [loadingLimits, setLoadingLimits] = useState(false);
 
@@ -163,9 +169,19 @@ export function OrdenesPage() {
       if (!q) return true;
       const c = clientes.find((x) => x.id === o.cliente_id);
       const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
-      return o.numero.toLowerCase().includes(q.toLowerCase()) || 
-             nombreCompleto.toLowerCase().includes(q.toLowerCase()) ||
-             (o.pago_referencia && o.pago_referencia.toLowerCase().includes(q.toLowerCase()));
+      const searchLower = q.toLowerCase();
+      const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
+      const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
+      const totalStr = String(o.total);
+      const saldoStr = String(o.saldo);
+
+      return o.numero.toLowerCase().includes(searchLower) || 
+             nombreCompleto.toLowerCase().includes(searchLower) ||
+             (o.pago_referencia && o.pago_referencia.toLowerCase().includes(searchLower)) ||
+             dateStr.includes(searchLower) ||
+             dateStrFull.includes(searchLower) ||
+             totalStr.includes(searchLower) ||
+             saldoStr.includes(searchLower);
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
   }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, q]);
 
@@ -550,7 +566,7 @@ export function OrdenesPage() {
           <Input 
             value={searchPendientes} 
             onChange={(e) => setSearchPendientes(e.target.value)} 
-            placeholder="Buscar por número de orden, nombre de cliente o monto (ej: 590, KL-0147)..." 
+            placeholder="Buscar por número de orden, cliente, monto, fecha..." 
             className="pl-12 h-11 bg-background border border-primary/10 rounded-2xl focus-visible:ring-amber-500 font-medium" 
           />
         </Card>
@@ -560,6 +576,7 @@ export function OrdenesPage() {
           {(() => {
             const pendientesCobroList = ordenes.filter(o => 
               o.saldo > 0 && 
+              o.metodo_pago === "PAGO_AL_RETIRAR" &&
               o.estado !== "ENTREGADA" && 
               o.estado !== "ANULADA" &&
               ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado)
@@ -570,11 +587,15 @@ export function OrdenesPage() {
               const searchLower = searchPendientes.toLowerCase();
               const clienteObj = clientes.find(c => c.id === o.cliente_id);
               const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
+              const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
+              const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
               
               return o.numero.toLowerCase().includes(searchLower) ||
                      clienteNombre.includes(searchLower) ||
                      String(o.total).includes(searchLower) ||
-                     String(o.saldo).includes(searchLower);
+                     String(o.saldo).includes(searchLower) ||
+                     dateStr.includes(searchLower) ||
+                     dateStrFull.includes(searchLower);
             }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
 
             if (pendientesCobroList.length === 0) {
@@ -686,7 +707,13 @@ export function OrdenesPage() {
           </Button>
 
           {(() => {
-            const cantidadPendientes = ordenes.filter(o => o.saldo > 0 && o.estado !== "ANULADA").length;
+            const cantidadPendientes = ordenes.filter(o => 
+              o.saldo > 0 && 
+              o.metodo_pago === "PAGO_AL_RETIRAR" &&
+              o.estado !== "ENTREGADA" && 
+              o.estado !== "ANULADA" &&
+              ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado)
+            ).length;
             return (
               <Button
                 onClick={() => setShowPendientes(true)}
@@ -739,7 +766,7 @@ export function OrdenesPage() {
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
         <div className="relative flex-1 min-w-[200px]">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número o cliente..." className="pl-10" />
+          <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número de orden, cliente, monto, fecha..." className="pl-10" />
         </div>
         <Select value={filtroEntrega} onValueChange={(v: any) => setFiltroEntrega(v)}>
           <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
@@ -887,17 +914,27 @@ export function OrdenesPage() {
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
                     <td className="px-4 py-3 text-center">
-                      <div className="flex justify-center">
+                      <div className="flex flex-col items-center justify-center gap-1.5">
                         {o.saldo > 0 ? (
-                          <button
-                            onClick={() => o.estado !== "ANULADA" && setCobrarOrden(o)}
-                            className="transition-transform active:scale-95 cursor-pointer"
-                            title="Cobrar saldo de esta orden"
-                          >
-                            <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
-                              {formatRD(o.saldo)}
-                            </Badge>
-                          </button>
+                          <>
+                            <button
+                              onClick={() => o.estado !== "ANULADA" && setCobrarOrden(o)}
+                              className="transition-transform active:scale-95 cursor-pointer"
+                              title="Cobrar saldo de esta orden"
+                            >
+                              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
+                                {formatRD(o.saldo)}
+                              </Badge>
+                            </button>
+                            {o.estado !== "ANULADA" && (o.metodo_pago === "PAGO_AL_RETIRAR" || o.metodo_pago === "CREDITO") && (
+                              <button
+                                onClick={() => setCobrarOrden(o)}
+                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                              >
+                                <DollarSign className="h-2.5 w-2.5" /> Cobrar
+                              </button>
+                            )}
+                          </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -906,7 +943,7 @@ export function OrdenesPage() {
                     <td className="px-4 py-3 text-center text-xs">
                       <div className="flex flex-col items-center">
                         <span className="font-semibold text-slate-700 dark:text-slate-300">
-                          {o.metodo_pago === "PAGO_AL_RETIRAR" ? "PAR" : o.metodo_pago}
+                          {o.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : o.metodo_pago}
                         </span>
                         {o.pago_referencia && (
                           <span className="text-[9px] text-muted-foreground font-mono mt-0.5 px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 rounded border border-slate-200/50 dark:border-slate-700/50" title={`Referencia: ${o.pago_referencia}`}>
@@ -1280,37 +1317,37 @@ export function OrdenesPage() {
       {/* Modal de Estado de Orden */}
       <Dialog open={!!estadoModal} onOpenChange={(o) => { if (!o) setEstadoModal(null); }}>
         <DialogContent className="sm:max-w-3xl rounded-[24px] p-6 overflow-hidden bg-white shadow-2xl">
-          {/* Header */}
-          <div className="flex items-center gap-3 mb-4">
-            <div className={`h-10 w-10 rounded-full flex items-center justify-center text-white shrink-0 shadow-sm ${
-              estadoModal?.estado === "RECIBIDA" ? "bg-blue-500" :
-              estadoModal?.estado === "EN_PROCESO" ? "bg-amber-500" :
-              estadoModal?.estado === "LISTA" ? "bg-emerald-500" :
-              "bg-purple-500"
-            }`}>
-              {estadoModal?.estado === "RECIBIDA" && <Inbox className="h-5 w-5" />}
-              {estadoModal?.estado === "EN_PROCESO" && <RefreshCw className="h-5 w-5" />}
-              {estadoModal?.estado === "LISTA" && <CircleCheck className="h-5 w-5" />}
-              {estadoModal?.estado === "ENTREGADA" && <Truck className="h-5 w-5" />}
-            </div>
-            <div>
-              <DialogTitle className="text-lg font-black leading-tight text-slate-900">{estadoModal?.numero}</DialogTitle>
-              <div className="text-xs font-medium mt-0.5 flex items-center gap-1.5">
-                <span className="text-blue-600 uppercase tracking-wide">{clientes.find(c => c.id === estadoModal?.cliente_id)?.nombre || "Consumidor Final"}</span>
-                <span className="text-slate-400">•</span>
-                <span className="text-slate-500">Cambiar estado</span>
+          {/* Header Top Left */}
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2.5">
+              <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0 ${
+                estadoModal?.estado === "RECIBIDA" ? "bg-blue-500" :
+                estadoModal?.estado === "EN_PROCESO" ? "bg-amber-500" :
+                estadoModal?.estado === "LISTA" ? "bg-emerald-500" :
+                "bg-purple-500"
+              }`}>
+                {estadoModal?.estado === "RECIBIDA" && <Inbox className="h-4 w-4" />}
+                {estadoModal?.estado === "EN_PROCESO" && <RefreshCw className="h-4 w-4" />}
+                {estadoModal?.estado === "LISTA" && <CircleCheck className="h-4 w-4" />}
+                {estadoModal?.estado === "ENTREGADA" && <Truck className="h-4 w-4" />}
+              </div>
+              <div>
+                <DialogTitle className="text-sm font-black leading-tight text-slate-900">{estadoModal?.numero}</DialogTitle>
+                <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">
+                  {clientes.find(c => c.id === estadoModal?.cliente_id)?.nombre || "Consumidor Final"}
+                </div>
               </div>
             </div>
           </div>
           
-          {/* Título Central */}
-          <div className="text-center mb-5">
-            <h2 className="text-lg font-bold text-slate-900 mb-1">Cambiar estado de la orden</h2>
-            <p className="text-[13px] text-slate-500">Selecciona el nuevo estado para actualizar el progreso de esta orden.</p>
+          {/* Título Central Elevado */}
+          <div className="text-center mb-3 -mt-7 px-16">
+            <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">Cambiar estado de la orden</h2>
+            <p className="text-xs text-slate-500 font-medium">Selecciona el nuevo estado para actualizar el progreso de esta orden.</p>
           </div>
           
           {/* Tarjetas */}
-          <div className="grid grid-cols-4 gap-3 mb-6 px-1">
+          <div className="grid grid-cols-4 gap-2.5 mb-3.5 px-1">
             {([
               { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "La orden ha sido recibida y está pendiente de revisión." },
               { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "La orden está siendo procesada actualmente." },
@@ -1328,8 +1365,8 @@ export function OrdenesPage() {
               }[s.color]!;
 
               const cardClass = isCurrent 
-                ? `border-[1.5px] ${colorClasses.activeBorder} ${colorClasses.activeCardBg} shadow-sm`
-                : `border border-slate-200 bg-white hover:shadow-md hover:border-slate-300`;
+                ? `border-[1.5px] ${colorClasses.activeBorder} ${colorClasses.activeCardBg}`
+                : `border border-slate-200 bg-white hover:border-slate-300`;
 
               return (
                 <button
@@ -1346,39 +1383,120 @@ export function OrdenesPage() {
                     }
                   }}
                   disabled={isCurrent}
-                  className={`relative flex flex-col items-center justify-start text-center rounded-[16px] p-4 transition-all duration-200 active:scale-95 cursor-pointer ${cardClass}`}
+                  className={`relative flex flex-col items-center justify-start text-center rounded-[14px] p-2.5 py-3 transition-all duration-200 active:scale-95 cursor-pointer ${cardClass}`}
                 >
                   {isCurrent && (
-                    <div className={`absolute top-2.5 right-2.5 h-[18px] w-[18px] rounded-full flex items-center justify-center text-white shadow-sm ${colorClasses.activeCheckBg}`}>
-                      <Check className="h-3 w-3" strokeWidth={3} />
+                    <div className={`absolute top-2 right-2 h-[16px] w-[16px] rounded-full flex items-center justify-center text-white ${colorClasses.activeCheckBg}`}>
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
                     </div>
                   )}
-                  <div className={`h-[52px] w-[52px] rounded-full flex items-center justify-center mb-3 ${colorClasses.iconBg}`}>
-                    <Icon className={`h-6 w-6 ${colorClasses.iconColor}`} strokeWidth={2.5} />
+                  <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center mb-1.5 ${colorClasses.iconBg}`}>
+                    <Icon className={`h-5 w-5 ${colorClasses.iconColor}`} strokeWidth={2.5} />
                   </div>
-                  <h3 className="text-[15px] font-bold text-slate-900 mb-1.5">{s.label}</h3>
-                  <p className="text-[11px] text-slate-500 leading-snug font-medium">{s.desc}</p>
+                  <h3 className="text-xs font-bold text-slate-900 mb-0.5">{s.label}</h3>
+                  <p className="text-[10px] text-slate-500 leading-tight font-medium">{s.desc}</p>
                 </button>
               );
             })}
           </div>
 
-          <div className="flex justify-center gap-3">
-            <Button variant="outline" className="text-sm text-slate-700 font-semibold h-9 px-6 rounded-xl border-slate-200 hover:bg-slate-50" onClick={() => setEstadoModal(null)}>
+          {/* Acciones Adicionales / Notas, Condonación & Anulación */}
+          {estadoModal && estadoModal.estado !== "ANULADA" && (hasNotaCredito || hasNotaDebito || hasCondonarDeuda || hasAnularOrden) && (
+            <div className="mb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+              <div className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight text-center mb-2">
+                Acciones Especiales
+              </div>
+              <div className="flex flex-wrap items-center justify-center gap-2">
+                {hasNotaCredito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = estadoModal;
+                      setEstadoModal(null);
+                      setCredito(target);
+                      setMontoCredito(0);
+                      setMotivoCredito("");
+                      setCodigoCredito("04");
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
+                  >
+                    <ArrowDownCircle className="h-4 w-4 text-slate-800 dark:text-slate-200" />
+                    Nota de Crédito
+                  </button>
+                )}
+                {hasNotaDebito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = estadoModal;
+                      setEstadoModal(null);
+                      setDebito(target);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/70 dark:border-blue-800/70 active:scale-95"
+                  >
+                    <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                    Nota de Débito
+                  </button>
+                )}
+                {hasCondonarDeuda && estadoModal.saldo > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = estadoModal;
+                      setEstadoModal(null);
+                      setCondonarOrden(target);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-amber-200/70 dark:border-amber-800/70 active:scale-95"
+                  >
+                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                    Condonar Deuda
+                  </button>
+                )}
+                {hasAnularOrden && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const target = estadoModal;
+                      setEstadoModal(null);
+                      setAnular(target);
+                    }}
+                    className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-rose-200/70 dark:border-rose-800/70 active:scale-95"
+                  >
+                    <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                    Anular Orden
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          <div className="flex items-center justify-center gap-3">
+            <Button variant="outline" className="text-xs text-slate-600 font-semibold h-9 px-4 rounded-xl border-slate-200 hover:bg-slate-50 border shadow-none" onClick={() => setEstadoModal(null)}>
               Cancelar
             </Button>
+            {estadoModal && estadoModal.saldo > 0 && estadoModal.estado !== "ANULADA" && (
+              <Button 
+                className="text-sm font-black h-11 px-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-none gap-2 transition-all active:scale-95 cursor-pointer"
+                onClick={() => {
+                  const targetOrden = estadoModal;
+                  setEstadoModal(null);
+                  setCobrarOrden(targetOrden);
+                }}
+              >
+                <DollarSign className="h-5 w-5 stroke-[3]" /> Cobrar Orden
+              </Button>
+            )}
             <Button 
-              className="text-sm font-semibold h-9 px-6 rounded-xl bg-slate-900 hover:bg-slate-800 text-white shadow-sm gap-2" 
-              onClick={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                setTimeout(() => {
-                  window.print();
-                  setTimeout(() => setEstadoModal(null), 500);
-                }, 50);
+              className="text-xs font-semibold h-9 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border-none shadow-none gap-1.5 active:scale-95 transition-all cursor-pointer" 
+              onClick={() => {
+                const target = estadoModal;
+                setEstadoModal(null);
+                if (target) {
+                  setShowPrint(target);
+                }
               }}
             >
-              <Printer className="h-4 w-4" /> Imprimir Ticket
+              <Printer className="h-3.5 w-3.5" /> Imprimir Ticket
             </Button>
           </div>
         </DialogContent>
@@ -2180,7 +2298,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(orden.saldo);
-  const [entregarAlCobrar] = useState<boolean>(true);
+  const [entregarAlCobrar, setEntregarAlCobrar] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
   const [showCondonar, setShowCondonar] = useState<boolean>(false);
   const [referencia, setReferencia] = useState("");
@@ -2222,7 +2340,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       const nuevoSaldo = Math.max(0, totalCobrar - montoAPagar);
       const nuevoEstado: EstadoOrden = orden.estado === "ENTREGADA" 
         ? "ENTREGADA" 
-        : (nuevoSaldo === 0 ? (entregarAlCobrar ? "ENTREGADA" : "PAGADA") : orden.estado);
+        : (nuevoSaldo === 0 && entregarAlCobrar ? "ENTREGADA" : orden.estado);
 
       let finalNCF: string | undefined = orden.ncf;
       let finalNcfVencimiento: string | undefined = orden.ncf_vencimiento;
@@ -2299,7 +2417,9 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         pagado: nuevoPagado,
         saldo: nuevoSaldo,
         estado: nuevoEstado,
-        metodo_pago: orden.pagado > 0 ? "MIXTO" : metodo,
+        metodo_pago: orden.metodo_pago === "CREDITO"
+          ? "CREDITO"
+          : (nuevoSaldo === 0 ? metodo : orden.metodo_pago),
         ncf: finalNCF,
         ncf_vencimiento: finalNcfVencimiento,
         tipo_ecf: finalTipoECF,
@@ -2668,6 +2788,19 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
             {/* Acciones Finales (Botón Verde COBRAR ORDEN Grande y Limpio) */}
             <div className="space-y-2 pt-1">
+              {orden.estado !== "ENTREGADA" && (
+                <div className="flex items-center justify-between py-1 px-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+                  <div className="flex flex-col text-left pl-2">
+                    <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">Marcar ropa como entregada</span>
+                    <span className="text-[9px] font-medium text-slate-500">Cambiar estado a Entregada al confirmar cobro</span>
+                  </div>
+                  <Switch
+                    checked={entregarAlCobrar}
+                    onCheckedChange={setEntregarAlCobrar}
+                    className="scale-90 origin-right mr-1"
+                  />
+                </div>
+              )}
               <Button
                 size="lg"
                 className="w-full h-12 font-black text-sm rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wider"
@@ -2766,16 +2899,15 @@ function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick }: PendienteCar
           </span>
         </div>
 
-        {/* Resumen de Importes */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-2.5 grid grid-cols-2 gap-2 shadow-2xs">
+        {/* Resumen de Importes - Rediseñado para mostrar solo el Total de la Orden */}
+        <div className="bg-slate-50/60 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center shadow-2xs">
           <div>
-            <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Total Orden</span>
-            <span className="text-xs font-black text-slate-900 dark:text-slate-100 block mt-0.5">{formatRD(o.total)}</span>
+            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-slate-400 block">Total a Cobrar</span>
+            <span className="text-lg font-black text-slate-900 dark:text-slate-100 block mt-0.5">{formatRD(o.total)}</span>
           </div>
-          <div className="border-l border-slate-200/80 dark:border-slate-800 pl-2.5">
-            <span className="text-[9px] font-extrabold uppercase tracking-wider text-amber-600 dark:text-amber-400 block">Saldo Pendiente</span>
-            <span className="text-sm font-black text-amber-700 dark:text-amber-300 block mt-0.5">{formatRD(o.saldo)}</span>
-          </div>
+          <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200/50 font-black text-[9px] uppercase tracking-wider rounded-lg px-2.5 py-1">
+            Al retirar
+          </Badge>
         </div>
       </div>
 

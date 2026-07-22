@@ -135,7 +135,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
         const newPagado = +(currentPagado + p).toFixed(2);
         const newSaldo = +(currentSaldo - p).toFixed(2);
 
-        const nextState = order.estado === "ENTREGADA" ? "ENTREGADA" : (newSaldo === 0 ? "PAGADA" : order.estado);
+        const nextState = order.estado;
 
         updatedOrders.push({
           ...order,
