@@ -30,7 +30,7 @@ import { Calendar } from "@/components/ui/calendar";
 import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  getClientes, saveCliente, getCatalogo, getServicios, getCajaAbierta, saveOrden, saveMovimiento,
+  getClientes, getOrdenes, saveCliente, getCatalogo, getServicios, getCajaAbierta, saveOrden, saveMovimiento,
   nextOrdenNumero, formatRD, formatPhoneRD, uid, DEFAULT_CONFIG,
   formatAmountInput, parseAmount, saveTenant, getTenantPlan,
   checkPlanLimits, getECFConfig, getECFSequences, nextECFNumero, saveECFDocument,
@@ -102,8 +102,22 @@ function NuevaOrdenPage() {
   const catalogScrollTopRef = useRef(0);
 
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
-  const [showPendingCollections, setShowPendingCollections] = useState(false);
+  const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [searchGlow, setSearchGlow] = useState(false);
+
+  useEffect(() => {
+    if (!tenantId || tenantId === "__loading__") return;
+
+    const preloadTimer = window.setTimeout(() => {
+      void queryClient.prefetchQuery({
+        queryKey: ["ordenes", tenantId],
+        queryFn: () => getOrdenes(tenantId),
+        staleTime: 30_000,
+      });
+    }, 150);
+
+    return () => window.clearTimeout(preloadTimer);
+  }, [queryClient, tenantId]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -1131,11 +1145,11 @@ function NuevaOrdenPage() {
 
                 <button
                   type="button"
-                  onClick={() => setShowPendingCollections(true)}
+                  onClick={() => setShowOrdersDialog(true)}
                   className="group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                 >
-                  <Banknote className="h-4 w-4 text-white opacity-90 transition-colors group-hover:opacity-100" />
-                  <span>Cobrar orden</span>
+                  <List className="h-4 w-4 text-white opacity-90 transition-colors group-hover:opacity-100" />
+                  <span>Ver órdenes</span>
                 </button>
 
                 <button
@@ -1151,8 +1165,9 @@ function NuevaOrdenPage() {
             </div>
 
             <PendingCollectionsDialog
-              open={showPendingCollections}
-              onOpenChange={setShowPendingCollections}
+              open={showOrdersDialog}
+              onOpenChange={setShowOrdersDialog}
+              authUser={user}
             />
 
             <DeliveryPOSDialog

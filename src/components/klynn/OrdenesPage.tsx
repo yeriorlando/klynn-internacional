@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect } from "react";
-import { createPortal } from "react-dom";
-import { Search, Printer, Eye, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind } from "lucide-react";
+import { createPortal, flushSync } from "react-dom";
+import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind } from "lucide-react";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -17,7 +17,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
-  type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago,
+  type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant,
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
   updateOrdenEstado, can
 } from "@/lib/storage";
@@ -52,8 +52,19 @@ function esAtrasada(fechaStr?: string, estado?: EstadoOrden): boolean {
   return new Date(fechaStr).getTime() < Date.now();
 }
 
-export function OrdenesPage() {
-  const user = useRequireAuth();
+function formatMetodoPagoLabel(metodo?: string): string {
+  if (!metodo) return "—";
+  return metodo.replace(/_/g, " ");
+}
+
+interface OrdenesPageProps {
+  authUser?: { empleado: Empleado; tenant: Tenant } | null;
+  embedded?: boolean;
+}
+
+export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {}) {
+  const requiredUser = useRequireAuth();
+  const user = authUser ?? requiredUser;
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
@@ -633,9 +644,8 @@ export function OrdenesPage() {
             <div className="flex flex-wrap items-center justify-between gap-3">
               <Button
                 type="button"
-                variant="outline"
                 onClick={() => setShowPendientes(false)}
-                className="h-9 gap-2 rounded-xl border-slate-200 bg-white/80 px-3 text-xs font-bold text-slate-700 shadow-sm backdrop-blur hover:bg-white hover:text-primary dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
+                className="h-9 gap-2 rounded-xl border border-primary bg-primary px-3 text-xs font-bold text-primary-foreground shadow-md shadow-primary/20 hover:bg-primary/90 hover:text-primary-foreground"
               >
                 <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
                 Volver a Órdenes
@@ -783,7 +793,7 @@ export function OrdenesPage() {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {filteredPendientes.map((o) => (
               <PendienteCard
                 key={o.id}
@@ -791,6 +801,7 @@ export function OrdenesPage() {
                 clientes={clientes}
                 cajaAbierta={cajaAbierta}
                 onCobrarClick={setCobrarOrden}
+                compact
               />
             ))}
           </div>
@@ -834,6 +845,21 @@ export function OrdenesPage() {
     <div>
       <PageHeader title="Órdenes" description={`${ordenes.length} órdenes registradas`}>
         <div className="flex items-center gap-2">
+          <Button
+            onClick={() => setShowPendientes(true)}
+            className="h-10 gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 text-amber-800 shadow-sm transition-all duration-200 hover:border-amber-300 hover:bg-amber-100 hover:text-amber-900 active:scale-[0.98] dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/60"
+          >
+            <span className="grid h-6 w-6 place-items-center rounded-lg bg-amber-500 text-white shadow-sm">
+              <Coins className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </span>
+            <span className="text-xs font-black uppercase tracking-wide">Pendientes de pago</span>
+            {pendientesCobroList.length > 0 && (
+              <Badge className="ml-0.5 grid h-5 min-w-5 place-items-center rounded-full border-none bg-amber-500 px-1.5 text-[9px] font-black text-white shadow-sm hover:bg-amber-500">
+                {pendientesCobroList.length}
+              </Badge>
+            )}
+          </Button>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-sm border-0 transition-all duration-200 active:scale-95">
@@ -863,20 +889,6 @@ export function OrdenesPage() {
             <Printer className="h-4 w-4" /> Imprimir
           </Button>
 
-          <Button
-            onClick={() => setShowPendientes(true)}
-            className="h-10 gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 text-amber-800 shadow-sm transition-all duration-200 hover:border-amber-300 hover:bg-amber-100 hover:text-amber-900 active:scale-[0.98] dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/60"
-          >
-            <span className="grid h-6 w-6 place-items-center rounded-lg bg-amber-500 text-white shadow-sm">
-              <Coins className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </span>
-            <span className="text-xs font-extrabold">Órdenes pendientes</span>
-            {pendientesCobroList.length > 0 && (
-              <Badge className="ml-0.5 grid h-5 min-w-5 place-items-center rounded-full border-none bg-amber-500 px-1.5 text-[9px] font-black text-white shadow-sm hover:bg-amber-500">
-                {pendientesCobroList.length}
-              </Badge>
-            )}
-          </Button>
         </div>
       </PageHeader>
 
@@ -1432,6 +1444,7 @@ export function OrdenesPage() {
           tenant={user.tenant}
           ordenes={filt}
           clientes={clientes}
+          inline={embedded}
           onClose={() => setIsPrintingList(false)}
         />
       )}
@@ -2219,7 +2232,7 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
                 <span>{formatRD(orden.total)}</span>
               </div>
               <div className="flex justify-between py-2 text-xs text-slate-500">
-                <span>Pago ({orden.metodo_pago}):</span>
+                <span>Pago ({formatMetodoPagoLabel(orden.metodo_pago)}):</span>
                 <span>{formatRD(orden.pagado)}</span>
               </div>
             </div>
@@ -2270,25 +2283,53 @@ function OrdenesPrintPortal({
   tenant,
   ordenes,
   clientes,
+  inline = false,
   onClose
 }: {
   tenant: any;
   ordenes: any[];
   clientes: any[];
+  inline?: boolean;
   onClose: () => void;
 }) {
+  const [printing, setPrinting] = useState(false);
   const totalMontoGlobal = ordenes.reduce((acc, curr) => acc + curr.total, 0);
   const totalSaldoGlobal = ordenes.reduce((acc, curr) => acc + curr.saldo, 0);
 
-  return createPortal(
-    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target text-slate-800">
+  const handlePrint = () => {
+    if (inline) {
+      flushSync(() => setPrinting(true));
+      window.print();
+      setPrinting(false);
+      return;
+    }
+    window.print();
+  };
+
+  const report = (
+    <div
+      className={`${inline && !printing ? "absolute" : "fixed"} inset-0 z-[99999] overflow-y-auto overscroll-y-contain touch-pan-y bg-white text-slate-800 pointer-events-auto atomic-print-target`}
+      data-scroll-lock-scrollable
+    >
+      <div className="sticky top-0 z-[100001] h-0 print:hidden">
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar reporte y volver a Órdenes"
+          title="Cerrar reporte"
+          className="pointer-events-auto absolute right-4 top-4 grid h-11 w-11 place-items-center rounded-full border-2 border-white/90 bg-primary text-primary-foreground shadow-lg shadow-primary/25 transition-transform hover:scale-105 hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+        >
+          <X className="h-5 w-5" strokeWidth={2.5} />
+        </button>
+      </div>
+
       <div className="max-w-4xl mx-auto p-8 print:p-12 print:max-w-4xl print:mx-auto">
         {/* Controles de impresión (ocultos al imprimir) */}
-        <div className="flex justify-between items-center border-b-2 border-primary/20 pb-6 mb-8 print:hidden relative z-[100000]">
-          <Button variant="outline" onClick={onClose} className="gap-2 cursor-pointer">
+        <div className="flex justify-between items-center border-b-2 border-primary/20 pb-6 mb-8 pr-14 print:hidden relative z-[100000]">
+          <Button onClick={onClose} className="gap-2 bg-primary text-primary-foreground shadow-sm hover:bg-primary/90">
             Cerrar Reporte
           </Button>
-          <Button onClick={() => window.print()} className="bg-primary text-white gap-2 cursor-pointer">
+          <Button onClick={handlePrint} className="bg-primary text-white gap-2 cursor-pointer">
             <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
           </Button>
         </div>
@@ -2377,7 +2418,7 @@ function OrdenesPrintPortal({
                       </td>
                       <td className="py-2.5 px-4 text-right font-semibold text-slate-700">{formatRD(o.total)}</td>
                       <td className={`py-2.5 px-4 text-right font-bold ${o.saldo > 0 ? "text-rose-600" : "text-slate-500"}`}>{o.saldo > 0 ? formatRD(o.saldo) : "—"}</td>
-                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{o.metodo_pago}</td>
+                      <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatMetodoPagoLabel(o.metodo_pago)}</td>
                       <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatDateTimeRD(o.creado_en)}</td>
                     </tr>
                   );
@@ -2424,9 +2465,11 @@ function OrdenesPrintPortal({
           .no-print { display: none !important; }
         }
       `}} />
-    </div>,
-    document.body
+    </div>
   );
+
+  if (inline && !printing) return report;
+  return createPortal(report, document.body);
 }
 
 // ============ DIALOG DE COBRO DE SALDO (PAGO AL RETIRAR) ============
