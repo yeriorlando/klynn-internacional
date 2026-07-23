@@ -629,12 +629,12 @@ export function TenantShell() {
           onClick={() => setShowAtajosModal(false)}
         >
           <div
-            className="relative w-full max-w-md overflow-hidden rounded-3xl bg-white dark:bg-slate-950 shadow-2xl p-7 space-y-5"
+            className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-950 space-y-4"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
             <div className="flex items-center justify-between pr-10">
-              <h3 className="font-display text-xl font-black text-slate-900 dark:text-white">
+              <h3 className="font-display text-lg font-black text-slate-900 dark:text-white">
                 Atajos de Teclado del Sistema Klynn
               </h3>
             </div>
@@ -647,7 +647,7 @@ export function TenantShell() {
             </button>
 
             {/* Grid of Shortcuts */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-2.5">
               {[
                 { label: "Ir a POS / Ventas", key: "N" },
                 { label: "Ir a Dashboard", key: "D" },
@@ -658,10 +658,13 @@ export function TenantShell() {
                 { label: "Deshacer", key: "Ctrl+Z" },
                 { label: "Cobrar", key: "Enter" },
                 { label: "Facturar", key: "Espacio" },
+                { label: "Buscar", key: "Ctrl" },
+                { label: "Pantalla completa", key: "P" },
+                { label: "Ver órdenes", key: "Z" },
               ].map(({ label, key }) => (
-                <div key={key} className="py-2 px-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
-                  <span className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-snug">{label}</span>
-                  <kbd className="px-3 py-1 flex items-center justify-center rounded-xl bg-primary text-xs font-bold text-white border-0 shadow-sm select-none shrink-0 tracking-wide whitespace-nowrap">
+                <div key={key} className="flex h-10 min-w-0 items-center justify-between gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
+                  <span className="min-w-0 truncate whitespace-nowrap text-[13px] font-semibold leading-none text-slate-700 dark:text-slate-300">{label}</span>
+                  <kbd className="flex h-7 min-w-7 shrink-0 select-none items-center justify-center whitespace-nowrap rounded-lg border-0 bg-primary px-2.5 text-[11px] font-bold tracking-wide text-white shadow-sm">
                     {key}
                   </kbd>
                 </div>

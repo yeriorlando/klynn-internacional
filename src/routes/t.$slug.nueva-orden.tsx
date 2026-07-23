@@ -605,6 +605,22 @@ function NuevaOrdenPage() {
 
       if (isInput) return;
 
+      // P to toggle fullscreen mode
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "p") {
+        if (e.repeat) return;
+        e.preventDefault();
+        state.toggleFullscreen();
+        return;
+      }
+
+      // Z to open the orders modal
+      if (!e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "z") {
+        if (e.repeat) return;
+        e.preventDefault();
+        state.setShowOrdersDialog(true);
+        return;
+      }
+
       // F2 to open client search modal
       if (e.key === "F2") {
         e.preventDefault();
@@ -1060,6 +1076,8 @@ function NuevaOrdenPage() {
     onCrearOrden,
     setIsClientModalOpen,
     setShowDiscountPOS,
+    setShowOrdersDialog,
+    toggleFullscreen,
     addItem,
     isCobroModalOpen,
     setIsCobroModalOpen
