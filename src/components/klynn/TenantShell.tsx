@@ -5,7 +5,7 @@ import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import {
   LayoutDashboard, Wallet, Users, Truck, Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone, HelpCircle,
   Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3, Keyboard, Inbox, RotateCw, CheckCircle2, Ban,
-  Sparkles, Scale, Flame, Printer, StickyNote, Trash2, Plus, ChevronRight, Search, FileText, Wrench, Clock, Shirt
+  Sparkles, Scale, Flame, Printer, StickyNote, Trash2, Plus, ChevronRight, Search, FileText, Wrench, Clock, Shirt, AlertTriangle
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -16,6 +16,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { 
@@ -35,6 +36,7 @@ import { queryClient } from "@/router";
 import { useCajaAbierta } from "@/hooks/use-queries";
 import ThemeSwitch from "@/components/theme-switch";
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
+import { UserAvatar } from "@/components/klynn/UserAvatar";
 
 interface NavItem {
   to: string;
@@ -88,6 +90,7 @@ export function TenantShell() {
   // NOTIFICACIONES GENERALES
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>([]);
+  const visibleNotificaciones = notificaciones.filter(n => !deletedNotifIds.includes(n.id));
   const unreadNotifs = notificaciones.filter(n => !n.leida && !deletedNotifIds.includes(n.id)).length;
 
   useEffect(() => {
@@ -373,6 +376,37 @@ export function TenantShell() {
     setNotificaciones(prev => prev.map(x => x.id === id ? { ...x, leida: true } : x));
   };
 
+  const handleMarcarTodasLeidas = async () => {
+    if (tenantId) await marcarTodasNotificacionesLeidas(tenantId);
+
+    const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-') && !n.leida).map(n => n.id);
+    if (virtualIds.length > 0) {
+      const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
+      localStorage.setItem('klynn_read_virtuals', JSON.stringify([...readVirtuals, ...virtualIds]));
+    }
+
+    const unreadIds = notificaciones.filter(n => !n.leida).map(n => n.id);
+    setDeletedNotifIds(prev => [...prev, ...unreadIds]);
+    setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })));
+  };
+
+  const handleLimpiarNotificaciones = async () => {
+    const allIds = notificaciones.map(n => n.id);
+    setDeletedNotifIds(prev => [...prev, ...allIds]);
+
+    if (tenantId) {
+      await supabase.from('notificaciones').delete().eq('tenant_id', tenantId);
+    }
+
+    const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-')).map(n => n.id);
+    if (virtualIds.length > 0) {
+      const deletedVirtuals = JSON.parse(localStorage.getItem('klynn_deleted_virtuals') || '[]');
+      localStorage.setItem('klynn_deleted_virtuals', JSON.stringify([...deletedVirtuals, ...virtualIds]));
+    }
+
+    setNotificaciones([]);
+  };
+
   const handleEliminarNotificacion = async (id: string) => {
     setDeletedNotifIds(prev => [...prev, id]);
     if (id.startsWith('virtual-')) {
@@ -619,6 +653,11 @@ export function TenantShell() {
                 { label: "Ir a Dashboard", key: "D" },
                 { label: "Ir a Órdenes", key: "O" },
                 { label: "Ver/Abrir Caja", key: "C" },
+                { label: "Cliente", key: "F2" },
+                { label: "Descuento", key: "F4" },
+                { label: "Deshacer", key: "Ctrl+Z" },
+                { label: "Cobrar", key: "Enter" },
+                { label: "Facturar", key: "Espacio" },
               ].map(({ label, key }) => (
                 <div key={key} className="py-2 px-4 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm flex items-center justify-between gap-3">
                   <span className="text-sm font-medium text-slate-700 dark:text-slate-300 leading-snug">{label}</span>
@@ -690,102 +729,105 @@ export function TenantShell() {
               </Badge>
             )}
             {!pathname.endsWith('/nueva-orden') && <CloudSync tenantId={tenant.id} />}
-            {!pathname.endsWith('/nueva-orden') && (
-              <button 
-                onClick={() => setShowAtajosModal(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
-                title="Mostrar atajos de teclado (Alt+K)"
-              >
-                <Keyboard className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-                <span>Atajos</span>
-                <kbd className="h-4 px-1.5 flex items-center justify-center rounded-md bg-primary text-[9px] font-bold text-white select-none border-0">
-                  Alt+K
-                </kbd>
-              </button>
-            )}
+            <button
+              onClick={() => setShowAtajosModal(true)}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
+              title="Mostrar atajos de teclado (Alt+K)"
+            >
+              <Keyboard className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+              <span>Atajos</span>
+              <kbd className="h-4 px-1.5 flex items-center justify-center rounded-md bg-primary text-[9px] font-bold text-white select-none border-0">
+                Alt+K
+              </kbd>
+            </button>
           </div>
 
           <ThemeSwitch />
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <button className="relative rounded-md p-2 hover:bg-accent transition-colors" aria-label="Notificaciones">
-                <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" />
+              <button
+                type="button"
+                className="relative grid h-10 w-10 place-items-center rounded-xl border border-transparent transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 data-[state=open]:border-slate-200 data-[state=open]:bg-white data-[state=open]:shadow-sm dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:data-[state=open]:border-slate-700 dark:data-[state=open]:bg-slate-900"
+                aria-label={unreadNotifs > 0 ? `Notificaciones, ${unreadNotifs} sin leer` : "Notificaciones"}
+              >
+                <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" strokeWidth={2} />
                 {unreadNotifs > 0 && (
-                  <span className="absolute right-1.5 top-1.5 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-white shadow-sm ring-2 ring-surface">
-                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-destructive opacity-75"></span>
+                  <span className="absolute right-1 top-1 flex h-2.5 w-2.5 items-center justify-center rounded-full bg-rose-500 shadow-sm ring-2 ring-white dark:ring-slate-950">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-400 opacity-60" />
                   </span>
                 )}
               </button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-[325px] sm:w-[355px] rounded-2xl shadow-elegant shadow-2xl border border-slate-200/80 dark:border-slate-800 p-0 overflow-hidden bg-white dark:bg-slate-950 animate-in fade-in duration-200">
-              <div className="bg-primary text-white p-3 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <span className="font-display font-black text-sm uppercase tracking-wider text-white">Notificaciones</span>
-                  {unreadNotifs > 0 && (
-                    <span className="bg-white/20 text-white rounded-full px-2 py-0.5 text-[9px] font-black leading-none">
-                      {unreadNotifs}
-                    </span>
-                  )}
+            <DropdownMenuContent
+              align="end"
+              sideOffset={10}
+              collisionPadding={12}
+              className="w-[min(24rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 text-slate-950 shadow-[0_24px_70px_-24px_rgba(15,23,42,0.38)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
+            >
+              <div className="border-b border-slate-100 bg-gradient-to-br from-primary/[0.08] via-white to-emerald-50/60 px-4 pb-3.5 pt-4 dark:border-slate-800 dark:from-primary/15 dark:via-slate-950 dark:to-emerald-950/20">
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-center gap-3">
+                    <div className="relative grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                      <Bell className="h-[18px] w-[18px]" strokeWidth={2} />
+                      {unreadNotifs > 0 && (
+                        <span className="absolute -right-1 -top-1 grid h-4 min-w-4 place-items-center rounded-full bg-primary px-1 text-[9px] font-black text-white ring-2 ring-white dark:ring-slate-950">
+                          {unreadNotifs > 99 ? "99+" : unreadNotifs}
+                        </span>
+                      )}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">Notificaciones</p>
+                      <p className="mt-0.5 text-[11px] font-medium leading-4 text-slate-500 dark:text-slate-400">
+                        {unreadNotifs > 0 ? `${unreadNotifs} ${unreadNotifs === 1 ? "pendiente" : "pendientes"} por revisar` : "Estás al día con tu negocio"}
+                      </p>
+                    </div>
+                  </div>
+
+                  <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-bold ${
+                    unreadNotifs > 0
+                      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-300"
+                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300"
+                  }`}>
+                    <span className={`h-1.5 w-1.5 rounded-full ${unreadNotifs > 0 ? "bg-amber-500" : "bg-emerald-500"}`} />
+                    {unreadNotifs > 0 ? "Por revisar" : "Todo al día"}
+                  </span>
                 </div>
-                
-                <div className="flex items-center gap-1.5 shrink-0">
-                  <button 
-                    onClick={async () => {
-                      if (tenantId) await marcarTodasNotificacionesLeidas(tenantId);
-                      
-                      // Marcar virtuales como leídas localmente
-                      const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-') && !n.leida).map(n => n.id);
-                      if (virtualIds.length > 0) {
-                        const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
-                        localStorage.setItem('klynn_read_virtuals', JSON.stringify([...readVirtuals, ...virtualIds]));
-                      }
 
-                      const unreadIds = notificaciones.filter(n => !n.leida).map(n => n.id);
-                      setDeletedNotifIds(prev => [...prev, ...unreadIds]);
-                      setNotificaciones(prev => prev.map(n => ({...n, leida: true})));
-                    }}
-                    className="h-6.5 px-2 rounded-md flex items-center gap-1 bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-[10.5px] font-black cursor-pointer shadow-xs border-none"
-                    title="Marcar todas como leídas"
+                <div className="mt-3 flex gap-2">
+                  <button
+                    type="button"
+                    onClick={handleMarcarTodasLeidas}
+                    disabled={unreadNotifs === 0}
+                    className="inline-flex h-8 flex-1 items-center justify-center gap-1.5 rounded-lg border border-primary/15 bg-white/80 px-3 text-[11px] font-bold text-primary shadow-sm transition-all hover:border-primary/25 hover:bg-primary/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 disabled:cursor-not-allowed disabled:opacity-45 dark:bg-slate-900/80 dark:hover:bg-primary/10"
                   >
-                    <Check className="h-3 w-3" />
-                    <span>Leídas</span>
+                    <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2} />
+                    Marcar todo como leído
                   </button>
-                  <button 
-                    onClick={async () => {
-                      const allIds = notificaciones.map(n => n.id);
-                      setDeletedNotifIds(prev => [...prev, ...allIds]);
-                      
-                      if (tenantId) {
-                        await supabase.from('notificaciones').delete().eq('tenant_id', tenantId);
-                      }
-                      
-                      const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-')).map(n => n.id);
-                      if (virtualIds.length > 0) {
-                        const deletedVirtuals = JSON.parse(localStorage.getItem('klynn_deleted_virtuals') || '[]');
-                        localStorage.setItem('klynn_deleted_virtuals', JSON.stringify([...deletedVirtuals, ...virtualIds]));
-                      }
-
-                      setNotificaciones([]);
-                    }}
-                    className="h-6.5 px-2 rounded-md flex items-center gap-1 bg-rose-600 hover:bg-rose-700 text-white transition-all text-[10.5px] font-black cursor-pointer shadow-xs border-none"
-                    title="Limpiar todas"
+                  <button
+                    type="button"
+                    onClick={handleLimpiarNotificaciones}
+                    disabled={visibleNotificaciones.length === 0}
+                    className="inline-flex h-8 items-center justify-center gap-1.5 rounded-lg border border-slate-200 bg-white/80 px-3 text-[11px] font-bold text-slate-600 shadow-sm transition-all hover:border-rose-200 hover:bg-rose-50 hover:text-rose-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200 disabled:cursor-not-allowed disabled:opacity-45 dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-300 dark:hover:border-rose-900 dark:hover:bg-rose-950/30 dark:hover:text-rose-400"
                   >
-                    <Trash2 className="h-3 w-3" />
-                    <span>Limpiar</span>
+                    <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
+                    Limpiar
                   </button>
                 </div>
               </div>
-              <div className="max-h-[300px] overflow-y-auto custom-scrollbar flex flex-col gap-0.5">
-                {notificaciones.filter(n => !deletedNotifIds.includes(n.id)).length === 0 ? (
-                  <div className="py-10 px-4 text-center text-muted-foreground flex flex-col items-center justify-center gap-2">
-                    <div className="h-10 w-10 rounded-full bg-slate-100 dark:bg-slate-900 flex items-center justify-center text-muted-foreground/50">
-                      <Bell className="h-5 w-5" />
+
+              <div className="custom-scrollbar flex max-h-[min(26rem,calc(100vh-11rem))] flex-col gap-1 overflow-y-auto p-2">
+                {visibleNotificaciones.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                    <div className="relative grid h-14 w-14 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60">
+                      <CheckCircle2 className="h-6 w-6" strokeWidth={1.8} />
+                      <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-4 border-white bg-emerald-500 dark:border-slate-950" />
                     </div>
-                    <span className="text-[11px] font-bold tracking-tight">No tienes notificaciones</span>
+                    <p className="mt-4 text-sm font-extrabold text-slate-900 dark:text-white">Todo está bajo control</p>
+                    <p className="mt-1 max-w-56 text-xs leading-5 text-slate-500 dark:text-slate-400">No tienes notificaciones pendientes en este momento.</p>
                   </div>
                 ) : (
-                  notificaciones.filter(n => !deletedNotifIds.includes(n.id)).map((n) => {
+                  visibleNotificaciones.map((n) => {
                     const isUnread = !n.leida;
                     // Strip emojis/emoticons from title and message
                     const emojiRegex = /[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g;
@@ -795,45 +837,45 @@ export function TenantShell() {
                     const getIcon = () => {
                       const t = (cleanTitle + ' ' + cleanMessage).toLowerCase();
                       if (t.includes('entrega') || t.includes('domicilio') || t.includes('envío') || t.includes('delivery') || t.includes('orden') || t.includes('prenda')) {
-                        return <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary text-white shrink-0"><Shirt className="h-4 w-4" /></div>;
+                        return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20"><Shirt className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
                       }
                       if (t.includes('urgente') || t.includes('alerta') || t.includes('advertencia') || t.includes('error')) {
-                        return <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 shrink-0"><AlertTriangle className="h-4 w-4" /></div>;
+                        return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/60"><AlertTriangle className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
                       }
                       if (t.includes('caja') || t.includes('gasto') || t.includes('pago') || t.includes('cobro') || t.includes('venta')) {
-                        return <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-emerald-500/10 dark:bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 shrink-0"><Wallet className="h-4 w-4" /></div>;
+                        return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60"><Wallet className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
                       }
-                      return <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 shrink-0"><Bell className="h-4 w-4" /></div>;
+                      return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"><Bell className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
                     };
 
                     return (
-                      <div 
+                      <DropdownMenuItem
                         key={n.id}
-                        onClick={() => onNotificacionClick(n)}
-                        className={`p-3 transition-all flex gap-2.5 items-start cursor-pointer select-none border-l-2 ${
-                          isUnread 
-                            ? 'bg-primary/[0.02] dark:bg-primary/[0.01] hover:bg-primary/[0.04] dark:hover:bg-primary/[0.015] border-primary' 
-                            : 'opacity-85 hover:bg-slate-50/80 dark:hover:bg-slate-900/60 border-transparent'
+                        onSelect={() => onNotificacionClick(n)}
+                        className={`group relative cursor-pointer select-none items-start gap-3 rounded-xl border px-3 py-3 outline-none transition-all ${
+                          isUnread
+                            ? 'border-primary/10 bg-primary/[0.045] focus:border-primary/20 focus:bg-primary/[0.08] dark:bg-primary/[0.08] dark:focus:bg-primary/[0.13]'
+                            : 'border-transparent focus:border-slate-200 focus:bg-slate-50 dark:focus:border-slate-800 dark:focus:bg-slate-900'
                         }`}
                       >
                         {getIcon()}
-                        <div className="flex-1 min-w-0">
-                          <div className="flex items-start justify-between gap-1.5">
-                            <span className={`text-[13px] font-bold leading-tight ${isUnread ? 'text-slate-900 dark:text-white font-black' : 'text-slate-700 dark:text-slate-355'}`}>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-start justify-between gap-2">
+                            <span className={`text-[13px] leading-[18px] ${isUnread ? 'font-extrabold text-slate-950 dark:text-white' : 'font-bold text-slate-700 dark:text-slate-300'}`}>
                               {cleanTitle}
                             </span>
                             {isUnread && (
-                              <span className="relative flex h-1.5 w-1.5 mt-1 shrink-0">
-                                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
-                                <span className="relative inline-flex rounded-full h-1.5 w-1.5 bg-primary"></span>
+                              <span className="relative mt-1.5 flex h-2 w-2 shrink-0" aria-label="Sin leer">
+                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-45" />
+                                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary ring-2 ring-white dark:ring-slate-950" />
                               </span>
                             )}
                           </div>
-                          <div className="text-xs text-slate-500 dark:text-slate-400 leading-snug mt-0.5">
+                          <div className="mt-0.5 text-xs leading-[18px] text-slate-500 dark:text-slate-400">
                             {cleanMessage.split(/(#KL-[a-zA-Z0-9-]+)/).map((part, i) => {
                               if (part.startsWith('#KL-')) {
                                 return (
-                                  <span key={i} className="inline-block px-1.5 py-0.5 rounded bg-primary text-white font-black font-mono text-[10px] tracking-tight">
+                                  <span key={i} className="mx-0.5 inline-block rounded-md border border-primary/15 bg-primary/10 px-1.5 py-px font-mono text-[10px] font-black tracking-tight text-primary">
                                     {part.replace('#', '')}
                                   </span>
                                 );
@@ -879,22 +921,32 @@ export function TenantShell() {
                               return <span key={i}>{formatTextSegment(part)}</span>;
                             })}
                           </div>
-                          <div className="flex items-center gap-1 text-[10px] text-primary mt-1.5 font-extrabold">
-                            <Clock className="h-3 w-3 shrink-0" />
-                            <span>
+                          <div className="mt-2 flex items-center justify-between gap-2">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+                              <Clock className="h-3 w-3 shrink-0" strokeWidth={2} />
                               {new Date(n.created_at).toLocaleString('es-DO', { month: 'short', day: 'numeric' })}
+                            </span>
+                            <span className={`text-[9px] font-bold uppercase tracking-[0.08em] ${isUnread ? "text-primary" : "text-slate-400 dark:text-slate-500"}`}>
+                              {isUnread ? "Nueva" : "Leída"}
                             </span>
                           </div>
                         </div>
-                      </div>
+                      </DropdownMenuItem>
                     );
                   })
                 )}
               </div>
+              {visibleNotificaciones.length > 0 && (
+                <div className="border-t border-slate-100 bg-slate-50/70 px-4 py-2.5 text-center dark:border-slate-800 dark:bg-slate-900/50">
+                  <p className="text-[10px] font-medium text-slate-500 dark:text-slate-400">
+                    Selecciona una notificación para ver sus detalles
+                  </p>
+                </div>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <UserMenu nombre={empleado.nombre} rol={empleado.rol} empleadoId={empleado.id} onLogout={onLogout} />
+          <UserMenu empleado={empleado} onLogout={onLogout} />
         </header>
 
         <main className={`flex flex-col ${
@@ -1243,49 +1295,117 @@ function SidebarContent({
   );
 }
 
-function UserMenu({ nombre, rol, empleadoId, onLogout }: { nombre: string; rol: string; empleadoId: string; onLogout: () => void }) {
+function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void }) {
+  const { nombre, rol, avatar_url } = empleado;
   const [open, setOpen] = useState(false);
-  const initials = nombre.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  const avatarName = [nombre, empleado.apellido].filter(Boolean).join(" ");
+  const roleLabel = ({
+    ADMIN: "Administrador",
+    SUPERVISOR: "Supervisor",
+    VENDEDOR: "Vendedor",
+    RECEPCIONISTA: "Recepcionista",
+    REPARTIDOR: "Repartidor",
+  } as Record<string, string>)[rol] ?? rol;
+
   return (
-    <div className="relative">
-      <button
-        onClick={() => setOpen((s) => !s)}
-        className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-accent"
+    <DropdownMenu open={open} onOpenChange={setOpen}>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Abrir menú de ${nombre}`}
+          className="group flex h-11 items-center gap-2.5 rounded-xl border border-transparent px-1.5 pr-2 transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 data-[state=open]:border-slate-200 data-[state=open]:bg-white data-[state=open]:shadow-sm dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:data-[state=open]:border-slate-700 dark:data-[state=open]:bg-slate-900"
+        >
+          <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-primary text-[12px] font-black tracking-wide text-white shadow-sm ring-2 ring-white dark:ring-slate-950">
+            <UserAvatar name={avatarName} avatarUrl={avatar_url} size={36} />
+            <span className="absolute -bottom-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
+          </span>
+
+          <span className="hidden min-w-0 text-left md:block">
+            <span className="block max-w-28 truncate text-[13px] font-bold leading-4 text-slate-900 dark:text-slate-100">
+              {nombre.split(" ")[0]}
+            </span>
+            <span className="block text-[10px] font-semibold uppercase leading-4 tracking-[0.08em] text-slate-500 dark:text-slate-400">
+              {roleLabel}
+            </span>
+          </span>
+
+          <ChevronDown className="user-menu-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" strokeWidth={2} />
+        </button>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent
+        align="end"
+        sideOffset={10}
+        collisionPadding={12}
+        className="w-[min(19.5rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 text-slate-950 shadow-[0_24px_70px_-24px_rgba(15,23,42,0.38)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
       >
-        <div className="grid h-8 w-8 place-items-center rounded-full bg-gradient-primary text-xs font-bold text-white">{initials}</div>
-        <div className="hidden text-left md:block">
-          <div className="text-sm font-medium leading-tight">{nombre.split(" ")[0]}</div>
-          <div className="text-[10px] uppercase text-muted-foreground">{rol}</div>
-        </div>
-        <ChevronDown className="h-4 w-4 text-muted-foreground" />
-      </button>
-      {open && (
-        <>
-          <div className="fixed inset-0 z-10" onClick={() => setOpen(false)} />
-          <div className="absolute right-0 top-full z-20 mt-1 w-56 overflow-hidden rounded-lg border border-border bg-popover shadow-elegant">
-            <div className="border-b border-border p-3">
-              <div className="text-sm font-semibold">{nombre}</div>
-              <div className="text-xs text-muted-foreground">{rol}</div>
+        <div className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-primary/[0.10] via-white to-emerald-50/80 px-4 py-4 dark:border-slate-800 dark:from-primary/20 dark:via-slate-950 dark:to-emerald-950/30">
+          <div className="absolute -right-10 -top-12 h-28 w-28 rounded-full bg-primary/10 blur-2xl" aria-hidden="true" />
+          <div className="relative flex items-center gap-3">
+            <div className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-primary text-sm font-black tracking-wide text-white shadow-md shadow-primary/15 ring-1 ring-white/80 dark:ring-white/10">
+              <UserAvatar name={avatarName} avatarUrl={avatar_url} size={44} />
+              <span className="absolute -bottom-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
             </div>
-            <button 
-              onClick={() => { window.open("https://wa.me/18299416546?text=Hola Klynn, necesito soporte.", "_blank"); setOpen(false); }} 
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
-            >
-              <MessageCircle className="h-4 w-4 text-emerald-500 animate-pulse" /> Soporte
-            </button>
-            <button 
-              onClick={() => { toast.info("Tutoriales y guías próximamente 🚀"); setOpen(false); }} 
-              className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-foreground hover:bg-accent border-b border-border"
-            >
-              <BookOpen className="h-4 w-4 text-blue-500" /> Tutoriales y guías
-            </button>
-            <button onClick={onLogout} className="flex w-full items-center gap-2 px-3 py-2.5 text-sm text-destructive hover:bg-accent">
-              <LogOut className="h-4 w-4" /> Cerrar sesión
-            </button>
+
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-extrabold leading-5 text-slate-950 dark:text-white">{nombre}</p>
+              <div className="mt-1 flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-white/80 px-2 py-0.5 text-[10px] font-bold text-primary shadow-sm dark:bg-slate-900/80">
+                  <Shield className="h-3 w-3" strokeWidth={2} />
+                  {roleLabel}
+                </span>
+                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Sesión activa</span>
+              </div>
+            </div>
           </div>
-        </>
-      )}
-    </div>
+        </div>
+
+        <div className="p-2">
+          <DropdownMenuItem
+            onSelect={() => window.open("https://wa.me/18299416546?text=Hola Klynn, necesito soporte.", "_blank", "noopener,noreferrer")}
+            className="group cursor-pointer gap-3 rounded-xl px-2.5 py-2.5 focus:bg-emerald-50 focus:text-slate-950 dark:focus:bg-emerald-950/30 dark:focus:text-white"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 transition-colors group-focus:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:ring-emerald-900">
+              <MessageCircle className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-bold leading-4">Soporte</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-slate-500 dark:text-slate-400">Habla con nuestro equipo</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-emerald-500 dark:text-slate-600" />
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onSelect={() => toast.info("Tutoriales y guías próximamente 🚀")}
+            className="group cursor-pointer gap-3 rounded-xl px-2.5 py-2.5 focus:bg-blue-50 focus:text-slate-950 dark:focus:bg-blue-950/30 dark:focus:text-white"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition-colors group-focus:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400 dark:ring-blue-900">
+              <BookOpen className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-bold leading-4">Tutoriales y guías</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-slate-500 dark:text-slate-400">Aprende a sacar más provecho de Klynn</span>
+            </span>
+            <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator className="mx-2 my-1.5 bg-slate-100 dark:bg-slate-800" />
+
+          <DropdownMenuItem
+            onSelect={onLogout}
+            className="group cursor-pointer gap-3 rounded-xl px-2.5 py-2.5 text-rose-600 focus:bg-rose-50 focus:text-rose-700 dark:text-rose-400 dark:focus:bg-rose-950/30 dark:focus:text-rose-300"
+          >
+            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 transition-colors group-focus:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-400 dark:ring-rose-900">
+              <LogOut className="h-4 w-4" strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[13px] font-bold leading-4">Cerrar sesión</span>
+              <span className="mt-0.5 block text-[11px] leading-4 text-rose-500/80 dark:text-rose-400/70">Salir de esta cuenta de forma segura</span>
+            </span>
+          </DropdownMenuItem>
+        </div>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 

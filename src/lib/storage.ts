@@ -56,6 +56,7 @@ export interface Empleado {
   permisos?: string[]; // Array de keys: 'dashboard', 'caja', etc.
   max_descuento_porcentaje?: number;
   creado_en: string;
+  avatar_url?: string;
 }
 
 export interface Tenant {
@@ -750,6 +751,7 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
   const { password: _pw, ...empData } = admin;
   const { error: empError } = await supabase.from('empleados').insert({
     ...empData,
+    avatar_url: admin.avatar_url || null,
     id: authData.user.id,
     password: '***'
   });
@@ -780,6 +782,7 @@ export async function registerBranch(tenant: Tenant, admin: Empleado, userId: st
   const { password: _pw, ...empData } = admin;
   const { error: empError } = await supabase.from('empleados').insert({
     ...empData,
+    avatar_url: admin.avatar_url || null,
     id: userId,
     tenant_id: tenant.id,
     password: '***'
@@ -1009,101 +1012,110 @@ export async function saveEmpleado(e: Empleado) {
 
   console.log("Iniciando guardado de empleado:", { email: emailLower, id: e.id });
 
-  // 0. Si es un nuevo registro (e.id temporal "emp_..."), verificar si el correo ya existe en empleados
+  // 0. Registrar o sincronizar en Supabase Auth
   if (!e.id || e.id.startsWith('emp_')) {
-    const { data: existingByEmail } = await supabase
-      .from('empleados')
-      .select('id')
-      .eq('email', emailLower)
-      .maybeSingle();
-
-    if (existingByEmail) {
-      console.log("Sincronizado ID existente desde tabla empleados por correo:", existingByEmail.id);
-      e.id = existingByEmail.id;
-    }
-  }
-
-  // 1. Manejo de Seguridad en Supabase Auth
-  if (e.password && e.password.length >= 6 && e.password !== '***') {
     try {
-      const { data: { user: currentUser } } = await supabase.auth.getUser();
+      console.log("Intentando crear cuenta en Auth...");
+      const tempClient = createClient(
+        import.meta.env.VITE_SUPABASE_URL || '',
+        import.meta.env.VITE_SUPABASE_ANON_KEY || '',
+        { auth: { persistSession: false, autoRefreshToken: false } }
+      );
 
-      // Caso especial: El admin se actualiza a sí mismo
-      if (currentUser && currentUser.id === e.id) {
-        console.log("Auto-actualización de contraseña...");
-        const { error: updateError } = await supabase.auth.updateUser({ password: e.password });
-        if (updateError) authErrorMsg = "Error auto-update: " + updateError.message;
+      const { data: authData, error: authError } = await tempClient.auth.signUp({
+        email: emailLower,
+        password: e.password || 'tempPassword123!',
+        options: { data: { nombre: e.nombre, tenant_id: e.tenant_id, rol: e.rol } }
+      });
 
-        if (currentUser.email !== emailLower) {
-          console.log("Auto-actualización de email...");
-          const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
-          if (emailError) authErrorMsg = (authErrorMsg ? authErrorMsg + " " : "") + "Error auto-update email: " + emailError.message;
-        }
-      } else if (e.id && e.id.length === 36 && !e.id.startsWith('emp_')) {
-        // Actualizar usuario existente que ya tiene ID de Auth (UUID)
-        console.log("Actualizando contraseña/correo de usuario UUID en Auth via RPC...");
-        const { error: rpcError } = await supabase.rpc('admin_set_user_password', {
-          target_user_id: e.id,
-          new_password: e.password
-        });
-        if (rpcError) {
-          console.error("RPC ERROR:", rpcError);
-        }
+      if (authError) {
+        if (authError.message.toLowerCase().includes("already registered") || authError.status === 422) {
+          // El usuario ya existe en Auth. Sincronizamos con su ID de la tabla empleados
+          const { data: existingByEmail } = await supabase
+            .from('empleados')
+            .select('id')
+            .eq('email', emailLower)
+            .maybeSingle();
 
-        const { error: emailRpcError } = await supabase.rpc('admin_set_user_email', {
-          target_user_id: e.id,
-          new_email: emailLower
-        });
-        if (emailRpcError) {
-          console.error("RPC EMAIL ERROR:", emailRpcError);
-        }
-      } else {
-        // ESTRATEGIA PARA NUEVO EMPLEADO: Intentamos Sign Up primero. 
-        console.log("Intentando crear cuenta en Auth...");
-
-        const tempClient = createClient(
-          import.meta.env.VITE_SUPABASE_URL || '',
-          import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-          { auth: { persistSession: false, autoRefreshToken: false } }
-        );
-
-        const { data: authData, error: authError } = await tempClient.auth.signUp({
-          email: emailLower,
-          password: e.password,
-          options: { data: { nombre: e.nombre, tenant_id: e.tenant_id, rol: e.rol } }
-        });
-
-        if (authError) {
-          if (authError.message.toLowerCase().includes("already registered") || authError.status === 422) {
-            throw new Error(`El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente.`);
+          if (existingByEmail) {
+            console.log("El usuario ya existe en Auth y public.empleados. Usando ID existente:", existingByEmail.id);
+            e.id = existingByEmail.id;
+            
+            // Si especificó contraseña, actualizarla
+            if (e.password && e.password !== '***') {
+              await supabase.rpc('admin_set_user_password', {
+                target_user_id: e.id,
+                new_password: e.password
+              });
+            }
           } else {
-            console.error("SIGNUP ERROR:", authError);
-            throw new Error("Error de Auth al crear empleado: " + authError.message);
+            throw new Error(`El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente.`);
           }
-        } else if (authData?.user) {
-          console.log("Cuenta Auth creada exitosamente:", authData.user.id);
-          e.id = authData.user.id; // Sincronizamos el ID de la tabla con el de Auth
+        } else {
+          console.error("SIGNUP ERROR:", authError);
+          throw new Error("Error de Auth al crear empleado: " + authError.message);
         }
+      } else if (authData?.user) {
+        console.log("Cuenta Auth creada exitosamente:", authData.user.id);
+        
+        // AUTO-HEALING: Si el usuario ya existía en public.empleados con un ID viejo desincronizado,
+        // actualizamos ese ID viejo en la DB para que coincida con el nuevo ID válido de Auth.
+        const { data: existingByEmail } = await supabase
+          .from('empleados')
+          .select('id')
+          .eq('email', emailLower)
+          .maybeSingle();
+
+        if (existingByEmail && existingByEmail.id !== authData.user.id) {
+          console.log(`Corrigiendo inconsistencia: actualizando ID viejo ${existingByEmail.id} a nuevo ID de Auth ${authData.user.id}`);
+          await supabase.from('empleados').update({ id: authData.user.id }).eq('id', existingByEmail.id);
+        }
+
+        e.id = authData.user.id;
       }
     } catch (err: any) {
       console.error("EXCEPCION AUTH:", err);
-      if (err.message?.includes("ya está registrado")) throw err;
-      authErrorMsg = "Excepción: " + err.message;
+      throw err;
     }
   } else {
-    // Si no hay cambio de contraseña, pero es un usuario existente
-    if (e.id && e.id.length === 36 && !e.id.startsWith('emp_')) {
+    // 1. Manejo de Seguridad en Supabase Auth para edición de usuario existente
+    if (e.password && e.password.length >= 6 && e.password !== '***') {
       try {
-        console.log("Actualizando email del usuario existente en Auth...");
-        const { error: emailRpcError } = await supabase.rpc('admin_set_user_email', {
-          target_user_id: e.id,
-          new_email: emailLower
-        });
-        if (emailRpcError) {
-          console.error("RPC EMAIL ERROR (no password update):", emailRpcError);
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+
+        // Caso especial: El admin se actualiza a sí mismo
+        if (currentUser && currentUser.id === e.id) {
+          console.log("Auto-actualización de contraseña...");
+          const { error: updateError } = await supabase.auth.updateUser({ password: e.password });
+          if (updateError) authErrorMsg = "Error auto-update: " + updateError.message;
+
+          if (currentUser.email !== emailLower) {
+            console.log("Auto-actualización de email...");
+            const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
+            if (emailError) authErrorMsg = (authErrorMsg ? authErrorMsg + " " : "") + "Error auto-update email: " + emailError.message;
+          }
+        } else if (e.id && e.id.length === 36) {
+          // Actualizar usuario existente que ya tiene ID de Auth (UUID)
+          console.log("Actualizando contraseña/correo de usuario UUID en Auth via RPC...");
+          const { error: rpcError } = await supabase.rpc('admin_set_user_password', {
+            target_user_id: e.id,
+            new_password: e.password
+          });
+          if (rpcError) {
+            console.error("RPC ERROR:", rpcError);
+          }
+
+          const { error: emailRpcError } = await supabase.rpc('admin_set_user_email', {
+            target_user_id: e.id,
+            new_email: emailLower
+          });
+          if (emailRpcError) {
+            console.error("RPC EMAIL ERROR:", emailRpcError);
+          }
         }
       } catch (err: any) {
-        console.error("EXCEPCION RPC EMAIL:", err);
+        console.error("EXCEPCION AUTH:", err);
+        authErrorMsg = "Excepción: " + err.message;
       }
     }
   }
@@ -1115,7 +1127,8 @@ export async function saveEmpleado(e: Empleado) {
     password: '***',
     nombre: e.nombre || "",
     apellido: e.apellido || "",
-    pin: e.pin || ""
+    pin: e.pin || "",
+    avatar_url: e.avatar_url || null
   };
 
   console.log("Upsert en tabla empleados:", dataToSave);

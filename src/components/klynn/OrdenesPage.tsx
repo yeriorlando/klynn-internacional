@@ -79,6 +79,7 @@ export function OrdenesPage() {
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
   const [showPendientes, setShowPendientes] = useState(false);
   const [searchPendientes, setSearchPendientes] = useState("");
+  const [filtroPendientes, setFiltroPendientes] = useState<"todos" | "RECIBIDA" | "EN_PROCESO" | "LISTA" | "EN_CAMINO">("todos");
   const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
   const navigate = useNavigate();
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -184,6 +185,44 @@ export function OrdenesPage() {
              saldoStr.includes(searchLower);
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
   }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, q]);
+
+  const pendientesCobroList = useMemo(() => {
+    return ordenes
+      .filter(o =>
+        o.saldo > 0 &&
+        o.metodo_pago === "PAGO_AL_RETIRAR" &&
+        o.estado !== "ENTREGADA" &&
+        o.estado !== "ANULADA" &&
+        ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado)
+      )
+      .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+  }, [ordenes]);
+
+  const filteredPendientes = useMemo(() => {
+    const searchLower = searchPendientes.trim().toLowerCase();
+
+    return pendientesCobroList.filter(o => {
+      if (filtroPendientes !== "todos" && o.estado !== filtroPendientes) return false;
+      if (!searchLower) return true;
+
+      const clienteObj = clientes.find(c => c.id === o.cliente_id);
+      const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
+      const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
+      const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
+
+      return o.numero.toLowerCase().includes(searchLower) ||
+        clienteNombre.includes(searchLower) ||
+        String(o.total).includes(searchLower) ||
+        String(o.saldo).includes(searchLower) ||
+        dateStr.includes(searchLower) ||
+        dateStrFull.includes(searchLower);
+    });
+  }, [pendientesCobroList, filtroPendientes, searchPendientes, clientes]);
+
+  const totalPendienteCobro = useMemo(
+    () => pendientesCobroList.reduce((total, orden) => total + orden.saldo, 0),
+    [pendientesCobroList]
+  );
 
   const [currentPage, setCurrentPage] = useState(1);
 
@@ -540,104 +579,222 @@ export function OrdenesPage() {
   }
 
   if (showPendientes) {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-300">
-        <div className="relative bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60 py-3 sticky top-0 z-10 border-b border-border/10 pb-4 flex items-center justify-center min-h-[60px]">
-          <Button 
-            onClick={() => setShowPendientes(false)}
-            className="absolute left-0 top-1/2 -translate-y-1/2 bg-primary text-primary-foreground hover:bg-primary/90 border-none gap-1.5 font-extrabold rounded-xl shadow-sm shadow-primary/20 transition-all cursor-pointer h-8 px-3 text-xs"
-          >
-            <ArrowLeft className="h-3.5 w-3.5 stroke-[2.5]" /> Volver a Órdenes
-          </Button>
+    const filtrosDeCobro = [
+      {
+        value: "todos" as const,
+        label: "Todas",
+        count: pendientesCobroList.length,
+        icon: LayoutGrid,
+        bg: "bg-slate-100 text-slate-700 border-slate-200",
+        activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md",
+      },
+      {
+        value: "RECIBIDA" as const,
+        label: "Recibidas",
+        count: pendientesCobroList.filter(o => o.estado === "RECIBIDA").length,
+        icon: Inbox,
+        bg: "bg-blue-50 text-blue-700 border-blue-200",
+        activeBg: "bg-blue-600 text-white border-blue-600 shadow-md",
+      },
+      {
+        value: "EN_PROCESO" as const,
+        label: "En proceso",
+        count: pendientesCobroList.filter(o => o.estado === "EN_PROCESO").length,
+        icon: RefreshCw,
+        bg: "bg-amber-50 text-amber-700 border-amber-200",
+        activeBg: "bg-amber-500 text-white border-amber-500 shadow-md",
+      },
+      {
+        value: "LISTA" as const,
+        label: "Listas",
+        count: pendientesCobroList.filter(o => o.estado === "LISTA").length,
+        icon: CircleCheck,
+        bg: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md",
+      },
+      {
+        value: "EN_CAMINO" as const,
+        label: "En camino",
+        count: pendientesCobroList.filter(o => o.estado === "EN_CAMINO").length,
+        icon: Truck,
+        bg: "bg-purple-50 text-purple-700 border-purple-200",
+        activeBg: "bg-purple-600 text-white border-purple-600 shadow-md",
+      },
+    ];
+    const listasParaEntrega = pendientesCobroList.filter(o => o.estado === "LISTA" || o.estado === "EN_CAMINO").length;
 
-          <div className="text-center px-28">
-            <h1 className="text-2xl md:text-3xl font-display font-black text-foreground tracking-tight leading-tight">
-              Órdenes Pendientes de Cobro
-            </h1>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Aquí puedes ver, buscar y saldar todas las órdenes que tienen cobros pendientes de entrega.
+    return (
+      <div className="space-y-5 pb-8 animate-in fade-in slide-in-from-bottom-1 duration-300">
+        <section className="relative overflow-hidden rounded-3xl border border-primary/10 bg-gradient-to-br from-primary/[0.10] via-white to-emerald-50/70 shadow-sm dark:border-primary/20 dark:from-primary/20 dark:via-slate-950 dark:to-emerald-950/30">
+          <div className="pointer-events-none absolute -right-20 -top-28 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-28 left-1/3 h-56 w-56 rounded-full bg-emerald-300/10 blur-3xl" />
+
+          <div className="relative p-5 md:p-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setShowPendientes(false)}
+                className="h-9 gap-2 rounded-xl border-slate-200 bg-white/80 px-3 text-xs font-bold text-slate-700 shadow-sm backdrop-blur hover:bg-white hover:text-primary dark:border-slate-700 dark:bg-slate-900/80 dark:text-slate-200"
+              >
+                <ArrowLeft className="h-4 w-4" strokeWidth={2.25} />
+                Volver a Órdenes
+              </Button>
+
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50/90 px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.08em] text-amber-700 shadow-sm dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Cobros al retirar
+              </span>
+            </div>
+
+            <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_minmax(580px,0.95fr)] xl:items-end">
+              <div className="flex items-start gap-3.5">
+                <div className="grid h-12 w-12 shrink-0 place-items-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
+                  <Coins className="h-6 w-6" strokeWidth={2} />
+                </div>
+                <div>
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-primary">Centro de cobros</p>
+                  <h1 className="mt-1 font-display text-2xl font-black tracking-tight text-slate-950 md:text-3xl dark:text-white">
+                    Órdenes pendientes de cobro
+                  </h1>
+                  <p className="mt-1.5 max-w-2xl text-xs leading-5 text-slate-600 md:text-sm dark:text-slate-400">
+                    Encuentra las órdenes con pago al retirar y registra cada cobro desde un solo lugar.
+                  </p>
+                </div>
+              </div>
+
+              <div className="grid min-w-0 grid-cols-2 gap-2.5 md:grid-cols-[0.82fr_1.5fr_0.95fr] xl:min-w-[580px]">
+                <div className="order-1 flex min-h-[104px] min-w-0 flex-col justify-between rounded-2xl border border-white/90 bg-white/80 p-3.5 shadow-sm backdrop-blur transition-transform hover:-translate-y-0.5 dark:border-white/10 dark:bg-slate-900/75">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 dark:bg-blue-950/40 dark:text-blue-400 dark:ring-blue-900/60">
+                      <Receipt className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">Órdenes</span>
+                  </div>
+                  <div className="flex items-baseline justify-center gap-2 text-center">
+                    <p className="text-2xl font-black tabular-nums tracking-tight text-slate-950 dark:text-white">{pendientesCobroList.length}</p>
+                    <span className="text-[9px] font-semibold text-slate-400">Pendientes</span>
+                  </div>
+                </div>
+
+                <div className="order-3 col-span-2 flex min-h-[104px] min-w-0 flex-col justify-between overflow-visible rounded-2xl border border-primary/15 bg-gradient-to-br from-white via-white to-emerald-50/90 p-3.5 shadow-sm backdrop-blur transition-transform hover:-translate-y-0.5 md:order-2 md:col-span-1 dark:border-primary/25 dark:from-slate-900 dark:via-slate-900 dark:to-emerald-950/40">
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                        <Wallet className="h-4 w-4" strokeWidth={2} />
+                      </span>
+                      <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">Total por cobrar</span>
+                    </div>
+                    <span className="shrink-0 rounded-full bg-primary/10 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-primary">Saldo</span>
+                  </div>
+                  <p className="mt-2 whitespace-nowrap text-[clamp(1.35rem,2vw,1.8rem)] font-black tabular-nums tracking-[-0.04em] text-primary">
+                    {formatRD(totalPendienteCobro)}
+                  </p>
+                </div>
+
+                <div className="order-2 flex min-h-[104px] min-w-0 flex-col justify-between rounded-2xl border border-white/90 bg-white/80 p-3.5 shadow-sm backdrop-blur transition-transform hover:-translate-y-0.5 md:order-3 dark:border-white/10 dark:bg-slate-900/75">
+                  <div className="flex items-center gap-2">
+                    <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60">
+                      <CheckCircle2 className="h-4 w-4" strokeWidth={2} />
+                    </span>
+                    <span className="text-[9px] font-extrabold uppercase tracking-[0.1em] text-slate-500 dark:text-slate-400">Para entregar</span>
+                  </div>
+                  <div className="flex items-baseline justify-center gap-2 text-center">
+                    <p className="text-2xl font-black tabular-nums tracking-tight text-emerald-600 dark:text-emerald-400">{listasParaEntrega}</p>
+                    <span className="text-[9px] font-semibold text-slate-400">Listas</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <div>
+          <Card className="flex flex-wrap items-center gap-3 p-4">
+            <div className="relative min-w-[200px] flex-1">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                value={searchPendientes}
+                onChange={(e) => setSearchPendientes(e.target.value)}
+                placeholder="Buscar por número de orden, cliente, monto, fecha..."
+                aria-label="Buscar órdenes pendientes de cobro"
+                className="pl-10"
+              />
+            </div>
+          </Card>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="custom-scrollbar flex items-center gap-2 overflow-x-auto pb-1 sm:pb-0">
+              {filtrosDeCobro.map(filtro => {
+                const active = filtroPendientes === filtro.value;
+                const Icon = filtro.icon;
+                return (
+                  <button
+                    key={filtro.value}
+                    type="button"
+                    onClick={() => setFiltroPendientes(filtro.value)}
+                    className={`inline-flex shrink-0 cursor-pointer items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-all duration-200 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                      active ? filtro.activeBg : filtro.bg
+                    }`}
+                  >
+                    <Icon className="h-3.5 w-3.5" />
+                    {filtro.label}
+                    <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                      active ? "bg-white/25" : "bg-black/5"
+                    }`}>
+                      {filtro.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+            <p className="shrink-0 text-[10px] font-bold text-slate-500 dark:text-slate-400">
+              Mostrando <span className="text-slate-900 dark:text-white">{filteredPendientes.length}</span> de {pendientesCobroList.length}
             </p>
           </div>
         </div>
 
-        {/* Buscador de Pendientes */}
-        <Card className="p-4 relative border border-primary/10 shadow-sm rounded-2xl bg-card">
-          <Search className="pointer-events-none absolute left-7 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
-          <Input 
-            value={searchPendientes} 
-            onChange={(e) => setSearchPendientes(e.target.value)} 
-            placeholder="Buscar por número de orden, cliente, monto, fecha..." 
-            className="pl-12 h-11 bg-background border border-primary/10 rounded-2xl focus-visible:ring-amber-500 font-medium" 
-          />
-        </Card>
-
-        {/* Cuadrícula de Tarjetas */}
-        <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3 py-2">
-          {(() => {
-            const pendientesCobroList = ordenes.filter(o => 
-              o.saldo > 0 && 
-              o.metodo_pago === "PAGO_AL_RETIRAR" &&
-              o.estado !== "ENTREGADA" && 
-              o.estado !== "ANULADA" &&
-              ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado)
-            );
-
-            const filteredList = pendientesCobroList.filter(o => {
-              if (!searchPendientes) return true;
-              const searchLower = searchPendientes.toLowerCase();
-              const clienteObj = clientes.find(c => c.id === o.cliente_id);
-              const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
-              const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
-              const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
-              
-              return o.numero.toLowerCase().includes(searchLower) ||
-                     clienteNombre.includes(searchLower) ||
-                     String(o.total).includes(searchLower) ||
-                     String(o.saldo).includes(searchLower) ||
-                     dateStr.includes(searchLower) ||
-                     dateStrFull.includes(searchLower);
-            }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-
-            if (pendientesCobroList.length === 0) {
-              return (
-                <div className="col-span-full py-16 text-center flex flex-col items-center justify-center bg-card rounded-3xl border border-border shadow-sm">
-                  <div className="rounded-full bg-emerald-500/10 p-3.5 mb-3 text-emerald-600">
-                    <CheckCircle2 className="h-8 w-8" />
-                  </div>
-                  <h4 className="font-bold text-base text-foreground">¡Todo al día!</h4>
-                  <p className="text-xs text-muted-foreground mt-1 max-w-xs">No hay ninguna orden pendiente por cobrar en estado Recibida, En Proceso o Lista.</p>
-                  <Button 
-                    onClick={() => setShowPendientes(false)}
-                    className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
-                  >
-                    Volver a Órdenes
-                  </Button>
-                </div>
-              );
-            }
-
-            if (filteredList.length === 0) {
-              return (
-                <div className="col-span-full py-12 text-center flex flex-col items-center justify-center bg-card rounded-3xl border border-border shadow-sm">
-                  <h4 className="font-bold text-sm text-foreground">Sin resultados</h4>
-                  <p className="text-xs text-muted-foreground mt-1">No se encontraron órdenes pendientes que coincidan con "{searchPendientes}".</p>
-                </div>
-              );
-            }
-
-            return filteredList.map((o) => (
-              <PendienteCard 
+        {pendientesCobroList.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-3xl border border-slate-200/80 bg-white px-6 py-16 text-center shadow-sm dark:border-slate-800 dark:bg-slate-950">
+            <div className="relative grid h-16 w-16 place-items-center rounded-2xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60">
+              <CheckCircle2 className="h-7 w-7" strokeWidth={1.8} />
+              <span className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full border-4 border-white bg-emerald-500 dark:border-slate-950" />
+            </div>
+            <h4 className="mt-5 text-lg font-black text-slate-950 dark:text-white">Todo está cobrado</h4>
+            <p className="mt-1.5 max-w-sm text-xs leading-5 text-slate-500 dark:text-slate-400">No hay órdenes con pago al retirar que tengan un saldo pendiente.</p>
+            <Button onClick={() => setShowPendientes(false)} className="mt-5 h-9 rounded-xl bg-primary px-4 text-xs font-bold text-white hover:bg-primary/90">
+              Volver a Órdenes
+            </Button>
+          </div>
+        ) : filteredPendientes.length === 0 ? (
+          <div className="flex flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-white/70 px-6 py-14 text-center dark:border-slate-700 dark:bg-slate-950/70">
+            <div className="grid h-12 w-12 place-items-center rounded-2xl bg-slate-100 text-slate-500 dark:bg-slate-900 dark:text-slate-400">
+              <Search className="h-5 w-5" />
+            </div>
+            <h4 className="mt-4 text-sm font-extrabold text-slate-900 dark:text-white">No encontramos coincidencias</h4>
+            <p className="mt-1 max-w-md text-xs leading-5 text-slate-500 dark:text-slate-400">Prueba con otro número de orden, cliente, monto o selecciona un estado diferente.</p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => { setSearchPendientes(""); setFiltroPendientes("todos"); }}
+              className="mt-4 h-9 rounded-xl text-xs font-bold"
+            >
+              Limpiar búsqueda y filtros
+            </Button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {filteredPendientes.map((o) => (
+              <PendienteCard
                 key={o.id}
                 o={o}
                 clientes={clientes}
                 cajaAbierta={cajaAbierta}
-                onCobrarClick={(ordenToPay) => {
-                  setCobrarOrden(ordenToPay);
-                }}
+                onCobrarClick={setCobrarOrden}
               />
-            ));
-          })()}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Modal de cobro unificado */}
         {cobrarOrden && (
@@ -706,29 +863,20 @@ export function OrdenesPage() {
             <Printer className="h-4 w-4" /> Imprimir
           </Button>
 
-          {(() => {
-            const cantidadPendientes = ordenes.filter(o => 
-              o.saldo > 0 && 
-              o.metodo_pago === "PAGO_AL_RETIRAR" &&
-              o.estado !== "ENTREGADA" && 
-              o.estado !== "ANULADA" &&
-              ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO"].includes(o.estado)
-            ).length;
-            return (
-              <Button
-                onClick={() => setShowPendientes(true)}
-                className="gap-2 bg-amber-500 hover:bg-amber-600 text-white shadow-glow border-0 transition-all duration-200 active:scale-95 font-bold"
-              >
-                <Coins className="h-4 w-4" /> 
-                Órdenes Pendientes
-                {cantidadPendientes > 0 && (
-                  <Badge className="ml-1 bg-white text-amber-600 hover:bg-white border-none font-black text-[10px] px-1.5 py-0.5 rounded-full shadow-sm">
-                    {cantidadPendientes}
-                  </Badge>
-                )}
-              </Button>
-            );
-          })()}
+          <Button
+            onClick={() => setShowPendientes(true)}
+            className="h-10 gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 text-amber-800 shadow-sm transition-all duration-200 hover:border-amber-300 hover:bg-amber-100 hover:text-amber-900 active:scale-[0.98] dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/60"
+          >
+            <span className="grid h-6 w-6 place-items-center rounded-lg bg-amber-500 text-white shadow-sm">
+              <Coins className="h-3.5 w-3.5" strokeWidth={2.25} />
+            </span>
+            <span className="text-xs font-extrabold">Órdenes pendientes</span>
+            {pendientesCobroList.length > 0 && (
+              <Badge className="ml-0.5 grid h-5 min-w-5 place-items-center rounded-full border-none bg-amber-500 px-1.5 text-[9px] font-black text-white shadow-sm hover:bg-amber-500">
+                {pendientesCobroList.length}
+              </Badge>
+            )}
+          </Button>
         </div>
       </PageHeader>
 
@@ -2832,15 +2980,24 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 }
 
 // ============ TARJETA DE ORDEN PENDIENTE INTERACTIVA ============
-interface PendienteCardProps {
+export interface PendienteCardProps {
   o: Orden;
   clientes: Cliente[];
   cajaAbierta: Caja | null | undefined;
   onCobrarClick: (orden: Orden) => void;
+  compact?: boolean;
 }
 
-function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick }: PendienteCardProps) {
+export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact = false }: PendienteCardProps) {
   const c = clientes.find(cli => cli.id === o.cliente_id) || { nombre: "Consumidor", apellido: "Final", tipo: "Consumidor Final" };
+  const clienteNombre = `${c.nombre} ${c.apellido || ""}`.trim();
+  const clienteIniciales = clienteNombre.split(" ").filter(Boolean).map(parte => parte[0]).slice(0, 2).join("").toUpperCase();
+  const estadoAccent = ({
+    RECIBIDA: "from-blue-500 to-indigo-500",
+    EN_PROCESO: "from-amber-500 to-orange-500",
+    LISTA: "from-emerald-500 to-teal-500",
+    EN_CAMINO: "from-violet-500 to-purple-500",
+  } as Record<string, string>)[o.estado] || "from-slate-400 to-slate-500";
 
   const handleCardClick = () => {
     if (!cajaAbierta) {
@@ -2851,74 +3008,103 @@ function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick }: PendienteCar
   };
 
   return (
-    <Card 
-      onClick={handleCardClick}
-      className="relative overflow-hidden border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-primary/50 hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200 rounded-2xl flex flex-col justify-between group shadow-xs animate-in fade-in cursor-pointer select-none active:scale-[0.99]"
-    >
-      <div className="p-4 space-y-3 flex-grow flex flex-col justify-start">
-        {/* Fecha y Hora Centrada en la parte superior (Color Primario) */}
-        <div className="flex items-center justify-center gap-1.5 text-[10px] text-primary font-extrabold font-mono pb-1.5 border-b border-slate-100 dark:border-slate-800/80 -mt-0.5">
-          <Calendar className="h-3 w-3 text-primary shrink-0" />
-          <span>{formatDateTimeRD(o.creado_en)}</span>
-        </div>
+    <Card className={`group relative flex h-full cursor-pointer flex-col overflow-hidden border border-slate-200/80 bg-white shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/25 hover:shadow-[0_20px_50px_-28px_rgba(15,23,42,0.45)] dark:border-slate-800 dark:bg-slate-950 ${compact ? "rounded-2xl" : "rounded-3xl"}`}>
+      <button
+        type="button"
+        onClick={handleCardClick}
+        className={`absolute inset-0 z-10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset ${compact ? "rounded-2xl" : "rounded-3xl"}`}
+        aria-label={`Abrir cobro de ${formatRD(o.saldo)} para la orden ${o.numero}`}
+      >
+        <span className="sr-only">Abrir cobro de la orden {o.numero}</span>
+      </button>
+      <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${estadoAccent}`} />
 
-        {/* Header de tarjeta (Número de Orden sin badge ni # + Estado) */}
-        <div className="flex justify-between items-center pt-0.5">
-          <div className="flex items-center gap-1.5">
-            <span className="font-mono text-sm font-black text-primary">
-              {o.numero}
-            </span>
-            {o.urgente && (
-              <span className="px-2 py-0.5 rounded-lg bg-rose-50 text-rose-600 dark:bg-rose-950/50 dark:text-rose-400 text-[9px] font-black uppercase tracking-wider border border-rose-200/60 flex items-center gap-1">
-                ⚡ Urgente
-              </span>
-            )}
+      <div className={`flex flex-1 flex-col ${compact ? "p-3 pt-4" : "p-4 pt-5"}`}>
+        <div className={`flex items-start justify-between ${compact ? "gap-2" : "gap-3"}`}>
+          <div className={`flex min-w-0 items-center ${compact ? "gap-2" : "gap-2.5"}`}>
+            <div className={`grid shrink-0 place-items-center bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20 ${compact ? "h-8 w-8 rounded-lg" : "h-9 w-9 rounded-xl"}`}>
+              <Receipt className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} strokeWidth={2} />
+            </div>
+            <div className="min-w-0">
+              <p className={`truncate font-mono font-black tracking-tight text-slate-950 dark:text-white ${compact ? "text-[12px]" : "text-[13px]"}`}>{o.numero}</p>
+              <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
+                <Calendar className="h-3 w-3" strokeWidth={2} />
+                {formatDateTimeRD(o.creado_en)}
+              </p>
+            </div>
           </div>
           <EstadoBadge estado={o.estado} />
         </div>
 
-        {/* Cliente Info Box */}
-        <div className="bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="h-8 w-8 rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0 shadow-2xs">
-              {c.tipo === "Empresa" ? <Building2 className="h-4 w-4 text-primary" /> : <User className="h-4 w-4 text-primary" />}
-            </div>
-            <div className="min-w-0">
-              <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 block">Cliente</span>
-              <p className="font-black text-xs text-slate-900 dark:text-slate-100 truncate">
-                {c.nombre} {c.apellido || ""}
-              </p>
-            </div>
+        {o.es_urgente && (
+          <div className={`${compact ? "mt-2" : "mt-3"} inline-flex w-fit items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-rose-600 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-400`}>
+            <Zap className="h-3 w-3 fill-current" />
+            Servicio urgente
           </div>
-          <span className={`text-[8px] font-extrabold uppercase tracking-wider px-2 py-0.5 rounded-md border shrink-0 ${
-            c.tipo === "Empresa" 
-              ? "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800" 
-              : "bg-teal-50 text-teal-700 border-teal-200 dark:bg-teal-950/40 dark:text-teal-300 dark:border-teal-800"
+        )}
+
+        <div className={`flex items-center rounded-2xl border border-slate-200/70 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/60 ${compact ? "mt-2 gap-2 p-2.5" : "mt-3 gap-3 p-3"}`}>
+          <div className={`grid shrink-0 place-items-center rounded-full bg-white font-black text-primary shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${compact ? "h-8 w-8 text-[10px]" : "h-10 w-10 text-[11px]"}`}>
+            {c.tipo === "Empresa" ? <Building2 className="h-[18px] w-[18px]" /> : clienteIniciales}
+          </div>
+          <div className="min-w-0 flex-1">
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Cliente</p>
+            <p className="mt-0.5 truncate text-[13px] font-extrabold text-slate-950 dark:text-white">{clienteNombre}</p>
+          </div>
+          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider ${
+            c.tipo === "Empresa"
+              ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-300"
+              : "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900/60 dark:bg-teal-950/40 dark:text-teal-300"
           }`}>
             {c.tipo === "Empresa" ? "Empresa" : "Personal"}
           </span>
         </div>
 
-        {/* Resumen de Importes - Rediseñado para mostrar solo el Total de la Orden */}
-        <div className="bg-slate-50/60 dark:bg-slate-800/30 border border-slate-200/60 dark:border-slate-800 rounded-xl p-3 flex justify-between items-center shadow-2xs">
-          <div>
-            <span className="text-[10px] font-extrabold uppercase tracking-widest text-slate-500 dark:text-slate-400 block">Total a Cobrar</span>
-            <span className="text-lg font-black text-slate-900 dark:text-slate-100 block mt-0.5">{formatRD(o.total)}</span>
-          </div>
-          <Badge className="bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-200/50 font-black text-[9px] uppercase tracking-wider rounded-lg px-2.5 py-1">
-            Al retirar
-          </Badge>
+        <div className={`${compact ? "mt-2 p-3" : "mt-3 p-4"} rounded-2xl border border-primary/10 bg-gradient-to-br from-primary/[0.09] via-primary/[0.04] to-emerald-50/70 dark:border-primary/20 dark:from-primary/20 dark:via-primary/10 dark:to-emerald-950/30`}>
+          {compact ? (
+            <>
+              <div className="flex items-center justify-between gap-2">
+                <p className="min-w-0 truncate text-[8px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Pendiente por cobrar</p>
+                <span className="inline-flex shrink-0 items-center gap-1 rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-amber-700 shadow-sm dark:border-amber-900/60 dark:bg-slate-900/70 dark:text-amber-300">
+                  <Coins className="h-3 w-3" />
+                  Al retirar
+                </span>
+              </div>
+              <p className="mt-1 truncate text-xl font-black tracking-tight text-slate-950 dark:text-white" title={formatRD(o.saldo)}>{formatRD(o.saldo)}</p>
+            </>
+          ) : (
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-[9px] font-extrabold uppercase tracking-[0.14em] text-slate-500 dark:text-slate-400">Pendiente por cobrar</p>
+                <p className="mt-1 text-2xl font-black tracking-tight text-slate-950 dark:text-white">{formatRD(o.saldo)}</p>
+              </div>
+              <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-white/80 px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider text-amber-700 shadow-sm dark:border-amber-900/60 dark:bg-slate-900/70 dark:text-amber-300">
+                <Coins className="h-3 w-3" />
+                Al retirar
+              </span>
+            </div>
+          )}
+          {o.total !== o.saldo && (
+            <div className={`${compact ? "mt-2" : "mt-3"} flex items-center justify-between border-t border-primary/10 pt-2 text-[10px] font-semibold text-slate-500 dark:border-primary/20 dark:text-slate-400`}>
+              <span>Total de la orden</span>
+              <span className="font-bold text-slate-700 dark:text-slate-300">{formatRD(o.total)}</span>
+            </div>
+          )}
         </div>
-      </div>
 
-      {/* Botón de Cobrar */}
-      <div className="p-3 pt-0">
         <Button
           type="button"
-          className="w-full bg-emerald-600 group-hover:bg-emerald-700 text-white shadow-md shadow-emerald-600/20 font-black text-xs h-9 rounded-xl transition-all duration-200 gap-2 uppercase tracking-wider cursor-pointer"
+          onClick={handleCardClick}
+          className={`relative z-20 w-full justify-center gap-2 rounded-xl border-none text-center text-xs font-extrabold text-white shadow-md transition-all active:scale-[0.99] ${compact ? "mt-3 h-10 px-10" : "mt-4 h-11 px-12"} ${
+            cajaAbierta
+              ? "bg-primary shadow-primary/20 hover:bg-primary/90"
+              : "bg-slate-400 shadow-slate-400/15 hover:bg-slate-500 dark:bg-slate-700 dark:hover:bg-slate-600"
+          }`}
+          aria-label={`Cobrar ${formatRD(o.saldo)} de la orden ${o.numero}`}
         >
-          <DollarSign className="h-4 w-4 stroke-[2.5]" />
-          Cobrar Orden
+          <Wallet className="h-4 w-4" strokeWidth={2.25} />
+          {cajaAbierta ? "Cobrar orden" : "Caja cerrada"}
+          <ChevronRight className="absolute right-4 h-4 w-4 transition-transform group-hover:translate-x-0.5" />
         </Button>
       </div>
     </Card>

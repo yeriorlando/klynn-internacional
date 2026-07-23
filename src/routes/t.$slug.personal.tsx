@@ -21,6 +21,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { checkPlanLimits } from "@/lib/storage";
 import { PlanLimitModal } from "@/components/klynn/PlanLimitModal";
+import { UserAvatar } from "@/components/klynn/UserAvatar";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -112,10 +113,20 @@ function PersonalPage() {
           const total = stats.reduce((s, o) => s + o.total, 0);
           return (
             <Card key={e.id} className="cursor-pointer p-5 hover:shadow-elegant" onClick={() => setEdit(e)}>
-              <div className="flex items-start justify-between">
-                <div>
-                  <div className="font-display text-lg">{e.nombre} {e.apellido || ""}</div>
-                  <div className="text-xs text-muted-foreground">{e.email}</div>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <UserAvatar
+                    name={[e.nombre, e.apellido].filter(Boolean).join(" ")}
+                    avatarUrl={e.avatar_url}
+                    size={40}
+                    className="border border-border shadow-sm shrink-0"
+                  />
+                  <div>
+                    <div className="font-display text-base font-bold text-slate-900 dark:text-white leading-tight">
+                      {e.nombre} {e.apellido || ""}
+                    </div>
+                    <div className="text-xs text-muted-foreground mt-0.5">{e.email}</div>
+                  </div>
                 </div>
                 <Badge className={`border-none text-[10px] ${getRoleBadgeClass(e.rol)}`}>{e.rol}</Badge>
               </div>
@@ -551,8 +562,8 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
               {empleado && step === 1 ? (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="sm" className="text-destructive hover:bg-destructive/10 rounded-xl px-2.5 text-xs h-8.5">
-                      <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
+                    <Button variant="destructive" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-3 text-xs h-8.5 gap-1 transition-all active:scale-95 border-none shadow-sm">
+                      <Trash2 className="h-3.5 w-3.5 text-white" /> Eliminar
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="rounded-3xl border-none shadow-2xl">

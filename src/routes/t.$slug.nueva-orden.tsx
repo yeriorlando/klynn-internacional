@@ -7,8 +7,8 @@ import { motion } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
   Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
-  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, Sparkles,
-  CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays, FileText,
+  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, WashingMachine,
+  CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays, FileText, ChevronDown, ChevronUp,
   Building2, Banknote
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -46,6 +46,7 @@ import { useCatalogo, useServicios, useClientes, useCajaAbierta, useECFConfig, u
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PriceInput } from "@/components/klynn/PriceInput";
+import { PendingCollectionsDialog } from "@/components/klynn/PendingCollectionsDialog";
 
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
@@ -85,8 +86,6 @@ function NuevaOrdenPage() {
   const [step, setStep] = useState(1);
   const [isPosMode, setIsPosMode] = useState(cfg.pos_modo_defecto !== false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [headerPortalTarget, setHeaderPortalTarget] = useState<HTMLDivElement | null>(null);
-  const wrapperRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (user?.tenant?.config) {
@@ -94,34 +93,16 @@ function NuevaOrdenPage() {
     }
   }, [user?.tenant?.config?.pos_modo_defecto]);
 
-  useEffect(() => {
-    const headerDiv = document.querySelector(".main-header > div.flex-1");
-    if (!headerDiv) return;
-
-    const wrapper = document.createElement("div");
-    wrapperRef.current = wrapper;
-    headerDiv.appendChild(wrapper);
-    setHeaderPortalTarget(wrapper);
-
-    return () => {
-      wrapper.remove();
-      wrapperRef.current = null;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!wrapperRef.current) return;
-    wrapperRef.current.className = isFullscreen
-      ? "absolute left-1/2 -translate-x-1/2 top-3.5 hidden lg:flex items-center gap-3 animate-in fade-in duration-300"
-      : "hidden lg:flex items-center gap-3 ml-auto mr-4 animate-in fade-in duration-300";
-  }, [isFullscreen]);
-
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
   const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
+  const [showAllClothingCategories, setShowAllClothingCategories] = useState(false);
   const [posSearch, setPosSearch] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
+  const [isCatalogHeaderVisible, setIsCatalogHeaderVisible] = useState(true);
+  const catalogScrollTopRef = useRef(0);
 
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
+  const [showPendingCollections, setShowPendingCollections] = useState(false);
   const [searchGlow, setSearchGlow] = useState(false);
 
   useEffect(() => {
@@ -433,6 +414,17 @@ function NuevaOrdenPage() {
     return ["TODAS LAS PRENDAS", ...Array.from(cats)];
   }, [catalogo]);
 
+  const visibleClothingCategories = useMemo(() => {
+    const limit = 10;
+    if (showAllClothingCategories || categoriesPrendas.length <= limit) return categoriesPrendas;
+
+    const visible = categoriesPrendas.slice(0, limit);
+    if (activeCategory !== "TODOS" && !visible.includes(activeCategory)) {
+      return [...visible.slice(0, limit - 1), activeCategory];
+    }
+    return visible;
+  }, [activeCategory, categoriesPrendas, showAllClothingCategories]);
+
   const catalogFiltered = useMemo(() => {
     let list = catalogo;
     if (posFilterTab === "PRENDAS") {
@@ -452,6 +444,56 @@ function NuevaOrdenPage() {
     }
     return servicios;
   }, [servicios, posSearch]);
+
+  const internalCatalogHeading = useMemo(() => {
+    const showsServices = enableServicios && posFilterTab !== "PRENDAS";
+
+    if (showsServices) {
+      return {
+        title: "Servicios",
+        count: servicesFiltered.length,
+        type: "SERVICIOS" as const,
+      };
+    }
+
+    if (enablePrendas) {
+      return {
+        title: "Prendas",
+        count: catalogFiltered.length,
+        type: "PRENDAS" as const,
+      };
+    }
+
+    return {
+      title: "Catálogo",
+      count: 0,
+      type: "CATALOGO" as const,
+    };
+  }, [catalogFiltered.length, enablePrendas, enableServicios, posFilterTab, servicesFiltered.length]);
+
+  const catalogSummary = useMemo(() => {
+    if (posFilterTab === "SERVICIOS") {
+      return {
+        title: "Servicios",
+        count: servicesFiltered.length,
+        helper: "Toca un servicio para agregarlo a la orden",
+      };
+    }
+
+    if (posFilterTab === "PRENDAS") {
+      return {
+        title: "Prendas",
+        count: catalogFiltered.length,
+        helper: "Toca un artículo para agregarlo a la orden",
+      };
+    }
+
+    return {
+      title: "Catálogo",
+      count: (enableServicios ? servicesFiltered.length : 0) + (enablePrendas ? catalogFiltered.length : 0),
+      helper: "Toca un artículo o servicio para agregarlo a la orden",
+    };
+  }, [catalogFiltered.length, enablePrendas, enableServicios, posFilterTab, servicesFiltered.length]);
 
   // Efecto para calcular la fecha de entrega automáticamente
   useEffect(() => {
@@ -1034,35 +1076,6 @@ function NuevaOrdenPage() {
           }
         `}} />
       )}
-      {headerPortalTarget && createPortal(
-        <div className="flex items-center gap-3 text-xs bg-slate-100 dark:bg-slate-800/80 py-1.5 px-4 rounded-full border border-border/60 shadow-sm animate-in fade-in duration-200">
-          <span className="text-rose-700 dark:text-rose-400 font-extrabold uppercase text-[10px] tracking-wider shrink-0 mr-1">Atajos:</span>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">F2</kbd>
-              <span className="text-[11px] font-bold text-muted-foreground">Cliente</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">F4</kbd>
-              <span className="text-[11px] font-bold text-muted-foreground">Descuento</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">Ctrl+Z</kbd>
-              <span className="text-[11px] font-bold text-muted-foreground">Deshacer</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">Enter</kbd>
-              <span className="text-[11px] font-bold text-muted-foreground">Cobrar</span>
-            </div>
-            <div className="flex items-center gap-1.5">
-              <kbd className="px-1.5 py-0.5 rounded bg-primary text-white text-[10px] font-black shadow-sm">Espacio</kbd>
-              <span className="text-[11px] font-bold text-muted-foreground">Facturar</span>
-            </div>
-          </div>
-        </div>,
-        headerPortalTarget
-      )}
-
       {!caja && (
         <Card className="mb-4 flex items-center gap-3 border-warning/40 bg-warning/10 p-4 text-sm">
           <AlertTriangle className="h-5 w-5 text-warning" />
@@ -1076,70 +1089,41 @@ function NuevaOrdenPage() {
         >
           {/* CATALOG GRID */}
           <div className="flex-1 flex flex-col gap-4 overflow-hidden h-full">
-            {/* Top row of POS: Search, Badges, and Fullscreen inside the grid column */}
-            <div className="flex flex-wrap items-center gap-2.5 py-1 w-full justify-between sm:justify-start">
-              {/* Search input */}
-              <div className="relative flex-grow max-w-[260px] w-full animate-in fade-in slide-in-from-left-4 duration-500">
-                <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
-                <Input
-                  value={posSearch}
-                  onChange={(e) => setPosSearch(e.target.value)}
-                  placeholder="Buscar prenda o servicio..."
-                  className={`pl-10 h-10 bg-background border shadow-sm rounded-xl transition-all duration-200 ${searchGlow ? 'border-primary ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]' : 'border-border focus-visible:border-primary/30 focus-visible:ring-1 focus-visible:ring-primary/10'}`}
-                />
-                {posSearch ? (
-                  <Button variant="ghost" size="icon" className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 hover:bg-transparent" onClick={() => setPosSearch("")}>
-                    <X className="h-3.5 w-3.5 text-muted-foreground/30" />
-                  </Button>
-                ) : (
-                  <kbd className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 rounded-md bg-primary px-2 py-0.5 text-[9px] font-black text-white shadow-sm">Ctrl</kbd>
-                )}
-              </div>
-
+            {/* Top row of POS: action buttons */}
+            <div className="flex w-full flex-wrap items-center justify-between gap-2.5 py-1 sm:justify-start">
               {/* Action Buttons Group */}
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex min-w-0 flex-nowrap items-center gap-2">
                 <button
                   type="button"
                   onClick={() => setShowDeliveryPOS(true)}
-                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${servicioDomicilio
-                    ? "bg-teal-600 text-white border-teal-600 shadow-md hover:bg-teal-700"
-                    : "bg-teal-50 dark:bg-teal-950/30 text-teal-700 dark:text-teal-300 border-teal-200 dark:border-teal-800 hover:bg-teal-100 dark:hover:bg-teal-900/40"
-                    }`}
+                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${servicioDomicilio ? "bg-blue-700 text-white shadow-inner ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-background" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"}`}
                 >
-                  <Truck className="h-3.5 w-3.5" />
+                  <Truck className={`h-4 w-4 transition-colors text-white ${servicioDomicilio ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`} />
                   <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={() => setShowDiscountPOS(true)}
-                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${descuento > 0
-                    ? "bg-amber-600 text-white border-amber-600 shadow-md hover:bg-amber-700"
-                    : "bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/40"
-                    }`}
+                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${descuento > 0 ? "bg-rose-700 text-white shadow-inner ring-2 ring-rose-400 ring-offset-1 dark:ring-offset-background" : "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"}`}
                 >
-                  <Percent className="h-3.5 w-3.5" />
+                  <Percent className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`} />
                   <span>{descuento > 0 ? `Desc. ${descuento}%` : "Descuento"}</span>
                 </button>
-
-
 
                 <button
                   type="button"
                   onClick={toggleFullscreen}
-                  className={`inline-flex items-center justify-center gap-1.5 rounded-full border px-2.5 h-9 text-[11px] font-bold transition-all duration-200 cursor-pointer hover:shadow-sm ${isFullscreen
-                    ? "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700"
-                    : "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40"
-                    }`}
+                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${isFullscreen ? "bg-slate-800 text-white shadow-inner ring-2 ring-slate-400 ring-offset-1 dark:ring-offset-background" : "bg-slate-700 hover:bg-slate-800 text-white shadow-sm"}`}
                 >
                   {isFullscreen ? (
                     <>
-                      <Minimize className="h-3.5 w-3.5" />
+                      <Minimize className="h-4 w-4 text-white opacity-100" />
                       <span>Pantalla normal</span>
                     </>
                   ) : (
                     <>
-                      <Maximize className="h-3.5 w-3.5" />
+                      <Maximize className="h-4 w-4 text-white opacity-90 transition-colors group-hover:opacity-100" />
                       <span>Pantalla completa</span>
                     </>
                   )}
@@ -1147,14 +1131,29 @@ function NuevaOrdenPage() {
 
                 <button
                   type="button"
+                  onClick={() => setShowPendingCollections(true)}
+                  className="group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
+                >
+                  <Banknote className="h-4 w-4 text-white opacity-90 transition-colors group-hover:opacity-100" />
+                  <span>Cobrar orden</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={() => setIsPosMode(false)}
                   title="Modo Clásico"
-                  className="flex items-center justify-center rounded-full border border-border bg-accent/50 hover:bg-accent hover:shadow-sm h-9 w-9 text-muted-foreground transition-all duration-200 cursor-pointer shrink-0"
+                  aria-label="Cambiar al modo clásico"
+                  className="group inline-flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 transition-colors hover:bg-slate-200 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 dark:text-slate-200 dark:hover:bg-slate-700"
                 >
-                  <Box className="h-4 w-4" />
+                  <Box className="h-4.5 w-4.5 text-slate-500 transition-colors group-hover:text-primary dark:text-slate-400" />
                 </button>
               </div>
             </div>
+
+            <PendingCollectionsDialog
+              open={showPendingCollections}
+              onOpenChange={setShowPendingCollections}
+            />
 
             <DeliveryPOSDialog
               open={showDeliveryPOS}
@@ -1199,48 +1198,70 @@ function NuevaOrdenPage() {
 
             <Card className="flex-1 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl bg-card">
               {!(step === 1 && !cliente && !isPosMode) && (
-                <div className="flex flex-col gap-3 pb-2 border-b border-border/40 px-6 pt-4 mb-2">
-                  {/* Filtro Principal de 3 Pestañas */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                    {enableServicios && enablePrendas ? (
-                      <div className="flex flex-wrap items-center gap-2">
+                <div
+                  aria-hidden={!isCatalogHeaderVisible}
+                  className={`flex shrink-0 flex-col overflow-hidden border-b px-6 transition-[max-height,opacity,margin,padding,border-color] duration-300 ease-out motion-reduce:transition-none ${
+                    isCatalogHeaderVisible
+                      ? "pointer-events-auto mb-2 max-h-[32rem] gap-3 border-border/40 py-4 opacity-100"
+                      : "pointer-events-none mb-0 max-h-0 gap-0 border-transparent py-0 opacity-0"
+                  }`}
+                >
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-display text-base font-black tracking-tight text-slate-950 dark:text-white md:text-lg">
+                          {catalogSummary.title}
+                        </h2>
+                        <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-primary px-1.5 text-[9px] font-black tabular-nums text-white shadow-sm dark:bg-primary dark:text-white">
+                          {catalogSummary.count}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-[11px] font-medium text-slate-400 dark:text-slate-500">
+                        {catalogSummary.helper}
+                      </p>
+                    </div>
+
+                    {enableServicios && enablePrendas && (
+                      <div className="inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100/90 p-1 shadow-inner shadow-slate-200/40 dark:bg-slate-900 dark:shadow-none">
                         {[
-                          { id: "TODOS", label: "Todos", icon: <LayoutGrid className="h-4 w-4" />, activeBg: "bg-[#2c4e82] text-white border-[#2c4e82] shadow-md hover:bg-[#2c4e82]", bg: "bg-accent text-foreground/80 border-border hover:bg-accent/80" },
-                          { id: "SERVICIOS", label: "Servicios", icon: <Sparkles className="h-4 w-4" />, activeBg: "bg-blue-600 text-white border-blue-600 shadow-md hover:bg-blue-700", bg: "bg-blue-50 dark:bg-blue-950/30 text-blue-700 dark:text-blue-300 border-blue-200 dark:border-blue-800 hover:bg-blue-100 dark:hover:bg-blue-900/40" },
-                          { id: "PRENDAS", label: "Prendas", icon: <Shirt className="h-4 w-4" />, activeBg: "bg-rose-600 text-white border-rose-600 shadow-md hover:bg-rose-700", bg: "bg-rose-50 dark:bg-rose-950/30 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40" }
-                        ].map(tab => {
+                          { id: "TODOS", label: "Todos", icon: LayoutGrid },
+                          { id: "SERVICIOS", label: "Servicios", icon: WashingMachine },
+                          { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                        ].map((tab) => {
                           const isSelected = posFilterTab === tab.id;
+                          const Icon = tab.icon;
+
                           return (
                             <button
                               key={tab.id}
+                              type="button"
+                              aria-pressed={isSelected}
                               onClick={() => {
-                                setPosFilterTab(tab.id as any);
-                                if (tab.id === "PRENDAS") {
-                                  setActiveCategory("TODAS LAS PRENDAS");
-                                } else {
-                                  setActiveCategory("TODOS");
-                                }
+                                setPosFilterTab(tab.id as typeof posFilterTab);
+                                setActiveCategory(tab.id === "PRENDAS" ? "TODAS LAS PRENDAS" : "TODOS");
                               }}
-                              className={`inline-flex items-center justify-center gap-1.5 py-2 px-4 rounded-full text-[13px] font-semibold transition-all duration-200 active:scale-95 border cursor-pointer hover:shadow-sm ${isSelected ? tab.activeBg : tab.bg
-                                }`}
+                              className={`inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-extrabold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:text-xs ${
+                                isSelected
+                                  ? "bg-primary text-white shadow-sm shadow-primary/20"
+                                  : "text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
+                              }`}
                             >
-                              {tab.icon}
+                              <Icon className={`h-3.5 w-3.5 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`} />
                               <span>{tab.label}</span>
                             </button>
                           );
                         })}
                       </div>
-                    ) : (
-                      <div />
                     )}
                   </div>
 
                   {/* Sub-filtro de Categorías de Prendas */}
                   {enablePrendas && posFilterTab === "PRENDAS" && (
-                    <div className="flex flex-wrap items-center gap-1.5 pt-2 animate-in slide-in-from-top-1 duration-200">
-                      {categoriesPrendas.map(cat => (
+                    <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 animate-in slide-in-from-top-1 duration-200 dark:border-slate-800">
+                      {visibleClothingCategories.map(cat => (
                         <button
                           key={cat}
+                          type="button"
                           onClick={() => setActiveCategory(cat)}
                           className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${activeCategory === cat
                             ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
@@ -1250,20 +1271,81 @@ function NuevaOrdenPage() {
                           {cat}
                         </button>
                       ))}
+                      {categoriesPrendas.length > 10 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowAllClothingCategories((current) => !current)}
+                          aria-expanded={showAllClothingCategories}
+                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/20 bg-primary/5 px-3.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-primary shadow-sm transition-all hover:border-primary/35 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
+                        >
+                          {showAllClothingCategories ? (
+                            <ChevronUp className="h-3 w-3" strokeWidth={2.5} />
+                          ) : (
+                            <ChevronDown className="h-3 w-3" strokeWidth={2.5} />
+                          )}
+                          {showAllClothingCategories ? "Ver menos" : "Ver más"}
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>
               )}
 
-              <div className="flex-1 overflow-y-auto px-6 py-4 custom-scrollbar space-y-8">
+              <div
+                className="flex-1 overflow-y-auto overscroll-contain px-6 py-4 custom-scrollbar space-y-8"
+                onScroll={(event) => {
+                  const scrollContainer = event.currentTarget;
+                  const scrollTop = scrollContainer.scrollTop;
+                  const previousScrollTop = catalogScrollTopRef.current;
+                  const scrollDelta = scrollTop - previousScrollTop;
+                  const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+                  const isNearBottom = maxScrollTop - scrollTop <= 12;
+
+                  if (scrollTop <= 16) {
+                    setIsCatalogHeaderVisible(true);
+                  } else if (scrollDelta > 2 && scrollTop > 32) {
+                    setIsCatalogHeaderVisible(false);
+                  } else if (scrollDelta < -2 && !isNearBottom) {
+                    setIsCatalogHeaderVisible(true);
+                  }
+
+                  catalogScrollTopRef.current = scrollTop;
+                }}
+              >
                 <>
+                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:grid-cols-[auto_minmax(12rem,1fr)_auto]">
+                    <h3 className="flex min-w-0 items-center gap-2.5 text-sm font-black text-slate-800 dark:text-slate-100 md:text-base">
+                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                        {internalCatalogHeading.type === "SERVICIOS" ? (
+                          <WashingMachine className="h-4 w-4" strokeWidth={2.2} />
+                        ) : internalCatalogHeading.type === "PRENDAS" ? (
+                          <Shirt className="h-4 w-4" strokeWidth={2.2} />
+                        ) : (
+                          <LayoutGrid className="h-4 w-4" strokeWidth={2.2} />
+                        )}
+                      </span>
+                      <span className="truncate">{internalCatalogHeading.title}</span>
+                    </h3>
+
+                    <div className={`relative col-span-2 row-start-2 min-w-0 rounded-xl transition-all duration-200 md:col-span-1 md:row-start-auto ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}>
+                      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <Input
+                        value={posSearch}
+                        onChange={(event) => setPosSearch(event.target.value)}
+                        placeholder="Buscar prenda o servicio..."
+                        aria-label="Buscar prenda o servicio"
+                        className="h-10 rounded-xl border-slate-200 bg-slate-50/80 pl-10 pr-3 shadow-none transition-colors focus-visible:border-primary/40 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900/80 dark:focus-visible:bg-slate-900"
+                      />
+                    </div>
+
+                    <span className="inline-flex items-center justify-self-end rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary dark:bg-primary/20">
+                      {internalCatalogHeading.count} disponibles
+                    </span>
+                  </div>
+
                   {/* SECCION SERVICIOS */}
-                  {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS" || posSearch) && servicesFiltered.length > 0 && (
+                  {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS") && servicesFiltered.length > 0 && (
                     <div className="space-y-4 animate-in fade-in duration-200">
-                      <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                        <div className="h-4 w-1 bg-primary rounded-full" />
-                        Servicios
-                      </h3>
                       <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
                         {servicesFiltered.map(s => {
                           const srvCount = serviciosSel.filter(x => x === s.nombre).length;
@@ -1300,16 +1382,23 @@ function NuevaOrdenPage() {
                   )}
 
                   {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
-                  {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS" || posSearch) && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
+                  {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS") && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
                     const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
                     if (itemsInCat.length === 0) return null;
 
                     return (
                       <div key={catName} className="space-y-4">
-                        <h3 className="text-sm font-black uppercase tracking-widest text-muted-foreground flex items-center gap-2">
-                          <div className="h-4 w-1 bg-primary rounded-full" />
-                          {catName}
-                        </h3>
+                        <div className="flex items-center justify-between gap-3">
+                          <h3 className="flex items-center gap-2.5 text-sm font-black text-slate-800 dark:text-slate-100 md:text-base">
+                            <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                              <Shirt className="h-4 w-4" strokeWidth={2.2} />
+                            </span>
+                            {catName}
+                          </h3>
+                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary dark:bg-primary/20">
+                            {itemsInCat.length} disponibles
+                          </span>
+                        </div>
                         <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
                           {itemsInCat.map(item => {
                             const countInCart = items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0);
