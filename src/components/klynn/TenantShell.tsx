@@ -333,7 +333,7 @@ export function TenantShell() {
 
   function onLogout() {
     logout();
-    navigate({ to: "/login" });
+    navigate({ to: "/t/$slug/login", params: { slug: tenant.slug } });
   }
 
   const isActive = (to: string, exact?: boolean) => {

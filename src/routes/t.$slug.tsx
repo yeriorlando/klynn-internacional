@@ -1,5 +1,4 @@
-import { createFileRoute, Outlet, redirect } from "@tanstack/react-router";
-import { getTenantBySlug } from "@/lib/storage";
+import { createFileRoute, Outlet, useRouterState } from "@tanstack/react-router";
 import { TenantShell } from "@/components/klynn/TenantShell";
 import { ThemeProvider } from "next-themes";
 
@@ -11,9 +10,12 @@ export const Route = createFileRoute("/t/$slug")({
 });
 
 function TenantLayout() {
+  const routerState = useRouterState();
+  const isLoginPage = routerState.location.pathname.endsWith("/login");
+
   return (
     <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-      <TenantShell />
+      {isLoginPage ? <Outlet /> : <TenantShell />}
     </ThemeProvider>
   );
 }

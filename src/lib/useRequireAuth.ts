@@ -25,7 +25,14 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
     async function check() {
       const u = await getCurrentUser();
       if (!u) {
-        navigate({ to: "/login" });
+        const match = typeof window !== 'undefined' ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+        const slug = match ? match[1] : null;
+        
+        if (slug && slug !== 'admin') {
+          navigate({ to: "/t/$slug/login", params: { slug } });
+        } else {
+          navigate({ to: "/login" });
+        }
       } else {
         setUser(u);
       }

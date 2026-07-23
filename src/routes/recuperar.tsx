@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { ArrowLeft, Mail, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
@@ -24,6 +24,17 @@ function RecuperarPage() {
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [sent, setSent] = useState(false);
+  const [redirectUrl, setRedirectUrl] = useState("/login");
+
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      const redirect = params.get("redirect");
+      if (redirect) {
+        setRedirectUrl(redirect);
+      }
+    }
+  }, []);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -88,11 +99,17 @@ function RecuperarPage() {
         <div className="w-full max-w-md">
           <div className="mb-10">
             <Button 
-              variant="ghost" 
-              onClick={() => navigate({ to: "/login" })}
-              className="group -ml-4 text-muted-foreground hover:text-foreground hover:bg-transparent font-bold"
+              variant="default" 
+              onClick={() => {
+                if (redirectUrl.startsWith("/t/")) {
+                  window.location.href = redirectUrl;
+                } else {
+                  navigate({ to: redirectUrl as any });
+                }
+              }}
+              className="group inline-flex items-center gap-2 px-4.5 py-2 bg-primary hover:opacity-95 text-xs font-bold text-white transition-all shadow-glow hover:scale-[1.01] active:scale-[0.99] rounded-full"
             >
-              <ArrowLeft size={16} className="mr-2 transition-transform group-hover:-translate-x-1" /> Volver al login
+              <ArrowLeft size={14} className="transition-transform group-hover:-translate-x-0.5" /> Volver al login
             </Button>
           </div>
 
@@ -157,7 +174,13 @@ function RecuperarPage() {
                   </p>
                 </div>
                 <Button 
-                  onClick={() => navigate({ to: "/login" })}
+                  onClick={() => {
+                    if (redirectUrl.startsWith("/t/")) {
+                      window.location.href = redirectUrl;
+                    } else {
+                      navigate({ to: redirectUrl as any });
+                    }
+                  }}
                   className="w-full h-12 rounded-xl font-bold bg-white text-slate-900 border border-slate-200 hover:bg-slate-50 transition-all shadow-sm"
                 >
                   Volver a Iniciar Sesión
