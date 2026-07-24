@@ -2,7 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { encodeCuadreEscPos, printDirectRaw } from "@/lib/impresora";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { Wallet, Lock, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard, ShieldCheck, Landmark } from "lucide-react";
+import { Wallet, Lock, ArrowLeft, ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, CheckCircle2, Printer, Search, FileText, PiggyBank, Coins, CreditCard, ShieldCheck, Landmark, ChevronLeft, ChevronRight } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -22,7 +22,7 @@ import {
   type Caja, type TipoMovimiento, type MetodoPago, type Empleado, type Orden, type Tenant, type MovimientoCaja, type ECFConfig, type ECFDocument
 } from "@/lib/storage";
 import { getECFConfig, getECFDocuments, registerTenantInPronesoft } from "@/lib/fiscal";
-import { useCajaAbierta, useCajas, useMovimientos, useECFConfig, useECFDocuments, useEmpleados } from "@/hooks/use-queries";
+import { useCajaAbierta, useCajas, useMovimientos, useECFConfig, useECFDocuments, useEmpleados, useOrdenes } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/lib/supabase";
 import { toast } from "sonner";
@@ -59,8 +59,8 @@ function CajaPage() {
   const movs = caja ? movsData : [];
   const { data: fiscalConfigData } = useECFConfig(tenantId);
   const { data: fiscalDocs = [] } = useECFDocuments(tenantId);
+  const { data: ordenesList = [] } = useOrdenes(tenantId);
   const { data: empleados = [] } = useEmpleados(tenantId);
-
   const fiscalConfig = fiscalConfigData || null;
   const loading = loadingCaja || loadingTodas || (!!caja && loadingMovs);
 
@@ -106,7 +106,7 @@ function CajaPage() {
 
   if (selectedPrintCaja) {
     const targetEmp = empleados.find(e => e.id === selectedPrintCaja.empleado_id);
-    const targetEmpName = targetEmp ? `${targetEmp.nombre} ${targetEmp.apellido || ""}` : "Cajero";
+    const targetEmpName = targetEmp ? (targetEmp.apellido && targetEmp.apellido !== "null" ? `${targetEmp.nombre} ${targetEmp.apellido}` : targetEmp.nombre) : "Cajero";
     
     return (
       <ReporteCuadreThermal 
@@ -116,6 +116,7 @@ function CajaPage() {
         empleadoName={targetEmpName}
         rango={`${formatDateTimeRD(selectedPrintCaja.abierta_en)} - ${formatDateTimeRD(selectedPrintCaja.cerrada_en!)}`}
         formato={tenant.config?.formato_ticket || "80mm"}
+        montoInicial={selectedPrintCaja.monto_inicial}
         onBack={() => setSelectedPrintCaja(null)}
       />
     );
@@ -248,7 +249,7 @@ function CajaPage() {
           <Card className="mt-4 overflow-hidden">
             <div className="flex items-center justify-between border-b border-border p-4">
               <h3 className="font-display text-lg">Movimientos del turno</h3>
-              <Badge variant="outline">{movs.length}</Badge>
+              <Badge className="bg-primary text-white hover:bg-primary border-none font-bold">{movs.length}</Badge>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -291,7 +292,53 @@ function CajaPage() {
                         )}
                       </td>
                       <td className="px-4 py-2.5">
-                        {m.concepto.startsWith("Reembolso:") ? (
+                        {m.concepto.startsWith("Cobro de saldo orden #") ? (() => {
+                          const rest = m.concepto.substring("Cobro de saldo orden #".length);
+                          const orderNumMatch = rest.match(/^[A-Za-z0-9-]+/);
+                          const orderNum = orderNumMatch ? orderNumMatch[0] : "";
+                          const dbOrder = ordenesList.find(o => o.numero === orderNum);
+                          const cleanExtra = dbOrder 
+                            ? (dbOrder.estado === "ENTREGADA" ? "ENTREGADA" : "NO ENTREGADA")
+                            : rest.substring(orderNum.length).trim().replace(/^\((.*)\)$/, '$1');
+
+                          return (
+                            <div className="flex flex-col leading-tight">
+                              <span className="text-muted-foreground text-[11px]">Cobro de saldo orden</span>
+                              <span className="font-mono text-xs font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                                {orderNum}
+                              </span>
+                              {cleanExtra && (
+                                <span className={`text-[10px] font-bold uppercase tracking-wider ${
+                                  cleanExtra.toLowerCase().includes("no entregada") 
+                                    ? "text-amber-600 dark:text-amber-400" 
+                                    : "text-emerald-600 dark:text-emerald-400"
+                                }`}>
+                                  {cleanExtra}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })() : m.concepto.startsWith("Venta orden #") ? (() => {
+                          const orderNum = m.concepto.substring("Venta orden #".length);
+                          return (
+                            <div className="flex items-center gap-1.5 py-0.5">
+                              <span className="text-foreground text-xs">Venta orden</span>
+                              <Badge className="bg-primary text-white hover:bg-primary border-none font-bold font-mono text-[12px] py-0.5 px-2 rounded-md">
+                                {orderNum}
+                              </Badge>
+                            </div>
+                          );
+                        })() : m.concepto.startsWith("Abono inicial orden #") ? (() => {
+                          const orderNum = m.concepto.substring("Abono inicial orden #".length);
+                          return (
+                            <div className="flex items-center gap-1.5 py-0.5">
+                              <span className="text-foreground text-xs">Abono inicial orden</span>
+                              <Badge className="bg-primary text-white hover:bg-primary border-none font-bold font-mono text-[12px] py-0.5 px-2 rounded-md">
+                                {orderNum}
+                              </Badge>
+                            </div>
+                          );
+                        })() : m.concepto.startsWith("Reembolso:") ? (
                           <>
                             <span className="font-bold">Reembolso:</span>
                             {m.concepto.substring("Reembolso:".length)}
@@ -357,9 +404,14 @@ function CajaPage() {
                   <td className="px-4 py-2.5 text-right">{formatRD(c.monto_inicial)}</td>
                   <td className="px-4 py-2.5 text-right">{formatRD(c.monto_esperado_efectivo || 0)}</td>
                   <td className="px-4 py-2.5 text-right">{formatRD(c.monto_contado_efectivo || 0)}</td>
-                  <td className={`px-4 py-2.5 text-right font-medium ${(c.diferencia || 0) === 0 ? "" : (c.diferencia || 0) < 0 ? "text-destructive" : "text-success"}`}>
-                    {formatRD(c.diferencia || 0)}
-                  </td>
+                  {(() => {
+                    const difEf = (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
+                    return (
+                      <td className={`px-4 py-2.5 text-right font-medium ${difEf === 0 ? "" : difEf < 0 ? "text-destructive" : "text-success"}`}>
+                        {formatRD(difEf)}
+                      </td>
+                    );
+                  })()}
                   <td className="px-4 py-2.5 text-center">
                     <Button 
                       size="sm" 
@@ -384,22 +436,22 @@ function CajaPage() {
             </span>
             <div className="flex gap-1">
               <Button 
-                variant="outline" 
+                variant="default" 
                 size="sm" 
                 onClick={() => setCierrePage(p => Math.max(1, p - 1))}
                 disabled={cierrePage === 1}
-                className="h-8 text-xs font-bold"
+                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
               >
-                Anterior
+                <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
               </Button>
               <Button 
-                variant="outline" 
+                variant="default" 
                 size="sm" 
                 onClick={() => setCierrePage(p => Math.min(totalCierrePages, p + 1))}
                 disabled={cierrePage === totalCierrePages}
-                className="h-8 text-xs font-bold"
+                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
               >
-                Siguiente
+                Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>
             </div>
           </div>
@@ -411,10 +463,10 @@ function CajaPage() {
         onOpenChange={setShowApertura} 
         tenantId={tenant.id} 
         empleadoId={empleado.id} 
-        onDone={() => {
-          queryClient.invalidateQueries({ queryKey: ['caja-abierta', tenantId] });
-          queryClient.invalidateQueries({ queryKey: ['cajas', tenantId] });
-          queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
+        onDone={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['caja-abierta', tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ['cajas', tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
           setRefresh((r) => r + 1);
         }} 
       />
@@ -425,8 +477,8 @@ function CajaPage() {
         empleadoId={empleado.id} 
         tenantId={tenant.id} 
         tenant={tenant} 
-        onDone={() => {
-          queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId, caja?.id] });
+        onDone={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId, caja?.id] });
           setRefresh((r) => r + 1);
         }} 
       />
@@ -435,17 +487,18 @@ function CajaPage() {
         onOpenChange={setShowCierre}
         caja={caja}
         tenant={tenant}
-        empleadoName={`${empleado.nombre} ${empleado.apellido}`}
+        empleadoName={empleado.apellido && empleado.apellido !== "null" ? `${empleado.nombre} ${empleado.apellido}` : empleado.nombre}
         efectivoEsperado={efectivoEsperado}
         ventasTar={ventasTar}
         ventasTrans={ventasTrans}
+        totalRecaudado={ventasEf + otrosIng + ventasTar + ventasTrans}
         umbral={tenant.config?.umbral_diferencia_caja || 100}
         empleadoPin={empleado.pin}
         empleadoRol={empleado.rol}
-        onDone={() => {
-          queryClient.invalidateQueries({ queryKey: ['caja-abierta', tenantId] });
-          queryClient.invalidateQueries({ queryKey: ['cajas', tenantId] });
-          queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
+        onDone={async () => {
+          await queryClient.invalidateQueries({ queryKey: ['caja-abierta', tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ['cajas', tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
           setRefresh((r) => r + 1);
         }}
       />
@@ -612,7 +665,7 @@ function AmountField({ label, value, onChange }: { label: string; value: string;
           onBlur={() => {
             const n = parseAmount(value);
             if (n === 0) onChange("");
-            else onChange(n.toLocaleString("en-US", { minimumFractionDigits: 0, maximumFractionDigits: 0 }));
+            else onChange(n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
           }}
           placeholder="0.00"
           className="h-20 w-full px-6 text-center font-display text-4xl font-bold text-primary rounded-2xl border-2 border-slate-200 bg-white shadow-sm focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none placeholder:text-slate-100"
@@ -622,7 +675,7 @@ function AmountField({ label, value, onChange }: { label: string; value: string;
   );
 }
 
-function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; tenantId: string; empleadoId: string; onDone: () => void }) {
+function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; tenantId: string; empleadoId: string; onDone: () => Promise<void> | void }) {
   const [montoStr, setMontoStr] = useState<string>("");
   const [turno, setTurno] = useState<"Mañana" | "Tarde" | "Noche">("Mañana");
   const [loading, setLoading] = useState(false);
@@ -635,7 +688,10 @@ function AperturaDialog({ open, onOpenChange, tenantId, empleadoId, onDone }: { 
       const cajaId = uid("caj");
       await saveCaja({ id: cajaId, tenant_id: tenantId, empleado_id: empleadoId, monto_inicial: monto, estado: "ABIERTA", abierta_en: new Date().toISOString(), notas_apertura: `Turno: ${turno}` });
       await saveMovimiento({ id: uid("mov"), tenant_id: tenantId, caja_id: cajaId, empleado_id: empleadoId, tipo: "INGRESO", concepto: "Apertura de caja", monto, creado_en: new Date().toISOString() });
-      toast.success("Caja abierta 🔓"); onDone(); onOpenChange(false); setMontoStr("");
+      toast.success("Caja abierta 🔓"); 
+      await onDone(); 
+      onOpenChange(false); 
+      setMontoStr("");
     } catch (err: any) {
       console.error("Error opening box:", err);
       toast.error("Error al abrir caja");
@@ -869,10 +925,10 @@ function MovDialog({ tipo, onClose, caja, empleadoId, tenantId, tenant, onDone }
   );
 }
 
-function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivoEsperado, ventasTar, ventasTrans, umbral, empleadoPin, empleadoRol, onDone }: {
+function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivoEsperado, ventasTar, ventasTrans, totalRecaudado, umbral, empleadoPin, empleadoRol, onDone }: {
   open: boolean; onOpenChange: (o: boolean) => void; caja: Caja | undefined;
   tenant: Tenant; empleadoName: string;
-  efectivoEsperado: number; ventasTar: number; ventasTrans: number; umbral: number; empleadoPin?: string; empleadoRol?: string; onDone: () => void;
+  efectivoEsperado: number; ventasTar: number; ventasTrans: number; totalRecaudado: number; umbral: number; empleadoPin?: string; empleadoRol?: string; onDone: () => void;
 }) {
   const [contadoEfStr, setContadoEfStr] = useState<string>("");
   const [contadoTarStr, setContadoTarStr] = useState<string>("");
@@ -887,6 +943,27 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
   const [movimientosPrint, setMovimientosPrint] = useState<MovimientoCaja[]>([]);
   const [showPrint, setShowPrint] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [savedTotalRecaudado, setSavedTotalRecaudado] = useState(0);
+
+  useEffect(() => {
+    if (open && !showSuccess) {
+      setSavedTotalRecaudado(totalRecaudado);
+    }
+  }, [open, totalRecaudado, showSuccess]);
+
+  useEffect(() => {
+    if (open) {
+      setContadoEfStr("");
+      setContadoTarStr(ventasTar > 0 ? ventasTar.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "");
+      setContadoTransStr(ventasTrans > 0 ? ventasTrans.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "");
+      setNotas("");
+      setPin("");
+      setShowNotas(false);
+      setShowSuccess(false);
+      setClosedCaja(null);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
 
   const contadoEf = parseAmount(contadoEfStr);
   const contadoTar = parseAmount(contadoTarStr);
@@ -959,6 +1036,7 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
         empleadoName={empleadoName}
         rango={`${formatDateTimeRD(closedCaja.abierta_en)} - ${formatDateTimeRD(closedCaja.cerrada_en!)}`}
         formato={tenant.config?.formato_ticket || "80mm"}
+        montoInicial={closedCaja.monto_inicial}
         onBack={() => { setShowPrint(false); onOpenChange(false); }}
       />
     );
@@ -978,9 +1056,19 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
             >
               <DialogHeader><DialogTitle>Cerrar caja — Cuadre</DialogTitle></DialogHeader>
               <div className="space-y-6">
-                <div className="rounded-2xl bg-primary/5 p-6 text-center border-2 border-primary/10">
-                  <div className="text-[10px] uppercase font-bold tracking-widest text-primary/60 mb-1">Efectivo esperado en caja</div>
-                  <div className="font-display text-4xl text-primary font-bold">{formatRD(efectivoEsperado)}</div>
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="rounded-2xl bg-emerald-500/5 p-4 text-center border-2 border-emerald-500/10">
+                    <div className="text-[9px] uppercase font-black tracking-wider text-emerald-600 mb-1">Efectivo Esperado</div>
+                    <div className="font-display text-2xl text-emerald-700 font-bold">{formatRD(efectivoEsperado)}</div>
+                  </div>
+                  <div className="rounded-2xl bg-sky-500/5 p-4 text-center border-2 border-sky-500/10">
+                    <div className="text-[9px] uppercase font-black tracking-wider text-sky-600 mb-1">Tarjeta Esperada</div>
+                    <div className="font-display text-2xl text-sky-700 font-bold">{formatRD(ventasTar)}</div>
+                  </div>
+                  <div className="rounded-2xl bg-indigo-500/5 p-4 text-center border-2 border-indigo-500/10">
+                    <div className="text-[9px] uppercase font-black tracking-wider text-indigo-600 mb-1">Transferencia Esperada</div>
+                    <div className="font-display text-2xl text-indigo-750 font-bold">{formatRD(ventasTrans)}</div>
+                  </div>
                 </div>
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <AmountField label="💵 EFECTIVO CONTADO" value={contadoEfStr} onChange={setContadoEfStr} />
@@ -1069,29 +1157,34 @@ function CierreDialog({ open, onOpenChange, caja, tenant, empleadoName, efectivo
                 <p className="text-xs text-muted-foreground">El cuadre ha sido registrado correctamente.</p>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                <div className="flex justify-between text-xs mb-1 text-slate-500 uppercase font-bold tracking-wider">
+              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
+                <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider">
                   <span>Efectivo Contado:</span>
                   <span className="text-slate-900 font-bold">{formatRD(contadoEf)}</span>
                 </div>
-                <div className="flex justify-between text-base font-black border-t border-slate-200 pt-2 mt-1">
+                <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider">
                   <span>Total Contado:</span>
-                  <span className="text-primary">
-                    {formatRD(contadoEf + contadoTar + contadoTrans)}
-                  </span>
+                  <span className="text-slate-900 font-bold">{formatRD(contadoEf + contadoTar + contadoTrans)}</span>
+                </div>
+                <div className="border-t border-slate-200 pt-2 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-primary/70">VENTAS DEL DÍA</span>
+                  <span className="text-2xl font-display font-black text-primary mt-0.5">{formatRD(savedTotalRecaudado)}</span>
                 </div>
               </div>
 
-              <div className="flex flex-col gap-2 pt-2">
+              <div className="flex gap-3 pt-2">
+                <Button 
+                  onClick={() => onOpenChange(false)}
+                  className="flex-1 bg-primary/10 hover:bg-primary/20 text-primary h-9 text-xs font-bold gap-2 shadow-none border-none rounded-xl"
+                >
+                  <ArrowLeft className="h-4 w-4" /> Volver a caja
+                </Button>
                 <Button 
                   onClick={handlePrint} 
                   disabled={loadingOrders}
-                  className="bg-gradient-primary text-white h-11 text-base font-bold gap-2 shadow-lg shadow-primary/20"
+                  className="flex-1 bg-gradient-primary text-white h-9 text-xs font-bold gap-2 shadow-none rounded-xl"
                 >
                   <Printer className="h-4 w-4" /> {loadingOrders ? "Preparando..." : "Imprimir Cierre"}
-                </Button>
-                <Button variant="ghost" size="sm" onClick={() => onOpenChange(false)} className="text-muted-foreground text-xs">
-                  Listo, volver a caja
                 </Button>
               </div>
             </motion.div>
@@ -1216,9 +1309,14 @@ function HistoricoCierresDialog({ open, onOpenChange, tenant, empleadoId }: {
                           </td>
                           <td className="px-4 py-3 font-medium">{emp ? `${emp.nombre}` : "Desconocido"}</td>
                           <td className="px-4 py-3 text-right font-bold text-primary">{formatRD(c.monto_contado_efectivo || 0)}</td>
-                          <td className={`px-4 py-3 text-right font-bold ${(c.diferencia || 0) < 0 ? "text-destructive" : (c.diferencia || 0) > 0 ? "text-success" : "text-muted-foreground"}`}>
-                            {formatRD(c.diferencia || 0)}
-                          </td>
+                          {(() => {
+                            const difEf = (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
+                            return (
+                              <td className={`px-4 py-3 text-right font-bold ${difEf < 0 ? "text-destructive" : difEf > 0 ? "text-success" : "text-muted-foreground"}`}>
+                                {formatRD(difEf)}
+                              </td>
+                            );
+                          })()}
                         </tr>
                       );
                     })}
@@ -1232,22 +1330,22 @@ function HistoricoCierresDialog({ open, onOpenChange, tenant, empleadoId }: {
                   </span>
                   <div className="flex gap-1">
                     <Button 
-                      variant="outline" 
+                      variant="default" 
                       size="sm" 
                       onClick={() => setPage(p => Math.max(1, p - 1))}
                       disabled={page === 1}
-                      className="h-8 text-xs font-bold"
+                      className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
                     >
-                      Anterior
+                      <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
                     </Button>
                     <Button 
-                      variant="outline" 
+                      variant="default" 
                       size="sm" 
                       onClick={() => setPage(p => Math.min(totalPages, p + 1))}
                       disabled={page === totalPages}
-                      className="h-8 text-xs font-bold"
+                      className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
                     >
-                      Siguiente
+                      Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
                     </Button>
                   </div>
                 </div>
@@ -1518,6 +1616,7 @@ function HistoricoCuadreDialog({ open, onOpenChange, tenant, empleadoId }: {
         rango={printedRange}
         formato={formato}
         mostrarRango={true}
+        montoInicial={activeCierre?.monto_inicial || 0}
         onBack={() => setShowPrint(false)}
       />
     );
@@ -1721,7 +1820,7 @@ function HistoricoCuadreDialog({ open, onOpenChange, tenant, empleadoId }: {
   );
 }
 
-function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName, rango, formato, mostrarRango, onBack }: { 
+function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName, rango, formato, mostrarRango, montoInicial = 0, onBack }: { 
   ordenes: Orden[], 
   movimientos?: MovimientoCaja[],
   tenant: Tenant, 
@@ -1729,6 +1828,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
   rango: string,
   formato: "57mm" | "80mm",
   mostrarRango?: boolean,
+  montoInicial?: number,
   onBack: () => void
 }) {
   // Hook para impresión física directa del cuadre si está configurada
@@ -1737,7 +1837,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
     if (printerType === "bluetooth" || printerType === "serial") {
       const runPhysicalPrint = async () => {
         try {
-          const bytes = encodeCuadreEscPos(ordenes, movimientos, tenant, empleadoName, rango);
+          const bytes = encodeCuadreEscPos(ordenes, movimientos, tenant, empleadoName, rango, montoInicial);
           const success = await printDirectRaw(bytes, tenant.config);
           if (success) {
             toast.success("¡Reporte de cuadre impreso en impresora física!");
@@ -1753,26 +1853,37 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
       };
       runPhysicalPrint();
     }
-  }, [ordenes, movimientos, tenant, empleadoName, rango, onBack]);
+  }, [ordenes, movimientos, tenant, empleadoName, rango, montoInicial, onBack]);
 
   const total = ordenes.reduce((s, o) => s + o.total, 0);
-  const cash = ordenes.filter(o => o.metodo_pago === 'EFECTIVO').reduce((s, o) => s + o.total, 0);
-  const card = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);
-  const transfer = ordenes.filter(o => o.metodo_pago === 'TRANSFERENCIA').reduce((s, o) => s + o.total, 0);
+  const cashSales = ordenes.filter(o => o.metodo_pago === 'EFECTIVO').reduce((s, o) => s + o.total, 0);
+  const cardSales = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);
+  const transferSales = ordenes.filter(o => o.metodo_pago === 'TRANSFERENCIA').reduce((s, o) => s + o.total, 0);
   const credit = ordenes.filter(o => o.metodo_pago === 'CREDITO').reduce((s, o) => s + o.total, 0);
   const retirar = ordenes.filter(o => o.metodo_pago === 'PAGO_AL_RETIRAR').reduce((s, o) => s + o.total, 0);
-  const ventasContado = cash + card + transfer;
+  const ventasContado = cashSales + cardSales + transferSales;
   const ventasCredito = credit;
   const totalFacturado = total;
 
-  const abonosCredito = movimientos.filter(m => m.concepto.includes("Abono inicial orden") || m.tipo === "ABONO").reduce((s, m) => s + m.monto, 0);
-  const manualIngresos = movimientos.filter(m => m.tipo === "INGRESO").reduce((s, m) => s + m.monto, 0);
+  const cash = movimientos.filter(m => m.tipo === "VENTA" && m.metodo === "EFECTIVO" && !m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+  const card = movimientos.filter(m => m.tipo === "VENTA" && m.metodo === "TARJETA" && !m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+  const transfer = movimientos.filter(m => m.tipo === "VENTA" && m.metodo === "TRANSFERENCIA" && !m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+
+  const abonosCredito = movimientos.filter(m => m.tipo === "ABONO" || m.concepto.includes("Abono inicial orden") || m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+  const abonosEfectivo = movimientos.filter(m => (m.tipo === "ABONO" || m.concepto.includes("Abono inicial orden") || m.concepto.startsWith("Cobro de saldo orden #")) && m.metodo === "EFECTIVO").reduce((s, m) => s + m.monto, 0);
+  const manualIngresos = movimientos.filter(m => m.tipo === "INGRESO" && !m.concepto.includes("Apertura de caja")).reduce((s, m) => s + m.monto, 0);
   const manualEgresos = movimientos.filter(m => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo) && !m.concepto.includes("Reembolso: Anulaci")).reduce((s, m) => s + m.monto, 0);
   const anulado = movimientos.filter(m => m.concepto.includes("Reembolso: Anulaci")).reduce((s, m) => s + m.monto, 0);
 
-  const realTotalEfectivo = cash + card + transfer + abonosCredito + manualIngresos - manualEgresos - anulado;
+  const realTotalEfectivo = cash + abonosEfectivo + montoInicial + manualIngresos - manualEgresos - anulado;
+  const totalDineroRecaudado = cash + card + transfer + abonosCredito;
 
-  const displayMovs = movimientos.filter(m => !m.concepto.startsWith("Venta orden #") && !m.concepto.startsWith("Abono inicial orden #") && m.tipo !== "ABONO");
+  const displayMovs = movimientos.filter(m => {
+    if (m.orden_id && ordenes.some(o => o.id === m.orden_id)) {
+      return false;
+    }
+    return !m.concepto.startsWith("Venta orden #") && !m.concepto.startsWith("Abono inicial orden #") && m.tipo !== "ABONO";
+  });
 
   const ventasRealizadas = ordenes.filter(o => o.estado !== 'ANULADA').length;
   const devoluciones = movimientos.filter(m => m.concepto.includes("Reembolso: Anulaci")).length || ordenes.filter(o => o.estado === 'ANULADA').length;
@@ -1801,14 +1912,14 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
             ) : (
               <div className="text-base font-bold uppercase leading-tight">{tenant.nombre}</div>
             )}
-            <div className="font-bold">CUADRE DE CAJA POS</div>
+            <div className="font-bold">CUADRE DE CAJA</div>
             {mostrarRango && <div className="text-[9px] uppercase">{rango}</div>}
           </div>
           <div className="my-2 border-t border-dashed border-black" />
           
           <div className="space-y-1">
-            <div className="flex justify-between"><span>Empleado:</span> <span>{empleadoName}</span></div>
-            <div className="flex justify-between"><span>Fecha de impresión:</span> <span>{new Date().toLocaleString()}</span></div>
+            <div className="flex justify-between"><span>Empleado:</span> <span className="font-bold">{empleadoName}</span></div>
+            <div className="flex justify-between"><span>Fecha:</span> <span>{new Date().toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</span></div>
           </div>
           <div className="my-2 border-t border-dashed border-black" />
 
@@ -1834,7 +1945,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
             <div className="flex justify-between"><span>(+) Tarjeta:</span> <span>{formatRD(card)}</span></div>
             <div className="flex justify-between"><span>(+) Transferencia:</span> <span>{formatRD(transfer)}</span></div>
             <div className="flex justify-between"><span>(+) Abonos a Crédito:</span> <span>{formatRD(abonosCredito)}</span></div>
-            
+            <div className="flex justify-between"><span>(+) Fondo Inicial:</span> <span>{formatRD(montoInicial)}</span></div>
             {manualIngresos > 0 && (
               <div className="flex justify-between"><span>(+) Otros Ingresos:</span> <span>{formatRD(manualIngresos)}</span></div>
             )}
@@ -1848,6 +1959,9 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
             <div className="border-t border-dashed border-black my-1" />
             <div className="flex justify-between font-bold">
               <span>TOTAL EFECTIVO EN CAJA:</span> <span>{formatRD(realTotalEfectivo)}</span>
+            </div>
+            <div className="flex justify-between font-bold border-t border-black pt-1 mt-1 text-xs">
+              <span>TOTAL RECAUDADO:</span> <span>{formatRD(totalDineroRecaudado)}</span>
             </div>
           </div>
           
@@ -1867,7 +1981,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
                 return (
                   <div key={o.id} className="flex flex-col">
                     <div className="flex justify-between font-medium">
-                      <span>{o.numero} ({label})</span>
+                      <span>{o.numero} <span className="font-bold">({label})</span></span>
                       <span>{formatRD(o.total)}</span>
                     </div>
                     {isCredito && (
@@ -1890,7 +2004,7 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
           {displayMovs.length > 0 && (
             <>
               <div className="mt-4 border-t border-dashed border-black" />
-              <div className="font-bold my-1 text-center">[4] OTROS MOVIMIENTOS</div>
+              <div className="font-bold my-1 text-center">[4] OTROS MOVIMIENTOS DE CAJA</div>
               <div className="border-t border-dashed border-black mb-2" />
               <div className="space-y-1">
                  <div className="flex justify-between text-[10px] font-bold border-b border-black/5 pb-1">
@@ -1915,17 +2029,20 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
           )}
 
           <div className="mt-4 border-t border-dashed border-black" />
-          <div className="font-bold my-1 text-center">ESTADÍSTICAS DEL TURNO</div>
+          <div className="font-bold my-1 text-center">[5] ESTADÍSTICAS DEL TURNO</div>
           <div className="border-t border-dashed border-black mb-2" />
           <div className="space-y-1">
             <div className="flex justify-between"><span>Ventas Emitidas:</span> <span className="font-bold">{ventasRealizadas}</span></div>
             <div className="flex justify-between"><span>Devoluciones/Cancelados:</span> <span className="font-bold">{devoluciones}</span></div>
             <div className="flex justify-between"><span>Monto Total Descontado:</span> <span className="font-bold">{formatRD(montoDescontado)}</span></div>
-            <div className="flex justify-between"><span>ITBIS Total Recaudado:</span> <span className="font-bold">{formatRD(itbisRecaudado)}</span></div>
+            <div className="flex justify-between font-bold"><span>ITBIS Total Recaudado:</span> <span className="font-bold">{formatRD(itbisRecaudado)}</span></div>
+            <div className="flex justify-between font-bold border-t border-dashed border-black/40 pt-1 mt-1 text-xs">
+              <span>TOTAL RECAUDADO:</span> <span>{formatRD(totalDineroRecaudado)}</span>
+            </div>
           </div>
 
           <div className="my-4 border-t border-dashed border-black" />
-          <div className="mt-8 text-center">
+          <div className="mt-12 text-center">
             <div className="border-t border-black w-3/4 mx-auto pt-1 mb-10">Firma Cajero</div>
             <div className="text-[9px] italic">Klynn POS System</div>
           </div>

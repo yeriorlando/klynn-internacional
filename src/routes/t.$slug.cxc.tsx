@@ -1182,16 +1182,22 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, c
           pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : o.pago_referencia
         }));
 
+        const eraPagoAlRetirar = o.metodo_pago === "PAGO_AL_RETIRAR";
+
         // Registrar el movimiento de entrada en caja para esta orden
         await saveMovimiento({
           id: uid("mov"),
           tenant_id: tenantId,
           caja_id: cajaAbierta.id,
           empleado_id: o.empleado_id,
-          tipo: nuevoSaldo === 0 ? "VENTA" : "ABONO",
-          concepto: nuevoSaldo === 0
-            ? `Cobro de saldo orden #${o.numero} desde Cobrar Todo${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`
-            : `Abono a orden #${o.numero} desde Cobrar Todo (Saldo restante: ${formatRD(nuevoSaldo)})${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`,
+          tipo: eraPagoAlRetirar ? "VENTA" : (nuevoSaldo === 0 ? "VENTA" : "ABONO"),
+          concepto: eraPagoAlRetirar
+            ? (nuevoSaldo === 0
+              ? `Cobro de orden al retirar #${o.numero} desde Cobrar Todo${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`
+              : `Abono a orden al retirar #${o.numero} desde Cobrar Todo (Saldo restante: ${formatRD(nuevoSaldo)})${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`)
+            : (nuevoSaldo === 0
+              ? `Cobro de saldo orden #${o.numero} desde Cobrar Todo${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`
+              : `Abono a orden #${o.numero} desde Cobrar Todo (Saldo restante: ${formatRD(nuevoSaldo)})${(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? ` (Ref: ${referencia})` : ""}`),
           monto: montoAPagarOrden,
           metodo: metodo,
           orden_id: o.id,

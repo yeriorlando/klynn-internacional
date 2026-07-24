@@ -2623,16 +2623,22 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
       await saveOrden(ordenActualizada);
 
+      const eraPagoAlRetirar = orden.metodo_pago === "PAGO_AL_RETIRAR";
+
       // 2. Registrar el movimiento de entrada en caja
       await saveMovimiento({
         id: uid("mov"),
         tenant_id: tenant.id,
         caja_id: cajaAbierta.id,
         empleado_id: ordenActualizada.empleado_id,
-        tipo: nuevoSaldo === 0 ? "VENTA" : "ABONO",
-        concepto: nuevoSaldo === 0
-          ? `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`
-          : `Abono a orden #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`,
+        tipo: eraPagoAlRetirar ? "VENTA" : (nuevoSaldo === 0 ? "VENTA" : "ABONO"),
+        concepto: eraPagoAlRetirar
+          ? (nuevoSaldo === 0
+            ? `Cobro de orden al retirar #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`
+            : `Abono a orden al retirar #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`)
+          : (nuevoSaldo === 0
+            ? `Cobro de saldo orden #${orden.numero} (${entregarAlCobrar ? 'Entregada' : 'No entregada'})`
+            : `Abono a orden #${orden.numero} (Saldo restante: ${formatRD(nuevoSaldo)})`),
         monto: montoAPagar,
         metodo: metodo,
         orden_id: orden.id,

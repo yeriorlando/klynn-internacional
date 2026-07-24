@@ -507,7 +507,8 @@ export function encodeCuadreEscPos(
   movimientos: any[],
   tenant: Tenant,
   empleadoName: string,
-  rango: string
+  rango: string,
+  montoInicial = 0
 ): Uint8Array {
   const config = tenant.config || {};
   const formato = config.formato_ticket || "80mm";
@@ -543,20 +544,32 @@ export function encodeCuadreEscPos(
 
   // Cálculos de Resumen
   const total = ordenes.reduce((s, o) => s + o.total, 0);
-  const cash = ordenes.filter(o => o.metodo_pago === 'EFECTIVO').reduce((s, o) => s + o.total, 0);
-  const card = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);
-  const transfer = ordenes.filter(o => o.metodo_pago === 'TRANSFERENCIA').reduce((s, o) => s + o.total, 0);
+  const cashSales = ordenes.filter(o => o.metodo_pago === 'EFECTIVO').reduce((s, o) => s + o.total, 0);
+  const cardSales = ordenes.filter(o => o.metodo_pago === 'TARJETA').reduce((s, o) => s + o.total, 0);
+  const transferSales = ordenes.filter(o => o.metodo_pago === 'TRANSFERENCIA').reduce((s, o) => s + o.total, 0);
   const credit = ordenes.filter(o => o.metodo_pago === 'CREDITO').reduce((s, o) => s + o.total, 0);
-  const ventasContado = cash + card + transfer;
+  const ventasContado = cashSales + cardSales + transferSales;
   const ventasCredito = credit;
   const totalFacturado = total;
 
-  const abonosCredito = movimientos.filter(m => m.concepto.includes("Abono inicial orden") || m.tipo === "ABONO").reduce((s, m) => s + m.monto, 0);
-  const manualIngresos = movimientos.filter(m => m.tipo === "INGRESO").reduce((s, m) => s + m.monto, 0);
+  const cash = movimientos.filter(m => m.tipo === "VENTA" && m.metodo === "EFECTIVO" && !m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+  const card = movimientos.filter(m => m.tipo === "VENTA" && m.metodo === "TARJETA" && !m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+  const transfer = movimientos.filter(m => m.tipo === "VENTA" && m.metodo === "TRANSFERENCIA" && !m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+
+  const abonosCredito = movimientos.filter(m => m.tipo === "ABONO" || m.concepto.includes("Abono inicial orden") || m.concepto.startsWith("Cobro de saldo orden #")).reduce((s, m) => s + m.monto, 0);
+  const abonosEfectivo = movimientos.filter(m => (m.tipo === "ABONO" || m.concepto.includes("Abono inicial orden") || m.concepto.startsWith("Cobro de saldo orden #")) && m.metodo === "EFECTIVO").reduce((s, m) => s + m.monto, 0);
+  const manualIngresos = movimientos.filter(m => m.tipo === "INGRESO" && !m.concepto.includes("Apertura de caja")).reduce((s, m) => s + m.monto, 0);
   const manualEgresos = movimientos.filter(m => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo) && !m.concepto.includes("Reembolso: Anulaci")).reduce((s, m) => s + m.monto, 0);
   const anulado = movimientos.filter(m => m.concepto.includes("Reembolso: Anulaci")).reduce((s, m) => s + m.monto, 0);
 
-  const realTotalEfectivo = cash + card + transfer + abonosCredito + manualIngresos - manualEgresos - anulado;
+  const realTotalEfectivo = cash + abonosEfectivo + montoInicial + manualIngresos - manualEgresos - anulado;
+  const totalDineroRecaudado = cash + card + transfer + abonosCredito;
+  const displayMovs = movimientos.filter(m => {
+    if (m.orden_id && ordenes.some(o => o.id === m.orden_id)) {
+      return false;
+    }
+    return !m.concepto.startsWith("Venta orden #") && !m.concepto.startsWith("Abono inicial orden #") && m.tipo !== "ABONO";
+  });
   const ventasRealizadas = ordenes.filter(o => o.estado !== 'ANULADA').length;
   const devCount = ordenes.filter(o => o.estado === 'ANULADA').length;
   const montoDescontado = ordenes.filter(o => o.estado !== 'ANULADA').reduce((s, o) => s + (o.descuento || 0), 0);
@@ -570,19 +583,23 @@ export function encodeCuadreEscPos(
     bytes.push(...FONT_DOUBLE, ...BOLD_ON);
     writeLine(tenant.nombre);
     bytes.push(...FONT_NORMAL);
-    writeLine("CUADRE DE CAJA POS");
+    writeLine("CUADRE DE CAJA");
     bytes.push(...BOLD_OFF);
   } else {
     writeLine(tenant.nombre.toUpperCase());
-    writeLine("CUADRE DE CAJA POS");
+    writeLine("CUADRE DE CAJA");
   }
 
   writeLine(rango);
   writeLine("-".repeat(columns));
 
   bytes.push(...ALIGN_LEFT);
-  writeLine(`Empleado: ${empleadoName}`);
-  writeLine(`Fecha: ${new Date().toLocaleString("es-DO")}`);
+  writeString("Empleado: ");
+  if (perfil !== "basica") bytes.push(...BOLD_ON);
+  writeString(empleadoName);
+  if (perfil !== "basica") bytes.push(...BOLD_OFF);
+  writeLine();
+  writeLine(`Fecha: ${new Date().toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}`);
   writeLine("-".repeat(columns));
 
   // [1] VENTAS
@@ -607,6 +624,7 @@ export function encodeCuadreEscPos(
   writeLine(formatRow("(+) Tarjeta:", `RD$${card.toFixed(2)}`, columns));
   writeLine(formatRow("(+) Transferencia:", `RD$${transfer.toFixed(2)}`, columns));
   writeLine(formatRow("(+) Abonos Credito:", `RD$${abonosCredito.toFixed(2)}`, columns));
+  writeLine(formatRow("(+) Fondo Inicial:", `RD$${montoInicial.toFixed(2)}`, columns));
   if (manualIngresos > 0) {
     writeLine(formatRow("(+) Otros Ingresos:", `RD$${manualIngresos.toFixed(2)}`, columns));
   }
@@ -619,6 +637,7 @@ export function encodeCuadreEscPos(
   writeLine("-".repeat(columns));
   if (perfil !== "basica") bytes.push(...BOLD_ON);
   writeLine(formatRow("TOTAL EFECTIVO EN CAJA:", `RD$${realTotalEfectivo.toFixed(2)}`, columns));
+  writeLine(formatRow("TOTAL RECAUDADO:", `RD$${totalDineroRecaudado.toFixed(2)}`, columns));
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("=".repeat(columns));
 
@@ -629,24 +648,60 @@ export function encodeCuadreEscPos(
   writeLine("-".repeat(columns));
   ordenes.forEach((o) => {
     const isAnulada = o.estado === "ANULADA";
-    const status = isAnulada ? "ANUL" : o.metodo_pago;
-    writeLine(formatRow(`#${o.numero} [${status}]`, `RD$${o.total.toFixed(2)}`, columns));
+    const status = isAnulada ? "ANUL" : (o.metodo_pago === "CREDITO" ? "CRE" : o.metodo_pago === "PAGO_AL_RETIRAR" ? "PAR" : o.metodo_pago?.substring(0,3));
+    const leftText = `#${o.numero} `;
+    const boldText = `(${status})`;
+    const rightText = `RD$${o.total.toFixed(2)}`;
+    const spacesCount = columns - leftText.length - boldText.length - rightText.length;
+    const spaces = spacesCount > 0 ? " ".repeat(spacesCount) : " ";
+
+    writeString(leftText);
+    if (perfil !== "basica") bytes.push(...BOLD_ON);
+    writeString(boldText);
+    if (perfil !== "basica") bytes.push(...BOLD_OFF);
+    writeLine(spaces + rightText);
   });
   writeLine("=".repeat(columns));
 
-  // [4] METRICAS
+  // [4] OTROS MOVIMIENTOS DE CAJA
+  if (displayMovs.length > 0) {
+    if (perfil !== "basica") bytes.push(...BOLD_ON);
+    writeLine("[4] OTROS MOVIMIENTOS DE CAJA");
+    if (perfil !== "basica") bytes.push(...BOLD_OFF);
+    writeLine("-".repeat(columns));
+    writeLine(formatRow("CONCEPTO", "MONTO", columns));
+    writeLine("-".repeat(columns));
+    displayMovs.forEach((m) => {
+      const isNegative = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
+      const sign = isNegative ? "-" : "+";
+      const concept = m.concepto;
+      const amountStr = `${sign}RD$${m.monto.toFixed(2)}`;
+      
+      if (concept.length + amountStr.length + 1 > columns) {
+        writeLine(cleanText(concept));
+        writeLine(formatRow("", amountStr, columns));
+      } else {
+        writeLine(formatRow(concept, amountStr, columns));
+      }
+    });
+    writeLine("=".repeat(columns));
+  }
+
+  // [5] ESTADISTICAS DEL TURNO
   if (perfil !== "basica") bytes.push(...BOLD_ON);
-  writeLine("[4] METRICAS DE TURNO");
+  writeLine("[5] ESTADISTICAS DEL TURNO");
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("-".repeat(columns));
   writeLine(formatRow("Ventas Realizadas:", String(ventasRealizadas), columns));
   writeLine(formatRow("Devoluciones:", String(devCount), columns));
   writeLine(formatRow("Descuentos:", `RD$${montoDescontado.toFixed(2)}`, columns));
   writeLine(formatRow("ITBIS Recaudado:", `RD$${itbisRecaudado.toFixed(2)}`, columns));
+  writeLine(formatRow("TOTAL RECAUDADO:", `RD$${totalDineroRecaudado.toFixed(2)}`, columns));
   writeLine("-".repeat(columns));
 
   // Firmas
   bytes.push(...ALIGN_CENTER);
+  writeLine();
   writeLine();
   writeLine();
   writeLine("_____________________");
