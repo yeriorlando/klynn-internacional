@@ -2224,7 +2224,7 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
                 <span>{formatRD(orden.subtotal)}</span>
               </div>
               <div className="flex justify-between py-2 border-b border-slate-100 text-sm text-slate-600">
-                <span>ITBIS (18%):</span>
+                <span>ITBIS ({cfg?.itbis_porcentaje ?? 18}%):</span>
                 <span>{formatRD(orden.total - orden.subtotal)}</span>
               </div>
               <div className="flex justify-between py-4 text-xl font-black text-primary">

@@ -2032,10 +2032,10 @@ function ReporteCuadreThermal({ ordenes, movimientos = [], tenant, empleadoName,
           <div className="font-bold my-1 text-center">[5] ESTADÍSTICAS DEL TURNO</div>
           <div className="border-t border-dashed border-black mb-2" />
           <div className="space-y-1">
-            <div className="flex justify-between"><span>Ventas Emitidas:</span> <span className="font-bold">{ventasRealizadas}</span></div>
-            <div className="flex justify-between"><span>Devoluciones/Cancelados:</span> <span className="font-bold">{devoluciones}</span></div>
-            <div className="flex justify-between"><span>Monto Total Descontado:</span> <span className="font-bold">{formatRD(montoDescontado)}</span></div>
-            <div className="flex justify-between font-bold"><span>ITBIS Total Recaudado:</span> <span className="font-bold">{formatRD(itbisRecaudado)}</span></div>
+            <div className="flex justify-between"><span>Órdenes Procesadas:</span> <span className="font-bold">{ventasRealizadas}</span></div>
+            <div className="flex justify-between"><span>Devoluciones / Anulaciones:</span> <span className="font-bold">{devoluciones}</span></div>
+            <div className="flex justify-between"><span>Descuentos Aplicados:</span> <span className="font-bold">{formatRD(montoDescontado)}</span></div>
+            <div className="flex justify-between font-bold"><span>ITBIS Recaudado ({tenant.config?.itbis_porcentaje ?? 18}%):</span> <span className="font-bold">{formatRD(itbisRecaudado)}</span></div>
             <div className="flex justify-between font-bold border-t border-dashed border-black/40 pt-1 mt-1 text-xs">
               <span>TOTAL RECAUDADO:</span> <span>{formatRD(totalDineroRecaudado)}</span>
             </div>

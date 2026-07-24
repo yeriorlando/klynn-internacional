@@ -292,7 +292,7 @@ export function encodeEscPos(
 
   // TOTALES
   writeLine(formatRow("Subtotal:", `RD$${orden.subtotal.toFixed(2)}`, columns));
-  writeLine(formatRow("ITBIS (18%):", `RD$${orden.itbis.toFixed(2)}`, columns));
+  writeLine(formatRow(`ITBIS (${config.itbis_porcentaje ?? 18}%):`, `RD$${orden.itbis.toFixed(2)}`, columns));
   if (perfil !== "basica") {
     bytes.push(...BOLD_ON);
     bytes.push(...FONT_DOUBLE);
@@ -692,10 +692,10 @@ export function encodeCuadreEscPos(
   writeLine("[5] ESTADISTICAS DEL TURNO");
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("-".repeat(columns));
-  writeLine(formatRow("Ventas Realizadas:", String(ventasRealizadas), columns));
-  writeLine(formatRow("Devoluciones:", String(devCount), columns));
-  writeLine(formatRow("Descuentos:", `RD$${montoDescontado.toFixed(2)}`, columns));
-  writeLine(formatRow("ITBIS Recaudado:", `RD$${itbisRecaudado.toFixed(2)}`, columns));
+  writeLine(formatRow("Órdenes Procesadas:", String(ventasRealizadas), columns));
+  writeLine(formatRow("Devoluciones / Anulaciones:", String(devCount), columns));
+  writeLine(formatRow("Descuentos Aplicados:", `RD$${montoDescontado.toFixed(2)}`, columns));
+  writeLine(formatRow(`ITBIS Recaudado (${config.itbis_porcentaje ?? 18}%):`, `RD$${itbisRecaudado.toFixed(2)}`, columns));
   writeLine(formatRow("TOTAL RECAUDADO:", `RD$${totalDineroRecaudado.toFixed(2)}`, columns));
   writeLine("-".repeat(columns));
 
