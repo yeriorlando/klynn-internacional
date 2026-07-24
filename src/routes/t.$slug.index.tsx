@@ -9,14 +9,15 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   getOrdenes, getCajaAbierta, getMovimientos, getGastos, getClienteById, getClientes,
-  formatRD, formatDateTimeRD, saveOrden, type Orden, type Gasto, type Cliente, type EstadoOrden, type Tenant
+  formatRD, formatDateTimeRD, saveOrden, type Orden, type Gasto, type Cliente, type EstadoOrden, type Tenant,
+  can
 } from "@/lib/storage";
 import {
   Receipt, Package, Wallet, AlertCircle, ArrowUpRight, FilePlus2, Truck, TrendingUp,
   Inbox, RefreshCw, CircleCheck, Ban, ChevronLeft, ChevronRight,
   MoreVertical, MoreHorizontal, Eye, DollarSign, Printer, DownloadCloud, AlertTriangle, Zap, Check, CheckCircle2, ArrowLeft, ArrowUpCircle, XCircle, Info, ArrowRight, Clock
 } from "lucide-react";
-import { useOrdenes, useCajaAbierta, useGastos, useClientes, useMovimientos, useEmpleados } from "@/hooks/use-queries";
+import { useOrdenes, useCajaAbierta, useGastos, useClientes, useMovimientos, useEmpleados, useECFConfig } from "@/hooks/use-queries";
 import { TenantShell } from "@/components/klynn/TenantShell";
 import { 
   DropdownMenu, 
@@ -30,7 +31,7 @@ import { toast } from "sonner";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { CobrarOrdenDialog, TicketPrintPortal, OrderDetail } from "@/components/klynn/OrdenesPage";
+import { CobrarOrdenDialog, TicketPrintPortal, OrderDetail, esTransicionEstadoPermitida, EstadoOrdenDialog } from "@/components/klynn/OrdenesPage";
 
 export const Route = createFileRoute("/t/$slug/")({
   component: DashboardPage,
@@ -57,6 +58,12 @@ function DashboardPage() {
   const navigate = useNavigate();
 
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
+  const { data: ecfConfig } = useECFConfig(tenantId);
+  const emp = user?.empleado;
+  const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
+  const hasNotaDebito = emp ? can(emp, "nota-debito") : false;
+  const hasAnularOrden = emp ? can(emp, "anular-orden") : false;
+  const hasCondonarDeuda = emp ? can(emp, "condonar-deuda") : false;
 
   const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
@@ -85,12 +92,21 @@ function DashboardPage() {
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
+  const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
 
   const loading = loadingOrdenes || loadingCaja || loadingGastos || loadingClientes || loadingMovs;
 
   const tenant = user?.tenant as Tenant;
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden) {
+    if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
+      if (estado === "ENTREGADA" && o.saldo > 0 && o.metodo_pago !== "CREDITO") {
+        toast.error("No se puede entregar una orden con saldo pendiente si no es a crédito");
+      } else {
+        toast.error("No se permite esta transición de estado para una orden pagada");
+      }
+      return;
+    }
     try {
       await saveOrden({ ...o, estado });
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
@@ -376,7 +392,7 @@ function DashboardPage() {
               }
             </div>
           </div>
-          <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+          <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} search={{ view: undefined, action: undefined }} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
             Ver todas <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -397,7 +413,16 @@ function DashboardPage() {
               {paginatedOrdenes.map((o) => {
                 const c = clientes.find((x) => x.id === o.cliente_id);
                 return (
-                  <tr key={o.id} className="border-b border-border/50 hover:bg-accent/30">
+                  <tr 
+                    key={o.id} 
+                    className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors duration-100"
+                    onClick={(e) => {
+                      // Don't open modal if clicking on action buttons or badges
+                      const target = e.target as HTMLElement;
+                      if (target.closest('button') || target.closest('[role="menuitem"]') || target.closest('.action-menu-container')) return;
+                      if (o.estado !== "ANULADA" && !(o.estado === "ENTREGADA" && o.saldo <= 0)) setEstadoModal(o);
+                    }}
+                  >
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-3">
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
@@ -422,53 +447,19 @@ function DashboardPage() {
                           <Ban className="h-3 w-3" /> ANULADA
                         </span>
                       ) : (
-                        <DropdownMenu modal={false}>
-                          <DropdownMenuTrigger asChild>
-                            <button className="cursor-pointer transition-transform duration-100 active:scale-90 hover:scale-[1.08] focus:outline-none">
-                              <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold transition-colors duration-150 ${
-                                o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400" :
-                                o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" :
-                                o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" :
-                                o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400" :
-                                "border-zinc-200 bg-zinc-50 text-zinc-600"
-                              }`}>
-                                {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
-                                {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
-                                {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
-                                {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
-                                {o.estado.replace("_", " ")}
-                              </span>
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="center" sideOffset={4} className="w-[180px] p-1.5 rounded-xl shadow-lg border border-border/60">
-                            <div className="space-y-1">
-                              {([
-                                { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, solidBg: "bg-blue-600", hoverBg: "hover:bg-blue-50 dark:hover:bg-blue-950/20" },
-                                { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, solidBg: "bg-amber-500", hoverBg: "hover:bg-amber-50 dark:hover:bg-amber-950/20" },
-                                { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, solidBg: "bg-emerald-600", hoverBg: "hover:bg-emerald-50 dark:hover:bg-amber-950/20" },
-                                { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, solidBg: "bg-purple-600", hoverBg: "hover:bg-purple-50 dark:hover:bg-purple-950/20" },
-                              ]).map((s) => {
-                                const Icon = s.icon;
-                                const isCurrent = o.estado === s.value;
-                                return (
-                                  <button
-                                    key={s.value}
-                                    onClick={() => { if (!isCurrent) cambiarEstado(o, s.value); }}
-                                    className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-xs font-semibold transition-colors duration-75 ${
-                                      isCurrent ? "bg-accent font-bold" : `${s.hoverBg} text-foreground`
-                                    }`}
-                                  >
-                                    <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md ${s.solidBg}`}>
-                                      <Icon className="h-3.5 w-3.5 text-white" />
-                                    </span>
-                                    {s.label}
-                                    {isCurrent && <Check className="ml-auto h-3.5 w-3.5 text-primary" />}
-                                  </button>
-                                );
-                              })}
-                            </div>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                          o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400" :
+                          o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" :
+                          o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" :
+                          o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400" :
+                          "border-zinc-200 bg-zinc-50 text-zinc-600"
+                        }`}>
+                          {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
+                          {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
+                          {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
+                          {o.estado === "ENTREGADA" && <Truck className="h-3 w-3" />}
+                          {o.estado.replace("_", " ")}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
@@ -659,6 +650,55 @@ function DashboardPage() {
           }} 
         />
       )}
+      {/* Modal de Estado de Orden */}
+      <EstadoOrdenDialog
+        estadoModal={estadoModal}
+        setEstadoModal={setEstadoModal}
+        clientes={clientes}
+        cambiarEstado={cambiarEstado}
+        hasNotaCredito={hasNotaCredito}
+        hasNotaDebito={hasNotaDebito}
+        hasCondonarDeuda={hasCondonarDeuda}
+        hasAnularOrden={hasAnularOrden}
+        ecfConfig={ecfConfig}
+        setCredito={(o) => {
+          setEstadoModal(null);
+          navigate({
+            to: "/t/$slug/ordenes",
+            params: { slug: tenant.slug },
+            search: { view: o.id, action: "credito" }
+          });
+        }}
+        setMontoCredito={() => {}}
+        setMotivoCredito={() => {}}
+        setCodigoCredito={() => {}}
+        setDebito={(o) => {
+          setEstadoModal(null);
+          navigate({
+            to: "/t/$slug/ordenes",
+            params: { slug: tenant.slug },
+            search: { view: o.id, action: "debito" }
+          });
+        }}
+        setCondonarOrden={(o) => {
+          setEstadoModal(null);
+          navigate({
+            to: "/t/$slug/ordenes",
+            params: { slug: tenant.slug },
+            search: { view: o.id, action: "condonar" }
+          });
+        }}
+        setAnular={(o) => {
+          setEstadoModal(null);
+          navigate({
+            to: "/t/$slug/ordenes",
+            params: { slug: tenant.slug },
+            search: { view: o.id, action: "anular" }
+          });
+        }}
+        setCobrarOrden={setCobrarOrden}
+        setShowPrint={setShowPrint}
+      />
     </div>
   );
 }

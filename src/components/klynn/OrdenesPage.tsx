@@ -57,6 +57,27 @@ function formatMetodoPagoLabel(metodo?: string): string {
   return metodo.replace(/_/g, " ");
 }
 
+const ESTADOS_ORDEN_ORDENADOS: EstadoOrden[] = ["RECIBIDA", "EN_PROCESO", "PAGADA", "LISTA", "EN_CAMINO", "ENTREGADA"];
+
+export function esTransicionEstadoPermitida(actual: EstadoOrden, destino: EstadoOrden, saldo: number, metodoPago?: string): boolean {
+  if (actual === destino) return false;
+  if (actual === "ANULADA" || destino === "ANULADA") return false;
+
+  // Regla especial: Solo se permite entregar si está pagado, a menos que sea a CRÉDITO
+  if (destino === "ENTREGADA" && saldo > 0 && metodoPago !== "CREDITO") {
+    return false;
+  }
+
+  if (saldo <= 0) {
+    if (actual === "ENTREGADA") return false;
+    const idxActual = ESTADOS_ORDEN_ORDENADOS.indexOf(actual);
+    const idxDestino = ESTADOS_ORDEN_ORDENADOS.indexOf(destino);
+    if (idxActual === -1 || idxDestino === -1) return true;
+    return idxDestino > idxActual;
+  }
+  return true;
+}
+
 interface OrdenesPageProps {
   authUser?: { empleado: Empleado; tenant: Tenant } | null;
   embedded?: boolean;
@@ -120,7 +141,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: empleados = [] } = useEmpleados(tenantId);
   const { data: servicios = [] } = useServicios(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
-  const searchParams = useSearch({ strict: false }) as { view?: string };
+  const searchParams = useSearch({ strict: false }) as { view?: string; action?: string };
 
   const emp = user?.empleado;
   const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
@@ -136,12 +157,25 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     if (searchParams.view) {
       const orderToView = ordenes.find(o => o.numero === searchParams.view || o.id === searchParams.view);
       if (orderToView) {
-        setView(orderToView);
+        if (searchParams.action === "credito") {
+          setCredito(orderToView);
+          setMontoCredito(0);
+          setMotivoCredito("");
+          setCodigoCredito("04");
+        } else if (searchParams.action === "debito") {
+          setDebito(orderToView);
+        } else if (searchParams.action === "condonar") {
+          setCondonarOrden(orderToView);
+        } else if (searchParams.action === "anular") {
+          setAnular(orderToView);
+        } else {
+          setView(orderToView);
+        }
         // Clear param so it doesn't reopen if they close it
         navigate({ search: {}, replace: true });
       }
     }
-  }, [searchParams.view, ordenes, tenantId, navigate]);
+  }, [searchParams.view, searchParams.action, ordenes, tenantId, navigate]);
 
   useEffect(() => {
     if (!tenantId || tenantId === '__loading__') return;
@@ -267,6 +301,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   if (!user || user.tenant.id === '__loading__') return null;
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
+    if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
+      if (estado === "ENTREGADA" && o.saldo > 0 && o.metodo_pago !== "CREDITO") {
+        toast.error("No se puede entregar una orden con saldo pendiente si no es a crédito");
+      } else {
+        toast.error("No se permite esta transición de estado para una orden pagada");
+      }
+      return true;
+    }
     // If marking as LISTA and conveyor is enabled, show the modal first
     if (estado === "LISTA" && tenant?.config?.usar_ubicacion_ropa) {
       setConveyorOrden(o);
@@ -1030,7 +1072,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                       // Don't open modal if clicking on action buttons or badges
                       const target = e.target as HTMLElement;
                       if (target.closest('button') || target.closest('[role="menuitem"]') || target.closest('.action-menu-container')) return;
-                      if (o.estado !== "ANULADA") setEstadoModal(o);
+                      if (o.estado !== "ANULADA" && !(o.estado === "ENTREGADA" && o.saldo <= 0)) setEstadoModal(o);
                     }}
                   >
                     <td className="px-4 py-3">
@@ -1476,192 +1518,26 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       )}
 
       {/* Modal de Estado de Orden */}
-      <Dialog open={!!estadoModal} onOpenChange={(o) => { if (!o) setEstadoModal(null); }}>
-        <DialogContent className="sm:max-w-3xl rounded-[24px] p-6 overflow-hidden bg-white shadow-2xl">
-          {/* Header Top Left */}
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2.5">
-              <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0 ${
-                estadoModal?.estado === "RECIBIDA" ? "bg-blue-500" :
-                estadoModal?.estado === "EN_PROCESO" ? "bg-amber-500" :
-                estadoModal?.estado === "LISTA" ? "bg-emerald-500" :
-                "bg-purple-500"
-              }`}>
-                {estadoModal?.estado === "RECIBIDA" && <Inbox className="h-4 w-4" />}
-                {estadoModal?.estado === "EN_PROCESO" && <RefreshCw className="h-4 w-4" />}
-                {estadoModal?.estado === "LISTA" && <CircleCheck className="h-4 w-4" />}
-                {estadoModal?.estado === "ENTREGADA" && <Truck className="h-4 w-4" />}
-              </div>
-              <div>
-                <DialogTitle className="text-sm font-black leading-tight text-slate-900">{estadoModal?.numero}</DialogTitle>
-                <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">
-                  {clientes.find(c => c.id === estadoModal?.cliente_id)?.nombre || "Consumidor Final"}
-                </div>
-              </div>
-            </div>
-          </div>
-          
-          {/* Título Central Elevado */}
-          <div className="text-center mb-3 -mt-7 px-16">
-            <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">Cambiar estado de la orden</h2>
-            <p className="text-xs text-slate-500 font-medium">Selecciona el nuevo estado para actualizar el progreso de esta orden.</p>
-          </div>
-          
-          {/* Tarjetas */}
-          <div className="grid grid-cols-4 gap-2.5 mb-3.5 px-1">
-            {([
-              { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "La orden ha sido recibida y está pendiente de revisión." },
-              { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "La orden está siendo procesada actualmente." },
-              { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, color: "emerald", desc: "La orden está lista para ser entregada." },
-              { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, color: "purple", desc: "La orden ha sido entregada al cliente." },
-            ]).map((s) => {
-              const Icon = s.icon;
-              const isCurrent = estadoModal?.estado === s.value;
-              
-              const colorClasses = {
-                blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/40", activeBorder: "border-blue-400", activeCheckBg: "bg-blue-500" },
-                amber: { iconBg: "bg-amber-100", iconColor: "text-amber-500", activeCardBg: "bg-amber-50/40", activeBorder: "border-amber-400", activeCheckBg: "bg-amber-500" },
-                emerald: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", activeCardBg: "bg-emerald-50/40", activeBorder: "border-emerald-400", activeCheckBg: "bg-emerald-500" },
-                purple: { iconBg: "bg-purple-100", iconColor: "text-purple-600", activeCardBg: "bg-purple-50/40", activeBorder: "border-purple-400", activeCheckBg: "bg-purple-500" }
-              }[s.color]!;
-
-              const cardClass = isCurrent 
-                ? `border-[1.5px] ${colorClasses.activeBorder} ${colorClasses.activeCardBg}`
-                : `border border-slate-200 bg-white hover:border-slate-300`;
-
-              return (
-                <button
-                  key={s.value}
-                  onClick={async () => {
-                    if (!isCurrent && estadoModal) {
-                      const shouldCloseImmediately = await cambiarEstado(estadoModal, s.value);
-                      if (shouldCloseImmediately) {
-                        setEstadoModal(null);
-                      } else {
-                        // Delay closing the current modal slightly so the conveyor modal can mount properly
-                        setTimeout(() => setEstadoModal(null), 100);
-                      }
-                    }
-                  }}
-                  disabled={isCurrent}
-                  className={`relative flex flex-col items-center justify-start text-center rounded-[14px] p-2.5 py-3 transition-all duration-200 active:scale-95 cursor-pointer ${cardClass}`}
-                >
-                  {isCurrent && (
-                    <div className={`absolute top-2 right-2 h-[16px] w-[16px] rounded-full flex items-center justify-center text-white ${colorClasses.activeCheckBg}`}>
-                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                    </div>
-                  )}
-                  <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center mb-1.5 ${colorClasses.iconBg}`}>
-                    <Icon className={`h-5 w-5 ${colorClasses.iconColor}`} strokeWidth={2.5} />
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-900 mb-0.5">{s.label}</h3>
-                  <p className="text-[10px] text-slate-500 leading-tight font-medium">{s.desc}</p>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Acciones Adicionales / Notas, Condonación & Anulación */}
-          {estadoModal && estadoModal.estado !== "ANULADA" && (hasNotaCredito || hasNotaDebito || hasCondonarDeuda || hasAnularOrden) && (
-            <div className="mb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
-              <div className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight text-center mb-2">
-                Acciones Especiales
-              </div>
-              <div className="flex flex-wrap items-center justify-center gap-2">
-                {hasNotaCredito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = estadoModal;
-                      setEstadoModal(null);
-                      setCredito(target);
-                      setMontoCredito(0);
-                      setMotivoCredito("");
-                      setCodigoCredito("04");
-                    }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
-                  >
-                    <ArrowDownCircle className="h-4 w-4 text-slate-800 dark:text-slate-200" />
-                    Nota de Crédito
-                  </button>
-                )}
-                {hasNotaDebito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = estadoModal;
-                      setEstadoModal(null);
-                      setDebito(target);
-                    }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/70 dark:border-blue-800/70 active:scale-95"
-                  >
-                    <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
-                    Nota de Débito
-                  </button>
-                )}
-                {hasCondonarDeuda && estadoModal.saldo > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = estadoModal;
-                      setEstadoModal(null);
-                      setCondonarOrden(target);
-                    }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-amber-200/70 dark:border-amber-800/70 active:scale-95"
-                  >
-                    <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
-                    Condonar Deuda
-                  </button>
-                )}
-                {hasAnularOrden && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const target = estadoModal;
-                      setEstadoModal(null);
-                      setAnular(target);
-                    }}
-                    className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-rose-200/70 dark:border-rose-800/70 active:scale-95"
-                  >
-                    <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                    Anular Orden
-                  </button>
-                )}
-              </div>
-            </div>
-          )}
-
-          <div className="flex items-center justify-center gap-3">
-            <Button variant="outline" className="text-xs text-slate-600 font-semibold h-9 px-4 rounded-xl border-slate-200 hover:bg-slate-50 border shadow-none" onClick={() => setEstadoModal(null)}>
-              Cancelar
-            </Button>
-            {estadoModal && estadoModal.saldo > 0 && estadoModal.estado !== "ANULADA" && (
-              <Button 
-                className="text-sm font-black h-11 px-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-none gap-2 transition-all active:scale-95 cursor-pointer"
-                onClick={() => {
-                  const targetOrden = estadoModal;
-                  setEstadoModal(null);
-                  setCobrarOrden(targetOrden);
-                }}
-              >
-                <DollarSign className="h-5 w-5 stroke-[3]" /> Cobrar Orden
-              </Button>
-            )}
-            <Button 
-              className="text-xs font-semibold h-9 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border-none shadow-none gap-1.5 active:scale-95 transition-all cursor-pointer" 
-              onClick={() => {
-                const target = estadoModal;
-                setEstadoModal(null);
-                if (target) {
-                  setShowPrint(target);
-                }
-              }}
-            >
-              <Printer className="h-3.5 w-3.5" /> Imprimir Ticket
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
+      <EstadoOrdenDialog
+        estadoModal={estadoModal}
+        setEstadoModal={setEstadoModal}
+        clientes={clientes}
+        cambiarEstado={cambiarEstado}
+        hasNotaCredito={hasNotaCredito}
+        hasNotaDebito={hasNotaDebito}
+        hasCondonarDeuda={hasCondonarDeuda}
+        hasAnularOrden={hasAnularOrden}
+        ecfConfig={ecfConfig}
+        setCredito={setCredito}
+        setMontoCredito={setMontoCredito}
+        setMotivoCredito={setMotivoCredito}
+        setCodigoCredito={setCodigoCredito}
+        setDebito={setDebito}
+        setCondonarOrden={setCondonarOrden}
+        setAnular={setAnular}
+        setCobrarOrden={setCobrarOrden}
+        setShowPrint={setShowPrint}
+      />
 
       {/* Modal Conveyor - Ubicación de la ropa */}
       <Dialog open={!!conveyorOrden} onOpenChange={(o) => { if (!o) { setConveyorOrden(null); setConveyorUbicacion(""); } }}>
@@ -1710,6 +1586,239 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         />
       )}
     </div>
+  );
+}
+
+export interface EstadoOrdenDialogProps {
+  estadoModal: Orden | null;
+  setEstadoModal: (o: Orden | null) => void;
+  clientes: Cliente[];
+  cambiarEstado: any;
+  hasNotaCredito?: boolean;
+  hasNotaDebito?: boolean;
+  hasCondonarDeuda?: boolean;
+  hasAnularOrden?: boolean;
+  ecfConfig?: any;
+  setCredito?: (o: Orden) => void;
+  setMontoCredito?: (n: number) => void;
+  setMotivoCredito?: (s: string) => void;
+  setCodigoCredito?: (s: string) => void;
+  setDebito?: (o: Orden) => void;
+  setCondonarOrden?: (o: Orden) => void;
+  setAnular?: (o: Orden) => void;
+  setCobrarOrden?: (o: Orden) => void;
+  setShowPrint?: (o: Orden) => void;
+}
+
+export function EstadoOrdenDialog({
+  estadoModal,
+  setEstadoModal,
+  clientes,
+  cambiarEstado,
+  hasNotaCredito = false,
+  hasNotaDebito = false,
+  hasCondonarDeuda = false,
+  hasAnularOrden = false,
+  ecfConfig,
+  setCredito,
+  setMontoCredito,
+  setMotivoCredito,
+  setCodigoCredito,
+  setDebito,
+  setCondonarOrden,
+  setAnular,
+  setCobrarOrden,
+  setShowPrint,
+}: EstadoOrdenDialogProps) {
+  if (!estadoModal) return null;
+
+  return (
+    <Dialog open={!!estadoModal} onOpenChange={(o) => { if (!o) setEstadoModal(null); }}>
+      <DialogContent className="sm:max-w-3xl rounded-[24px] p-6 overflow-hidden bg-white shadow-2xl">
+        {/* Header Top Left */}
+        <div className="flex items-center justify-between mb-1">
+          <div className="flex items-center gap-2.5">
+            <div className={`h-8 w-8 rounded-full flex items-center justify-center text-white shrink-0 ${
+              estadoModal.estado === "RECIBIDA" ? "bg-blue-500" :
+              estadoModal.estado === "EN_PROCESO" ? "bg-amber-500" :
+              estadoModal.estado === "LISTA" ? "bg-emerald-500" :
+              "bg-purple-500"
+            }`}>
+              {estadoModal.estado === "RECIBIDA" && <Inbox className="h-4 w-4" />}
+              {estadoModal.estado === "EN_PROCESO" && <RefreshCw className="h-4 w-4" />}
+              {estadoModal.estado === "LISTA" && <CircleCheck className="h-4 w-4" />}
+              {estadoModal.estado === "ENTREGADA" && <Truck className="h-4 w-4" />}
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-black leading-tight text-slate-900">{estadoModal.numero}</DialogTitle>
+              <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">
+                {clientes.find(c => c.id === estadoModal.cliente_id)?.nombre || "Consumidor Final"}
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        {/* Título Central Elevado */}
+        <div className="text-center mb-3 -mt-7 px-16">
+          <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">Cambiar estado de la orden</h2>
+          <p className="text-xs text-slate-500 font-medium">Selecciona el nuevo estado para actualizar el progreso de esta orden.</p>
+        </div>
+        
+        {/* Tarjetas */}
+        <div className="grid grid-cols-4 gap-2.5 mb-3.5 px-1">
+          {([
+            { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "La orden ha sido recibida y está pendiente de revisión." },
+            { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "La orden está siendo procesada actualmente." },
+            { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, color: "emerald", desc: "La orden está lista para ser entregada." },
+            { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, color: "purple", desc: "La orden ha sido entregada al cliente." },
+          ]).map((s) => {
+            const Icon = s.icon;
+            const isCurrent = estadoModal.estado === s.value;
+            
+            const colorClasses = {
+              blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/40", activeBorder: "border-blue-400", activeCheckBg: "bg-blue-500" },
+              amber: { iconBg: "bg-amber-100", iconColor: "text-amber-500", activeCardBg: "bg-amber-50/40", activeBorder: "border-amber-400", activeCheckBg: "bg-amber-500" },
+              emerald: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", activeCardBg: "bg-emerald-50/40", activeBorder: "border-emerald-400", activeCheckBg: "bg-emerald-500" },
+              purple: { iconBg: "bg-purple-100", iconColor: "text-purple-600", activeCardBg: "bg-purple-50/40", activeBorder: "border-purple-400", activeCheckBg: "bg-purple-500" }
+            }[s.color]!;
+
+            const cardClass = isCurrent 
+              ? `border-[1.5px] ${colorClasses.activeBorder} ${colorClasses.activeCardBg}`
+              : `border border-slate-200 bg-white hover:border-slate-300`;
+
+            return (
+              <button
+                key={s.value}
+                onClick={async () => {
+                  if (!isCurrent) {
+                    const shouldCloseImmediately = await cambiarEstado(estadoModal, s.value);
+                    if (shouldCloseImmediately) {
+                      setEstadoModal(null);
+                    } else {
+                      // Delay closing the current modal slightly so the conveyor modal can mount properly
+                      setTimeout(() => setEstadoModal(null), 100);
+                    }
+                  }
+                }}
+                disabled={isCurrent || !esTransicionEstadoPermitida(estadoModal.estado, s.value, estadoModal.saldo, estadoModal.metodo_pago)}
+                className={`relative flex flex-col items-center justify-start text-center rounded-[14px] p-2.5 py-3 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 cursor-pointer ${cardClass}`}
+              >
+                {isCurrent && (
+                  <div className={`absolute top-2 right-2 h-[16px] w-[16px] rounded-full flex items-center justify-center text-white ${colorClasses.activeCheckBg}`}>
+                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                  </div>
+                )}
+                <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center mb-1.5 ${colorClasses.iconBg}`}>
+                  <Icon className={`h-5 w-5 ${colorClasses.iconColor}`} strokeWidth={2.5} />
+                </div>
+                <h3 className="text-xs font-bold text-slate-900 mb-0.5">{s.label}</h3>
+                <p className="text-[10px] text-slate-500 leading-tight font-medium">{s.desc}</p>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Acciones Adicionales / Notas, Condonación & Anulación */}
+        {estadoModal.estado !== "ANULADA" && (hasNotaCredito || hasNotaDebito || hasCondonarDeuda || hasAnularOrden) && (
+          <div className="mb-3.5 pt-2.5 border-t border-slate-100 dark:border-slate-800">
+            <div className="text-sm font-black text-slate-900 dark:text-slate-100 tracking-tight text-center mb-2">
+              Acciones Especiales
+            </div>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              {hasNotaCredito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && setCredito && setMontoCredito && setMotivoCredito && setCodigoCredito && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = estadoModal;
+                    setEstadoModal(null);
+                    setCredito(target);
+                    setMontoCredito(0);
+                    setMotivoCredito("");
+                    setCodigoCredito("04");
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
+                >
+                  <ArrowDownCircle className="h-4 w-4 text-slate-800 dark:text-slate-200" />
+                  Nota de Crédito
+                </button>
+              )}
+              {hasNotaDebito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && setDebito && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = estadoModal;
+                    setEstadoModal(null);
+                    setDebito(target);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-blue-200/70 dark:border-blue-800/70 active:scale-95"
+                >
+                  <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                  Nota de Débito
+                </button>
+              )}
+              {hasCondonarDeuda && estadoModal.saldo > 0 && setCondonarOrden && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = estadoModal;
+                    setEstadoModal(null);
+                    setCondonarOrden(target);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-amber-200/70 dark:border-amber-800/70 active:scale-95"
+                >
+                  <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                  Condonar Deuda
+                </button>
+              )}
+              {hasAnularOrden && setAnular && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const target = estadoModal;
+                    setEstadoModal(null);
+                    setAnular(target);
+                  }}
+                  className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-rose-200/70 dark:border-rose-800/70 active:scale-95"
+                >
+                  <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
+                  Anular Orden
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div className="flex items-center justify-center gap-3">
+          <Button variant="outline" className="text-xs text-slate-600 font-semibold h-9 px-4 rounded-xl border-slate-200 hover:bg-slate-50 border shadow-none" onClick={() => setEstadoModal(null)}>
+            Cancelar
+          </Button>
+          {estadoModal.saldo > 0 && estadoModal.estado !== "ANULADA" && setCobrarOrden && (
+            <Button 
+              className="text-sm font-black h-11 px-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-none gap-2 transition-all active:scale-95 cursor-pointer"
+              onClick={() => {
+                const targetOrden = estadoModal;
+                setEstadoModal(null);
+                setCobrarOrden(targetOrden);
+              }}
+            >
+              <DollarSign className="h-5 w-5 stroke-[3]" /> Cobrar Orden
+            </Button>
+          )}
+          {setShowPrint && (
+            <Button 
+              className="text-xs font-semibold h-9 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border-none shadow-none gap-1.5 active:scale-95 transition-all cursor-pointer" 
+              onClick={() => {
+                const target = estadoModal;
+                setEstadoModal(null);
+                setShowPrint(target);
+              }}
+            >
+              <Printer className="h-3.5 w-3.5" /> Imprimir Ticket
+            </Button>
+          )}
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -1825,7 +1934,8 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
                   <Button 
                     key={s} 
                     variant="outline" 
-                    className={`h-11 flex-col gap-1 px-1 py-1.5 transition-all text-[9px] font-bold border-slate-200 ${
+                    disabled={isActive || !esTransicionEstadoPermitida(view.estado, s, view.saldo, view.metodo_pago)}
+                    className={`h-11 flex-col gap-1 px-1 py-1.5 transition-all text-[9px] font-bold border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed ${
                       isActive 
                         ? 'bg-[#2E4A79] text-white border-transparent hover:bg-[#253d63]' 
                         : 'bg-white text-slate-600 hover:bg-slate-50'
