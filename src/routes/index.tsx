@@ -691,30 +691,104 @@ function LandingPage() {
                   </div>
                   <div className="text-sm text-muted-foreground">{billingCycle === "monthly" ? "por mes" : "por año"}</div>
 
-                  <ul className="my-6 space-y-2.5 text-sm">
-                    <Feature on>{plan.limite_empleados} empleados</Feature>
-                    <Feature on>{plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</Feature>
-                    <Feature on>Caja, clientes, gastos, reportes</Feature>
-                    <Feature on={!!plan.modulos?.whatsapp}>
-                      Notificaciones WhatsApp {plan.modulos?.whatsapp && plan.limite_whatsapp_mes && `(${plan.limite_whatsapp_mes.toLocaleString("es-DO")} mensajes/mes)`}
-                    </Feature>
-                    <Feature on={plan.modulos.facturacion_fiscal}>
-                      Facturación Electrónica <strong className="font-extrabold text-foreground">(Costo por uso)</strong>
-                    </Feature>
-                    <Feature on={plan.modulos.multisucursal}>
-                      Multi-sucursal <strong className="font-extrabold text-foreground">(Cargo adicional)</strong> {plan.modulos.multisucursal && (
-                        <span className="text-[10px] font-bold text-primary ml-1 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                          Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
-                        </span>
-                      )}
-                    </Feature>
-                    <Feature on={plan.modulos.logistica}>Logística y Repartidores</Feature>
-                    <Feature on>Clientes ilimitados</Feature>
-                    <Feature on>Generación de reportes</Feature>
-                    <Feature on>Actualizaciones de software</Feature>
-                    <Feature on>Cuentas x cobrar</Feature>
-                    <Feature on>Impresión A4/80mm</Feature>
-                  </ul>
+                  <div className="my-6 space-y-4.5 text-sm">
+                    {/* Límites / Características Básicas */}
+                    <div className="space-y-2.5 text-left">
+                      <div className="flex items-center gap-2.5 text-slate-700 font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                        <span>{plan.limite_empleados} empleados</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 text-slate-700 font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                        <span>{plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</span>
+                      </div>
+                      <div className="flex items-center gap-2.5 text-slate-700 font-semibold">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                        <span>Caja, clientes, gastos, reportes</span>
+                      </div>
+                    </div>
+
+                    {/* Módulos Habilitados */}
+                    <div className="border-t border-border pt-3.5 text-left">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2.5">
+                        Módulos Habilitados
+                      </div>
+                      <div className="space-y-2.5">
+                        {[
+                          { key: "whatsapp", label: "Mensajería WhatsApp" },
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica" },
+                          { key: "multisucursal", label: "Multisucursal" },
+                          { key: "logistica", label: "Logística" }
+                        ].map(({ key, label }) => {
+                          const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
+                          return (
+                            <div 
+                              key={key} 
+                              className={`flex items-center gap-2.5 font-semibold ${
+                                v 
+                                  ? "text-green-700 dark:text-green-400" 
+                                  : "text-slate-400 line-through opacity-70"
+                              }`}
+                            >
+                              {v ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="m9 12 2 2 4-4" />
+                                </svg>
+                              ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-350 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="m15 9-6 6" />
+                                  <path d="m9 9 6 6" />
+                                </svg>
+                              )}
+                              <span>
+                                {label}
+                                {key === "whatsapp" && v && plan.limite_whatsapp_mes && (
+                                  <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                                    ({plan.limite_whatsapp_mes.toLocaleString("es-DO")} msg/mes)
+                                  </span>
+                                )}
+                                {key === "multisucursal" && v && (
+                                  <span className="text-[9px] font-bold text-primary ml-1 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                    Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
+                                  </span>
+                                )}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Características Generales */}
+                    <div className="border-t border-border pt-3 space-y-2.5">
+                      {[
+                        "Clientes ilimitados",
+                        "Generación de reportes",
+                        "Actualizaciones de software",
+                        "Cuentas x cobrar",
+                        "Impresión A4/80mm"
+                      ].map((feat) => (
+                        <div key={feat} className="flex items-center gap-2.5 font-semibold text-slate-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-400 shrink-0">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="m9 12 2 2 4-4" />
+                          </svg>
+                          <span>{feat}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
 
                   {polarUrl ? (
                     <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="mt-auto">

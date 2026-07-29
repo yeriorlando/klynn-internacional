@@ -741,6 +741,16 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
   if (authError) throw authError;
   if (!authData.user) throw new Error("No se pudo crear el usuario");
 
+  // Auto-confirmar el email del tenant admin en Auth
+  try {
+    await supabase.rpc('admin_set_user_email', {
+      target_user_id: authData.user.id,
+      new_email: admin.email.toLowerCase().trim()
+    });
+  } catch (confirmErr) {
+    console.error("Error auto-confirming tenant admin email:", confirmErr);
+  }
+
   // 2. Guardar la lavandería
   const { error: tenantError } = await supabase.from('tenants').insert(tenant);
   if (tenantError) {
@@ -1017,7 +1027,19 @@ export async function saveEmpleado(e: Empleado) {
   console.log("Iniciando guardado de empleado:", { email: emailLower, id: e.id });
 
   // 0. Registrar o sincronizar en Supabase Auth
+  let isNew = false;
   if (!e.id || e.id.startsWith('emp_')) {
+    isNew = true;
+  } else {
+    const { data: existing } = await supabase
+      .from('empleados')
+      .select('id')
+      .eq('id', e.id)
+      .maybeSingle();
+    isNew = !existing;
+  }
+
+  if (isNew) {
     try {
       console.log("Intentando crear cuenta en Auth...");
       const tempClient = createClient(
@@ -1061,6 +1083,17 @@ export async function saveEmpleado(e: Empleado) {
         }
       } else if (authData?.user) {
         console.log("Cuenta Auth creada exitosamente:", authData.user.id);
+        
+        // Auto-confirmar el email del nuevo usuario en Auth para evitar que quede atascado sin confirmación
+        try {
+          await supabase.rpc('admin_set_user_email', {
+            target_user_id: authData.user.id,
+            new_email: emailLower
+          });
+          console.log("Email auto-confirmado para el nuevo empleado");
+        } catch (confirmErr) {
+          console.error("Error al auto-confirmar email:", confirmErr);
+        }
         
         // AUTO-HEALING: Si el usuario ya existía en public.empleados con un ID viejo desincronizado,
         // actualizamos ese ID viejo en la DB para que coincida con el nuevo ID válido de Auth.

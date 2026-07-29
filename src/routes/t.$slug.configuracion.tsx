@@ -1698,47 +1698,91 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                   </div>
                   
                   <div className="space-y-2 mb-6">
-                    <div className="text-xs flex items-center gap-2">✅ {p.limite_empleados} Empleados</div>
-                    <div className="text-xs flex items-center gap-2">✅ {p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</div>
+                    <div className="text-xs flex items-center gap-2.5 font-semibold text-slate-800">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="m9 12 2 2 4-4" />
+                      </svg>
+                      <span>{p.limite_empleados} Empleados</span>
+                    </div>
+                    <div className="text-xs flex items-center gap-2.5 font-semibold text-slate-800">
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                        <circle cx="12" cy="12" r="10" />
+                        <path d="m9 12 2 2 4-4" />
+                      </svg>
+                      <span>{p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</span>
+                    </div>
                     {p.modulos?.whatsapp && (
-                      <div className="text-xs flex items-center gap-2 font-medium text-blue-600">
-                        ✅ {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes
+                      <div className="text-xs flex items-center gap-2.5 font-semibold text-blue-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                          <circle cx="12" cy="12" r="10" />
+                          <path d="m9 12 2 2 4-4" />
+                        </svg>
+                        <span>{(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes</span>
                       </div>
                     )}
-                    {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((k) => {
-                      const v = p.modulos?.[k as keyof typeof p.modulos];
-                      
-                      let label: React.ReactNode = "";
-                      if (k === "logistica") label = "Logística y Repartidores";
-                      else if (k === "facturacion_fiscal") label = (
-                        <span>
-                          Facturación Electrónica <strong className="font-extrabold text-foreground opacity-100">(Costo por uso)</strong>
-                        </span>
-                      );
-                      else if (k === "whatsapp") label = "WhatsApp";
-                      else if (k === "multisucursal") label = (
-                        <span>
-                          Multi-sucursal <strong className="font-extrabold text-foreground opacity-100">(Cargo adicional)</strong>
-                        </span>
-                      );
-                      else label = k.charAt(0).toUpperCase() + k.slice(1).replace(/_/g, " ");
+                    <div className="border-t border-border/60 pt-3 mt-3 text-left">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                        Módulos Habilitados
+                      </div>
+                      <div className="space-y-1.5">
+                        {[
+                          { key: "whatsapp", label: "Mensajería WhatsApp" },
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica" },
+                          { key: "multisucursal", label: "Multisucursal" },
+                          { key: "logistica", label: "Logística" }
+                        ].map(({ key, label }) => {
+                          const v = !!p.modulos?.[key as keyof typeof p.modulos];
+                          return (
+                            <div 
+                              key={key} 
+                              className={`flex items-center gap-2 text-xs font-semibold ${
+                                v 
+                                  ? "text-green-700 dark:text-green-400" 
+                                  : "text-slate-400 line-through opacity-70"
+                              }`}
+                            >
+                              {v ? (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="m9 12 2 2 4-4" />
+                                </svg>
+                              ) : (
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-350 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="m15 9-6 6" />
+                                  <path d="m9 9 6 6" />
+                                </svg>
+                              )}
+                              <span>{label}</span>
+                              {key === "multisucursal" && v && (
+                                <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
+                                  Hasta {1 + (p.limite_sucursales_adicionales || 0)}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
 
-                      return (
-                        <div key={k} className={`text-xs flex items-center gap-2 ${v ? "text-foreground" : "text-muted-foreground opacity-50"}`}>
-                           {v ? "✅" : "❌"} <span>{label}</span>
-                           {k === "multisucursal" && v && (
-                             <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
-                               Hasta {1 + (p.limite_sucursales_adicionales || 0)}
-                             </span>
-                           )}
+                    <div className="border-t border-border/40 pt-2.5 mt-3 space-y-1.5">
+                      {[
+                        "Clientes ilimitados",
+                        "Generación de reportes",
+                        "Actualizaciones de software",
+                        "Cuentas x cobrar",
+                        "Impresión A4/80mm"
+                      ].map((feat) => (
+                        <div key={feat} className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-400 shrink-0">
+                            <circle cx="12" cy="12" r="10" />
+                            <path d="m9 12 2 2 4-4" />
+                          </svg>
+                          <span>{feat}</span>
                         </div>
-                      );
-                    })}
-                    <div className="text-xs flex items-center gap-2">✅ Clientes ilimitados</div>
-                    <div className="text-xs flex items-center gap-2">✅ Generación de reportes</div>
-                    <div className="text-xs flex items-center gap-2">✅ Actualizaciones de software</div>
-                    <div className="text-xs flex items-center gap-2">✅ Cuentas x cobrar</div>
-                    <div className="text-xs flex items-center gap-2">✅ Impresión A4/80mm</div>
+                      ))}
+                    </div>
                   </div>
 
                       <Button 
