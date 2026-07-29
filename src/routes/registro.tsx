@@ -16,7 +16,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   PLANS, formatRD, formatPhoneRD, isSlugAvailable, registerTenant,
   setActiveTenant, uid, PROVINCIAS_RD, NCF_TIPOS, DEFAULT_CONFIG, getGlobalConfig, getPlans,
-  type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado,
+  type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan,
 } from "@/lib/storage";
 
 // Definimos IS_LOCAL_MODE como false para asegurar compatibilidad 100% cloud
@@ -204,6 +204,7 @@ function RegistroPage() {
       estado: "TRIAL",
       trial_hasta: new Date(Date.now() + globalConfig.trialDays * 86400000).toISOString(),
       creado_en: new Date().toISOString(),
+      plan_fecha_inicio: new Date().toISOString(),
       config,
     };
 

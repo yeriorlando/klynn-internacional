@@ -83,6 +83,7 @@ export interface Tenant {
   monto_actual_caja_chica?: number;
   max_sucursales?: number;
   limite_credito_dias?: number;
+  plan_fecha_inicio?: string;
 }
 
 export interface TenantConfig {
@@ -889,7 +890,10 @@ export async function updateTenantAdmin(tenant_id: string, newEmail: string, new
 }
 
 export async function updateTenantPlan(tenantId: string, planId: PlanId) {
-  const { error } = await supabase.from('tenants').update({ plan_id: planId }).eq('id', tenantId);
+  const { error } = await supabase.from('tenants').update({
+    plan_id: planId,
+    plan_fecha_inicio: new Date().toISOString()
+  }).eq('id', tenantId);
   return !error;
 }
 
@@ -1774,14 +1778,64 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
 }
 
 
-export async function getMonthlyOrderCount(tenantId: string): Promise<number> {
-  const all = (await getOrdenes(tenantId)).filter(o => o.estado !== "ANULADA");
-  const now = new Date();
-  const month = now.getMonth();
+export function getBillingCycleStart(planStartDateStr: string | Date, now: Date = new Date()): Date {
+  const start = new Date(planStartDateStr);
+  if (isNaN(start.getTime())) return new Date(now.getFullYear(), now.getMonth(), 1);
+  if (now < start) return start;
+
   const year = now.getFullYear();
+  const month = now.getMonth();
+  const day = start.getDate();
+
+  let cycleStart = new Date(year, month, day, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+
+  // Manejar el desbordamiento de fin de mes (ej. si el mes tiene menos días que el día de aniversario)
+  if (cycleStart.getDate() !== day) {
+    cycleStart = new Date(year, month + 1, 0, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+  }
+
+  // Si la fecha calculada está en el futuro, el ciclo actual comenzó en el mes anterior
+  if (cycleStart > now) {
+    let prevMonth = month - 1;
+    let prevYear = year;
+    if (prevMonth < 0) {
+      prevMonth = 11;
+      prevYear = year - 1;
+    }
+    cycleStart = new Date(prevYear, prevMonth, day, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+    if (cycleStart.getDate() !== day) {
+      cycleStart = new Date(prevYear, prevMonth + 1, 0, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+    }
+  }
+
+  return cycleStart;
+}
+
+export async function getMonthlyOrderCount(tenantId: string, planFechaInicio?: string): Promise<number> {
+  const all = (await getOrdenes(tenantId)).filter(o => o.estado !== "ANULADA");
+  
+  let refDateStr = planFechaInicio;
+  if (!refDateStr) {
+    const t = await getTenantById(tenantId);
+    refDateStr = t?.plan_fecha_inicio || t?.creado_en;
+  }
+
+  if (!refDateStr) {
+    const now = new Date();
+    const month = now.getMonth();
+    const year = now.getFullYear();
+    return all.filter(o => {
+      const d = new Date(o.creado_en);
+      return d.getMonth() === month && d.getFullYear() === year;
+    }).length;
+  }
+
+  const now = new Date();
+  const cycleStart = getBillingCycleStart(refDateStr, now);
+
   return all.filter(o => {
     const d = new Date(o.creado_en);
-    return d.getMonth() === month && d.getFullYear() === year;
+    return d >= cycleStart;
   }).length;
 }
 
@@ -1803,7 +1857,7 @@ export async function checkPlanLimits(tenant: Tenant | string) {
   const plans = await getPlans();
   const plan = plans.find(p => p.id === t.plan_id) || PLANS[0];
 
-  const orderCount = await getMonthlyOrderCount(t.id);
+  const orderCount = await getMonthlyOrderCount(t.id, t.plan_fecha_inicio || t.creado_en);
   const employeeCount = (await getEmpleados(t.id)).filter(e => e.rol !== "ADMIN").length;
 
   const ordersReached = plan.limite_ordenes_mes !== null && orderCount >= plan.limite_ordenes_mes;

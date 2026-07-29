@@ -129,6 +129,7 @@ Deno.serve(async (req) => {
       .update({
         plan_id: planId,
         estado: "ACTIVO",
+        plan_fecha_inicio: new Date().toISOString(),
       })
       .eq("email", customerEmail);
 
