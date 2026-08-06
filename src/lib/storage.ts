@@ -118,6 +118,7 @@ export interface TenantConfig {
   max_sucursales?: number;
   pos_habilitar_servicios?: boolean;
   pos_habilitar_prendas?: boolean;
+  pos_modal_desglose?: boolean;
   pos_modo_defecto?: boolean;
   usar_ubicacion_ropa?: boolean;
   modulos_override?: {
@@ -178,6 +179,7 @@ export interface OrdenItem {
   es_libra?: boolean;
   is_exento?: boolean;
   notas?: string;
+  servicio_origen?: string;
 }
 
 export interface Orden {
@@ -556,6 +558,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
+  pos_modal_desglose: false,
   pos_modo_defecto: true,
 };
 

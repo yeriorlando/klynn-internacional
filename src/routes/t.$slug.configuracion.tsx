@@ -1528,6 +1528,17 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                 />
               </label>
 
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Ventana modal para desglose de prendas</span>
+                  <p className="text-[10px] text-muted-foreground">Abre una ventana flotante al hacer clic en "+ Añadir prenda" (ideal para pantallas táctiles).</p>
+                </div>
+                <Switch 
+                  checked={cfg.pos_modal_desglose === true} 
+                  onCheckedChange={(v) => updateCfg({ pos_modal_desglose: v })} 
+                />
+              </label>
+
 
             </div>
             <Button className="mt-6" onClick={() => save(tenant)}>

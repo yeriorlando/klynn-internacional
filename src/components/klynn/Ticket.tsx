@@ -185,35 +185,53 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
 
                   // Encontrar prendas desglosadas que corresponden a este servicio
                   const misPrendasDesglosadas = itemsDesglosados.filter(it => 
-                    it.descripcion.toLowerCase().includes(sName.toLowerCase()) || 
-                    (it.notas && it.notas.toLowerCase().includes(sName.toLowerCase())) ||
-                    (!orden.items.some(x => x.descripcion.startsWith("↳") && x.descripcion.toLowerCase().includes(sName.toLowerCase())) && orden.servicios.length === 1)
+                    it.servicio_origen 
+                      ? it.servicio_origen === sName 
+                      : (it.descripcion.toLowerCase().includes(sName.toLowerCase()) || 
+                         (it.notas && it.notas.toLowerCase().includes(sName.toLowerCase())) ||
+                         (orden.servicios.length === 1))
                   );
 
                   return (
-                    <div key={'s'+i} className={p > 0 ? "mb-2" : "mb-1"}>
-                      {p > 0 && (
-                        <div className="flex justify-between items-start mb-1.5">
-                          <div className="w-[44%] pr-1">
-                            <div className="font-bold leading-tight uppercase text-[11px]">Servicio: {sName}</div>
-                            <div className="text-[10px] text-black font-semibold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
-                          </div>
-                          <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
-                          <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
+                    <div key={'s'+i} className="mb-2">
+                      <div className="flex justify-between items-start mb-1">
+                        <div className="w-[44%] pr-1">
+                          <div className="font-bold leading-tight uppercase text-[11px]">Servicio: {sName}</div>
+                          <div className="text-[10px] text-black font-semibold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
                         </div>
-                      )}
+                        <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
+                        <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
+                      </div>
 
                       {/* Desgloses anidados debajo del servicio */}
-                      {misPrendasDesglosadas.map((it, dIdx) => (
-                        <div key={'sd'+dIdx} className={`flex justify-between items-start ${p > 0 ? "pl-3" : "pl-0"} mb-1 animate-in fade-in duration-200`}>
-                          <div className="w-[44%] pr-1">
-                            <div className="font-normal text-black text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
-                            {it.notas && <div className="text-[9px] italic leading-tight text-black">Nota: {it.notas}</div>}
+                      {misPrendasDesglosadas.map((it, dIdx) => {
+                        let baseTotal = it.cantidad * (it.precio_unitario || 0);
+                        let itemItbis = 0;
+                        let valor = baseTotal;
+                        if (cfg?.ncf_facturacion_activa && orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
+                          if (isItbisIncluidoEnEstaOrden) {
+                            itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
+                          } else {
+                            itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
+                            valor = baseTotal + itemItbis;
+                          }
+                        }
+
+                        return (
+                          <div key={'sd'+dIdx} className="flex justify-between items-start pl-3 mb-1 animate-in fade-in duration-200">
+                            <div className="w-[44%] pr-1">
+                              <div className="font-normal text-black text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : (it.cantidad > 1 ? ` (x${it.cantidad})` : "")}</div>
+                              {it.notas && <div className="text-[9px] italic leading-tight text-black">Nota: {it.notas}</div>}
+                            </div>
+                            <div className="w-[26%] text-right font-medium pt-0.5 text-black">
+                              {baseTotal > 0 ? (itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00") : "—"}
+                            </div>
+                            <div className="w-[30%] text-right font-medium pt-0.5 text-black">
+                              {baseTotal > 0 ? formatRD(valor).replace("RD$", "") : "—"}
+                            </div>
                           </div>
-                          <div className="w-[26%] text-right font-medium pt-0.5 text-black">—</div>
-                          <div className="w-[30%] text-right font-medium pt-0.5 text-black">—</div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   );
                })}
@@ -265,14 +283,14 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       </div>
       <Sep />
       <div>
-        <Row k="Pago" v={orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago} />
-        <Row k="Estado Pago" v={orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"} bold />
+        <Row k="Método de pago" v={orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago} />
+        <Row k="Estado de factura" v={orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"} boldValue />
         {pagoRecibido !== undefined && (
           <>
             {orden.saldo === 0 && (pagoRecibido < orden.total || orden.pagado > pagoRecibido) ? (
               <>
                 <Row k="Saldo pendiente" v="RD$0.00" bold />
-                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} />}
+                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} boldValue />}
               </>
             ) : pagoRecibido < (orden.saldo + pagoRecibido) && pagoRecibido > 0 ? (
               <>
@@ -282,7 +300,7 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
             ) : (
               <>
                 <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} />
-                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} />}
+                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} boldValue />}
               </>
             )}
           </>
@@ -300,13 +318,14 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
       <Sep />
       <div>
         <Row 
-          k="Entrega" 
+          k="Fecha de entrega" 
           v={orden.es_urgente 
             ? `${humanizeDate(orden.fecha_entrega, true)} (${cfg?.tiempo_entrega_urgente || 3} HORAS)` 
             : humanizeDate(orden.fecha_entrega, false)
           } 
+          boldValue
         />
-        <Row k="Estado" v={orden.estado.replace("_", " ")} />
+        <Row k="Estado de la orden" v={orden.estado.replace("_", " ")} />
         {orden.motivo_anulacion && (
           <div className="text-[9px] mt-1 italic leading-tight">
             <b>Motivo ({orden.motivo_anulacion_codigo || "01"}):</b> {orden.motivo_anulacion}
@@ -358,11 +377,11 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
 }
 
 function Sep() { return <div className="my-1.5 border-t border-dashed border-black" />; }
-function Row({ k, v, bold }: { k: string; v: string; bold?: boolean }) {
+function Row({ k, v, bold, boldValue }: { k: string; v: string; bold?: boolean; boldValue?: boolean }) {
   return (
     <div className={`flex justify-between ${bold ? "font-bold text-[12px]" : ""}`}>
       <span>{k}:</span>
-      <span>{v}</span>
+      <span className={boldValue ? "font-bold" : ""}>{v}</span>
     </div>
   );
 }

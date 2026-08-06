@@ -265,11 +265,32 @@ export function encodeEscPos(
   writeLine("-".repeat(columns));
 
   // Renderizar prendas del ticket
-  orden.items.forEach((it) => {
+  const itemsSueltos = orden.items.filter(it => !it.descripcion.startsWith("↳"));
+  const itemsDesglosados = orden.items.filter(it => it.descripcion.startsWith("↳"));
+
+  // Renderizar servicios asociados con sus desgloses
+  if (orden.servicios && orden.servicios.length > 0) {
+    orden.servicios.forEach((sName) => {
+      const srv = serviciosList.find((x) => x.nombre === sName);
+      const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
+      writeLine(formatRow(`Servicio: ${sName}`, `RD$${p.toFixed(2)}`, columns));
+      
+      const misPrendas = itemsDesglosados.filter(it => 
+        it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
+      );
+      misPrendas.forEach(it => {
+        const sub = it.cantidad * it.precio_unitario;
+        const subStr = sub > 0 ? `RD$${sub.toFixed(2)}` : "---";
+        writeLine(formatRow(`  ${it.cantidad}x ${it.descripcion}`, subStr, columns));
+      });
+    });
+  }
+
+  // Renderizar prendas sueltas
+  itemsSueltos.forEach((it) => {
     const cantDesc = `${it.cantidad}x ${it.descripcion}`;
     const sub = it.cantidad * it.precio_unitario;
     const subStr = `RD$${sub.toFixed(2)}`;
-    // Si la descripción es muy larga, la partimos
     if (cantDesc.length + subStr.length + 1 > columns) {
       writeLine(cleanText(cantDesc));
       writeLine(formatRow("", subStr, columns));
@@ -277,17 +298,6 @@ export function encodeEscPos(
       writeLine(formatRow(cantDesc, subStr, columns));
     }
   });
-
-  // Renderizar servicios asociados
-  if (orden.servicios && orden.servicios.length > 0) {
-    orden.servicios.forEach((sName) => {
-      const srv = serviciosList.find((x) => x.nombre === sName);
-      const p = srv ? srv.precio : 0;
-      if (p > 0) {
-        writeLine(formatRow(`Servicio: ${sName}`, `RD$${p.toFixed(2)}`, columns));
-      }
-    });
-  }
   writeLine("=".repeat(columns));
 
   // TOTALES

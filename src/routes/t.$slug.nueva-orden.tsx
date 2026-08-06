@@ -9,7 +9,7 @@ import {
   Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
   ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, WashingMachine,
   CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays, FileText, ChevronDown, ChevronUp,
-  Building2, Banknote
+  Building2, Banknote, Sparkles, Tag, Layers, Package
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -163,6 +163,9 @@ function NuevaOrdenPage() {
   const [tipoECF, setTipoECF] = useState<string>("E32");
   const [indexDesglose, setIndexDesglose] = useState<number | null>(null);
   const [showDesgloseDialog, setShowDesgloseDialog] = useState(false);
+  const [desgloseServiceName, setDesgloseServiceName] = useState<string>("");
+  const [showCategoryModal, setShowCategoryModal] = useState(false);
+  const [categorySearchQuery, setCategorySearchQuery] = useState("");
 
   const { data: catalogoData = [], isLoading: loadingCatalog } = useCatalogo(tenantId);
   const { data: serviciosData = [], isLoading: loadingServicios } = useServicios(tenantId);
@@ -424,26 +427,24 @@ function NuevaOrdenPage() {
   }, [user]);
 
   const categoriesPrendas = useMemo(() => {
-    const cats = new Set(catalogo.map(c => c.categoria || "Otros"));
-    return ["TODAS LAS PRENDAS", ...Array.from(cats)];
+    const map = new Map<string, string>();
+    catalogo.forEach(c => {
+      const cat = (c.categoria || "Otros").trim();
+      if (cat) {
+        const upper = cat.toUpperCase();
+        if (!map.has(upper)) {
+          map.set(upper, cat);
+        }
+      }
+    });
+    return Array.from(map.values());
   }, [catalogo]);
-
-  const visibleClothingCategories = useMemo(() => {
-    const limit = 10;
-    if (showAllClothingCategories || categoriesPrendas.length <= limit) return categoriesPrendas;
-
-    const visible = categoriesPrendas.slice(0, limit);
-    if (activeCategory !== "TODOS" && !visible.includes(activeCategory)) {
-      return [...visible.slice(0, limit - 1), activeCategory];
-    }
-    return visible;
-  }, [activeCategory, categoriesPrendas, showAllClothingCategories]);
 
   const catalogFiltered = useMemo(() => {
     let list = catalogo;
     if (posFilterTab === "PRENDAS") {
-      if (activeCategory !== "TODAS LAS PRENDAS") {
-        list = list.filter(c => (c.categoria || "Otros") === activeCategory);
+      if (activeCategory !== "TODAS LAS PRENDAS" && activeCategory !== "TODOS") {
+        list = list.filter(c => (c.categoria || "Otros").trim().toUpperCase() === activeCategory.trim().toUpperCase());
       }
     }
     if (posSearch) {
@@ -739,20 +740,25 @@ function NuevaOrdenPage() {
   function removeItem(i: number) { setItems((arr) => arr.filter((_, idx) => idx !== i)); }
   function addItemDesglose(it: OrdenItem) {
     if (indexDesglose === null) return;
+    const targetService = it.servicio_origen || desgloseServiceName || (serviciosSel.length > 0 ? serviciosSel[serviciosSel.length - 1] : undefined);
+    const itemWithService: OrdenItem = {
+      ...it,
+      servicio_origen: targetService
+    };
     setItems((arr) => {
-      const idx = arr.findIndex(x => x.descripcion === it.descripcion && x.precio_unitario === it.precio_unitario);
+      const idx = arr.findIndex(x => x.descripcion === itemWithService.descripcion && x.precio_unitario === itemWithService.precio_unitario && x.servicio_origen === itemWithService.servicio_origen);
       if (idx > -1) {
-        return arr.map((item, i) => i === idx ? { ...item, cantidad: item.cantidad + it.cantidad } : item);
+        return arr.map((item, i) => i === idx ? { ...item, cantidad: item.cantidad + itemWithService.cantidad } : item);
       }
 
       const result = [...arr];
       if (indexDesglose === -1) {
-        return [...result, it];
+        return [...result, itemWithService];
       }
-      result.splice(indexDesglose + 1, 0, it);
+      result.splice(indexDesglose + 1, 0, itemWithService);
       return result;
     });
-    toast.success(`${it.descripcion.replace('↳ ', '')} agregada al desglose`);
+    toast.success(`${it.descripcion.replace('↳ ', '')} agregada ${targetService ? `a ${targetService}` : 'al desglose'}`);
   }
   function updateItemQuantity(i: number, delta: number) {
     setItems((arr) => arr.map((it, idx) => {
@@ -1084,7 +1090,7 @@ function NuevaOrdenPage() {
   };
 
   return (
-    <div className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}>
+    <div style={{ zoom: 0.9 }} className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}>
       {isPosMode ? (
         <style dangerouslySetInnerHTML={{
           __html: `
@@ -1288,37 +1294,21 @@ function NuevaOrdenPage() {
                     )}
                   </div>
 
-                  {/* Sub-filtro de Categorías de Prendas */}
-                  {enablePrendas && posFilterTab === "PRENDAS" && (
-                    <div className="flex flex-wrap items-center gap-1.5 border-t border-slate-100 pt-3 animate-in slide-in-from-top-1 duration-200 dark:border-slate-800">
-                      {visibleClothingCategories.map(cat => (
-                        <button
-                          key={cat}
-                          type="button"
-                          onClick={() => setActiveCategory(cat)}
-                          className={`px-3.5 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest whitespace-nowrap transition-all shadow-sm border ${activeCategory === cat
-                            ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                            : "bg-card text-muted-foreground hover:bg-accent border-border/50"
-                            }`}
-                        >
-                          {cat}
-                        </button>
-                      ))}
-                      {categoriesPrendas.length > 10 && (
-                        <button
-                          type="button"
-                          onClick={() => setShowAllClothingCategories((current) => !current)}
-                          aria-expanded={showAllClothingCategories}
-                          className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border border-primary/20 bg-primary/5 px-3.5 py-1.5 text-[9px] font-black uppercase tracking-widest text-primary shadow-sm transition-all hover:border-primary/35 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25"
-                        >
-                          {showAllClothingCategories ? (
-                            <ChevronUp className="h-3 w-3" strokeWidth={2.5} />
-                          ) : (
-                            <ChevronDown className="h-3 w-3" strokeWidth={2.5} />
-                          )}
-                          {showAllClothingCategories ? "Ver menos" : "Ver más"}
-                        </button>
-                      )}
+                  {desgloseServiceName && !showDesgloseDialog && (
+                    <div className="mt-2 py-1.5 px-3 rounded-xl bg-emerald-50 border border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 flex items-center justify-between gap-3 shadow-2xs">
+                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
+                        <Plus className="h-3.5 w-3.5 text-emerald-600 shrink-0 stroke-[3]" />
+                        <span>Añadiendo prendas a: <strong className="uppercase font-black text-emerald-900 dark:text-emerald-200">{desgloseServiceName}</strong></span>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-6 px-2.5 text-[11px] font-extrabold bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-200 rounded-md shadow-2xs border-slate-300 cursor-pointer shrink-0"
+                        onClick={() => setDesgloseServiceName("")}
+                      >
+                        <Check className="h-3 w-3 text-emerald-600 mr-1 stroke-[3]" /> Finalizar
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -1346,35 +1336,44 @@ function NuevaOrdenPage() {
                 }}
               >
                 <>
-                  <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 md:grid-cols-[auto_minmax(12rem,1fr)_auto]">
-                    <h3 className="flex min-w-0 items-center gap-2.5 text-sm font-black text-slate-800 dark:text-slate-100 md:text-base">
-                      <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
-                        {internalCatalogHeading.type === "SERVICIOS" ? (
-                          <WashingMachine className="h-4 w-4" strokeWidth={2.2} />
-                        ) : internalCatalogHeading.type === "PRENDAS" ? (
-                          <Shirt className="h-4 w-4" strokeWidth={2.2} />
-                        ) : (
-                          <LayoutGrid className="h-4 w-4" strokeWidth={2.2} />
-                        )}
-                      </span>
-                      <span className="truncate">{internalCatalogHeading.title}</span>
-                    </h3>
+                  <div className="flex items-center gap-3">
+                    <div className="flex flex-1 items-center gap-2 min-w-0">
+                      <div className={`relative flex-1 rounded-xl transition-all duration-200 ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}>
+                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Input
+                          value={posSearch}
+                          onChange={(event) => setPosSearch(event.target.value)}
+                          placeholder={
+                            posFilterTab === "SERVICIOS"
+                              ? "Búsqueda de servicios..."
+                              : posFilterTab === "PRENDAS"
+                              ? "Búsqueda de prendas..."
+                              : "Buscar prenda o servicio..."
+                          }
+                          aria-label="Buscar en el catálogo"
+                          className="h-10 rounded-xl border-slate-200 bg-slate-50/80 pl-10 pr-3 shadow-none transition-colors focus-visible:border-primary/40 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900/80 dark:focus-visible:bg-slate-900 text-xs font-medium"
+                        />
+                      </div>
 
-                    <div className={`relative col-span-2 row-start-2 min-w-0 rounded-xl transition-all duration-200 md:col-span-1 md:row-start-auto ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}>
-                      <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-                      <Input
-                        value={posSearch}
-                        onChange={(event) => setPosSearch(event.target.value)}
-                        placeholder="Buscar prenda o servicio..."
-                        aria-label="Buscar prenda o servicio"
-                        className="h-10 rounded-xl border-slate-200 bg-slate-50/80 pl-10 pr-3 shadow-none transition-colors focus-visible:border-primary/40 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900/80 dark:focus-visible:bg-slate-900"
-                      />
+                      {enablePrendas && posFilterTab === "PRENDAS" && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => setShowCategoryModal(true)}
+                          className="h-10 px-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-extrabold text-xs text-slate-700 dark:text-slate-200 shadow-2xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                        >
+                          <Tag className="h-3.5 w-3.5 text-primary shrink-0" />
+                          <span className="truncate max-w-[130px]">
+                            {activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS"
+                              ? `CATEGORÍAS (${catalogo.length})`
+                              : activeCategory}
+                          </span>
+                          <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 stroke-[2.5]" />
+                        </Button>
+                      )}
                     </div>
 
-                    <span className="inline-flex items-center justify-self-end rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary dark:bg-primary/20">
-                      {internalCatalogHeading.count} disponibles
-                    </span>
-                  </div>
+                    </div>
 
                   {/* SECCION SERVICIOS */}
                   {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS") && servicesFiltered.length > 0 && (
@@ -1428,9 +1427,6 @@ function NuevaOrdenPage() {
                             </span>
                             {catName}
                           </h3>
-                          <span className="inline-flex items-center rounded-full bg-primary/10 px-2.5 py-0.5 text-[10px] font-bold text-primary dark:bg-primary/20">
-                            {itemsInCat.length} disponibles
-                          </span>
                         </div>
                         <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
                           {itemsInCat.map(item => {
@@ -1439,13 +1435,26 @@ function NuevaOrdenPage() {
                             return (
                               <button
                                 key={item.id}
-                                onClick={() => addItem({
-                                  descripcion: item.nombre,
-                                  cantidad: 1,
-                                  precio_unitario: item.precio,
-                                  es_libra: item.por_libra,
-                                  is_exento: item.is_exento
-                                })}
+                                onClick={() => {
+                                  if (desgloseServiceName) {
+                                    addItemDesglose({
+                                      descripcion: `↳ ${item.nombre}`,
+                                      cantidad: 1,
+                                      precio_unitario: item.precio || 0,
+                                      es_libra: item.por_libra || false,
+                                      is_exento: (item.precio || 0) === 0,
+                                      servicio_origen: desgloseServiceName
+                                    });
+                                  } else {
+                                    addItem({
+                                      descripcion: item.nombre,
+                                      cantidad: 1,
+                                      precio_unitario: item.precio,
+                                      es_libra: item.por_libra,
+                                      is_exento: item.is_exento
+                                    });
+                                  }
+                                }}
                                 className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
                               >
                                 {item.imagen_url ? (
@@ -1542,73 +1551,151 @@ function NuevaOrdenPage() {
                   {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
                     const count = serviciosSel.filter(x => x === srv.nombre).length;
                     const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
+                    const prendasDelServicio = items.filter(it => it.descripcion.startsWith("↳") && (it.servicio_origen ? it.servicio_origen === srv.nombre : serviciosSel[0] === srv.nombre));
+
+                    const isActiveService = desgloseServiceName === srv.nombre;
+
                     return (
-                      <div key={'pos-srv-' + idx} className="flex flex-col gap-1.5 p-2.5 rounded-xl border border-primary/20 bg-primary/5 mb-3 transition-all animate-in fade-in duration-200">
-                        <div className="flex justify-between items-start">
-                          <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
-                            <span>🧺</span>
-                            <span className="line-clamp-1">Servicio: {srv.nombre}</span>
+                      <div key={'pos-srv-' + idx} className="space-y-2 mb-3">
+                        <div className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all animate-in fade-in duration-200 ${isActiveService ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 shadow-md ring-2 ring-emerald-400/50" : "border-primary/20 bg-primary/5"}`}>
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
+                              <WashingMachine className="h-3.5 w-3.5 text-primary shrink-0" />
+                              <span className="line-clamp-1">Servicio: {srv.nombre}</span>
+                            </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
+                              onClick={() => {
+                                setServiciosSel(prev => {
+                                  const index = prev.indexOf(srv.nombre);
+                                  if (index > -1) {
+                                    const next = [...prev];
+                                    next.splice(index, 1);
+                                    return next;
+                                  }
+                                  return prev;
+                                });
+                                setItems(prev => prev.filter(it => !(it.descripcion.startsWith("↳") && it.servicio_origen === srv.nombre)));
+                              }}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
-                            onClick={() => setServiciosSel(prev => {
-                              const index = prev.indexOf(srv.nombre);
-                              if (index > -1) {
-                                const next = [...prev];
-                                next.splice(index, 1);
-                                return next;
-                              }
-                              return prev;
-                            })}
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
-                              <Minus className="h-2.5 w-2.5" />
-                            </Button>
-                            <span className="text-xs font-bold w-5 text-center">{count}</span>
-                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
-                              <Plus className="h-2.5 w-2.5" />
-                            </Button>
+                          <div className="flex justify-between items-center">
+                            <div className="flex items-center gap-2">
+                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
+                                <Minus className="h-2.5 w-2.5" />
+                              </Button>
+                              <span className="text-xs font-bold w-5 text-center">{count}</span>
+                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
+                                <Plus className="h-2.5 w-2.5" />
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                className={`h-6 px-2.5 text-[10px] font-extrabold gap-1.5 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1 text-white ${
+                                  isActiveService
+                                    ? "bg-emerald-800 text-white hover:bg-emerald-900 border-emerald-800"
+                                    : "bg-primary text-white hover:bg-primary/90 border-primary"
+                                }`}
+                                title={`Añadir prendas para ${srv.nombre}`}
+                                onClick={() => {
+                                  setIndexDesglose(-1);
+                                  if (isActiveService) {
+                                    setDesgloseServiceName("");
+                                  } else {
+                                    setDesgloseServiceName(srv.nombre);
+                                    if (cfg?.pos_modal_desglose === true) {
+                                      setShowDesgloseDialog(true);
+                                    } else {
+                                      setPosFilterTab("PRENDAS");
+                                      setActiveCategory("TODAS LAS PRENDAS");
+                                      toast.info(`Modo Servicio Activo: Se añadirán prendas a ${srv.nombre}`, { duration: 3000 });
+                                    }
+                                  }
+                                }}
+                              >
+                                {isActiveService ? (
+                                  <>
+                                    <Check className="h-3 w-3 stroke-[2.5]" />
+                                    <span className="whitespace-nowrap">Finalizar</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Plus className="h-3 w-3 stroke-[2.5]" />
+                                    <span className="whitespace-nowrap">Añadir prendas</span>
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                              {srv.permitir_editar_precio ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
+                                    <PriceInput
+                                      className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                      value={unitPrice}
+                                      onChange={(val) => {
+                                        setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+                                      }}
+                                    />
+                                  </div>
+                                  {count > 1 && (
+                                    <span className="text-[9px] text-muted-foreground font-semibold">
+                                      Tot: {formatRD(count * unitPrice)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-xs font-black text-primary">
+                                  {formatRD(count * unitPrice)}
+                                </div>
+                              )}
+                            </div>
                           </div>
 
-                          <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            {srv.permitir_editar_precio ? (
-                              <div className="flex flex-col items-end gap-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
-                                  <PriceInput
-                                    className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={unitPrice}
-                                    onChange={(val) => {
-                                      setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
-                                    }}
-                                  />
+                        {/* Prendas del Servicio */}
+                        {prendasDelServicio.map((it) => {
+                          const itemOriginalIndex = items.indexOf(it);
+                          return (
+                            <div key={'pos-detail-' + itemOriginalIndex} className="flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all bg-accent/5 ml-5 border-dashed border-primary/20 text-muted-foreground animate-in fade-in duration-200">
+                              <div className="flex justify-between items-start">
+                                <div className="flex flex-col flex-1 min-w-0">
+                                  <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
+                                    <Shirt className="h-3 w-3 text-primary shrink-0" />
+                                    <span className="line-clamp-1">{it.descripcion}{it.cantidad > 1 ? ` (x${it.cantidad})` : ""}</span>
+                                  </div>
                                 </div>
-                                {count > 1 && (
-                                  <span className="text-[9px] text-muted-foreground font-semibold">
-                                    Tot: {formatRD(count * unitPrice)}
-                                  </span>
-                                )}
+                                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md" onClick={() => removeItem(itemOriginalIndex)}>
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
                               </div>
-                            ) : (
-                              <div className="text-xs font-black text-primary">
-                                {formatRD(count * unitPrice)}
+                              <div className="flex justify-between items-center">
+                                <div className="flex items-center gap-2">
+                                  <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateItemQuantity(itemOriginalIndex, -1)}>
+                                    <Minus className="h-2.5 w-2.5" />
+                                  </Button>
+                                  <span className="text-xs font-bold w-5 text-center">{it.cantidad}</span>
+                                  <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateItemQuantity(itemOriginalIndex, 1)}>
+                                    <Plus className="h-2.5 w-2.5" />
+                                  </Button>
+                                </div>
+                                <div className="text-xs font-black text-primary">
+                                  {formatRD(it.cantidad * it.precio_unitario)}
+                                </div>
                               </div>
-                            )}
-                          </div>
-                        </div>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })}
 
-                  {/* Prendas (Items) */}
-                  {items.map((it, i) => {
+                  {/* Prendas / Items Generales del Catálogo */}
+                  {items.filter(it => !it.descripcion.startsWith("↳")).map((it, i) => {
                     const isDetail = it.descripcion.startsWith("↳");
                     const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
                     return (
@@ -1631,11 +1718,7 @@ function NuevaOrdenPage() {
                           </Button>
                         </div>
                         <div className="flex justify-between items-center">
-                          {isDetail ? (
-                            <div className="text-[10px] font-black uppercase text-primary/80 tracking-wide flex items-center gap-1">
-                              <span>🧺</span> {it.cantidad > 1 ? `${it.cantidad} Unids. en Hamper` : "En Hamper"}
-                            </div>
-                          ) : it.es_libra ? (
+                          {it.es_libra ? (
                             <div className="flex items-center gap-1.5 text-xs font-semibold">
                               <span className="text-slate-850 dark:text-slate-300 text-[10px] font-black">Peso:</span>
                               <Input
@@ -1653,13 +1736,30 @@ function NuevaOrdenPage() {
                             </div>
                           ) : (
                             <div className="flex items-center gap-2">
-                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateItemQuantity(i, -1)}>
+                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateItemQuantity(i, -1)}>
                                 <Minus className="h-2.5 w-2.5" />
                               </Button>
                               <span className="text-xs font-bold w-5 text-center">{it.cantidad}</span>
-                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateItemQuantity(i, 1)}>
+                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateItemQuantity(i, 1)}>
                                 <Plus className="h-2.5 w-2.5" />
                               </Button>
+                              {!isDetail && catalogMatch?.permitir_desglose && (
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  size="sm"
+                                  className="h-6 px-2 text-[10px] font-extrabold gap-1 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/60 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-2"
+                                  title="Añadir prenda"
+                                  onClick={() => {
+                                    setIndexDesglose(i);
+                                    setDesgloseServiceName(it.descripcion);
+                                    setShowDesgloseDialog(true);
+                                  }}
+                                >
+                                  <Plus className="h-3 w-3 stroke-[2.5]" />
+                                  <span className="whitespace-nowrap">Añadir prenda</span>
+                                </Button>
+                              )}
                             </div>
                           )}
                           <div className="flex flex-col items-end gap-0.5 shrink-0">
@@ -2016,39 +2116,48 @@ function NuevaOrdenPage() {
                       No hay servicios. Agrégalos en <strong>Catálogo</strong>.
                     </div>
                   ) : (
-                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {servicios.map((s) => {
                         const srvCount = serviciosSel.filter(x => x === s.nombre).length;
                         return (
-                          <button key={s.id} onClick={() => {
-                            if (srvCount > 0) {
-                              setServiciosSel((arr) => arr.filter(x => x !== s.nombre));
-                              setCustomServicePrices((prev) => {
-                                const next = { ...prev };
-                                delete next[s.nombre];
-                                return next;
-                              });
-                            } else {
-                              setServiciosSel((arr) => [...arr, s.nombre]);
-                            }
-                          }}
-                            className={`flex items-center gap-3 rounded-lg border-2 p-3 text-left text-sm transition relative ${srvCount > 0 ? "border-primary bg-primary/5" : "border-border hover:border-primary/40"
-                              }`}>
-                            <div className={`flex h-5 w-5 items-center justify-center rounded border-2 ${srvCount > 0 ? "border-primary bg-primary text-white" : "border-border"}`}>
-                              {srvCount > 0 && <Check className="h-3 w-3" />}
-                            </div>
+                          <button
+                            key={s.id}
+                            type="button"
+                            onClick={() => {
+                              if (srvCount > 0) {
+                                setServiciosSel((arr) => arr.filter(x => x !== s.nombre));
+                                setCustomServicePrices((prev) => {
+                                  const next = { ...prev };
+                                  delete next[s.nombre];
+                                  return next;
+                                });
+                              } else {
+                                setServiciosSel((arr) => [...arr, s.nombre]);
+                              }
+                            }}
+                            className={`group relative flex flex-col items-center justify-center gap-2 p-3 rounded-2xl border-2 transition-all active:scale-95 text-center cursor-pointer ${
+                              srvCount > 0
+                                ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/40 shadow-sm"
+                                : "border-border/70 bg-card hover:border-emerald-500/50 hover:bg-emerald-50/20 hover:shadow-sm"
+                            }`}
+                          >
                             {s.imagen_url ? (
-                              <img src={s.imagen_url} alt={s.nombre} className="h-8 w-8 rounded object-cover" />
+                              <div className="h-16 w-16 rounded-xl bg-background shadow-xs overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
+                              </div>
                             ) : (
-                              <span className="text-xl">{s.icono || "🧺"}</span>
+                              <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-accent/30 text-2xl group-hover:bg-primary/10 transition-colors">
+                                {s.icono || "🧹"}
+                              </div>
                             )}
-                            <div className="flex-1">
-                              <div className="font-medium">{s.nombre}</div>
-                              {s.descripcion && <div className="text-[11px] text-muted-foreground">{s.descripcion}</div>}
-                              {s.precio > 0 && <div className="text-[10px] font-bold text-primary">+{formatRD(s.precio)}</div>}
+                            <div className="w-full text-center">
+                              <div className="text-xs font-bold leading-tight line-clamp-1 text-slate-800 dark:text-slate-100">{s.nombre}</div>
+                              <div className="mt-0.5 text-xs font-display font-extrabold text-emerald-600 tracking-tight">
+                                {s.precio > 0 ? formatRD(s.precio) : "RD$0.00"}
+                              </div>
                             </div>
                             {srvCount > 0 && (
-                              <div className="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-primary text-white text-[9px] font-black shadow-sm ring-2 ring-background">
+                              <div className="absolute -top-1.5 -right-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-[10px] font-black shadow-sm animate-in zoom-in duration-300 ring-2 ring-background">
                                 {srvCount}
                               </div>
                             )}
@@ -2084,11 +2193,11 @@ function NuevaOrdenPage() {
                           </div>
 
                           <div className="flex items-center gap-2">
-                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
+                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
                               <Minus className="h-2.5 w-2.5" />
                             </Button>
                             <span className="text-xs font-bold w-5 text-center">{count}</span>
-                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
+                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
                               <Plus className="h-2.5 w-2.5" />
                             </Button>
                           </div>
@@ -2121,16 +2230,19 @@ function NuevaOrdenPage() {
                           <div className="flex items-center gap-1">
                             {srv.permitir_desglose && (
                               <Button
-                                variant="ghost"
-                                size="icon"
-                                className="h-8 w-8 text-primary hover:bg-primary/10 rounded-md"
+                                type="button"
+                                variant="default"
+                                size="sm"
+                                className="h-7 px-2.5 text-xs font-extrabold gap-1 bg-primary text-white hover:bg-primary/90 border-primary rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1"
                                 title={`Desglosar prendas para el servicio ${srv.nombre}`}
                                 onClick={() => {
                                   setIndexDesglose(-1);
+                                  setDesgloseServiceName(srv.nombre);
                                   setShowDesgloseDialog(true);
                                 }}
                               >
-                                <Plus className="h-4 w-4" />
+                                <Plus className="h-3 w-3 stroke-[2.5]" />
+                                <span className="whitespace-nowrap">Desglosar prendas</span>
                               </Button>
                             )}
                             <Button
@@ -2197,6 +2309,7 @@ function NuevaOrdenPage() {
                                 title="Desglosar Ropa en Hamper / Bolsa"
                                 onClick={() => {
                                   setIndexDesglose(i);
+                                  setDesgloseServiceName(it.descripcion);
                                   setShowDesgloseDialog(true);
                                 }}
                               >
@@ -3050,18 +3163,132 @@ function NuevaOrdenPage() {
         onUpdateQty={updateItemQuantity}
         isDesglose
         onAddDesglose={addItemDesglose}
+        serviceName={desgloseServiceName}
       />
 
+      {/* Modal de Selección de Categorías POS */}
+      <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
+        <DialogContent className="max-w-3xl p-6 rounded-3xl overflow-hidden">
+          <DialogHeader className="pb-1 text-left">
+            <DialogTitle className="text-xl font-display font-bold flex items-center gap-2 text-slate-800 dark:text-slate-100">
+              <Tag className="h-5 w-5 text-emerald-600" />
+              Seleccionar Categoría de Prendas
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Filtra rápidamente las prendas por categoría para agilizar la toma de orden.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Barra de búsqueda de categorías */}
+          <div className="relative my-3">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+            <Input
+              value={categorySearchQuery}
+              onChange={(e) => setCategorySearchQuery(e.target.value)}
+              placeholder="Buscar categoría de prendas..."
+              className="h-10 pl-10 pr-3 rounded-xl border-slate-200 bg-slate-50 text-xs font-medium dark:bg-slate-900 dark:border-slate-800 focus-visible:ring-emerald-500/20"
+              autoFocus
+            />
+          </div>
+
+          {/* Grid de Categorías Horizontales Elegantes */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[55vh] overflow-y-auto custom-scrollbar p-1">
+            {/* Opción TODAS */}
+            {("TODAS LAS PRENDAS").toLowerCase().includes(categorySearchQuery.toLowerCase()) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setActiveCategory("TODAS LAS PRENDAS");
+                  setShowCategoryModal(false);
+                  setCategorySearchQuery("");
+                }}
+                className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
+                  activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-600/30"
+                    : "bg-slate-50 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 text-slate-800 dark:text-slate-200"
+                }`}
+              >
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className={`p-1.5 rounded-xl shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                    <Shirt className="h-4 w-4" />
+                  </div>
+                  <span className="font-extrabold text-xs tracking-tight truncate">TODAS</span>
+                </div>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/25 text-white" : "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400"}`}>
+                  {catalogo.length}
+                </span>
+              </button>
+            )}
+
+            {/* Categorías filtradas */}
+            {categoriesPrendas
+              .filter(cat => cat.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+              .map((cat, idx) => {
+                const catCount = catalogo.filter(c => (c.categoria || "Otros").trim().toUpperCase() === cat.trim().toUpperCase()).length;
+                const isSelected = activeCategory.trim().toUpperCase() === cat.trim().toUpperCase();
+
+                // Paleta de colores pastel aplicados únicamente al icono y la insignia
+                const PASTELS = [
+                  { iconBg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300", badgeBg: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300" },
+                  { iconBg: "bg-sky-100 text-sky-700 dark:bg-sky-950/80 dark:text-sky-300", badgeBg: "bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300" },
+                  { iconBg: "bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300", badgeBg: "bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300" },
+                  { iconBg: "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300", badgeBg: "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300" },
+                  { iconBg: "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300", badgeBg: "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300" },
+                  { iconBg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300", badgeBg: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300" },
+                  { iconBg: "bg-teal-100 text-teal-700 dark:bg-teal-950/80 dark:text-teal-300", badgeBg: "bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300" },
+                  { iconBg: "bg-orange-100 text-orange-700 dark:bg-orange-950/80 dark:text-orange-300", badgeBg: "bg-orange-100 text-orange-800 dark:bg-orange-950/80 dark:text-orange-300" },
+                ];
+                const theme = PASTELS[idx % PASTELS.length];
+
+                return (
+                  <button
+                    key={cat}
+                    type="button"
+                    onClick={() => {
+                      setActiveCategory(cat);
+                      setShowCategoryModal(false);
+                      setCategorySearchQuery("");
+                    }}
+                    className={`flex items-center justify-between gap-2 px-3.5 py-2.5 rounded-2xl border transition-all text-left cursor-pointer ${
+                      isSelected
+                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md ring-2 ring-emerald-600/30"
+                        : "bg-slate-50/90 hover:bg-slate-100 dark:bg-slate-900 dark:hover:bg-slate-800/90 border-slate-200/80 dark:border-slate-800 text-slate-800 dark:text-slate-100"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`p-1.5 rounded-xl shrink-0 ${isSelected ? "bg-white/20 text-white" : theme.iconBg}`}>
+                        <Shirt className="h-4 w-4" />
+                      </div>
+                      <span className="font-extrabold text-xs tracking-tight truncate uppercase">{cat}</span>
+                    </div>
+                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${isSelected ? "bg-white/25 text-white" : theme.badgeBg}`}>
+                      {catCount}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
-        <DialogContent className="max-w-2xl p-5 rounded-2xl overflow-y-auto max-h-[95vh] custom-scrollbar">
-          <DialogHeader>
+        <DialogContent className="max-w-2xl p-4 sm:p-5 rounded-2xl overflow-y-auto max-h-[92vh] custom-scrollbar top-[50%]">
+          <DialogHeader className="pb-0">
             <DialogTitle className="text-xl font-display font-bold text-foreground">Panel de Cobro</DialogTitle>
             <DialogDescription className="sr-only">
               Selecciona el método de pago y confirma la creación de la orden.
             </DialogDescription>
+            <div className="flex flex-col items-center justify-center text-center -mt-6 sm:-mt-7 mb-0.5">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
+                TOTAL A COBRAR
+              </span>
+              <span className="text-2xl sm:text-3xl font-display font-black text-emerald-600 dark:text-emerald-400 tracking-tight leading-tight">
+                {formatRD(total)}
+              </span>
+            </div>
           </DialogHeader>
 
-          <div className="py-1 space-y-4">
+          <div className="py-0.5 space-y-3">
             <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-2">
               {[
                 { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: Timer, color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
@@ -3374,7 +3601,8 @@ function AddItemDialog({
   onAdd,
   onUpdateQty,
   isDesglose = false,
-  onAddDesglose
+  onAddDesglose,
+  serviceName
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -3384,6 +3612,7 @@ function AddItemDialog({
   onUpdateQty: (i: number, d: number) => void;
   isDesglose?: boolean;
   onAddDesglose?: (it: OrdenItem) => void;
+  serviceName?: string;
 }) {
   const [activeCat, setActiveCat] = useState<string>("TODOS");
   const [search, setSearch] = useState("");
@@ -3413,7 +3642,7 @@ function AddItemDialog({
 
   function handleItemClick(it: CatalogoItem) {
     if (isDesglose && onAddDesglose) {
-      onAddDesglose({ descripcion: `↳ ${it.nombre}`, cantidad: 1, precio_unitario: 0, es_libra: false, is_exento: true });
+      onAddDesglose({ descripcion: `↳ ${it.nombre}`, cantidad: 1, precio_unitario: it.precio || 0, es_libra: it.por_libra || false, is_exento: (it.precio || 0) === 0, servicio_origen: serviceName });
       return;
     }
     const existingIdx = items.findIndex(x => x.descripcion === it.nombre);
@@ -3433,7 +3662,7 @@ function AddItemDialog({
         <DialogHeader className="p-6 pb-2 border-b border-border/50">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="text-2xl font-display font-bold">
-              {isDesglose ? "Desglosar Ropa en Hamper" : "Seleccionar Prendas"}
+              {isDesglose ? (serviceName ? `Añadir prendas para ${serviceName}` : "Añadir prendas al servicio") : "Seleccionar Prendas"}
             </DialogTitle>
             <DialogDescription className="sr-only">
               Selecciona las prendas que deseas agregar a la orden.
