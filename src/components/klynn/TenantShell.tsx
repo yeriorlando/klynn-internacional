@@ -1263,17 +1263,6 @@ function SidebarContent({
         ))}
       </nav>
 
-      {empleado.rol === "ADMIN" && (
-        <div className="p-4 pb-2 shrink-0">
-          <Link to="/dashboard-admin" onClick={onNavigate}>
-            <div className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700 transition-all shadow-2xs group">
-              <Shield className="h-4 w-4 text-slate-600 dark:text-slate-300 group-hover:scale-110 transition-transform" />
-              <span className="text-[11px] font-bold tracking-wide uppercase">Panel Administrador</span>
-            </div>
-          </Link>
-        </div>
-      )}
-
       {/* Tarjeta Herramientas */}
       <div className="mt-auto border-t border-border p-3 shrink-0">
         <button
@@ -1299,6 +1288,7 @@ function SidebarContent({
 }
 
 function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void }) {
+  const navigate = useNavigate();
   const { nombre, rol, avatar_url } = empleado;
   const [open, setOpen] = useState(false);
   const avatarName = [nombre, empleado.apellido].filter(Boolean).join(" ");
@@ -1338,72 +1328,90 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
 
       <DropdownMenuContent
         align="end"
-        sideOffset={10}
+        sideOffset={8}
         collisionPadding={12}
-        className="w-[min(19.5rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 text-slate-950 shadow-[0_24px_70px_-24px_rgba(15,23,42,0.38)] dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
+        className="w-[min(16.5rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 text-slate-950 shadow-xl dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
       >
-        <div className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-primary/[0.10] via-white to-emerald-50/80 px-4 py-4 dark:border-slate-800 dark:from-primary/20 dark:via-slate-950 dark:to-emerald-950/30">
-          <div className="absolute -right-10 -top-12 h-28 w-28 rounded-full bg-primary/10 blur-2xl" aria-hidden="true" />
-          <div className="relative flex items-center gap-3">
-            <div className="relative grid h-11 w-11 shrink-0 place-items-center rounded-full bg-gradient-primary text-sm font-black tracking-wide text-white shadow-md shadow-primary/15 ring-1 ring-white/80 dark:ring-white/10">
-              <UserAvatar name={avatarName} avatarUrl={avatar_url} size={44} />
-              <span className="absolute -bottom-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
+        <div className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-primary/[0.10] via-white to-emerald-50/80 px-3.5 py-3 dark:border-slate-800 dark:from-primary/20 dark:via-slate-950 dark:to-emerald-950/30">
+          <div className="absolute -right-10 -top-12 h-24 w-24 rounded-full bg-primary/10 blur-xl" aria-hidden="true" />
+          <div className="relative flex items-center gap-2.5">
+            <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-primary text-xs font-black tracking-wide text-white shadow-sm ring-1 ring-white/80 dark:ring-white/10">
+              <UserAvatar name={avatarName} avatarUrl={avatar_url} size={36} />
+              <span className="absolute -bottom-0.5 -right-0.5 z-10 h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-extrabold leading-5 text-slate-950 dark:text-white">{nombre}</p>
-              <div className="mt-1 flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-white/80 px-2 py-0.5 text-[10px] font-bold text-primary shadow-sm dark:bg-slate-900/80">
-                  <Shield className="h-3 w-3" strokeWidth={2} />
+              <p className="truncate text-xs font-extrabold leading-4 text-slate-950 dark:text-white">{nombre}</p>
+              <div className="mt-0.5 flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-white/80 px-1.5 py-0.5 text-[9px] font-bold text-primary shadow-sm dark:bg-slate-900/80">
+                  <Shield className="h-2.5 w-2.5" strokeWidth={2} />
                   {roleLabel}
                 </span>
-                <span className="text-[10px] font-medium text-slate-500 dark:text-slate-400">Sesión activa</span>
+                <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">Sesión activa</span>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-2">
+        <div className="p-1.5 space-y-0.5">
+          {rol === "ADMIN" && (
+            <DropdownMenuItem
+              onSelect={() => {
+                setOpen(false);
+                navigate({ to: "/dashboard-admin" });
+              }}
+              className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-primary/10 focus:text-slate-950 dark:focus:bg-primary/20 dark:focus:text-white"
+            >
+              <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary ring-1 ring-primary/20 transition-colors group-focus:bg-primary group-focus:text-white">
+                <Shield className="h-3.5 w-3.5" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold leading-tight">Panel Administrador</span>
+                <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">Control global del sistema</span>
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-primary dark:text-slate-600" />
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem
             onSelect={() => window.open("https://wa.me/18299416546?text=Hola Klynn, necesito soporte.", "_blank", "noopener,noreferrer")}
-            className="group cursor-pointer gap-3 rounded-xl px-2.5 py-2.5 focus:bg-emerald-50 focus:text-slate-950 dark:focus:bg-emerald-950/30 dark:focus:text-white"
+            className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-emerald-50 focus:text-slate-950 dark:focus:bg-emerald-950/30 dark:focus:text-white"
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 transition-colors group-focus:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:ring-emerald-900">
-              <MessageCircle className="h-4 w-4" strokeWidth={2} />
+            <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 transition-colors group-focus:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:ring-emerald-900">
+              <MessageCircle className="h-3.5 w-3.5" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-bold leading-4">Soporte</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-slate-500 dark:text-slate-400">Habla con nuestro equipo</span>
+              <span className="block text-xs font-bold leading-tight">Soporte</span>
+              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">Habla con nuestro equipo</span>
             </span>
-            <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-emerald-500 dark:text-slate-600" />
+            <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-emerald-500 dark:text-slate-600" />
           </DropdownMenuItem>
 
           <DropdownMenuItem
             onSelect={() => toast.info("Tutoriales y guías próximamente 🚀")}
-            className="group cursor-pointer gap-3 rounded-xl px-2.5 py-2.5 focus:bg-blue-50 focus:text-slate-950 dark:focus:bg-blue-950/30 dark:focus:text-white"
+            className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-blue-50 focus:text-slate-950 dark:focus:bg-blue-950/30 dark:focus:text-white"
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition-colors group-focus:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400 dark:ring-blue-900">
-              <BookOpen className="h-4 w-4" strokeWidth={2} />
+            <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition-colors group-focus:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400 dark:ring-blue-900">
+              <BookOpen className="h-3.5 w-3.5" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-bold leading-4">Tutoriales y guías</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-slate-500 dark:text-slate-400">Aprende a sacar más provecho de Klynn</span>
+              <span className="block text-xs font-bold leading-tight">Tutoriales y guías</span>
+              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">Guías de uso de Klynn</span>
             </span>
-            <ChevronRight className="h-4 w-4 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
+            <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
           </DropdownMenuItem>
 
-          <DropdownMenuSeparator className="mx-2 my-1.5 bg-slate-100 dark:bg-slate-800" />
+          <DropdownMenuSeparator className="mx-1 my-1 bg-slate-100 dark:bg-slate-800" />
 
           <DropdownMenuItem
             onSelect={onLogout}
-            className="group cursor-pointer gap-3 rounded-xl px-2.5 py-2.5 text-rose-600 focus:bg-rose-50 focus:text-rose-700 dark:text-rose-400 dark:focus:bg-rose-950/30 dark:focus:text-rose-300"
+            className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 text-rose-600 focus:bg-rose-50 focus:text-rose-700 dark:text-rose-400 dark:focus:bg-rose-950/30 dark:focus:text-rose-300"
           >
-            <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 transition-colors group-focus:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-400 dark:ring-rose-900">
-              <LogOut className="h-4 w-4" strokeWidth={2} />
+            <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-rose-50 text-rose-600 ring-1 ring-rose-100 transition-colors group-focus:bg-rose-100 dark:bg-rose-950/50 dark:text-rose-400 dark:ring-rose-900">
+              <LogOut className="h-3.5 w-3.5" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[13px] font-bold leading-4">Cerrar sesión</span>
-              <span className="mt-0.5 block text-[11px] leading-4 text-rose-500/80 dark:text-rose-400/70">Salir de esta cuenta de forma segura</span>
+              <span className="block text-xs font-bold leading-tight">Cerrar sesión</span>
+              <span className="block text-[9.5px] leading-tight text-rose-500/80 dark:text-rose-400/70 truncate mt-0.5">Salir de forma segura</span>
             </span>
           </DropdownMenuItem>
         </div>

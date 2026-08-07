@@ -1089,6 +1089,45 @@ function NuevaOrdenPage() {
     setIsCobroModalOpen
   };
 
+  const getComprobanteInfo = (tipo: string) => {
+    const isConsumo = tipo === "E32" || tipo === "B02";
+    const isCredito = tipo === "E31" || tipo === "B01";
+    
+    const rawName = NCF_NOMBRES[tipo.substring(0, 3)] || "Comprobante";
+    const cleanName = rawName.replace("FISCAL", "").trim();
+    
+    const name = cleanName
+      .toLowerCase()
+      .split(" ")
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .join(" ");
+
+    let label = "";
+    if (isConsumo) {
+      label = "Consumidor Final (01)";
+    } else if (isCredito) {
+      label = "Crédito Fiscal (02)";
+    } else {
+      label = `${name} (${tipo})`;
+    }
+
+    let colorClass = "";
+    let icon = null;
+
+    if (isConsumo) {
+      colorClass = "border-emerald-500/40 text-emerald-600 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 focus:ring-emerald-500/50";
+      icon = <UserIcon className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
+    } else if (isCredito) {
+      colorClass = "border-blue-500/40 text-blue-600 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 focus:ring-blue-500/50";
+      icon = <Building className="h-3.5 w-3.5 text-blue-500 shrink-0" />;
+    } else {
+      colorClass = "border-amber-500/40 text-amber-600 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 focus:ring-amber-500/50";
+      icon = <Building2 className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
+    }
+
+    return { label, colorClass, icon, isConsumo };
+  };
+
   return (
     <div style={{ zoom: 0.9 }} className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}>
       {isPosMode ? (
@@ -1491,50 +1530,142 @@ function NuevaOrdenPage() {
 
           {/* SIDEBAR ORDER */}
           <Card className="w-80 md:w-96 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl h-full">
-            <div className="p-3 border-b bg-accent/5 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground/80">Cliente</span>
-                <div className="inline-flex rounded-full border border-border/60 bg-muted/40 p-0.5 scale-95 origin-right shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => handleSelectGeneric("Persona")}
-                    className={`inline-flex items-center justify-center py-1.5 px-3 rounded-full text-[11.5px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                      ? "bg-primary text-white shadow-xs"
-                      : "text-primary hover:bg-primary/5"
-                      }`}
-                  >
-                    <UserIcon className="h-3.5 w-3.5 mr-1 shrink-0" />
-                    Consumidor Final (01)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEmpresaDialogOpen(true)}
-                    className={`inline-flex items-center justify-center py-1.5 px-3 rounded-full text-[11.5px] font-semibold transition-all duration-200 cursor-pointer ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                      ? "bg-slate-800 dark:bg-slate-200 text-white dark:text-slate-900 shadow-xs"
-                      : "text-slate-600 dark:text-slate-355 hover:bg-slate-50 dark:hover:bg-slate-800/50"
-                      }`}
-                  >
-                    <Building className="h-3.5 w-3.5 mr-1 shrink-0" />
-                    Crédito Fiscal (02)
-                  </button>
-                </div>
+            <div className="p-3 border-b border-border/60 bg-gradient-to-b from-slate-50/80 via-slate-50/40 to-transparent dark:from-slate-900/60 dark:to-transparent space-y-2.5">
+              {/* Row 1: Tipo de Comprobante Selector */}
+              <div className="flex items-center justify-between gap-2.5 w-full">
+                <span className="text-[10px] font-black uppercase tracking-wider text-slate-500 dark:text-slate-400 shrink-0">
+                  Tipo cliente:
+                </span>
+                <Select
+                  value={tipoECF}
+                  onValueChange={(val) => {
+                    const info = getComprobanteInfo(val);
+                    setTipoECF(val);
+                    if (info.isConsumo) {
+                      handleSelectGeneric("Persona");
+                    } else {
+                      setEmpresaDialogOpen(true);
+                    }
+                  }}
+                >
+                  <SelectTrigger className={`h-9 flex-1 bg-white dark:bg-slate-900 border transition-all rounded-xl text-xs font-bold shadow-2xs px-3 flex items-center justify-between gap-2 focus:ring-1 duration-200 cursor-pointer ${
+                    getComprobanteInfo(tipoECF).colorClass
+                  }`}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl border border-border/80 shadow-md min-w-[220px]">
+                    {validTipos
+                      .filter((tipo) => {
+                        const isConsumo = tipo === "E32" || tipo === "B02";
+                        if (isConsumo) return true;
+                        return isModuleEnabled(
+                          user.tenant,
+                          "facturacion_fiscal",
+                          plans.find((p) => p.id === user.tenant.plan_id)
+                        );
+                      })
+                      .map((tipo) => {
+                        const info = getComprobanteInfo(tipo);
+                        let itemStyles = "focus:bg-emerald-500/5 focus:text-emerald-600";
+                        if (tipo === "E31" || tipo === "B01") {
+                          itemStyles = "focus:bg-blue-500/5 focus:text-blue-600";
+                        } else if (tipo !== "E32" && tipo !== "B02") {
+                          itemStyles = "focus:bg-amber-500/5 focus:text-amber-600";
+                        }
+
+                        return (
+                          <SelectItem key={tipo} value={tipo} className={`rounded-lg text-xs font-bold py-2 cursor-pointer ${itemStyles}`}>
+                            {info.label}
+                          </SelectItem>
+                        );
+                      })}
+                  </SelectContent>
+                </Select>
               </div>
 
-              <Button
-                variant="outline"
-                className="w-full justify-between h-9 bg-background border-border/50 rounded-xl font-bold shadow-xs px-3 hover:bg-background/90 text-left"
-                onClick={() => setIsClientModalOpen(true)}
-              >
-                <div className="flex items-center gap-2.5 truncate flex-1 min-w-0">
-                  <span className="text-muted-foreground shrink-0">
-                    {cliente?.tipo === "Empresa" ? <Building className="h-4 w-4" /> : <UserIcon className="h-4 w-4" />}
-                  </span>
-                  <span className="truncate text-xs text-slate-700 dark:text-slate-200 font-bold">
-                    {cliente ? `${cliente.nombre} ${cliente.apellido || ""}` : "Seleccionar cliente"}
-                  </span>
+              {/* Row 2: Client Selection Card */}
+              {cliente && cliente.nombre !== "Consumidor" && cliente.nombre !== "Empresa" ? (
+                <div className="group relative flex items-center justify-between gap-2 p-2.5 rounded-2xl border border-primary/25 bg-white dark:bg-slate-900 shadow-xs hover:shadow-sm hover:border-primary/40 transition-all duration-200">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary font-black text-xs shadow-2xs">
+                      {cliente.tipo === "Empresa" ? (
+                        <Building className="h-4 w-4" />
+                      ) : (
+                        <span>{`${cliente.nombre[0] || ""}${cliente.apellido ? cliente.apellido[0] : ""}`.toUpperCase() || "CL"}</span>
+                      )}
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
+                          {cliente.nombre} {cliente.apellido || ""}
+                        </span>
+                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-bold border-primary/30 text-primary shrink-0">
+                          {cliente.tipo === "Empresa" ? "Empresa" : "Cliente"}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
+                        {cliente.telefono && cliente.telefono !== "---" && (
+                          <span className="flex items-center gap-1 truncate">
+                            <Phone className="h-2.5 w-2.5 text-slate-400 shrink-0" />
+                            {formatPhoneRD(cliente.telefono)}
+                          </span>
+                        )}
+                        {cliente.cedula && (
+                          <span className="truncate text-slate-400">
+                            ID: {cliente.cedula}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 shrink-0">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 rounded-lg text-slate-400 hover:text-primary hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors"
+                      onClick={() => setIsClientModalOpen(true)}
+                      title="Cambiar cliente"
+                    >
+                      <Search className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                      onClick={() => handleSelectGeneric("Persona")}
+                      title="Restablecer a Consumidor Final"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
                 </div>
-                <Search className="h-3.5 w-3.5 shrink-0 text-muted-foreground/60 ml-2" />
-              </Button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setIsClientModalOpen(true)}
+                  className="group relative flex items-center justify-between w-full h-11 px-3 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900/90 hover:border-primary/60 hover:bg-primary/5 hover:shadow-xs transition-all duration-200 cursor-pointer text-left"
+                >
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 group-hover:bg-primary group-hover:text-white transition-all duration-200 shadow-2xs">
+                      <UserIcon className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="flex flex-col min-w-0 flex-1">
+                      <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors truncate">
+                        {cliente ? `${cliente.nombre} ${cliente.apellido || ""}` : "Buscar y añadir cliente"}
+                      </span>
+                      <span className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500 truncate -mt-0.5">
+                        Seleccionar o registrar cliente
+                      </span>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1 text-[10px] font-extrabold text-primary bg-primary/10 group-hover:bg-primary group-hover:text-white px-2.5 py-1 rounded-xl transition-all duration-200 shrink-0">
+                    <Search className="h-3 w-3" />
+                    <span>Buscar</span>
+                  </div>
+                </button>
+              )}
             </div>
 
             {/* List: Items */}
@@ -1967,12 +2098,14 @@ function NuevaOrdenPage() {
                 <>
                   <h2 className="mb-1 text-2xl font-display">Cliente</h2>
                   <p className="mb-5 text-sm text-muted-foreground">Busca por nombre o teléfono. Si no existe, créalo.</p>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                    <Input value={clienteSearch} onChange={(e) => setClienteSearch(e.target.value)} placeholder="Nombre o teléfono..." className="pl-10" />
+
+                  <div className="flex items-center gap-2 mt-2 mb-3">
+                    <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
+                      Tipo de cliente
+                    </span>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">
                     {validTipos.map((tipo) => {
                       const isConsumo = tipo === "E32" || tipo === "B02";
                       const isCredito = tipo === "E31" || tipo === "B01";
@@ -2048,6 +2181,16 @@ function NuevaOrdenPage() {
                         </button>
                       );
                     })}
+                  </div>
+
+                  <div className="relative mb-6">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
+                    <Input
+                      value={clienteSearch}
+                      onChange={(e) => setClienteSearch(e.target.value)}
+                      placeholder="Nombre o teléfono..."
+                      className="pl-10 h-11 rounded-xl bg-slate-50/50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-800"
+                    />
                   </div>
 
                   <div className="mt-8 mb-2 flex items-center justify-between">
@@ -2890,7 +3033,7 @@ function NuevaOrdenPage() {
               <span>Buscar Cliente</span>
             </DialogTitle>
             <DialogDescription className="text-xs">
-              Busca por nombre o teléfono, o utiliza una de las opciones rápidas.
+              Busca por nombre o teléfono en la lista de clientes registrados.
             </DialogDescription>
           </DialogHeader>
 
@@ -2907,76 +3050,10 @@ function NuevaOrdenPage() {
             </div>
 
             <div className="max-h-60 overflow-y-auto space-y-1.5 custom-scrollbar text-xs pr-1 w-full">
-              <div className="flex items-center gap-2 mt-2.5 mb-2.5 px-1.5">
-                <div className="h-3.5 w-1 bg-primary rounded-full" />
-                <span className="text-xs font-black uppercase tracking-widest text-primary">
-                  Clientes Rápidos
-                </span>
-                <div className="flex-1 h-px bg-primary/10" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3 mb-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleSelectGeneric("Persona");
-                    setIsClientModalOpen(false);
-                  }}
-                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                    ? "bg-primary border-transparent text-white font-bold shadow-sm"
-                    : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                    }`}
-                >
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                    ? "bg-white/20 text-white"
-                    : "bg-emerald-500/10 text-emerald-600 group-hover:bg-white/20 group-hover:text-white"
-                    }`}>
-                    <UserIcon className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-xs truncate leading-tight">Consumidor Final (01)</div>
-                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${cliente?.tipo === "Consumidor Final" || (cliente?.nombre === "Consumidor" && cliente?.apellido === "Final")
-                      ? "text-white/80"
-                      : "text-muted-foreground group-hover:text-white/85"
-                      }`}>
-                      Venta rápida de mostrador
-                    </div>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    setIsClientModalOpen(false);
-                    setEmpresaDialogOpen(true);
-                  }}
-                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 transition-all text-left border ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                    ? "bg-primary border-transparent text-white font-bold shadow-sm"
-                    : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                    }`}
-                >
-                  <div className={`h-8 w-8 rounded-full flex items-center justify-center shrink-0 transition-colors ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                    ? "bg-white/20 text-white"
-                    : "bg-blue-500/10 text-blue-600 group-hover:bg-white/20 group-hover:text-white"
-                    }`}>
-                    <Building className="h-4.5 w-4.5" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="font-bold text-xs truncate leading-tight">Crédito Fiscal (02)</div>
-                    <div className={`text-[9px] truncate transition-colors mt-0.5 ${cliente?.tipo === "Empresa" && !(cliente?.nombre === "Empresa" && cliente?.apellido === "Genérica")
-                      ? "text-white/80"
-                      : "text-muted-foreground group-hover:text-white/85"
-                      }`}>
-                      Buscar por RNC o Cédula
-                    </div>
-                  </div>
-                </button>
-              </div>
-
-              <div className="flex items-center gap-2 mt-4 mb-2.5 px-1.5">
+              <div className="flex items-center gap-2 mt-2 mb-2.5 px-1.5">
                 <div className="h-3.5 w-1 bg-primary rounded-full animate-pulse" />
                 <span className="text-xs font-black uppercase tracking-widest text-primary">
-                  Base de Datos
+                  Clientes Registrados
                 </span>
                 <div className="flex-1 h-px bg-primary/10" />
               </div>
