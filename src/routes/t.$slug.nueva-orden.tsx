@@ -336,6 +336,70 @@ function NuevaOrdenPage() {
       });
   }
 
+  // Auto-selecciona el tipo de cliente "Consumidor Final" por defecto al cargar si no se ha seleccionado cliente
+  useEffect(() => {
+    if (tenantId && tenantId !== "__loading__" && !cliente) {
+      handleSelectGeneric("Persona");
+    }
+  }, [tenantId]);
+
+  function resetPosOrder() {
+    setItems([]);
+    setServiciosSel([]);
+    setCustomServicePrices({});
+    setDescuento(0);
+    setNotas("");
+    setRecibido(0);
+    setAbonoCredito(0);
+    setReferencia("");
+    setShowRefInput(false);
+    setServicioDomicilio(false);
+    setDireccionDomicilio("");
+    setCostoDomicilio(0);
+    setCreada(null);
+    setShowTicket(false);
+    setShowPrintPortal(null);
+    setStep(1);
+    handleSelectGeneric("Persona");
+  }
+
+  const handleImprimirTicket = async (ordenToPrint: Orden | null) => {
+    if (!ordenToPrint) return;
+
+    const printerType = tenant.config?.impresora_tipo || "usb";
+    if (printerType === "bluetooth" || printerType === "serial") {
+      try {
+        const activeClient: Cliente = cliente || clientes.find(c => c.id === ordenToPrint.cliente_id) || {
+          id: ordenToPrint.cliente_id,
+          tenant_id: tenantId,
+          nombre: "Consumidor",
+          apellido: "Final",
+          cedula: "",
+          telefono: "---",
+          email: "",
+          direccion: "",
+          tipo: "Consumidor Final",
+          limite_credito: 0,
+          creado_en: new Date().toISOString()
+        };
+        const bytes = encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios);
+        const success = await printDirectRaw(bytes, tenant.config);
+        if (success) {
+          toast.success("¡Ticket impreso en impresora física!");
+        } else {
+          toast.error("No se pudo imprimir en la impresora física.");
+        }
+      } catch (err: any) {
+        console.error(err);
+        toast.error("Error al imprimir físicamente: " + err.message);
+      } finally {
+        resetPosOrder();
+      }
+    } else {
+      setShowPrintPortal(ordenToPrint);
+    }
+  };
+
 
 
   const [empresaDialogOpen, setEmpresaDialogOpen] = useState(false);
@@ -1566,15 +1630,15 @@ function NuevaOrdenPage() {
                       })
                       .map((tipo) => {
                         const info = getComprobanteInfo(tipo);
-                        let itemStyles = "focus:bg-emerald-500/5 focus:text-emerald-600";
+                        let itemStyles = "focus:bg-emerald-500/10 focus:text-emerald-600 data-[state=checked]:bg-emerald-50 data-[state=checked]:text-emerald-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-emerald-950/40 dark:data-[state=checked]:text-emerald-400";
                         if (tipo === "E31" || tipo === "B01") {
-                          itemStyles = "focus:bg-blue-500/5 focus:text-blue-600";
+                          itemStyles = "focus:bg-blue-500/10 focus:text-blue-600 data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-400";
                         } else if (tipo !== "E32" && tipo !== "B02") {
-                          itemStyles = "focus:bg-amber-500/5 focus:text-amber-600";
+                          itemStyles = "focus:bg-amber-500/10 focus:text-amber-600 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-amber-950/40 dark:data-[state=checked]:text-amber-400";
                         }
 
                         return (
-                          <SelectItem key={tipo} value={tipo} className={`rounded-lg text-xs font-bold py-2 cursor-pointer ${itemStyles}`}>
+                          <SelectItem key={tipo} value={tipo} className={`rounded-lg text-xs font-bold py-2.5 px-3 cursor-pointer transition-colors ${itemStyles}`}>
                             {info.label}
                           </SelectItem>
                         );
@@ -2992,7 +3056,7 @@ function NuevaOrdenPage() {
       )}
 
       {/* Modal ticket */}
-      <Dialog open={showTicket} onOpenChange={(o) => { setShowTicket(o); if (!o) navigate({ to: "/t/$slug/ordenes", params: { slug: tenant.slug } }); }}>
+      <Dialog open={showTicket} onOpenChange={(o) => { if (!o) resetPosOrder(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>✓ Orden creada — {creada?.numero}</DialogTitle>
@@ -3006,8 +3070,8 @@ function NuevaOrdenPage() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => navigate({ to: "/t/$slug/ordenes", params: { slug: tenant.slug } })}>Cerrar</Button>
-            <Button onClick={() => setShowPrintPortal(creada)} className="bg-gradient-primary text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir</Button>
+            <Button variant="outline" onClick={resetPosOrder}>Cerrar</Button>
+            <Button onClick={() => handleImprimirTicket(creada)} className="bg-gradient-primary text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3020,8 +3084,7 @@ function NuevaOrdenPage() {
           empleado={empleado}
           serviciosList={servicios}
           onClose={() => {
-            setShowPrintPortal(null);
-            navigate({ to: "/t/$slug/ordenes", params: { slug: tenant.slug } });
+            resetPosOrder();
           }}
         />
       )}
