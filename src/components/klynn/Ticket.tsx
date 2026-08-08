@@ -136,11 +136,14 @@ export function Ticket({ orden, tenant, empleado, cliente, formato = "80mm", pag
             {cliente.cedula && <div><b>{cliente.tipo === 'Empresa' ? 'RNC:' : 'Cédula:'}</b> {cliente.cedula}</div>}
             {cliente.telefono && cliente.telefono !== "---" && <div><b>Teléfono:</b> {cliente.telefono}</div>}
             {cliente.direccion && <div><b>Dirección:</b> {cliente.direccion}</div>}
-            {orden.notas && (
-              <div className="mt-1 border-t border-dashed border-black/20 pt-1 italic">
-                <b>Nota:</b> {orden.notas}
-              </div>
-            )}
+          </div>
+          <Sep />
+        </>
+      )}
+      {orden.notas && (
+        <>
+          <div className="my-1 border border-black p-1.5 text-center font-bold text-[11px] leading-snug uppercase bg-slate-50">
+            📝 NOTA: {orden.notas}
           </div>
           <Sep />
         </>

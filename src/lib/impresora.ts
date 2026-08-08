@@ -252,6 +252,9 @@ export function encodeEscPos(
   if (orden.ubicacion_ropa && !ocultarUbicacion) {
     writeLine(`Ubicacion Ropa: ${orden.ubicacion_ropa}`);
   }
+  if (orden.notas) {
+    writeLine(`NOTA: ${orden.notas}`);
+  }
   writeLine("=".repeat(columns));
 
   // DETALLE DE ARTÍCULOS / SERVICIOS

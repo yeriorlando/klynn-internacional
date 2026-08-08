@@ -154,6 +154,7 @@ function NuevaOrdenPage() {
   };
 
   const [notas, setNotas] = useState("");
+  const [showNotesPOS, setShowNotesPOS] = useState(false);
   const [showDeliveryPOS, setShowDeliveryPOS] = useState(false);
   const [showDiscountPOS, setShowDiscountPOS] = useState(false);
   const [servicioDomicilio, setServicioDomicilio] = useState(false);
@@ -349,6 +350,7 @@ function NuevaOrdenPage() {
     setCustomServicePrices({});
     setDescuento(0);
     setNotas("");
+    setShowNotesPOS(false);
     setRecibido(0);
     setAbonoCredito(0);
     setReferencia("");
@@ -697,6 +699,13 @@ function NuevaOrdenPage() {
       if (e.key === "F4") {
         e.preventDefault();
         state.setShowDiscountPOS(true);
+        return;
+      }
+
+      // F8 to open notes dialog
+      if (e.key === "F8") {
+        e.preventDefault();
+        state.setShowNotesPOS(true);
         return;
       }
 
@@ -1146,6 +1155,7 @@ function NuevaOrdenPage() {
     onCrearOrden,
     setIsClientModalOpen,
     setShowDiscountPOS,
+    setShowNotesPOS,
     setShowOrdersDialog,
     toggleFullscreen,
     addItem,
@@ -1254,6 +1264,15 @@ function NuevaOrdenPage() {
 
                 <button
                   type="button"
+                  onClick={() => setShowNotesPOS(true)}
+                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${notas ? "bg-amber-600 hover:bg-amber-700 text-white shadow-inner ring-2 ring-amber-400 ring-offset-1 dark:ring-offset-background" : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm"}`}
+                >
+                  <FileText className={`h-4 w-4 transition-colors text-white ${notas ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`} />
+                  <span>{notas ? "Nota activa" : "Notas"}</span>
+                </button>
+
+                <button
+                  type="button"
                   onClick={toggleFullscreen}
                   className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${isFullscreen ? "bg-slate-800 text-white shadow-inner ring-2 ring-slate-400 ring-offset-1 dark:ring-offset-background" : "bg-slate-700 hover:bg-slate-800 text-white shadow-sm"}`}
                 >
@@ -1276,7 +1295,7 @@ function NuevaOrdenPage() {
                   className="group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                 >
                   <List className="h-4 w-4 text-white opacity-90 transition-colors group-hover:opacity-100" />
-                  <span>Ver órdenes</span>
+                  <span>Órdenes</span>
                 </button>
 
                 <button
@@ -1326,6 +1345,13 @@ function NuevaOrdenPage() {
               discount={descuento}
               setDiscount={setDescuento}
               empleado={user?.empleado}
+            />
+
+            <NotesPOSDialog
+              open={showNotesPOS}
+              onOpenChange={setShowNotesPOS}
+              notas={notas}
+              setNotas={setNotas}
             />
 
             <DeliveryDatePickerPOSDialog
@@ -4382,6 +4408,137 @@ function DeliveryDatePickerPOSDialog({
             className="rounded-lg bg-primary hover:bg-primary/95 text-white text-xs font-bold cursor-pointer h-8 px-3"
           >
             Aplicar Fecha
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function NotesPOSDialog({
+  open,
+  onOpenChange,
+  notas,
+  setNotas
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  notas: string;
+  setNotas: (n: string) => void;
+}) {
+  const [tempNotes, setTempNotes] = useState(notas);
+
+  useEffect(() => {
+    if (open) {
+      setTempNotes(notas);
+    }
+  }, [open, notas]);
+
+  const handleSave = () => {
+    setNotas(tempNotes.trim());
+    onOpenChange(false);
+    if (tempNotes.trim()) {
+      toast.success("Nota de la orden guardada 📝");
+    } else {
+      toast.info("Nota removida");
+    }
+  };
+
+  const handleAddPreset = (presetText: string) => {
+    setTempNotes(prev => {
+      if (!prev.trim()) return presetText;
+      if (prev.includes(presetText)) return prev;
+      return `${prev.trim()}, ${presetText}`;
+    });
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[90vw] sm:max-w-[420px] rounded-2xl p-4 border-none bg-white dark:bg-slate-950 shadow-xl">
+        <DialogHeader className="pb-2 border-b border-border/40">
+          <DialogTitle className="text-xs font-display font-black tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-1.5 uppercase">
+            <FileText className="h-4 w-4 text-amber-500 shrink-0" />
+            Notas y Observaciones de la Orden
+          </DialogTitle>
+          <DialogDescription className="text-[10.5px] text-muted-foreground -mt-0.5">
+            Instrucciones especiales para el lavadero, planchado o entrega.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-2.5 py-1.5">
+          {/* Atajos Rápidos */}
+          <div>
+            <span className="text-[9.5px] font-black uppercase tracking-wider text-muted-foreground block mb-1">
+              Atajos Rápidos de Notas
+            </span>
+            <div className="flex flex-wrap gap-1">
+              {[
+                "Ropa delicada",
+                "Mancha tratada",
+                "Planchado especial",
+                "Entregar en gancho",
+                "Doblado especial",
+                "Revisar bolsillos",
+                "Cliente VIP",
+                "Sin fragancia",
+                "Con almidón",
+                "Sin almidón",
+                "No planchar",
+                "Detalle/Daño previo",
+                "Prioridad de entrega"
+              ].map(preset => (
+                <button
+                  key={preset}
+                  type="button"
+                  onClick={() => handleAddPreset(preset)}
+                  className="px-2 py-0.5 rounded-md text-[10.5px] font-bold bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800 hover:bg-amber-100 dark:hover:bg-amber-900/50 transition-colors cursor-pointer"
+                >
+                  + {preset}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <Label className="text-[9.5px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              Observación detallada
+            </Label>
+            <Textarea
+              value={tempNotes}
+              onChange={(e) => setTempNotes(e.target.value)}
+              placeholder="Ej. Mancha de vino en manga derecha, entregar antes de las 4 PM..."
+              rows={2}
+              className="rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 focus-visible:ring-amber-500/30 text-xs font-medium p-2.5"
+              autoFocus
+            />
+          </div>
+        </div>
+
+        <DialogFooter className="pt-2 border-t border-border/40 gap-1.5 flex-row justify-end">
+          {tempNotes && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setTempNotes("")}
+              className="rounded-lg border-rose-200 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 text-xs font-bold cursor-pointer h-8 px-2.5"
+            >
+              Limpiar
+            </Button>
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => onOpenChange(false)}
+            className="rounded-lg border-border hover:bg-slate-100 dark:hover:bg-slate-900 text-xs font-bold cursor-pointer h-8 px-3"
+          >
+            Cancelar
+          </Button>
+          <Button
+            type="button"
+            onClick={handleSave}
+            className="rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold cursor-pointer h-8 px-4 shadow-xs"
+          >
+            Guardar Nota
           </Button>
         </DialogFooter>
       </DialogContent>

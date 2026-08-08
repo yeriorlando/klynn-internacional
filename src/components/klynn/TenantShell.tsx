@@ -629,25 +629,25 @@ export function TenantShell() {
           onClick={() => setShowAtajosModal(false)}
         >
           <div
-            className="relative w-full max-w-lg overflow-hidden rounded-3xl bg-white p-6 shadow-2xl dark:bg-slate-950 space-y-4"
+            className="relative w-full max-w-[440px] overflow-hidden rounded-2xl bg-white p-4 shadow-xl dark:bg-slate-950 space-y-3"
             onClick={(e) => e.stopPropagation()}
           >
             {/* Header */}
-            <div className="flex items-center justify-between pr-10">
-              <h3 className="font-display text-lg font-black text-slate-900 dark:text-white">
-                Atajos de Teclado del Sistema Klynn
+            <div className="flex items-center justify-between pr-8">
+              <h3 className="font-display text-sm font-black text-slate-900 dark:text-white uppercase tracking-tight">
+                Atajos de Teclado del Sistema
               </h3>
             </div>
             <button
               onClick={() => setShowAtajosModal(false)}
-              className="absolute right-4 top-4 h-8 w-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-90 transition-all hover:opacity-100 hover:scale-105 focus:outline-none shadow-sm"
+              className="absolute right-3.5 top-3.5 h-7 w-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center opacity-90 transition-all hover:opacity-100 hover:scale-105 focus:outline-none shadow-xs cursor-pointer"
               aria-label="Cerrar"
             >
-              <X className="h-4 w-4" />
+              <X className="h-3.5 w-3.5" />
             </button>
 
             {/* Grid of Shortcuts */}
-            <div className="grid grid-cols-2 gap-2.5">
+            <div className="grid grid-cols-2 gap-1.5">
               {[
                 { label: "Ir a POS / Ventas", key: "N" },
                 { label: "Ir a Dashboard", key: "D" },
@@ -655,16 +655,18 @@ export function TenantShell() {
                 { label: "Ver/Abrir Caja", key: "C" },
                 { label: "Cliente", key: "F2" },
                 { label: "Descuento", key: "F4" },
+                { label: "Nota", key: "F8" },
                 { label: "Deshacer", key: "Ctrl+Z" },
                 { label: "Cobrar", key: "Enter" },
                 { label: "Facturar", key: "Espacio" },
                 { label: "Buscar", key: "Ctrl" },
                 { label: "Pantalla completa", key: "P" },
-                { label: "Ver órdenes", key: "Z" },
+                { label: "Órdenes modal", key: "Z" },
+                { label: "Menu atajos", key: "Alt+K" },
               ].map(({ label, key }) => (
-                <div key={key} className="flex h-10 min-w-0 items-center justify-between gap-2.5 rounded-xl border border-slate-100 bg-slate-50 px-3 shadow-sm dark:border-slate-800 dark:bg-slate-900">
-                  <span className="min-w-0 truncate whitespace-nowrap text-[13px] font-semibold leading-none text-slate-700 dark:text-slate-300">{label}</span>
-                  <kbd className="flex h-7 min-w-7 shrink-0 select-none items-center justify-center whitespace-nowrap rounded-lg border-0 bg-primary px-2.5 text-[11px] font-bold tracking-wide text-white shadow-sm">
+                <div key={key} className="flex h-8.5 min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
+                  <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold leading-none text-slate-700 dark:text-slate-300">{label}</span>
+                  <kbd className="flex h-6 min-w-6 shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border-0 bg-primary px-2 text-[10px] font-bold tracking-wide text-white shadow-2xs">
                     {key}
                   </kbd>
                 </div>
@@ -672,9 +674,9 @@ export function TenantShell() {
             </div>
 
             {/* Footer */}
-            <div className="flex justify-end pt-1">
+            <div className="flex justify-end pt-0.5">
               <Button
-                className="bg-primary hover:bg-primary/90 text-white rounded-xl h-8 text-sm px-7 font-bold shadow-sm transition-colors"
+                className="bg-primary hover:bg-primary/90 text-white rounded-lg h-7.5 text-xs px-5 font-bold shadow-xs transition-colors cursor-pointer"
                 onClick={() => setShowAtajosModal(false)}
               >
                 Entendido
