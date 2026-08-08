@@ -1082,6 +1082,10 @@ function NuevaOrdenPage() {
       setIsCobroModalOpen(false);
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
 
+      if (cfg.pos_auto_imprimir) {
+        handleImprimirTicket({ ...ordenActualizada });
+      }
+
       if (targetCliente && servicioDomicilio && direccionDomicilio.trim() && direccionDomicilio !== targetCliente.direccion) {
         await saveCliente({ ...targetCliente, direccion: direccionDomicilio.trim() });
       }

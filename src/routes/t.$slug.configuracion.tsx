@@ -1539,6 +1539,17 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                 />
               </label>
 
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Imprimir ticket automáticamente al crear orden</span>
+                  <p className="text-[10px] text-muted-foreground">Envía la orden de impresión inmediatamente tras registrar la orden.</p>
+                </div>
+                <Switch 
+                  checked={cfg.pos_auto_imprimir === true} 
+                  onCheckedChange={(v) => updateCfg({ pos_auto_imprimir: v })} 
+                />
+              </label>
+
 
             </div>
             <Button className="mt-6" onClick={() => save(tenant)}>

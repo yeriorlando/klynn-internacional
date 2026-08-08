@@ -120,6 +120,7 @@ export interface TenantConfig {
   pos_habilitar_prendas?: boolean;
   pos_modal_desglose?: boolean;
   pos_modo_defecto?: boolean;
+  pos_auto_imprimir?: boolean;
   usar_ubicacion_ropa?: boolean;
   modulos_override?: {
     whatsapp?: boolean;
@@ -508,6 +509,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   tiempo_entrega_urgente: 6,
   alerta_ncf_limite: 50,
   alerta_ncf_telefono: "",
+  pos_auto_imprimir: false,
   whatsapp: {
     enabled: false,
     api_key: "",
