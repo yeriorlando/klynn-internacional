@@ -1870,8 +1870,10 @@ function NuevaOrdenPage() {
                                         });
                                       } else if (enableServicios) {
                                         toast.warning(
-                                          "Por favor, selecciona primero un servicio (ej: Lavado, Secado, Planchado) antes de agregar prendas.",
-                                          { duration: 4000 },
+                                          "Por favor, selecciona primero un servicio.",
+                                          {
+                                            duration: 3500,
+                                          },
                                         );
                                         setPosFilterTab("SERVICIOS");
                                         setActiveCategory("TODOS");

@@ -8,30 +8,83 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
-  getOrdenes, getCajaAbierta, getMovimientos, getGastos, getClienteById, getClientes,
-  formatRD, formatDateTimeRD, saveOrden, type Orden, type Gasto, type Cliente, type EstadoOrden, type Tenant,
-  can
+  getOrdenes,
+  getCajaAbierta,
+  getMovimientos,
+  getGastos,
+  getClienteById,
+  getClientes,
+  formatRD,
+  formatDateTimeRD,
+  saveOrden,
+  type Orden,
+  type Gasto,
+  type Cliente,
+  type EstadoOrden,
+  type Tenant,
+  can,
 } from "@/lib/storage";
 import {
-  Receipt, Package, Wallet, AlertCircle, ArrowUpRight, FilePlus2, Truck, TrendingUp,
-  Inbox, RefreshCw, CircleCheck, Ban, ChevronLeft, ChevronRight,
-  MoreVertical, MoreHorizontal, Eye, DollarSign, Printer, DownloadCloud, AlertTriangle, Zap, Check, CheckCircle2, ArrowLeft, ArrowUpCircle, XCircle, Info, ArrowRight, Clock
+  Receipt,
+  Package,
+  Wallet,
+  AlertCircle,
+  ArrowUpRight,
+  FilePlus2,
+  Truck,
+  TrendingUp,
+  Inbox,
+  RefreshCw,
+  CircleCheck,
+  Ban,
+  ChevronLeft,
+  ChevronRight,
+  MoreVertical,
+  MoreHorizontal,
+  Eye,
+  DollarSign,
+  Printer,
+  DownloadCloud,
+  AlertTriangle,
+  Zap,
+  Check,
+  CheckCircle2,
+  ArrowLeft,
+  ArrowUpCircle,
+  XCircle,
+  Info,
+  ArrowRight,
+  Clock,
 } from "lucide-react";
-import { useOrdenes, useCajaAbierta, useGastos, useClientes, useMovimientos, useEmpleados, useECFConfig } from "@/hooks/use-queries";
+import {
+  useOrdenes,
+  useCajaAbierta,
+  useGastos,
+  useClientes,
+  useMovimientos,
+  useEmpleados,
+  useECFConfig,
+} from "@/hooks/use-queries";
 import { TenantShell } from "@/components/klynn/TenantShell";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
   DropdownMenuSeparator,
-  DropdownMenuLabel
+  DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
-import { CobrarOrdenDialog, TicketPrintPortal, OrderDetail, esTransicionEstadoPermitida, EstadoOrdenDialog } from "@/components/klynn/OrdenesPage";
+import {
+  CobrarOrdenDialog,
+  TicketPrintPortal,
+  OrderDetail,
+  esTransicionEstadoPermitida,
+  EstadoOrdenDialog,
+} from "@/components/klynn/OrdenesPage";
 
 export const Route = createFileRoute("/t/$slug/")({
   component: DashboardPage,
@@ -41,9 +94,11 @@ function esParaHoy(fechaStr?: string): boolean {
   if (!fechaStr) return false;
   const d = new Date(fechaStr);
   const hoy = new Date();
-  return d.getDate() === hoy.getDate() &&
-         d.getMonth() === hoy.getMonth() &&
-         d.getFullYear() === hoy.getFullYear();
+  return (
+    d.getDate() === hoy.getDate() &&
+    d.getMonth() === hoy.getMonth() &&
+    d.getFullYear() === hoy.getFullYear()
+  );
 }
 
 function esAtrasada(fechaStr?: string, estado?: EstadoOrden): boolean {
@@ -53,7 +108,7 @@ function esAtrasada(fechaStr?: string, estado?: EstadoOrden): boolean {
 
 function DashboardPage() {
   const user = useRequireAuth();
-  const tenantId = user?.tenant?.id || '';
+  const tenantId = user?.tenant?.id || "";
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
@@ -79,7 +134,7 @@ function DashboardPage() {
     if (!openMenuId) return;
     const handleOutside = (e: MouseEvent) => {
       const target = e.target as HTMLElement;
-      if (!target.closest('.action-menu-container')) {
+      if (!target.closest(".action-menu-container")) {
         setOpenMenuId(null);
       }
     };
@@ -90,7 +145,9 @@ function DashboardPage() {
   const [view, setView] = useState<Orden | null>(null);
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
-  const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
+  const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(
+    undefined,
+  );
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
 
@@ -109,14 +166,20 @@ function DashboardPage() {
     }
     try {
       await saveOrden({ ...o, estado });
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       if (estado === "LISTA" || estado === "ENTREGADA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
         if (cli) {
-          toast.success(estado === "LISTA" ? "Orden lista — notificando al cliente..." : "Orden entregada — notificando al cliente...");
-          notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada").then((r) => {
-            if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
-          });
+          toast.success(
+            estado === "LISTA"
+              ? "Orden lista — notificando al cliente..."
+              : "Orden entregada — notificando al cliente...",
+          );
+          notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada").then(
+            (r) => {
+              if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+            },
+          );
         }
       }
     } catch (err: any) {
@@ -131,56 +194,117 @@ function DashboardPage() {
   const [periodoChart, setPeriodoChart] = useState<"7D" | "30D" | "TODO">("7D");
 
   const stats = useMemo(() => {
-    const hoy = new Date(); hoy.setHours(0, 0, 0, 0);
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
     const ordenesHoy = ordenes.filter((o) => new Date(o.creado_en) >= hoy);
-    const ventasHoy = ordenesHoy.filter((o) => o.estado !== "ANULADA").reduce((s, o) => s + o.total, 0);
+    const ventasHoy = ordenesHoy
+      .filter((o) => o.estado !== "ANULADA")
+      .reduce((s, o) => s + o.total, 0);
     const activas = ordenes.filter((o) => ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado));
     const listas = ordenes.filter((o) => o.estado === "LISTA");
-    const cuentasCobrar = ordenes.filter((o) => o.saldo > 0 && o.estado !== "ANULADA" && o.metodo_pago === "CREDITO");
+    const cuentasCobrar = ordenes.filter(
+      (o) => o.saldo > 0 && o.estado !== "ANULADA" && o.metodo_pago === "CREDITO",
+    );
     const totalCxC = cuentasCobrar.reduce((s, o) => s + o.saldo, 0);
-    const gastosHoy = gastos.filter((g) => new Date(g.fecha) >= hoy).reduce((s, g) => s + g.monto, 0);
+    const gastosHoy = gastos
+      .filter((g) => new Date(g.fecha) >= hoy)
+      .reduce((s, g) => s + g.monto, 0);
 
-    const efectivo = movs.filter((m) => m.metodo === "EFECTIVO" || m.tipo === "INGRESO").reduce((s, m) => s + m.monto, 0)
-      - movs.filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo)).reduce((s, m) => s + m.monto, 0);
+    const efectivo =
+      movs
+        .filter((m) => m.metodo === "EFECTIVO" || m.tipo === "INGRESO")
+        .reduce((s, m) => s + m.monto, 0) -
+      movs
+        .filter((m) => ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo))
+        .reduce((s, m) => s + m.monto, 0);
 
     const chartData: Array<{ dia: string; total: number }> = [];
 
     if (periodoChart === "7D") {
       for (let i = 6; i >= 0; i--) {
-        const d = new Date(); d.setDate(d.getDate() - i); d.setHours(0, 0, 0, 0);
-        const next = new Date(d); next.setDate(next.getDate() + 1);
-        const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next).reduce((s, o) => s + o.total, 0);
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        d.setHours(0, 0, 0, 0);
+        const next = new Date(d);
+        next.setDate(next.getDate() + 1);
+        const total = ordenes
+          .filter(
+            (o) =>
+              o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next,
+          )
+          .reduce((s, o) => s + o.total, 0);
         chartData.push({ dia: d.toLocaleDateString("es-DO", { weekday: "short" }), total });
       }
     } else if (periodoChart === "30D") {
       for (let i = 5; i >= 0; i--) {
-        const end = new Date(); end.setDate(end.getDate() - (i * 5)); end.setHours(23, 59, 59, 999);
-        const start = new Date(end); start.setDate(start.getDate() - 4); start.setHours(0, 0, 0, 0);
-        const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= start && new Date(o.creado_en) <= end).reduce((s, o) => s + o.total, 0);
+        const end = new Date();
+        end.setDate(end.getDate() - i * 5);
+        end.setHours(23, 59, 59, 999);
+        const start = new Date(end);
+        start.setDate(start.getDate() - 4);
+        start.setHours(0, 0, 0, 0);
+        const total = ordenes
+          .filter(
+            (o) =>
+              o.estado !== "ANULADA" &&
+              new Date(o.creado_en) >= start &&
+              new Date(o.creado_en) <= end,
+          )
+          .reduce((s, o) => s + o.total, 0);
         const label = `${start.getDate()}/${start.getMonth() + 1}`;
         chartData.push({ dia: label, total });
       }
     } else {
       for (let i = 5; i >= 0; i--) {
-        const d = new Date(); d.setMonth(d.getMonth() - i); d.setDate(1); d.setHours(0, 0, 0, 0);
+        const d = new Date();
+        d.setMonth(d.getMonth() - i);
+        d.setDate(1);
+        d.setHours(0, 0, 0, 0);
         const next = new Date(d.getFullYear(), d.getMonth() + 1, 1);
-        const total = ordenes.filter((o) => o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next).reduce((s, o) => s + o.total, 0);
+        const total = ordenes
+          .filter(
+            (o) =>
+              o.estado !== "ANULADA" && new Date(o.creado_en) >= d && new Date(o.creado_en) < next,
+          )
+          .reduce((s, o) => s + o.total, 0);
         chartData.push({ dia: d.toLocaleDateString("es-DO", { month: "short" }), total });
       }
     }
 
     const max = Math.max(1, ...chartData.map((v) => v.total));
     const totalPeriodo = chartData.reduce((s, v) => s + v.total, 0);
-    const diasDivider = periodoChart === "7D" ? 7 : periodoChart === "30D" ? 30 : (chartData.length * 30);
+    const diasDivider =
+      periodoChart === "7D" ? 7 : periodoChart === "30D" ? 30 : chartData.length * 30;
     const promedioDiario = totalPeriodo / diasDivider;
 
-    return { 
-      ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, 
-      chartData, max, totalPeriodo, promedioDiario 
+    return {
+      ventasHoy,
+      activas,
+      listas,
+      cuentasCobrar,
+      totalCxC,
+      gastosHoy,
+      efectivo,
+      chartData,
+      max,
+      totalPeriodo,
+      promedioDiario,
     };
   }, [ordenes, movs, gastos, periodoChart]);
 
-  const { ventasHoy, activas, listas, cuentasCobrar, totalCxC, gastosHoy, efectivo, chartData, max, totalPeriodo, promedioDiario } = stats;
+  const {
+    ventasHoy,
+    activas,
+    listas,
+    cuentasCobrar,
+    totalCxC,
+    gastosHoy,
+    efectivo,
+    chartData,
+    max,
+    totalPeriodo,
+    promedioDiario,
+  } = stats;
 
   const sortedOrdenes = useMemo(() => {
     return [...ordenes].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
@@ -194,13 +318,21 @@ function DashboardPage() {
     return sortedOrdenes.slice(startIndex, startIndex + ordersPerPage);
   }, [sortedOrdenes, currentPage]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || user.tenant.id === "__loading__") return null;
 
-  if (loading) return <div className="flex h-64 items-center justify-center"><p className="text-muted-foreground animate-pulse">Cargando dashboard...</p></div>;
+  if (loading)
+    return (
+      <div className="flex h-64 items-center justify-center">
+        <p className="text-muted-foreground animate-pulse">Cargando dashboard...</p>
+      </div>
+    );
 
   return (
     <div>
-      <PageHeader title={`Hola, ${user.empleado.nombre.split(" ")[0]} 👋`} description="Resumen operativo de tu lavandería en tiempo real.">
+      <PageHeader
+        title={`Hola, ${user.empleado.nombre.split(" ")[0]} 👋`}
+        description="Resumen operativo de tu lavandería en tiempo real."
+      >
         <Link to="/t/$slug/nueva-orden" params={{ slug: tenant.slug }}>
           <Button className="bg-gradient-primary text-white shadow-elegant hover:opacity-95">
             <FilePlus2 className="mr-1.5 h-4 w-4" /> Nueva orden
@@ -214,22 +346,50 @@ function DashboardPage() {
           <AlertCircle className="h-5 w-5 text-destructive" />
           <div className="flex-1">
             <div className="font-medium">No hay caja abierta</div>
-            <div className="text-sm text-muted-foreground">Abre la caja para comenzar a registrar ventas en efectivo.</div>
+            <div className="text-sm text-muted-foreground">
+              Abre la caja para comenzar a registrar ventas en efectivo.
+            </div>
           </div>
-          <Link to="/t/$slug/caja" params={{ slug: tenant.slug }}><Button variant="outline">Ir a caja</Button></Link>
+          <Link to="/t/$slug/caja" params={{ slug: tenant.slug }}>
+            <Button variant="outline">Ir a caja</Button>
+          </Link>
         </Card>
       )}
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <div id="tour-kpi-ventas" className="h-full">
-          <KPI title="Ventas del día" value={formatRD(ventasHoy)} icon={Receipt} sub="Facturado hoy" variant="primary" />
+          <KPI
+            title="Ventas del día"
+            value={formatRD(ventasHoy)}
+            icon={Receipt}
+            sub="Facturado hoy"
+            variant="primary"
+          />
         </div>
         <div id="tour-kpi-activas" className="h-full">
-          <KPI title="Órdenes activas" value={String(activas.length)} icon={Package} sub="Pendientes de procesar" variant="amber" />
+          <KPI
+            title="Órdenes activas"
+            value={String(activas.length)}
+            icon={Package}
+            sub="Pendientes de procesar"
+            variant="amber"
+          />
         </div>
-        <KPI title="Listas para entregar" value={String(listas.length)} icon={Truck} sub="Listas para retirar" variant="emerald" />
-        <KPI title="Por cobrar" value={formatRD(totalCxC)} icon={AlertCircle} sub={`${cuentasCobrar.length} órdenes pendientes`} variant="rose" />
+        <KPI
+          title="Listas para entregar"
+          value={String(listas.length)}
+          icon={Truck}
+          sub="Listas para retirar"
+          variant="emerald"
+        />
+        <KPI
+          title="Por cobrar"
+          value={formatRD(totalCxC)}
+          icon={AlertCircle}
+          sub={`${cuentasCobrar.length} órdenes pendientes`}
+          variant="rose"
+        />
       </div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-3">
@@ -238,32 +398,40 @@ function DashboardPage() {
           {/* Header con Filtros */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
-              <div className="text-base font-bold text-foreground leading-tight">Ventas y Tendencia</div>
+              <div className="text-base font-bold text-foreground leading-tight">
+                Ventas y Tendencia
+              </div>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-                Ventas operativas registradas {periodoChart === "7D" ? "en los últimos 7 días" : periodoChart === "30D" ? "en los últimos 30 días" : "en el historial general"}.
+                Ventas operativas registradas{" "}
+                {periodoChart === "7D"
+                  ? "en los últimos 7 días"
+                  : periodoChart === "30D"
+                    ? "en los últimos 30 días"
+                    : "en el historial general"}
+                .
               </p>
             </div>
 
             {/* Time toggle pill */}
             <div className="inline-flex items-center p-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold shrink-0 self-start sm:self-auto border border-slate-200/50 dark:border-slate-700/50">
-              <button 
-                type="button" 
-                onClick={() => setPeriodoChart("7D")} 
+              <button
+                type="button"
+                onClick={() => setPeriodoChart("7D")}
                 className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "7D" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
               >
                 7D
               </button>
-              <button 
-                type="button" 
-                onClick={() => setPeriodoChart("30D")} 
+              <button
+                type="button"
+                onClick={() => setPeriodoChart("30D")}
                 className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "30D" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
               >
                 30D
               </button>
-              <button 
-                type="button" 
-                onClick={() => setPeriodoChart("TODO")} 
+              <button
+                type="button"
+                onClick={() => setPeriodoChart("TODO")}
                 className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "TODO" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
               >
                 Todo
@@ -276,10 +444,16 @@ function DashboardPage() {
             <div className="md:col-span-5 space-y-2">
               <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
                 <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">
-                  {periodoChart === "7D" ? "Últimos 7 Días" : periodoChart === "30D" ? "Últimos 30 Días" : "Ventas Totales"}
+                  {periodoChart === "7D"
+                    ? "Últimos 7 Días"
+                    : periodoChart === "30D"
+                      ? "Últimos 30 Días"
+                      : "Ventas Totales"}
                 </span>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-lg font-display font-black text-foreground">{formatRD(totalPeriodo)}</span>
+                  <span className="text-lg font-display font-black text-foreground">
+                    {formatRD(totalPeriodo)}
+                  </span>
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
                     <TrendingUp className="h-2.5 w-2.5" /> +4.1%
                   </span>
@@ -287,9 +461,13 @@ function DashboardPage() {
               </div>
 
               <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">Promedio Diario</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">
+                  Promedio Diario
+                </span>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-lg font-display font-black text-foreground">{formatRD(promedioDiario)}</span>
+                  <span className="text-lg font-display font-black text-foreground">
+                    {formatRD(promedioDiario)}
+                  </span>
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
                     <TrendingUp className="h-2.5 w-2.5" /> +2.6%
                   </span>
@@ -297,9 +475,13 @@ function DashboardPage() {
               </div>
 
               <div className="p-2.5 px-3 rounded-xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/60 dark:border-slate-800 flex flex-col justify-between">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">Pico Máximo</span>
+                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block leading-none mb-1">
+                  Pico Máximo
+                </span>
                 <div className="flex items-center justify-between gap-2">
-                  <span className="text-lg font-display font-black text-foreground">{formatRD(max)}</span>
+                  <span className="text-lg font-display font-black text-foreground">
+                    {formatRD(max)}
+                  </span>
                   <span className="inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800">
                     <TrendingUp className="h-2.5 w-2.5" /> +5.4%
                   </span>
@@ -313,7 +495,10 @@ function DashboardPage() {
                 {chartData.map((v, i) => {
                   const pct = max > 0 ? (v.total / max) * 100 : 0;
                   return (
-                    <div key={i} className="group relative flex flex-col items-center justify-end h-full flex-1">
+                    <div
+                      key={i}
+                      className="group relative flex flex-col items-center justify-end h-full flex-1"
+                    >
                       {/* Tooltip Hover */}
                       <div className="absolute -top-8 opacity-0 group-hover:opacity-100 transition-all duration-200 pointer-events-none z-30 scale-90 group-hover:scale-100 origin-bottom">
                         <div className="bg-slate-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-lg shadow-xl whitespace-nowrap">
@@ -323,13 +508,17 @@ function DashboardPage() {
 
                       {/* Monto sobre la barra */}
                       <span className="text-[9.5px] font-extrabold text-slate-500 dark:text-slate-400 mb-1 opacity-80 group-hover:opacity-100 transition-opacity">
-                        {v.total > 0 ? (v.total >= 1000 ? `${(v.total / 1000).toFixed(1)}k` : v.total) : ""}
+                        {v.total > 0
+                          ? v.total >= 1000
+                            ? `${(v.total / 1000).toFixed(1)}k`
+                            : v.total
+                          : ""}
                       </span>
 
                       {/* Barra limpia sin cápsula ni contenedor gris */}
-                      <div 
+                      <div
                         className="w-full max-w-[32px] sm:max-w-[40px] bg-primary rounded-t-lg transition-all duration-500 hover:bg-primary/90 shadow-2xs"
-                        style={{ height: `${Math.max(v.total > 0 ? 6 : 2, pct)}%` }} 
+                        style={{ height: `${Math.max(v.total > 0 ? 6 : 2, pct)}%` }}
                       />
                     </div>
                   );
@@ -339,7 +528,10 @@ function DashboardPage() {
               {/* Labels de Días debajo de la línea base */}
               <div className="flex justify-between gap-1.5 sm:gap-2 px-1 pt-2">
                 {chartData.map((v, i) => (
-                  <span key={i} className="flex-1 text-center text-[10px] font-bold capitalize text-slate-500 dark:text-slate-400 truncate">
+                  <span
+                    key={i}
+                    className="flex-1 text-center text-[10px] font-bold capitalize text-slate-500 dark:text-slate-400 truncate"
+                  >
                     {v.dia}
                   </span>
                 ))}
@@ -351,7 +543,9 @@ function DashboardPage() {
         {/* Caja */}
         <Card id="tour-caja-turno" className="p-6">
           <div className="mb-4 flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">Caja del turno</div>
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+              Caja del turno
+            </div>
             <Wallet className="h-4 w-4 text-muted-foreground" />
           </div>
           {caja ? (
@@ -384,15 +578,21 @@ function DashboardPage() {
       <Card className="mt-6 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="font-display text-xl">Órdenes recientes</div>
+            <div className="font-display text-xl font-black text-slate-900 dark:text-white">
+              Órdenes recientes
+            </div>
             <div className="text-sm text-muted-foreground">
-              {sortedOrdenes.length > 0 
-                ? `Mostrando ${ (currentPage - 1) * ordersPerPage + 1 } a ${ Math.min(currentPage * ordersPerPage, sortedOrdenes.length) } de ${ sortedOrdenes.length }`
-                : "0 órdenes"
-              }
+              {sortedOrdenes.length > 0
+                ? `Mostrando ${(currentPage - 1) * ordersPerPage + 1} a ${Math.min(currentPage * ordersPerPage, sortedOrdenes.length)} de ${sortedOrdenes.length}`
+                : "0 órdenes"}
             </div>
           </div>
-          <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} search={{ view: undefined, action: undefined }} className="flex items-center gap-1 text-sm font-medium text-primary hover:underline">
+          <Link
+            to="/t/$slug/ordenes"
+            params={{ slug: tenant.slug }}
+            search={{ view: undefined, action: undefined }}
+            className="flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+          >
             Ver todas <ArrowUpRight className="h-3.5 w-3.5" />
           </Link>
         </div>
@@ -413,14 +613,20 @@ function DashboardPage() {
               {paginatedOrdenes.map((o) => {
                 const c = clientes.find((x) => x.id === o.cliente_id);
                 return (
-                  <tr 
-                    key={o.id} 
+                  <tr
+                    key={o.id}
                     className="border-b border-border/50 hover:bg-accent/30 cursor-pointer transition-colors duration-100"
                     onClick={(e) => {
                       // Don't open modal if clicking on action buttons or badges
                       const target = e.target as HTMLElement;
-                      if (target.closest('button') || target.closest('[role="menuitem"]') || target.closest('.action-menu-container')) return;
-                      if (o.estado !== "ANULADA" && !(o.estado === "ENTREGADA" && o.saldo <= 0)) setEstadoModal(o);
+                      if (
+                        target.closest("button") ||
+                        target.closest('[role="menuitem"]') ||
+                        target.closest(".action-menu-container")
+                      )
+                        return;
+                      if (o.estado !== "ANULADA" && !(o.estado === "ENTREGADA" && o.saldo <= 0))
+                        setEstadoModal(o);
                     }}
                   >
                     <td className="px-4 py-3">
@@ -432,7 +638,10 @@ function DashboardPage() {
                           <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
                             {o.numero}
                           </span>
-                          <span className="font-bold text-sm text-foreground truncate max-w-[220px]" title={c ? `${c.nombre} ${c.apellido || ""}` : ""}>
+                          <span
+                            className="font-bold text-sm text-foreground truncate max-w-[220px]"
+                            title={c ? `${c.nombre} ${c.apellido || ""}` : ""}
+                          >
                             {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
                           </span>
                           <span className="text-[11px] text-muted-foreground font-medium">
@@ -447,13 +656,19 @@ function DashboardPage() {
                           <Ban className="h-3 w-3" /> ANULADA
                         </span>
                       ) : (
-                        <span className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
-                          o.estado === "RECIBIDA" ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400" :
-                          o.estado === "EN_PROCESO" ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400" :
-                          o.estado === "LISTA" ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400" :
-                          o.estado === "ENTREGADA" ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400" :
-                          "border-zinc-200 bg-zinc-50 text-zinc-600"
-                        }`}>
+                        <span
+                          className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-full border px-2.5 py-1 text-[11px] font-bold ${
+                            o.estado === "RECIBIDA"
+                              ? "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-800 dark:bg-blue-950/30 dark:text-blue-400"
+                              : o.estado === "EN_PROCESO"
+                                ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400"
+                                : o.estado === "LISTA"
+                                  ? "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400"
+                                  : o.estado === "ENTREGADA"
+                                    ? "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-800 dark:bg-purple-950/30 dark:text-purple-400"
+                                    : "border-zinc-200 bg-zinc-50 text-zinc-600"
+                          }`}
+                        >
                           {o.estado === "RECIBIDA" && <Inbox className="h-3 w-3" />}
                           {o.estado === "EN_PROCESO" && <RefreshCw className="h-3 w-3" />}
                           {o.estado === "LISTA" && <CircleCheck className="h-3 w-3" />}
@@ -472,18 +687,23 @@ function DashboardPage() {
                               className="transition-transform active:scale-95 cursor-pointer"
                               title="Cobrar saldo de esta orden"
                             >
-                              <Badge variant="outline" className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold">
+                              <Badge
+                                variant="outline"
+                                className="border-warning/40 bg-warning/10 text-warning-foreground hover:bg-warning/25 transition-colors font-bold"
+                              >
                                 {formatRD(o.saldo)}
                               </Badge>
                             </button>
-                            {o.estado !== "ANULADA" && (o.metodo_pago === "PAGO_AL_RETIRAR" || o.metodo_pago === "CREDITO") && (
-                              <button
-                                onClick={() => setCobrarOrden(o)}
-                                className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
-                              >
-                                <DollarSign className="h-2.5 w-2.5" /> Cobrar
-                              </button>
-                            )}
+                            {o.estado !== "ANULADA" &&
+                              (o.metodo_pago === "PAGO_AL_RETIRAR" ||
+                                o.metodo_pago === "CREDITO") && (
+                                <button
+                                  onClick={() => setCobrarOrden(o)}
+                                  className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 px-2 py-0.5 rounded-full border border-emerald-500/20 active:scale-95 transition-all cursor-pointer"
+                                >
+                                  <DollarSign className="h-2.5 w-2.5" /> Cobrar
+                                </button>
+                              )}
                           </>
                         ) : (
                           <span className="text-muted-foreground">—</span>
@@ -528,33 +748,45 @@ function DashboardPage() {
                             <MoreHorizontal />
                           </button>
                           {openMenuId === o.id && (
-                            <div 
+                            <div
                               className="action-menu-popover"
                               onMouseLeave={() => setOpenMenuId(null)}
                             >
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setView(o); }}
+                              <button
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  setView(o);
+                                }}
                               >
                                 <Eye /> Ver Detalles
                               </button>
-                              
+
                               {o.saldo > 0 && o.estado !== "ANULADA" && (
-                                <button 
-                                  onClick={() => { setOpenMenuId(null); setCobrarOrden(o); }}
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null);
+                                    setCobrarOrden(o);
+                                  }}
                                   className="text-emerald-600 dark:text-emerald-400"
                                 >
                                   <DollarSign /> Cobrar Orden
                                 </button>
                               )}
 
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setShowPrint(o); }}
+                              <button
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  setShowPrint(o);
+                                }}
                               >
                                 <Printer /> Imprimir Ticket
                               </button>
-                              
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setShowDownloadA4(o); }}
+
+                              <button
+                                onClick={() => {
+                                  setOpenMenuId(null);
+                                  setShowDownloadA4(o);
+                                }}
                               >
                                 <DownloadCloud /> Ver Factura A4
                               </button>
@@ -567,12 +799,16 @@ function DashboardPage() {
                 );
               })}
               {ordenes.length === 0 && (
-                <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">Aún no hay órdenes.</td></tr>
+                <tr>
+                  <td colSpan={7} className="py-8 text-center text-muted-foreground">
+                    Aún no hay órdenes.
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
         </div>
-        
+
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between border-t pt-4">
             <div className="text-xs text-muted-foreground">
@@ -584,7 +820,7 @@ function DashboardPage() {
                 size="sm"
                 className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
                 disabled={currentPage === 1}
-                onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+                onClick={() => setCurrentPage((prev) => Math.max(1, prev - 1))}
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
               </Button>
@@ -593,7 +829,7 @@ function DashboardPage() {
                 size="sm"
                 className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
                 disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+                onClick={() => setCurrentPage((prev) => Math.min(totalPages, prev + 1))}
               >
                 Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
               </Button>
@@ -606,13 +842,13 @@ function DashboardPage() {
       <Dialog open={!!view} onOpenChange={(o) => !o && setView(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           {view && (
-            <OrderDetail 
-              view={view} 
-              tenant={tenant} 
-              clientes={clientes} 
+            <OrderDetail
+              view={view}
+              tenant={tenant}
+              clientes={clientes}
               empleados={empleados}
-              cambiarEstado={cambiarEstado} 
-              setView={setView} 
+              cambiarEstado={cambiarEstado}
+              setView={setView}
               onPrint={() => setShowPrint(view)}
               setCobrarOrden={setCobrarOrden}
             />
@@ -638,16 +874,16 @@ function DashboardPage() {
 
       {/* Modal de impresión térmica */}
       {showPrint && (
-        <TicketPrintPortal 
-          orden={showPrint} 
-          tenant={tenant} 
+        <TicketPrintPortal
+          orden={showPrint}
+          tenant={tenant}
           clientes={clientes}
           empleados={empleados}
           pagoRecibido={pagoRecibidoParaTicket}
           onClose={() => {
             setShowPrint(null);
             setPagoRecibidoParaTicket(undefined);
-          }} 
+          }}
         />
       )}
       {/* Modal de Estado de Orden */}
@@ -666,7 +902,7 @@ function DashboardPage() {
           navigate({
             to: "/t/$slug/ordenes",
             params: { slug: tenant.slug },
-            search: { view: o.id, action: "credito" }
+            search: { view: o.id, action: "credito" },
           });
         }}
         setMontoCredito={() => {}}
@@ -677,7 +913,7 @@ function DashboardPage() {
           navigate({
             to: "/t/$slug/ordenes",
             params: { slug: tenant.slug },
-            search: { view: o.id, action: "debito" }
+            search: { view: o.id, action: "debito" },
           });
         }}
         setCondonarOrden={(o) => {
@@ -685,7 +921,7 @@ function DashboardPage() {
           navigate({
             to: "/t/$slug/ordenes",
             params: { slug: tenant.slug },
-            search: { view: o.id, action: "condonar" }
+            search: { view: o.id, action: "condonar" },
           });
         }}
         setAnular={(o) => {
@@ -693,7 +929,7 @@ function DashboardPage() {
           navigate({
             to: "/t/$slug/ordenes",
             params: { slug: tenant.slug },
-            search: { view: o.id, action: "anular" }
+            search: { view: o.id, action: "anular" },
           });
         }}
         setCobrarOrden={setCobrarOrden}
@@ -703,17 +939,17 @@ function DashboardPage() {
   );
 }
 
-function KPI({ 
-  title, 
-  value, 
-  sub, 
-  icon: Icon, 
-  variant = "primary" 
-}: { 
-  title: string; 
-  value: string; 
-  sub?: string; 
-  icon: typeof Receipt; 
+function KPI({
+  title,
+  value,
+  sub,
+  icon: Icon,
+  variant = "primary",
+}: {
+  title: string;
+  value: string;
+  sub?: string;
+  icon: typeof Receipt;
   variant?: "primary" | "amber" | "emerald" | "rose";
 }) {
   const styles = {
@@ -722,29 +958,29 @@ function KPI({
       title: "text-white/80 font-semibold",
       value: "text-white",
       sub: "text-white/70",
-      icon: "text-white/80"
+      icon: "text-white/80",
     },
     amber: {
       card: "bg-amber-500/10 border border-amber-500/20 shadow-2xs",
       title: "text-amber-800 dark:text-amber-300 font-semibold",
       value: "text-foreground",
       sub: "text-amber-700/70 dark:text-amber-400/70",
-      icon: "text-amber-600 dark:text-amber-400"
+      icon: "text-amber-600 dark:text-amber-400",
     },
     emerald: {
       card: "bg-emerald-500/10 border border-emerald-500/20 shadow-2xs",
       title: "text-emerald-800 dark:text-emerald-300 font-semibold",
       value: "text-foreground",
       sub: "text-emerald-700/70 dark:text-emerald-400/70",
-      icon: "text-emerald-600 dark:text-emerald-400"
+      icon: "text-emerald-600 dark:text-emerald-400",
     },
     rose: {
       card: "bg-rose-500/10 border border-rose-500/20 shadow-2xs",
       title: "text-rose-800 dark:text-rose-300 font-semibold",
       value: "text-foreground",
       sub: "text-rose-700/70 dark:text-rose-400/70",
-      icon: "text-rose-600 dark:text-rose-400"
-    }
+      icon: "text-rose-600 dark:text-rose-400",
+    },
   }[variant];
 
   return (
@@ -760,5 +996,10 @@ function KPI({
 }
 
 function Row({ k, v }: { k: string; v: string }) {
-  return <div className="flex justify-between"><span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span></div>;
+  return (
+    <div className="flex justify-between">
+      <span className="text-muted-foreground">{k}</span>
+      <span className="font-medium">{v}</span>
+    </div>
+  );
 }

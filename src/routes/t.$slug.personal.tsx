@@ -1,6 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
-import { UserPlus, Trash2, Shield, Eye, EyeOff, Loader2, User, ShieldCheck, ArrowRight, ArrowLeft, CheckCircle2, RotateCcw, Check, Lock, KeyRound, Sparkles } from "lucide-react";
+import {
+  UserPlus,
+  Trash2,
+  Shield,
+  Eye,
+  EyeOff,
+  Loader2,
+  User,
+  ShieldCheck,
+  ArrowRight,
+  ArrowLeft,
+  CheckCircle2,
+  RotateCcw,
+  Check,
+  Lock,
+  KeyRound,
+  Sparkles,
+} from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -8,12 +25,34 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
-  getEmpleados, saveEmpleado, deleteEmpleado, getOrdenes, formatRD, uid,
-  PERMISOS_SISTEMA, getPermisosPorRol, can,
-  type Empleado, type RolEmpleado, type Orden, type Caja
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  getEmpleados,
+  saveEmpleado,
+  deleteEmpleado,
+  getOrdenes,
+  formatRD,
+  uid,
+  PERMISOS_SISTEMA,
+  getPermisosPorRol,
+  can,
+  type Empleado,
+  type RolEmpleado,
+  type Orden,
+  type Caja,
 } from "@/lib/storage";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -31,7 +70,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 function getRoleBadgeClass(rol: RolEmpleado) {
@@ -46,6 +85,8 @@ function getRoleBadgeClass(rol: RolEmpleado) {
       return "bg-amber-500 text-white border-amber-600 shadow-2xs";
     case "REPARTIDOR":
       return "bg-sky-600 text-white border-sky-700 shadow-2xs";
+    case "OPERARIO":
+      return "bg-teal-600 text-white border-teal-700 shadow-2xs";
     default:
       return "bg-slate-700 text-white";
   }
@@ -65,16 +106,16 @@ function PersonalPage() {
   const [loading, setLoading] = useState(true);
 
   const tenant = user?.tenant;
-  const tenantId = tenant?.id || '';
+  const tenantId = tenant?.id || "";
 
   useEffect(() => {
     async function load() {
-      if (!user || !tenant || !tenantId || tenantId === '__loading__') return;
+      if (!user || !tenant || !tenantId || tenantId === "__loading__") return;
       setLoading(true);
       const [eList, oList, lim] = await Promise.all([
         getEmpleados(tenantId),
         getOrdenes(tenantId),
-        checkPlanLimits(tenant)
+        checkPlanLimits(tenant),
       ]);
       setEmps(eList);
       setOrdenes(oList);
@@ -84,13 +125,11 @@ function PersonalPage() {
     load();
   }, [tenantId, refresh]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || user.tenant.id === "__loading__") return null;
 
   if (!can(user.empleado, "personal")) {
     return <NoAccess />;
   }
-
-
 
   function handleAdd() {
     if (limits.employeesReached) {
@@ -100,19 +139,28 @@ function PersonalPage() {
     }
   }
 
-  const staffCount = emps.filter(e => e.rol !== "ADMIN").length;
+  const staffCount = emps.filter((e) => e.rol !== "ADMIN").length;
 
   return (
     <div>
-      <PageHeader title="Personal" description={`${staffCount} empleados (excluyendo administradores)`}>
-        <Button onClick={handleAdd} className="bg-gradient-primary text-white"><UserPlus className="mr-1.5 h-4 w-4" /> Nuevo empleado</Button>
+      <PageHeader
+        title="Personal"
+        description={`${staffCount} empleados (excluyendo administradores)`}
+      >
+        <Button onClick={handleAdd} className="bg-gradient-primary text-white">
+          <UserPlus className="mr-1.5 h-4 w-4" /> Nuevo empleado
+        </Button>
       </PageHeader>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {emps.map((e) => {
           const stats = ordenes.filter((o) => o.empleado_id === e.id && o.estado !== "ANULADA");
           const total = stats.reduce((s, o) => s + o.total, 0);
           return (
-            <Card key={e.id} className="cursor-pointer p-5 hover:shadow-elegant" onClick={() => setEdit(e)}>
+            <Card
+              key={e.id}
+              className="cursor-pointer p-5 hover:shadow-elegant"
+              onClick={() => setEdit(e)}
+            >
               <div className="flex items-start justify-between gap-3">
                 <div className="flex items-center gap-3">
                   <UserAvatar
@@ -128,17 +176,40 @@ function PersonalPage() {
                     <div className="text-xs text-muted-foreground mt-0.5">{e.email}</div>
                   </div>
                 </div>
-                <Badge className={`border-none text-[10px] ${getRoleBadgeClass(e.rol)}`}>{e.rol}</Badge>
+                <Badge className={`border-none text-[10px] ${getRoleBadgeClass(e.rol)}`}>
+                  {e.rol}
+                </Badge>
               </div>
               <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs">
-                <div><div className="text-muted-foreground">Órdenes</div><div className="font-display text-base">{stats.length}</div></div>
-                <div><div className="text-muted-foreground">Ventas</div><div className="font-display text-base">{formatRD(total)}</div></div>
+                <div>
+                  <div className="text-muted-foreground">Órdenes</div>
+                  <div className="font-display text-base">{stats.length}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground">Ventas</div>
+                  <div className="font-display text-base">{formatRD(total)}</div>
+                </div>
               </div>
             </Card>
           );
         })}
       </div>
-      <EmpleadoDialog open={showNew || !!edit} onOpenChange={(o) => { if (!o) { setShowNew(false); setEdit(null); } }} empleado={edit} tenantId={user.tenant.id} onDone={() => { setRefresh((r) => r + 1); setShowNew(false); setEdit(null); }} />
+      <EmpleadoDialog
+        open={showNew || !!edit}
+        onOpenChange={(o) => {
+          if (!o) {
+            setShowNew(false);
+            setEdit(null);
+          }
+        }}
+        empleado={edit}
+        tenantId={user.tenant.id}
+        onDone={() => {
+          setRefresh((r) => r + 1);
+          setShowNew(false);
+          setEdit(null);
+        }}
+      />
 
       <PlanLimitModal
         open={showLimitModal}
@@ -151,9 +222,40 @@ function PersonalPage() {
   );
 }
 
-function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { open: boolean; onOpenChange: (o: boolean) => void; empleado: Empleado | null; tenantId: string; onDone: () => void }) {
-  const empty = { nombre: "", apellido: "", email: "", password: "", pin: "", rol: "VENDEDOR" as RolEmpleado, activo: true, permisos: getPermisosPorRol("VENDEDOR"), max_descuento_porcentaje: 10 };
-  const [f, setF] = useState(empleado ? { ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? 10 } : empty);
+function EmpleadoDialog({
+  open,
+  onOpenChange,
+  empleado,
+  tenantId,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  empleado: Empleado | null;
+  tenantId: string;
+  onDone: () => void;
+}) {
+  const empty = {
+    nombre: "",
+    apellido: "",
+    email: "",
+    password: "",
+    pin: "",
+    rol: "VENDEDOR" as RolEmpleado,
+    activo: true,
+    permisos: getPermisosPorRol("VENDEDOR"),
+    max_descuento_porcentaje: 10,
+  };
+  const [f, setF] = useState(
+    empleado
+      ? {
+          ...empty,
+          ...empleado,
+          permisos: empleado.permisos || getPermisosPorRol(empleado.rol),
+          max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? 10,
+        }
+      : empty,
+  );
   const [step, setStep] = useState<1 | 2>(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
@@ -161,21 +263,26 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
   useEffect(() => {
     setStep(1);
     if (empleado) {
-      setF({ ...empty, ...empleado, permisos: empleado.permisos || getPermisosPorRol(empleado.rol), max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? (empleado.rol === "ADMIN" ? 100 : 10), password: "" });
+      setF({
+        ...empty,
+        ...empleado,
+        permisos: empleado.permisos || getPermisosPorRol(empleado.rol),
+        max_descuento_porcentaje:
+          empleado.max_descuento_porcentaje ?? (empleado.rol === "ADMIN" ? 100 : 10),
+        password: "",
+      });
     } else {
       setF(empty);
     }
   }, [empleado, open]);
 
   const togglePermiso = (id: string) => {
-    const next = f.permisos.includes(id)
-      ? f.permisos.filter(p => p !== id)
-      : [...f.permisos, id];
+    const next = f.permisos.includes(id) ? f.permisos.filter((p) => p !== id) : [...f.permisos, id];
     setF({ ...f, permisos: next });
   };
 
   const selectAllPermisos = () => {
-    setF({ ...f, permisos: PERMISOS_SISTEMA.map(p => p.id) });
+    setF({ ...f, permisos: PERMISOS_SISTEMA.map((p) => p.id) });
   };
 
   const deselectAllPermisos = () => {
@@ -232,7 +339,7 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
         nombre: f.nombre,
         apellido: f.apellido || undefined,
         email: f.email,
-        password: f.password || (empleado ? '***' : ""),
+        password: f.password || (empleado ? "***" : ""),
         pin: f.pin || undefined,
         rol: f.rol,
         activo: f.activo,
@@ -282,7 +389,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                   {empleado ? "Editar empleado" : "Nuevo empleado"}
                 </DialogTitle>
                 <p className="text-xs text-muted-foreground">
-                  {step === 1 ? "Paso 1: Datos personales y de acceso" : "Paso 2: Permisos por módulo del sistema"}
+                  {step === 1
+                    ? "Paso 1: Datos personales y de acceso"
+                    : "Paso 2: Permisos por módulo del sistema"}
                 </p>
               </div>
             </div>
@@ -299,9 +408,13 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
-                step === 1 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-              }`}>
+              <span
+                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                  step === 1
+                    ? "bg-white/25 text-white"
+                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
                 1
               </span>
               <span>Información Básica</span>
@@ -316,9 +429,13 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
-              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
-                step === 2 ? "bg-white/25 text-white" : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-              }`}>
+              <span
+                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                  step === 2
+                    ? "bg-white/25 text-white"
+                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
                 2
               </span>
               <span>Permisos ({f.permisos.length})</span>
@@ -333,7 +450,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
             <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Nombre *</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Nombre *
+                  </Label>
                   <Input
                     value={f.nombre}
                     onChange={(e) => setF({ ...f, nombre: e.target.value })}
@@ -342,7 +461,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Apellido *</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Apellido *
+                  </Label>
                   <Input
                     value={f.apellido}
                     onChange={(e) => setF({ ...f, apellido: e.target.value })}
@@ -353,7 +474,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
               </div>
 
               <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Correo Electrónico *</Label>
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Correo Electrónico *
+                </Label>
                 <Input
                   type="email"
                   value={f.email}
@@ -381,13 +504,19 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                       onClick={() => setShowPassword(!showPassword)}
                       className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors p-0.5"
                     >
-                      {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
+                      {showPassword ? (
+                        <EyeOff className="h-3.5 w-3.5" />
+                      ) : (
+                        <Eye className="h-3.5 w-3.5" />
+                      )}
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">PIN Acceso Rápido (POS)</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    PIN Acceso Rápido (POS)
+                  </Label>
                   <Input
                     value={f.pin}
                     onChange={(e) => setF({ ...f, pin: e.target.value.slice(0, 4) })}
@@ -400,7 +529,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
 
               <div className="grid gap-3 sm:grid-cols-2 items-center">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Rol en el negocio</Label>
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Rol en el negocio
+                  </Label>
                   <Select
                     value={f.rol}
                     onValueChange={(v) => {
@@ -412,7 +543,16 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
-                      {(["ADMIN", "SUPERVISOR", "VENDEDOR", "RECEPCIONISTA", "REPARTIDOR"] as RolEmpleado[]).map((r) => (
+                      {(
+                        [
+                          "ADMIN",
+                          "SUPERVISOR",
+                          "VENDEDOR",
+                          "RECEPCIONISTA",
+                          "REPARTIDOR",
+                          "OPERARIO",
+                        ] as RolEmpleado[]
+                      ).map((r) => (
                         <SelectItem key={r} value={r} className="rounded-lg text-xs">
                           {r}
                         </SelectItem>
@@ -423,10 +563,23 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
 
                 <div className="flex items-center justify-between h-9 px-3 rounded-xl border border-border/60 bg-surface/50 mt-4 sm:mt-4">
                   <div className="flex items-center gap-2">
-                    <Checkbox id="activo" checked={f.activo} onCheckedChange={(v) => setF({ ...f, activo: !!v })} />
-                    <Label htmlFor="activo" className="text-xs font-bold cursor-pointer">Empleado Activo</Label>
+                    <Checkbox
+                      id="activo"
+                      checked={f.activo}
+                      onCheckedChange={(v) => setF({ ...f, activo: !!v })}
+                    />
+                    <Label htmlFor="activo" className="text-xs font-bold cursor-pointer">
+                      Empleado Activo
+                    </Label>
                   </div>
-                  <Badge variant={f.activo ? "default" : "outline"} className={f.activo ? "bg-emerald-600 text-white text-[9px] px-1.5 py-0" : "text-[9px] px-1.5 py-0"}>
+                  <Badge
+                    variant={f.activo ? "default" : "outline"}
+                    className={
+                      f.activo
+                        ? "bg-emerald-600 text-white text-[9px] px-1.5 py-0"
+                        : "text-[9px] px-1.5 py-0"
+                    }
+                  >
                     {f.activo ? "Activo" : "Inactivo"}
                   </Badge>
                 </div>
@@ -442,7 +595,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
               {/* Toolbar Actions (Primary Brand Background Card) */}
               <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
                 <div className="flex items-center gap-1.5">
-                  <Badge className={`font-semibold text-[10px] px-2.5 py-0.5 border-none ${getRoleBadgeClass(f.rol)}`}>
+                  <Badge
+                    className={`font-semibold text-[10px] px-2.5 py-0.5 border-none ${getRoleBadgeClass(f.rol)}`}
+                  >
                     Rol: {f.rol}
                   </Badge>
                   <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
@@ -488,7 +643,8 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                 <div className="p-2.5 rounded-xl bg-primary/10 border border-primary/20 flex items-center gap-2.5">
                   <ShieldCheck className="h-4 w-4 text-primary shrink-0" />
                   <p className="text-[11px] text-primary-dark font-medium leading-tight">
-                    Los usuarios con rol <strong>ADMINISTRADOR</strong> tienen acceso total a todos los módulos.
+                    Los usuarios con rol <strong>ADMINISTRADOR</strong> tienen acceso total a todos
+                    los módulos.
                   </p>
                 </div>
               )}
@@ -500,7 +656,8 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                     Descuento Máximo Permitido
                   </div>
                   <p className="text-[10px] text-amber-700/90 dark:text-amber-300/80 leading-tight">
-                    Porcentaje máximo de descuento que este usuario podrá aplicar en POS / Nueva Orden.
+                    Porcentaje máximo de descuento que este usuario podrá aplicar en POS / Nueva
+                    Orden.
                   </p>
                 </div>
                 <div className="relative w-24 shrink-0">
@@ -516,7 +673,9 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                     }}
                     className="h-8 text-center font-black text-xs rounded-xl bg-white dark:bg-slate-900 border-amber-300/80 dark:border-amber-700/80 pr-6"
                   />
-                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-600 dark:text-amber-400 pointer-events-none">%</span>
+                  <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-600 dark:text-amber-400 pointer-events-none">
+                    %
+                  </span>
                 </div>
               </div>
 
@@ -543,10 +702,15 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                           className="mt-0.5 rounded-md h-3.5 w-3.5"
                         />
                         <div className="grid gap-0.5">
-                          <Label htmlFor={p.id} className="text-xs font-bold leading-tight cursor-pointer">
+                          <Label
+                            htmlFor={p.id}
+                            className="text-xs font-bold leading-tight cursor-pointer"
+                          >
                             {p.nombre}
                           </Label>
-                          <p className="text-[10px] text-muted-foreground leading-tight">{p.descripcion}</p>
+                          <p className="text-[10px] text-muted-foreground leading-tight">
+                            {p.descripcion}
+                          </p>
                         </div>
                       </div>
                     );
@@ -562,20 +726,33 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
               {empleado && step === 1 ? (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
-                    <Button variant="destructive" size="sm" className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-3 text-xs h-8.5 gap-1 transition-all active:scale-95 border-none shadow-sm">
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-3 text-xs h-8.5 gap-1 transition-all active:scale-95 border-none shadow-sm"
+                    >
                       <Trash2 className="h-3.5 w-3.5 text-white" /> Eliminar
                     </Button>
                   </AlertDialogTrigger>
                   <AlertDialogContent className="rounded-3xl border-none shadow-2xl">
                     <AlertDialogHeader>
-                      <AlertDialogTitle className="text-lg">¿Eliminar a {empleado.nombre}?</AlertDialogTitle>
+                      <AlertDialogTitle className="text-lg">
+                        ¿Eliminar a {empleado.nombre}?
+                      </AlertDialogTitle>
                       <AlertDialogDescription className="text-xs">
                         Esta acción es irreversible. Se eliminará el acceso del empleado.
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="gap-2">
-                      <AlertDialogCancel className="rounded-xl h-9 text-xs">Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={remove} className="bg-destructive text-white rounded-xl h-9 text-xs hover:bg-destructive/90">Confirmar eliminación</AlertDialogAction>
+                      <AlertDialogCancel className="rounded-xl h-9 text-xs">
+                        Cancelar
+                      </AlertDialogCancel>
+                      <AlertDialogAction
+                        onClick={remove}
+                        className="bg-destructive text-white rounded-xl h-9 text-xs hover:bg-destructive/90"
+                      >
+                        Confirmar eliminación
+                      </AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -616,7 +793,13 @@ function EmpleadoDialog({ open, onOpenChange, empleado, tenantId, onDone }: { op
                   disabled={loading}
                   className="bg-gradient-primary text-white rounded-xl h-8.5 px-5 text-xs font-bold shadow-glow hover:opacity-95 disabled:opacity-50 transition-all active:scale-95 gap-1"
                 >
-                  {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <>Guardar Empleado <CheckCircle2 className="h-3.5 w-3.5" /></>}
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <>
+                      Guardar Empleado <CheckCircle2 className="h-3.5 w-3.5" />
+                    </>
+                  )}
                 </Button>
               )}
             </div>
@@ -649,14 +832,17 @@ function PasswordStrengthIndicator({ password }: { password: string }) {
         {[1, 2, 3, 4].map((i) => (
           <div
             key={i}
-            className={`h-1 flex-1 rounded-full transition-all duration-500 ${i <= strength ? colors[strength] : "bg-slate-100"
-              }`}
+            className={`h-1 flex-1 rounded-full transition-all duration-500 ${
+              i <= strength ? colors[strength] : "bg-slate-100"
+            }`}
           />
         ))}
       </div>
       {password && (
         <div className="flex items-center justify-between">
-          <p className={`text-[10px] font-bold uppercase tracking-wider ${strength <= 2 ? "text-orange-500" : "text-success"}`}>
+          <p
+            className={`text-[10px] font-bold uppercase tracking-wider ${strength <= 2 ? "text-orange-500" : "text-success"}`}
+          >
             Seguridad: {labels[strength]}
           </p>
         </div>

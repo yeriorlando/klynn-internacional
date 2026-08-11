@@ -131,7 +131,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
     permission: "nueva-orden",
   },
   { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes" },
-  { to: `/t/${slug}/procesos`, label: "Procesos", icon: Wrench, permission: "ordenes" },
+  { to: `/t/${slug}/procesos`, label: "Operaciones", icon: Wrench, permission: "procesos" },
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
@@ -1346,9 +1346,9 @@ function SidebarContent({
           },
           {
             to: `/t/${slug}/procesos`,
-            label: "Procesos",
+            label: "Operaciones",
             icon: Wrench,
-            permission: "ordenes",
+            permission: "procesos",
             shortcut: "P",
           },
           { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
@@ -1660,6 +1660,7 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
         VENDEDOR: "Vendedor",
         RECEPCIONISTA: "Recepcionista",
         REPARTIDOR: "Repartidor",
+        OPERARIO: "Operario",
       } as Record<string, string>
     )[rol] ?? rol;
 

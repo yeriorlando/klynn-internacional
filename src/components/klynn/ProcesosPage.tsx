@@ -16,16 +16,20 @@ import {
   StickyNote,
   Receipt,
   User,
+  Shield,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import {
   getOrdenes,
   getClientes,
   updateOrdenEstado,
+  saveTenant,
+  can,
   type Orden,
   type Cliente,
   type EstadoOrden,
 } from "@/lib/storage";
+import { notificarWhatsApp } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -49,24 +53,24 @@ export interface FaseOperativa {
 const FASES_OPERATIVAS: FaseOperativa[] = [
   {
     id: "recibida",
-    titulo: "RECIBIDO",
-    subtitulo: "",
+    titulo: "RECIBIDAS",
+    subtitulo: "Órdenes ingresadas en recepción",
     icon: Layers,
-    colorHeader: "bg-slate-800 text-white border-slate-900",
-    colorBorder: "border-slate-300 dark:border-slate-800",
-    badgeBg: "bg-slate-700/90 text-white",
-    badgeText: "Recibido",
+    colorHeader: "bg-blue-600/85 text-white border-blue-700/70",
+    colorBorder: "border-blue-200 dark:border-blue-900/40",
+    badgeBg: "bg-blue-800/80 text-white",
+    badgeText: "Recibidas",
     estadoOrden: "RECIBIDA",
     etiquetaUbicacion: "Recepción",
   },
   {
     id: "proceso",
     titulo: "EN PROCESO",
-    subtitulo: "",
+    subtitulo: "Órdenes actualmente en producción",
     icon: RefreshCw,
-    colorHeader: "bg-blue-600 text-white border-blue-700",
-    colorBorder: "border-blue-300 dark:border-blue-900/60",
-    badgeBg: "bg-blue-700/90 text-white",
+    colorHeader: "bg-amber-500/85 text-white border-amber-600/70",
+    colorBorder: "border-amber-200 dark:border-amber-900/40",
+    badgeBg: "bg-amber-700/80 text-white",
     badgeText: "En Proceso",
     estadoOrden: "EN_PROCESO",
     etiquetaUbicacion: "Área de Trabajo",
@@ -74,11 +78,11 @@ const FASES_OPERATIVAS: FaseOperativa[] = [
   {
     id: "lista",
     titulo: "TERMINADO",
-    subtitulo: "",
+    subtitulo: "Listas para entrega al cliente",
     icon: CheckCircle2,
-    colorHeader: "bg-emerald-600 text-white border-emerald-700",
-    colorBorder: "border-emerald-300 dark:border-emerald-900/60",
-    badgeBg: "bg-emerald-700/90 text-white",
+    colorHeader: "bg-emerald-600/85 text-white border-emerald-700/70",
+    colorBorder: "border-emerald-200 dark:border-emerald-900/40",
+    badgeBg: "bg-emerald-800/80 text-white",
     badgeText: "Terminado",
     estadoOrden: "LISTA",
     etiquetaUbicacion: "Mostrador",
@@ -187,11 +191,18 @@ export function ProcesosPage() {
     return ordenes.filter((o) => {
       if (soloUrgentes && !o.es_urgente) return false;
 
-      if (searchQuery.trim()) {
+      // La búsqueda por texto filtra ÚNICAMENTE las órdenes en la columna RECIBIDO
+      if (searchQuery.trim() && getFaseOrden(o) === "recibida") {
         const q = searchQuery.toLowerCase().trim();
         const cli = clienteMap.get(o.cliente_id);
         const matchNum = o.numero.toLowerCase().includes(q);
-        const matchCliente = cli?.nombre.toLowerCase().includes(q) || cli?.telefono.includes(q);
+        const nomCompleto = cli
+          ? [cli.nombre, cli.apellido]
+              .filter((x) => x && x !== "null")
+              .join(" ")
+              .toLowerCase()
+          : "consumidor final";
+        const matchCliente = nomCompleto.includes(q) || (cli?.telefono && cli.telefono.includes(q));
         const matchNotas = o.notas?.toLowerCase().includes(q);
         if (!matchNum && !matchCliente && !matchNotas) return false;
       }
@@ -208,6 +219,102 @@ export function ProcesosPage() {
       return true;
     });
   }, [ordenes, searchQuery, servicioFilter, soloUrgentes, clienteMap]);
+
+  const [localAutoSend, setLocalAutoSend] = useState<boolean | null>(null);
+
+  const autoSendWhatsApp =
+    localAutoSend !== null ? localAutoSend : (user?.tenant?.config?.whatsapp_auto_procesos ?? true);
+
+  const toggleAutoSendWhatsApp = async () => {
+    if (!user?.tenant) return;
+    const newValue = !autoSendWhatsApp;
+    setLocalAutoSend(newValue);
+    try {
+      const updatedTenant = {
+        ...user.tenant,
+        config: {
+          ...(user.tenant.config || {}),
+          whatsapp_auto_procesos: newValue,
+        },
+      };
+      await saveTenant(updatedTenant);
+      toast.success(
+        newValue
+          ? "Envío automático por WhatsApp ACTIVADO"
+          : "Envío automático por WhatsApp DESACTIVADO",
+      );
+    } catch (err) {
+      console.error("Error al guardar preferencia de WhatsApp en Supabase:", err);
+      setLocalAutoSend(!newValue);
+      toast.error("No se pudo guardar la preferencia en Supabase");
+    }
+  };
+
+  const showManualWhatsAppToast = (cli: Cliente, numLimpio: string) => {
+    toast.custom(
+      (t) => (
+        <motion.div
+          initial={{ opacity: 0, y: 12, scale: 0.96 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          exit={{ opacity: 0, y: -8, scale: 0.96 }}
+          transition={{ duration: 0.2, ease: "easeOut" }}
+          className="flex items-center gap-3 rounded-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white py-2 px-3.5 shadow-xl border border-slate-200/90 dark:border-slate-800 shrink-0 whitespace-nowrap"
+        >
+          {/* Icono de WhatsApp en verde */}
+          <div className="h-7 w-7 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+            <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 fill-emerald-600/20" />
+          </div>
+
+          {/* Contenido en una sola línea */}
+          <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
+            <span className="text-slate-900 dark:text-white">¡Orden {numLimpio} lista!</span>
+            <span className="text-slate-400 font-normal">•</span>
+            <span className="text-slate-600 dark:text-slate-300 font-medium">
+              Notificar a{" "}
+              <strong className="font-bold text-slate-900 dark:text-white">
+                {[cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") ||
+                  "Consumidor Final"}
+              </strong>
+            </span>
+          </div>
+
+          {/* Botones de acción */}
+          <div className="flex items-center gap-1 shrink-0 ml-1">
+            <Button
+              size="sm"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full px-3 h-7 text-xs shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1 border-none"
+              onClick={() => {
+                toast.dismiss(t);
+                const msg = encodeURIComponent(
+                  `Hola ${cli.nombre} 👋, tu orden ${numLimpio} en ${user?.tenant?.nombre || "la lavandería"} ya está LISTA para retirar. ¡Te esperamos!`,
+                );
+                window.open(
+                  `https://wa.me/${cli.telefono.replace(/\D/g, "")}?text=${msg}`,
+                  "_blank",
+                );
+              }}
+            >
+              <MessageCircle className="h-3 w-3 fill-white text-white" />
+              <span>Enviar WA</span>
+            </Button>
+
+            <button
+              type="button"
+              onClick={() => toast.dismiss(t)}
+              className="h-6 w-6 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ml-0.5"
+              title="Cerrar aviso"
+            >
+              ✕
+            </button>
+          </div>
+        </motion.div>
+      ),
+      {
+        duration: 9000,
+        unstyled: true,
+      },
+    );
+  };
 
   // Avanzar una orden a la siguiente fase operativa en 3 columnas
   const handleAvanzarFase = async (orden: Orden, faseActualId: string) => {
@@ -245,40 +352,25 @@ export function ProcesosPage() {
       if (nuevoEstado === "LISTA") {
         const cli = clienteMap.get(orden.cliente_id);
         if (cli?.telefono) {
-          toast.custom(
-            (t) => (
-              <div className="flex items-center gap-4 rounded-2xl bg-emerald-950 text-white p-4 shadow-2xl border border-emerald-700/80 min-w-[360px] sm:min-w-[440px]">
-                <div className="h-10 w-10 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/30">
-                  <MessageCircle className="h-5 w-5 text-emerald-400" />
-                </div>
-                <div className="flex-1 text-xs space-y-0.5">
-                  <p className="font-extrabold text-sm text-emerald-300">
-                    ¡Orden {numLimpio} Lista!
-                  </p>
-                  <p className="opacity-90 font-medium">
-                    Enviar mensaje por WhatsApp a {cli.nombre}
-                  </p>
-                </div>
-                <Button
-                  size="sm"
-                  className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold rounded-xl px-4 py-2 text-xs shrink-0 shadow-md active:scale-95"
-                  onClick={() => {
-                    toast.dismiss(t);
-                    const msg = encodeURIComponent(
-                      `Hola ${cli.nombre} 👋, tu orden ${numLimpio} en ${user?.tenant?.nombre || "la lavandería"} ya está LISTA para retirar. ¡Te esperamos!`,
-                    );
-                    window.open(
-                      `https://wa.me/${cli.telefono.replace(/\D/g, "")}?text=${msg}`,
-                      "_blank",
-                    );
-                  }}
-                >
-                  Enviar WA
-                </Button>
-              </div>
-            ),
-            { duration: 7000 },
-          );
+          if (autoSendWhatsApp && user?.tenant) {
+            toast.loading("Enviando WhatsApp a " + cli.nombre + "...", { id: `wa-${orden.id}` });
+            const res = await notificarWhatsApp(user.tenant, cli, orden, "lista");
+            toast.dismiss(`wa-${orden.id}`);
+
+            if (res.ok) {
+              toast.success(`Notificación enviada a ${cli.nombre}`, {
+                description: `Orden ${numLimpio} notificada con éxito.`,
+                duration: 4000,
+              });
+            } else {
+              toast.error(`WhatsApp no enviado: ${res.reason || "Error de API"}`, {
+                description: "Puedes enviarlo manualmente a continuación.",
+              });
+              showManualWhatsAppToast(cli, numLimpio);
+            }
+          } else {
+            showManualWhatsAppToast(cli, numLimpio);
+          }
         }
       }
     } catch (err) {
@@ -298,6 +390,18 @@ export function ProcesosPage() {
     return { total, urgentes, enProceso, listas };
   }, [ordenes]);
 
+  if (!loading && user?.empleado && !can(user.empleado, "procesos")) {
+    return (
+      <div className="p-12 text-center">
+        <Shield className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
+        <h3 className="font-display text-2xl font-bold">Acceso restringido</h3>
+        <p className="text-sm text-muted-foreground">
+          No tienes permisos para ver el tablero de Operaciones.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div
       className={
@@ -311,7 +415,7 @@ export function ProcesosPage() {
         <div className="flex flex-col items-center gap-1.5">
           <div className="flex items-center gap-2 justify-center">
             <h1 className="font-display text-2xl md:text-3xl font-black text-slate-900 dark:text-white tracking-tight">
-              Tablero de Procesos Operativos
+              Tablero de Operaciones
             </h1>
             {isFullscreen && (
               <Badge className="bg-primary/10 text-primary border-primary/20 text-[10px] font-bold">
@@ -394,23 +498,27 @@ export function ProcesosPage() {
         </div>
       </div>
 
-      {/* BARRA DE FILTROS CENTRADA: BUSCADOR, DESPLEGABLE DE SERVICIOS & URGENTES */}
-      <div className="flex flex-wrap items-center justify-center gap-3 bg-white dark:bg-slate-900 p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs shrink-0 max-w-3xl mx-auto w-full">
+      {/* BARRA DE FILTROS CENTRADA: BUSCADOR, DESPLEGABLE DE SERVICIOS, URGENTES & TOGGLE WHATSAPP */}
+      <div className="flex flex-wrap md:flex-nowrap items-center justify-center gap-2.5 bg-white dark:bg-slate-900 p-2.5 sm:p-3 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs shrink-0 max-w-6xl mx-auto w-full">
         {/* BUSCADOR SIMPLE DE ÓRDENES */}
-        <div className="relative w-full sm:w-72 shrink-0">
-          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 shrink-0" />
+        <div
+          className={`relative flex-1 min-w-[200px] shrink-0 transition-all ${
+            isFullscreen ? "max-w-md xl:max-w-xl" : "max-w-[280px] lg:max-w-xs"
+          }`}
+        >
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 shrink-0" />
           <Input
             type="text"
-            placeholder="Buscar por #orden o cliente..."
+            placeholder="Buscar en Recibido (#orden o cliente)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 pr-8 h-10 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 text-xs font-medium focus:bg-white"
+            className="pl-9 pr-7 h-9 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 text-xs font-medium focus:bg-white"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
             >
               ✕
             </button>
@@ -418,15 +526,15 @@ export function ProcesosPage() {
         </div>
 
         {/* FILTRO DESPLEGABLE (SELECT) DE SERVICIOS REALES */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider shrink-0 flex items-center gap-1">
-            <Filter className="h-3.5 w-3.5" /> Servicio:
+            <Filter className="h-3.5 w-3.5" /> <span className="hidden lg:inline">Servicio:</span>
           </span>
 
           <select
             value={servicioFilter}
             onChange={(e) => setServicioFilter(e.target.value)}
-            className="h-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3.5 text-xs font-bold text-slate-800 dark:text-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs transition-all cursor-pointer min-w-[210px]"
+            className="h-9 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3 text-xs font-bold text-slate-800 dark:text-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs transition-all cursor-pointer min-w-[160px] max-w-[210px]"
           >
             <option value="todos">Todos los Servicios ({ordenes.length})</option>
             {serviciosPresentes.map((srv) => {
@@ -448,8 +556,9 @@ export function ProcesosPage() {
 
         {/* TOGGLE URGENTES */}
         <button
+          type="button"
           onClick={() => setSoloUrgentes((prev) => !prev)}
-          className={`rounded-xl px-4 h-10 text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border shrink-0 ${
+          className={`rounded-xl px-3.5 h-9 text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border shrink-0 ${
             soloUrgentes
               ? "bg-rose-500 text-white border-rose-600 shadow-xs font-bold"
               : "border-slate-200 bg-white text-slate-700 hover:bg-rose-50 hover:text-rose-600 dark:border-slate-800 dark:bg-slate-900"
@@ -457,6 +566,32 @@ export function ProcesosPage() {
         >
           <Flame className="h-3.5 w-3.5" />
           Urgentes ({stats.urgentes})
+        </button>
+
+        {/* TOGGLE AUTO-ENVÍO WHATSAPP */}
+        <button
+          type="button"
+          onClick={toggleAutoSendWhatsApp}
+          title={
+            autoSendWhatsApp
+              ? "Auto-envío activo. Al pasar a Terminada se notifica por WhatsApp vía API."
+              : "Auto-envío inactivo. Haz clic para activar el envío automático por WhatsApp."
+          }
+          className={`rounded-xl px-3.5 h-9 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 border shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
+            autoSendWhatsApp
+              ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
+              : "border-slate-200 dark:border-slate-800 bg-slate-50 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-slate-900"
+          }`}
+        >
+          <MessageCircle
+            className={`h-3.5 w-3.5 ${autoSendWhatsApp ? "fill-white text-white" : ""}`}
+          />
+          <span>{autoSendWhatsApp ? "WhatsApp Auto ON" : "WhatsApp Auto OFF"}</span>
+          <span
+            className={`h-2 w-2 rounded-full ${
+              autoSendWhatsApp ? "bg-white animate-pulse" : "bg-slate-400"
+            }`}
+          />
         </button>
       </div>
 
@@ -473,13 +608,20 @@ export function ProcesosPage() {
             >
               {/* ENCABEZADO DE COLUMNA DE COLOR SÓLIDO CENTRADO */}
               <div
-                className={`p-3.5 border-b flex items-center justify-between shadow-xs ${fase.colorHeader}`}
+                className={`p-3 px-3.5 border-b flex items-center justify-between shadow-xs ${fase.colorHeader}`}
               >
-                <div className="flex items-center gap-2 flex-1 justify-center text-center">
+                <div className="flex items-center gap-2.5 min-w-0">
                   <Icon className="h-5 w-5 shrink-0 text-white" />
-                  <h3 className="font-black tracking-wider uppercase text-white text-sm md:text-base leading-tight text-center">
-                    {fase.titulo}
-                  </h3>
+                  <div className="min-w-0">
+                    <h3 className="font-black tracking-wider uppercase text-white text-xs sm:text-sm leading-tight truncate">
+                      {fase.titulo}
+                    </h3>
+                    {fase.subtitulo && (
+                      <p className="text-[10px] text-white/80 font-medium truncate mt-0.5">
+                        {fase.subtitulo}
+                      </p>
+                    )}
+                  </div>
                 </div>
                 <Badge
                   className={`rounded-full px-2.5 py-0.5 text-[10px] font-black shadow-xs shrink-0 ${fase.badgeBg}`}
@@ -499,6 +641,11 @@ export function ProcesosPage() {
                   ) : (
                     ordenesEnFase.map((orden) => {
                       const cliente = clienteMap.get(orden.cliente_id);
+                      const clienteNombreCompleto = cliente
+                        ? [cliente.nombre, cliente.apellido]
+                            .filter((x) => x && x !== "null")
+                            .join(" ")
+                        : "Consumidor Final";
                       const isProcessing = processingId === orden.id;
                       const tieneNota = !!orden.notas || orden.items?.some((it) => !!it.notas);
 
@@ -531,7 +678,7 @@ export function ProcesosPage() {
 
                           {/* CABECERA TARJETA CON ETIQUETAS E ICONOS EN COLOR PRIMARIO */}
                           <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="space-y-1">
+                            <div className="space-y-1 min-w-0 flex-1">
                               <div className="flex items-center gap-1.5 text-[11px] font-extrabold text-primary">
                                 <Receipt className="h-3.5 w-3.5 text-primary shrink-0" />
                                 <span>Orden:</span>
@@ -539,13 +686,16 @@ export function ProcesosPage() {
                                   {orden.numero.replace(/^#/, "")}
                                 </span>
                               </div>
-                              <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 dark:text-white truncate max-w-[160px]">
+                              <div className="flex items-center gap-1.5 text-xs font-extrabold text-slate-900 dark:text-white min-w-0 flex-1">
                                 <User className="h-3.5 w-3.5 text-primary shrink-0" />
-                                <span className="text-[11px] font-extrabold text-primary">
+                                <span className="text-[11px] font-extrabold text-primary shrink-0">
                                   Cliente:
                                 </span>
-                                <span className="truncate font-extrabold text-slate-900 dark:text-white">
-                                  {cliente?.nombre || "Cliente General"}
+                                <span
+                                  className="truncate font-extrabold text-slate-900 dark:text-white min-w-0"
+                                  title={clienteNombreCompleto}
+                                >
+                                  {clienteNombreCompleto}
                                 </span>
                               </div>
                             </div>
@@ -605,9 +755,15 @@ export function ProcesosPage() {
                                 size="sm"
                                 disabled={isProcessing}
                                 onClick={() => handleAvanzarFase(orden, fase.id)}
-                                className="h-7 px-2.5 bg-slate-900 hover:bg-primary text-white text-[10px] font-bold rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95 shrink-0"
+                                className={`h-7 px-2.5 text-[10px] font-bold rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95 shrink-0 ${
+                                  fase.id === "recibida"
+                                    ? "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    : "bg-rose-600 hover:bg-rose-700 text-white"
+                                }`}
                               >
-                                <span>Avanzar</span>
+                                <span>
+                                  {fase.id === "recibida" ? "Iniciar trabajo" : "Terminar trabajo"}
+                                </span>
                                 <ArrowRight className="h-3 w-3" />
                               </Button>
                             ) : (

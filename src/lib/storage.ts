@@ -1,7 +1,7 @@
-import { supabase } from './supabase';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from "./supabase";
+import { createClient } from "@supabase/supabase-js";
 
-export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === 'local';
+export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
 
 export type PlanId = "basico" | "pro" | "enterprise";
 
@@ -41,7 +41,13 @@ export interface GlobalConfig {
   bankDetails?: BankDetails;
 }
 
-export type RolEmpleado = "ADMIN" | "SUPERVISOR" | "VENDEDOR" | "RECEPCIONISTA" | "REPARTIDOR";
+export type RolEmpleado =
+  | "ADMIN"
+  | "SUPERVISOR"
+  | "VENDEDOR"
+  | "RECEPCIONISTA"
+  | "REPARTIDOR"
+  | "OPERARIO";
 
 export interface Empleado {
   id: string;
@@ -109,7 +115,7 @@ export interface TenantConfig {
   usar_color_secundario?: boolean;
   bancarios?: string;
   tiempo_entrega_estandar: number; // en horas
-  tiempo_entrega_urgente: number;  // en horas
+  tiempo_entrega_urgente: number; // en horas
   whatsapp?: WhatsAppConfig;
 
   // Alertas de Secuencias NCF/e-CF
@@ -170,8 +176,21 @@ export interface Cliente {
   creado_en: string;
 }
 
-export type EstadoOrden = "RECIBIDA" | "EN_PROCESO" | "LISTA" | "EN_CAMINO" | "ENTREGADA" | "PAGADA" | "ANULADA";
-export type MetodoPago = "EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "CREDITO" | "MIXTO" | "PAGO_AL_RETIRAR";
+export type EstadoOrden =
+  | "RECIBIDA"
+  | "EN_PROCESO"
+  | "LISTA"
+  | "EN_CAMINO"
+  | "ENTREGADA"
+  | "PAGADA"
+  | "ANULADA";
+export type MetodoPago =
+  | "EFECTIVO"
+  | "TARJETA"
+  | "TRANSFERENCIA"
+  | "CREDITO"
+  | "MIXTO"
+  | "PAGO_AL_RETIRAR";
 
 export interface OrdenItem {
   descripcion: string;
@@ -207,14 +226,14 @@ export interface Orden {
   creado_en: string;
   ncf?: string;
   tipo_ecf?: string; // Nuevo: E31, E32, etc.
-  ecf_id?: string;   // Nuevo: ID del documento en ecf_documents
+  ecf_id?: string; // Nuevo: ID del documento en ecf_documents
   motivo_anulacion?: string;
   motivo_anulacion_codigo?: string; // Código DGII: 01, 02, 03, 04, 05
   nota_credito_ncf?: string; // NCF de la nota de crédito (E34)
-  nota_credito_id?: string;  // ID del documento ECF E34
+  nota_credito_id?: string; // ID del documento ECF E34
   nota_credito_monto?: number; // Monto descontado/devuelto
-  nota_debito_ncf?: string;  // NCF de la nota de débito (E33)
-  nota_debito_id?: string;   // ID del documento ECF E33
+  nota_debito_ncf?: string; // NCF de la nota de débito (E33)
+  nota_debito_id?: string; // ID del documento ECF E33
   nota_debito_monto?: number; // Monto adicionado
   entrega_domicilio?: boolean;
   costo_envio?: number;
@@ -243,7 +262,7 @@ export interface ECFConfig {
   api_auth_token?: string;
   api_token_expires_at?: string;
   // Pronesoft multi-empresa
-  pronesoft_tenant_id?: string;  // x-tenant-id (UUID asignado por Pronesoft a este negocio)
+  pronesoft_tenant_id?: string; // x-tenant-id (UUID asignado por Pronesoft a este negocio)
   usar_credenciales_propias?: boolean;
   pronesoft_client_id?: string;
   pronesoft_client_secret?: string;
@@ -261,7 +280,7 @@ export interface ECFDocumentRecibido {
   fecha_emision: string;
   monto_total: number;
   monto_itbis: number;
-  estado_comercial: 'PENDIENTE' | 'APROBADO' | 'RECHAZADO';
+  estado_comercial: "PENDIENTE" | "APROBADO" | "RECHAZADO";
   pdf_url?: string;
   creado_en: string;
 }
@@ -300,7 +319,13 @@ export interface ECFDocument {
 }
 
 export type EstadoCaja = "ABIERTA" | "CERRADA";
-export type TipoMovimiento = "VENTA" | "ABONO" | "INGRESO" | "EGRESO" | "RETIRO" | "GASTO_CAJA_CHICA";
+export type TipoMovimiento =
+  | "VENTA"
+  | "ABONO"
+  | "INGRESO"
+  | "EGRESO"
+  | "RETIRO"
+  | "GASTO_CAJA_CHICA";
 
 export interface Caja {
   id: string;
@@ -396,7 +421,7 @@ const KEY = {
   globalConfig: "lvx:globalConfig",
 };
 
-export const ADMIN_EMAILS = ['admin@klynn.com.do'];
+export const ADMIN_EMAILS = ["admin@klynn.com.do"];
 
 export interface Plan {
   id: PlanId;
@@ -463,22 +488,22 @@ export const PLANS: Plan[] = [
 
 export function getTenantPlan(tenant: Tenant | null): Plan {
   if (!tenant) return PLANS[0];
-  return PLANS.find(p => p.id === tenant.plan_id) || PLANS[0];
+  return PLANS.find((p) => p.id === tenant.plan_id) || PLANS[0];
 }
 
 export function isModuleEnabled(
   tenant: Tenant | null,
   moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica",
-  plan?: Plan
+  plan?: Plan,
 ): boolean {
   if (!tenant) return false;
-  
+
   // 1. Check if there is an override in tenant.config.modulos_override
   const override = tenant.config?.modulos_override?.[moduleKey];
   if (override !== undefined) {
     return override;
   }
-  
+
   // 2. Fallback to plan
   const activePlan = plan || getTenantPlan(tenant);
   return !!activePlan?.modulos?.[moduleKey];
@@ -555,8 +580,10 @@ export const DEFAULT_CONFIG: TenantConfig = {
 
 {ticket_pie}
 {ticket_nota}`,
-    plantilla_lista: "Hola 👋, {cliente} ✨, tu orden {numero} de {detalle} en {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
-    plantilla_entregada: "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
+    plantilla_lista:
+      "Hola 👋, {cliente} ✨, tu orden {numero} de {detalle} en {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
+    plantilla_entregada:
+      "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
@@ -591,27 +618,71 @@ export const TIPOS_SERVICIO = [
 ];
 
 export const PROVINCIAS_RD = [
-  "Azua", "Baoruco", "Barahona", "Dajabón", "Distrito Nacional", "Duarte", "Elías Piña",
-  "El Seibo", "Espaillat", "Hato Mayor", "Hermanas Mirabal", "Independencia", "La Altagracia",
-  "La Romana", "La Vega", "María Trinidad Sánchez", "Monseñor Nouel", "Monte Cristi",
-  "Monte Plata", "Pedernales", "Peravia", "Puerto Plata", "Samaná", "San Cristóbal",
-  "San José de Ocoa", "San Juan", "San Pedro de Macorís", "Sánchez Ramírez", "Santiago",
-  "Santiago Rodríguez", "Santo Domingo", "Valverde",
+  "Azua",
+  "Baoruco",
+  "Barahona",
+  "Dajabón",
+  "Distrito Nacional",
+  "Duarte",
+  "Elías Piña",
+  "El Seibo",
+  "Espaillat",
+  "Hato Mayor",
+  "Hermanas Mirabal",
+  "Independencia",
+  "La Altagracia",
+  "La Romana",
+  "La Vega",
+  "María Trinidad Sánchez",
+  "Monseñor Nouel",
+  "Monte Cristi",
+  "Monte Plata",
+  "Pedernales",
+  "Peravia",
+  "Puerto Plata",
+  "Samaná",
+  "San Cristóbal",
+  "San José de Ocoa",
+  "San Juan",
+  "San Pedro de Macorís",
+  "Sánchez Ramírez",
+  "Santiago",
+  "Santiago Rodríguez",
+  "Santo Domingo",
+  "Valverde",
 ];
 
 // Mapa de nombres completos para tipos de comprobantes fiscales
 export const NCF_NOMBRES: Record<string, string> = {
-  B01: "CRÉDITO FISCAL", B02: "CONSUMIDOR FINAL", B03: "NOTA DE DÉBITO", B04: "NOTA DE CRÉDITO",
-  B11: "COMPRAS", B13: "GASTOS MENORES", B14: "RÉGIMEN ESPECIAL", B15: "GUBERNAMENTAL", B16: "EXPORTACIONES",
-  E31: "CRÉDITO FISCAL", E32: "CONSUMIDOR FINAL", E33: "NOTA DE DÉBITO", E34: "NOTA DE CRÉDITO",
-  E41: "COMPRAS", E43: "GASTOS MENORES", E44: "REGÍMENES ESPECIALES", E45: "GUBERNAMENTAL", E46: "EXPORTACIONES", E47: "PAGOS AL EXTERIOR",
+  B01: "CRÉDITO FISCAL",
+  B02: "CONSUMIDOR FINAL",
+  B03: "NOTA DE DÉBITO",
+  B04: "NOTA DE CRÉDITO",
+  B11: "COMPRAS",
+  B13: "GASTOS MENORES",
+  B14: "RÉGIMEN ESPECIAL",
+  B15: "GUBERNAMENTAL",
+  B16: "EXPORTACIONES",
+  E31: "CRÉDITO FISCAL",
+  E32: "CONSUMIDOR FINAL",
+  E33: "NOTA DE DÉBITO",
+  E34: "NOTA DE CRÉDITO",
+  E41: "COMPRAS",
+  E43: "GASTOS MENORES",
+  E44: "REGÍMENES ESPECIALES",
+  E45: "GUBERNAMENTAL",
+  E46: "EXPORTACIONES",
+  E47: "PAGOS AL EXTERIOR",
 };
-
 
 export const NCF_TIPOS: { codigo: string; nombre: string; descripcion: string }[] = [
   { codigo: "B01", nombre: "Crédito Fiscal", descripcion: "Para empresas con RNC" },
   { codigo: "B02", nombre: "Consumidor Final", descripcion: "Venta a consumidor final" },
-  { codigo: "B14", nombre: "Régimen Especial", descripcion: "Sectores especiales (zonas francas, etc.)" },
+  {
+    codigo: "B14",
+    nombre: "Régimen Especial",
+    descripcion: "Sectores especiales (zonas francas, etc.)",
+  },
   { codigo: "B15", nombre: "Gubernamental", descripcion: "Ventas a entidades gubernamentales" },
   { codigo: "B16", nombre: "Exportaciones", descripcion: "Para exportaciones de bienes/servicios" },
 ];
@@ -620,6 +691,11 @@ export const PERMISOS_SISTEMA = [
   { id: "dashboard", nombre: "Dashboard", descripcion: "Vista general y métricas rápidas" },
   { id: "nueva-orden", nombre: "Nueva Orden", descripcion: "Crear y recibir pedidos" },
   { id: "ordenes", nombre: "Órdenes", descripcion: "Ver historial y estados de órdenes" },
+  {
+    id: "procesos",
+    nombre: "Operaciones",
+    descripcion: "Control de producción y etapas de lavado",
+  },
   { id: "caja", nombre: "Caja", descripcion: "Apertura, cierre y movimientos" },
   { id: "clientes", nombre: "Clientes", descripcion: "Gestión de base de datos de clientes" },
   { id: "catalogo", nombre: "Catálogo", descripcion: "Prendas, precios y servicios" },
@@ -628,10 +704,22 @@ export const PERMISOS_SISTEMA = [
   { id: "gastos", nombre: "Gastos", descripcion: "Registro de egresos y compras" },
   { id: "reportes", nombre: "Reportes", descripcion: "Estadísticas y análisis financiero" },
   { id: "configuracion", nombre: "Configuración", descripcion: "Ajustes de la lavandería" },
-  { id: "nota-credito", nombre: "Nota de Crédito", descripcion: "Emitir notas de crédito electrónicas" },
-  { id: "nota-debito", nombre: "Nota de Débito", descripcion: "Emitir notas de débito electrónicas" },
+  {
+    id: "nota-credito",
+    nombre: "Nota de Crédito",
+    descripcion: "Emitir notas de crédito electrónicas",
+  },
+  {
+    id: "nota-debito",
+    nombre: "Nota de Débito",
+    descripcion: "Emitir notas de débito electrónicas",
+  },
   { id: "anular-orden", nombre: "Anular Orden", descripcion: "Anular órdenes registradas" },
-  { id: "condonar-deuda", nombre: "Condonar Deuda", descripcion: "Condonar saldos pendientes de pago" },
+  {
+    id: "condonar-deuda",
+    nombre: "Condonar Deuda",
+    descripcion: "Condonar saldos pendientes de pago",
+  },
 ];
 
 export function getPermisosPorRol(rol: RolEmpleado): string[] {
@@ -639,13 +727,26 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
     case "ADMIN":
       return PERMISOS_SISTEMA.map((p) => p.id);
     case "SUPERVISOR":
-      return ["dashboard", "nueva-orden", "ordenes", "caja", "clientes", "catalogo", "logistica", "gastos", "reportes"];
+      return [
+        "dashboard",
+        "nueva-orden",
+        "ordenes",
+        "procesos",
+        "caja",
+        "clientes",
+        "catalogo",
+        "logistica",
+        "gastos",
+        "reportes",
+      ];
     case "VENDEDOR":
-      return ["dashboard", "nueva-orden", "ordenes", "caja", "clientes"];
+      return ["dashboard", "nueva-orden", "ordenes", "procesos", "caja", "clientes"];
     case "RECEPCIONISTA":
-      return ["nueva-orden", "clientes", "ordenes"];
+      return ["nueva-orden", "clientes", "ordenes", "procesos"];
     case "REPARTIDOR":
       return ["logistica"];
+    case "OPERARIO":
+      return ["procesos"];
     default:
       return [];
   }
@@ -654,16 +755,23 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
 const isBrowser = () => typeof window !== "undefined";
 function read<T>(k: string, f: T): T {
   if (!isBrowser()) return f;
-  try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as T) : f; } catch { return f; }
+  try {
+    const v = localStorage.getItem(k);
+    return v ? (JSON.parse(v) as T) : f;
+  } catch {
+    return f;
+  }
 }
-function write<T>(k: string, v: T) { if (isBrowser()) localStorage.setItem(k, JSON.stringify(v)); }
+function write<T>(k: string, v: T) {
+  if (isBrowser()) localStorage.setItem(k, JSON.stringify(v));
+}
 
 // ============ Plans ============
 export async function getPlans(): Promise<Plan[]> {
   try {
-    const { data, error } = await supabase.from('planes').select('*').order('precio_mensual');
+    const { data, error } = await supabase.from("planes").select("*").order("precio_mensual");
     if (!error && data && data.length > 0) {
-      return data.map(p => ({
+      return data.map((p) => ({
         id: p.id as PlanId,
         nombre: p.nombre,
         precio_mensual: p.precio_mensual,
@@ -674,15 +782,24 @@ export async function getPlans(): Promise<Plan[]> {
           whatsapp: !!p.whatsapp,
           facturacion_fiscal: !!p.facturacion_fiscal,
           multisucursal: !!p.multisucursal,
-          logistica: !!p.logistica
+          logistica: !!p.logistica,
         },
         limite_whatsapp_mes: p.limite_whatsapp_mes || 0,
         destacado: !!p.destacado,
         polar_product_monthly_url: p.polar_product_monthly_url,
         polar_product_yearly_url: p.polar_product_yearly_url,
-        precio_sucursal_adicional: p.precio_sucursal_adicional !== undefined ? p.precio_sucursal_adicional : (PLANS.find(sp => sp.id === p.id)?.precio_sucursal_adicional || 0),
-        polar_sucursal_url: p.polar_sucursal_url !== undefined ? p.polar_sucursal_url : (PLANS.find(sp => sp.id === p.id)?.polar_sucursal_url || ""),
-        limite_sucursales_adicionales: p.limite_sucursales_adicionales !== undefined ? p.limite_sucursales_adicionales : (PLANS.find(sp => sp.id === p.id)?.limite_sucursales_adicionales || 0),
+        precio_sucursal_adicional:
+          p.precio_sucursal_adicional !== undefined
+            ? p.precio_sucursal_adicional
+            : PLANS.find((sp) => sp.id === p.id)?.precio_sucursal_adicional || 0,
+        polar_sucursal_url:
+          p.polar_sucursal_url !== undefined
+            ? p.polar_sucursal_url
+            : PLANS.find((sp) => sp.id === p.id)?.polar_sucursal_url || "",
+        limite_sucursales_adicionales:
+          p.limite_sucursales_adicionales !== undefined
+            ? p.limite_sucursales_adicionales
+            : PLANS.find((sp) => sp.id === p.id)?.limite_sucursales_adicionales || 0,
       }));
     }
   } catch (e) {
@@ -693,40 +810,51 @@ export async function getPlans(): Promise<Plan[]> {
   if (!Array.isArray(s) || s.length === 0) return PLANS;
   return s;
 }
-export function savePlans(plans: Plan[]) { write(KEY.plans, plans); }
+export function savePlans(plans: Plan[]) {
+  write(KEY.plans, plans);
+}
 
 // ============ Licencias Desktop (Supabase) ============
 export async function getLicenciasLocales(): Promise<LicenciaLocal[]> {
-  const { data, error } = await supabase.from('licencias_locales').select('*').order('creado_en', { ascending: false });
-  if (error) { console.error("Error getLicenciasLocales:", error); return []; }
+  const { data, error } = await supabase
+    .from("licencias_locales")
+    .select("*")
+    .order("creado_en", { ascending: false });
+  if (error) {
+    console.error("Error getLicenciasLocales:", error);
+    return [];
+  }
   return data || [];
 }
 
 export async function createLicenciaLocal(lic: Partial<LicenciaLocal>) {
-  const { data, error } = await supabase.from('licencias_locales').insert(lic).select().single();
+  const { data, error } = await supabase.from("licencias_locales").insert(lic).select().single();
   if (error) throw error;
   return data;
 }
 
 export async function updateLicenciaLocal(id: string, updates: Partial<LicenciaLocal>) {
-  const { error } = await supabase.from('licencias_locales').update(updates).eq('id', id);
+  const { error } = await supabase.from("licencias_locales").update(updates).eq("id", id);
   if (error) throw error;
 }
 
 export async function deleteLicenciaLocal(id: string) {
-  const { error } = await supabase.from('licencias_locales').delete().eq('id', id);
+  const { error } = await supabase.from("licencias_locales").delete().eq("id", id);
   if (error) throw error;
 }
 
 // ============ Tenants (Supabase) ============
 export async function getTenants(): Promise<Tenant[]> {
-  const { data, error } = await supabase.from('tenants').select('*').order('nombre');
-  if (error) { console.error("Error getTenants:", error); return []; }
+  const { data, error } = await supabase.from("tenants").select("*").order("nombre");
+  if (error) {
+    console.error("Error getTenants:", error);
+    return [];
+  }
   return data || [];
 }
 
 export async function saveTenant(t: Tenant) {
-  const { error } = await supabase.from('tenants').upsert(t);
+  const { error } = await supabase.from("tenants").upsert(t);
   if (error) throw error;
 }
 
@@ -738,9 +866,9 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
     options: {
       data: {
         nombre: admin.nombre,
-        tenant_id: tenant.id
-      }
-    }
+        tenant_id: tenant.id,
+      },
+    },
   });
 
   if (authError) throw authError;
@@ -748,34 +876,38 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
 
   // Auto-confirmar el email del tenant admin en Auth
   try {
-    await supabase.rpc('admin_set_user_email', {
+    await supabase.rpc("admin_set_user_email", {
       target_user_id: authData.user.id,
-      new_email: admin.email.toLowerCase().trim()
+      new_email: admin.email.toLowerCase().trim(),
     });
   } catch (confirmErr) {
     console.error("Error auto-confirming tenant admin email:", confirmErr);
   }
 
   // 2. Guardar la lavandería
-  const { error: tenantError } = await supabase.from('tenants').insert(tenant);
+  const { error: tenantError } = await supabase.from("tenants").insert(tenant);
   if (tenantError) {
     // Rollback Auth user — no se puede desde el cliente, pero al menos señalar el error
-    throw new Error("Error al crear lavandería: " + tenantError.message + ". Por favor contacta soporte.");
+    throw new Error(
+      "Error al crear lavandería: " + tenantError.message + ". Por favor contacta soporte.",
+    );
   }
 
   // 3. Guardar el Administrador vinculado al ID de Auth
   const { password: _pw, ...empData } = admin;
-  const { error: empError } = await supabase.from('empleados').insert({
+  const { error: empError } = await supabase.from("empleados").insert({
     ...empData,
     avatar_url: admin.avatar_url || null,
     id: authData.user.id,
-    password: '***'
+    password: "***",
   });
 
   if (empError) {
     // Rollback: eliminar el tenant creado
-    await supabase.from('tenants').delete().eq('id', tenant.id);
-    throw new Error("Error al crear empleado: " + empError.message + ". Por favor intenta de nuevo.");
+    await supabase.from("tenants").delete().eq("id", tenant.id);
+    throw new Error(
+      "Error al crear empleado: " + empError.message + ". Por favor intenta de nuevo.",
+    );
   }
 
   // 4. Iniciar sesión
@@ -789,25 +921,29 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
 
 export async function registerBranch(tenant: Tenant, admin: Empleado, userId: string) {
   // 1. Guardar la lavandería
-  const { error: tenantError } = await supabase.from('tenants').insert(tenant);
+  const { error: tenantError } = await supabase.from("tenants").insert(tenant);
   if (tenantError) {
-    throw new Error("Error al crear sucursal: " + tenantError.message + ". Por favor contacta soporte.");
+    throw new Error(
+      "Error al crear sucursal: " + tenantError.message + ". Por favor contacta soporte.",
+    );
   }
 
   // 2. Guardar el Administrador vinculado al ID de Auth existente
   const { password: _pw, ...empData } = admin;
-  const { error: empError } = await supabase.from('empleados').insert({
+  const { error: empError } = await supabase.from("empleados").insert({
     ...empData,
     avatar_url: admin.avatar_url || null,
     id: userId,
     tenant_id: tenant.id,
-    password: '***'
+    password: "***",
   });
 
   if (empError) {
     // Rollback: eliminar el tenant creado
-    await supabase.from('tenants').delete().eq('id', tenant.id);
-    throw new Error("Error al crear empleado: " + empError.message + ". Por favor intenta de nuevo.");
+    await supabase.from("tenants").delete().eq("id", tenant.id);
+    throw new Error(
+      "Error al crear empleado: " + empError.message + ". Por favor intenta de nuevo.",
+    );
   }
 
   return { tenant };
@@ -816,10 +952,10 @@ export async function registerBranch(tenant: Tenant, admin: Empleado, userId: st
 export async function deleteTenant(id: string) {
   // 1. Limpiar Archivos en Storage (Bucket 'catalogo')
   try {
-    const { data: files } = await supabase.storage.from('catalogo').list(id);
+    const { data: files } = await supabase.storage.from("catalogo").list(id);
     if (files && files.length > 0) {
-      const paths = files.map(f => `${id}/${f.name}`);
-      await supabase.storage.from('catalogo').remove(paths);
+      const paths = files.map((f) => `${id}/${f.name}`);
+      await supabase.storage.from("catalogo").remove(paths);
       console.log(`Archivos de lavandería ${id} eliminados.`);
     }
   } catch (e) {
@@ -831,7 +967,7 @@ export async function deleteTenant(id: string) {
     const emps = await getEmpleados(id);
     for (const emp of emps) {
       // Intentamos borrar el usuario de Auth mediante el RPC seguro
-      await supabase.rpc('admin_delete_user', { target_user_id: emp.id });
+      await supabase.rpc("admin_delete_user", { target_user_id: emp.id });
     }
     console.log(`Usuarios de Auth para lavandería ${id} eliminados.`);
   } catch (e) {
@@ -839,89 +975,104 @@ export async function deleteTenant(id: string) {
   }
 
   // 3. Eliminar la lavandería (La cascada de DB borrará el resto: órdenes, clientes, empleados en tabla)
-  const { error } = await supabase.from('tenants').delete().eq('id', id);
+  const { error } = await supabase.from("tenants").delete().eq("id", id);
   if (error) throw error;
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | undefined> {
-  const { data, error } = await supabase.from('tenants').select('*').eq('slug', slug.toLowerCase()).single();
+  const { data, error } = await supabase
+    .from("tenants")
+    .select("*")
+    .eq("slug", slug.toLowerCase())
+    .single();
   if (error) return undefined;
   return data;
 }
 
 export async function getTenantById(id: string): Promise<Tenant | undefined> {
-  const { data, error } = await supabase.from('tenants').select('*').eq('id', id).single();
+  const { data, error } = await supabase.from("tenants").select("*").eq("id", id).single();
   if (error) return undefined;
   return data;
 }
 
 export async function isSlugAvailable(slug: string): Promise<boolean> {
-  const { data, error } = await supabase.from('tenants').select('id').eq('slug', slug.toLowerCase());
+  const { data, error } = await supabase
+    .from("tenants")
+    .select("id")
+    .eq("slug", slug.toLowerCase());
   return !data || data.length === 0;
 }
 
 export async function getTenantsForUser(email: string): Promise<Tenant[]> {
-  const { data: emps, error: errEmps } = await supabase.from('empleados')
-    .select('tenant_id')
-    .eq('email', email.toLowerCase())
-    .eq('activo', true);
+  const { data: emps, error: errEmps } = await supabase
+    .from("empleados")
+    .select("tenant_id")
+    .eq("email", email.toLowerCase())
+    .eq("activo", true);
 
   if (errEmps || !emps) return [];
-  const tenantIds = Array.from(new Set(emps.map(e => e.tenant_id)));
+  const tenantIds = Array.from(new Set(emps.map((e) => e.tenant_id)));
 
-  const { data: tenants, error: errTenants } = await supabase.from('tenants')
-    .select('*')
-    .in('id', tenantIds);
+  const { data: tenants, error: errTenants } = await supabase
+    .from("tenants")
+    .select("*")
+    .in("id", tenantIds);
 
   return tenants || [];
 }
 
 export async function updateTenantAdmin(tenant_id: string, newEmail: string, newPassword?: string) {
   // Update Tenant Email
-  await supabase.from('tenants').update({ email: newEmail }).eq('id', tenant_id);
+  await supabase.from("tenants").update({ email: newEmail }).eq("id", tenant_id);
 
   // Update Admin Employee
   const emps = await getEmpleados(tenant_id);
-  const admin = emps.find(e => e.rol === "ADMIN");
+  const admin = emps.find((e) => e.rol === "ADMIN");
   if (admin) {
     const updates: Partial<Empleado> = { email: newEmail };
 
     // Actualizar el email en Supabase Auth mediante la función RPC segura
-    await supabase.rpc('admin_set_user_email', {
+    await supabase.rpc("admin_set_user_email", {
       target_user_id: admin.id,
-      new_email: newEmail
+      new_email: newEmail,
     });
 
     if (newPassword) {
-      updates.password = '***'; // No guardamos texto plano
+      updates.password = "***"; // No guardamos texto plano
       // Actualizar en Auth mediante la función RPC segura
-      await supabase.rpc('admin_set_user_password', {
+      await supabase.rpc("admin_set_user_password", {
         target_user_id: admin.id,
-        new_password: newPassword
+        new_password: newPassword,
       });
     }
-    await supabase.from('empleados').update(updates).eq('id', admin.id);
+    await supabase.from("empleados").update(updates).eq("id", admin.id);
   }
 }
 
 export async function updateTenantPlan(tenantId: string, planId: PlanId) {
-  const { error } = await supabase.from('tenants').update({
-    plan_id: planId,
-    plan_fecha_inicio: new Date().toISOString()
-  }).eq('id', tenantId);
+  const { error } = await supabase
+    .from("tenants")
+    .update({
+      plan_id: planId,
+      plan_fecha_inicio: new Date().toISOString(),
+    })
+    .eq("id", tenantId);
   return !error;
 }
 
-export async function updateTenantStatus(tenantId: string, status: "TRIAL" | "ACTIVO" | "SUSPENDIDO" | "CANCELADO") {
-  const { error } = await supabase.from('tenants').update({ estado: status }).eq('id', tenantId);
+export async function updateTenantStatus(
+  tenantId: string,
+  status: "TRIAL" | "ACTIVO" | "SUSPENDIDO" | "CANCELADO",
+) {
+  const { error } = await supabase.from("tenants").update({ estado: status }).eq("id", tenantId);
   return !error;
 }
 
 export async function updateTenantMaxSucursales(tenantId: string, maxSucursales: number) {
   const { error } = await supabase
-    .from('tenants')
+    .from("tenants")
     .update({ max_sucursales: maxSucursales })
-    .eq('id', tenantId);
+    .eq("id", tenantId);
 
   if (error) {
     console.error("Error updating tenant max_sucursales column:", error);
@@ -932,9 +1083,9 @@ export async function updateTenantMaxSucursales(tenantId: string, maxSucursales:
 
 export async function updateTenantTrialHasta(tenantId: string, trialHasta: string) {
   const { error } = await supabase
-    .from('tenants')
+    .from("tenants")
     .update({ trial_hasta: trialHasta })
-    .eq('id', tenantId);
+    .eq("id", tenantId);
 
   if (error) {
     console.error("Error updating tenant trial_hasta column:", error);
@@ -945,12 +1096,12 @@ export async function updateTenantTrialHasta(tenantId: string, trialHasta: strin
 
 export async function updateTenantModulosOverride(
   tenantId: string,
-  overrides: TenantConfig['modulos_override']
+  overrides: TenantConfig["modulos_override"],
 ): Promise<boolean> {
   const { data: tenant, error: fetchError } = await supabase
-    .from('tenants')
-    .select('config')
-    .eq('id', tenantId)
+    .from("tenants")
+    .select("config")
+    .eq("id", tenantId)
     .single();
 
   if (fetchError) {
@@ -961,13 +1112,13 @@ export async function updateTenantModulosOverride(
   const currentConfig = tenant?.config || {};
   const nextConfig = {
     ...currentConfig,
-    modulos_override: overrides
+    modulos_override: overrides,
   };
 
   const { error } = await supabase
-    .from('tenants')
+    .from("tenants")
     .update({ config: nextConfig })
-    .eq('id', tenantId);
+    .eq("id", tenantId);
 
   if (error) {
     console.error("Error saving tenant config overrides:", error);
@@ -984,13 +1135,21 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
 
 export async function getGlobalConfig(): Promise<GlobalConfig> {
   try {
-    const { data, error } = await supabase.from('global_config').select('*').eq('id', 1).maybeSingle();
+    const { data, error } = await supabase
+      .from("global_config")
+      .select("*")
+      .eq("id", 1)
+      .maybeSingle();
     if (!error && data) {
       return {
-        requirePlanOnRegistration: data.require_plan_on_registration ?? data.requirePlanOnRegistration ?? DEFAULT_GLOBAL_CONFIG.requirePlanOnRegistration,
+        requirePlanOnRegistration:
+          data.require_plan_on_registration ??
+          data.requirePlanOnRegistration ??
+          DEFAULT_GLOBAL_CONFIG.requirePlanOnRegistration,
         trialDays: data.trial_days ?? data.trialDays ?? DEFAULT_GLOBAL_CONFIG.trialDays,
-        defaultPlanId: data.default_plan_id ?? data.defaultPlanId ?? DEFAULT_GLOBAL_CONFIG.defaultPlanId,
-        bankDetails: data.bank_details ?? data.bankDetails
+        defaultPlanId:
+          data.default_plan_id ?? data.defaultPlanId ?? DEFAULT_GLOBAL_CONFIG.defaultPlanId,
+        bankDetails: data.bank_details ?? data.bankDetails,
       };
     }
   } catch (e) {
@@ -1001,13 +1160,13 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
 
 export async function saveGlobalConfig(config: GlobalConfig) {
   try {
-    const { error } = await supabase.from('global_config').upsert({
+    const { error } = await supabase.from("global_config").upsert({
       id: 1,
       require_plan_on_registration: config.requirePlanOnRegistration,
       trial_days: config.trialDays,
       default_plan_id: config.defaultPlanId,
       bank_details: config.bankDetails,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     });
     if (error) console.error("Error saving global config to Supabase:", error);
   } catch (e) {
@@ -1018,10 +1177,13 @@ export async function saveGlobalConfig(config: GlobalConfig) {
 
 // ============ Empleados (Supabase) ============
 export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
-  let query = supabase.from('empleados').select('*');
-  if (tenant_id) query = query.eq('tenant_id', tenant_id);
-  const { data, error } = await query.order('nombre');
-  if (error) { console.error("Error getEmpleados:", error); return []; }
+  let query = supabase.from("empleados").select("*");
+  if (tenant_id) query = query.eq("tenant_id", tenant_id);
+  const { data, error } = await query.order("nombre");
+  if (error) {
+    console.error("Error getEmpleados:", error);
+    return [];
+  }
   return data || [];
 }
 
@@ -1033,13 +1195,13 @@ export async function saveEmpleado(e: Empleado) {
 
   // 0. Registrar o sincronizar en Supabase Auth
   let isNew = false;
-  if (!e.id || e.id.startsWith('emp_')) {
+  if (!e.id || e.id.startsWith("emp_")) {
     isNew = true;
   } else {
     const { data: existing } = await supabase
-      .from('empleados')
-      .select('id')
-      .eq('id', e.id)
+      .from("empleados")
+      .select("id")
+      .eq("id", e.id)
       .maybeSingle();
     isNew = !existing;
   }
@@ -1048,39 +1210,47 @@ export async function saveEmpleado(e: Empleado) {
     try {
       console.log("Intentando crear cuenta en Auth...");
       const tempClient = createClient(
-        import.meta.env.VITE_SUPABASE_URL || '',
-        import.meta.env.VITE_SUPABASE_ANON_KEY || '',
-        { auth: { persistSession: false, autoRefreshToken: false } }
+        import.meta.env.VITE_SUPABASE_URL || "",
+        import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+        { auth: { persistSession: false, autoRefreshToken: false } },
       );
 
       const { data: authData, error: authError } = await tempClient.auth.signUp({
         email: emailLower,
-        password: e.password || 'tempPassword123!',
-        options: { data: { nombre: e.nombre, tenant_id: e.tenant_id, rol: e.rol } }
+        password: e.password || "tempPassword123!",
+        options: { data: { nombre: e.nombre, tenant_id: e.tenant_id, rol: e.rol } },
       });
 
       if (authError) {
-        if (authError.message.toLowerCase().includes("already registered") || authError.status === 422) {
+        if (
+          authError.message.toLowerCase().includes("already registered") ||
+          authError.status === 422
+        ) {
           // El usuario ya existe en Auth. Sincronizamos con su ID de la tabla empleados
           const { data: existingByEmail } = await supabase
-            .from('empleados')
-            .select('id')
-            .eq('email', emailLower)
+            .from("empleados")
+            .select("id")
+            .eq("email", emailLower)
             .maybeSingle();
 
           if (existingByEmail) {
-            console.log("El usuario ya existe en Auth y public.empleados. Usando ID existente:", existingByEmail.id);
+            console.log(
+              "El usuario ya existe en Auth y public.empleados. Usando ID existente:",
+              existingByEmail.id,
+            );
             e.id = existingByEmail.id;
-            
+
             // Si especificó contraseña, actualizarla
-            if (e.password && e.password !== '***') {
-              await supabase.rpc('admin_set_user_password', {
+            if (e.password && e.password !== "***") {
+              await supabase.rpc("admin_set_user_password", {
                 target_user_id: e.id,
-                new_password: e.password
+                new_password: e.password,
               });
             }
           } else {
-            throw new Error(`El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente.`);
+            throw new Error(
+              `El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente.`,
+            );
           }
         } else {
           console.error("SIGNUP ERROR:", authError);
@@ -1088,29 +1258,34 @@ export async function saveEmpleado(e: Empleado) {
         }
       } else if (authData?.user) {
         console.log("Cuenta Auth creada exitosamente:", authData.user.id);
-        
+
         // Auto-confirmar el email del nuevo usuario en Auth para evitar que quede atascado sin confirmación
         try {
-          await supabase.rpc('admin_set_user_email', {
+          await supabase.rpc("admin_set_user_email", {
             target_user_id: authData.user.id,
-            new_email: emailLower
+            new_email: emailLower,
           });
           console.log("Email auto-confirmado para el nuevo empleado");
         } catch (confirmErr) {
           console.error("Error al auto-confirmar email:", confirmErr);
         }
-        
+
         // AUTO-HEALING: Si el usuario ya existía en public.empleados con un ID viejo desincronizado,
         // actualizamos ese ID viejo en la DB para que coincida con el nuevo ID válido de Auth.
         const { data: existingByEmail } = await supabase
-          .from('empleados')
-          .select('id')
-          .eq('email', emailLower)
+          .from("empleados")
+          .select("id")
+          .eq("email", emailLower)
           .maybeSingle();
 
         if (existingByEmail && existingByEmail.id !== authData.user.id) {
-          console.log(`Corrigiendo inconsistencia: actualizando ID viejo ${existingByEmail.id} a nuevo ID de Auth ${authData.user.id}`);
-          await supabase.from('empleados').update({ id: authData.user.id }).eq('id', existingByEmail.id);
+          console.log(
+            `Corrigiendo inconsistencia: actualizando ID viejo ${existingByEmail.id} a nuevo ID de Auth ${authData.user.id}`,
+          );
+          await supabase
+            .from("empleados")
+            .update({ id: authData.user.id })
+            .eq("id", existingByEmail.id);
         }
 
         e.id = authData.user.id;
@@ -1121,9 +1296,11 @@ export async function saveEmpleado(e: Empleado) {
     }
   } else {
     // 1. Manejo de Seguridad en Supabase Auth para edición de usuario existente
-    if (e.password && e.password.length >= 6 && e.password !== '***') {
+    if (e.password && e.password.length >= 6 && e.password !== "***") {
       try {
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        const {
+          data: { user: currentUser },
+        } = await supabase.auth.getUser();
 
         // Caso especial: El admin se actualiza a sí mismo
         if (currentUser && currentUser.id === e.id) {
@@ -1134,22 +1311,26 @@ export async function saveEmpleado(e: Empleado) {
           if (currentUser.email !== emailLower) {
             console.log("Auto-actualización de email...");
             const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
-            if (emailError) authErrorMsg = (authErrorMsg ? authErrorMsg + " " : "") + "Error auto-update email: " + emailError.message;
+            if (emailError)
+              authErrorMsg =
+                (authErrorMsg ? authErrorMsg + " " : "") +
+                "Error auto-update email: " +
+                emailError.message;
           }
         } else if (e.id && e.id.length === 36) {
           // Actualizar usuario existente que ya tiene ID de Auth (UUID)
           console.log("Actualizando contraseña/correo de usuario UUID en Auth via RPC...");
-          const { error: rpcError } = await supabase.rpc('admin_set_user_password', {
+          const { error: rpcError } = await supabase.rpc("admin_set_user_password", {
             target_user_id: e.id,
-            new_password: e.password
+            new_password: e.password,
           });
           if (rpcError) {
             console.error("RPC ERROR:", rpcError);
           }
 
-          const { error: emailRpcError } = await supabase.rpc('admin_set_user_email', {
+          const { error: emailRpcError } = await supabase.rpc("admin_set_user_email", {
             target_user_id: e.id,
-            new_email: emailLower
+            new_email: emailLower,
           });
           if (emailRpcError) {
             console.error("RPC EMAIL ERROR:", emailRpcError);
@@ -1166,15 +1347,15 @@ export async function saveEmpleado(e: Empleado) {
   const dataToSave = {
     ...e,
     email: emailLower,
-    password: '***',
+    password: "***",
     nombre: e.nombre || "",
     apellido: e.apellido || "",
     pin: e.pin || "",
-    avatar_url: e.avatar_url || null
+    avatar_url: e.avatar_url || null,
   };
 
   console.log("Upsert en tabla empleados:", dataToSave);
-  const { error: dbError } = await supabase.from('empleados').upsert(dataToSave);
+  const { error: dbError } = await supabase.from("empleados").upsert(dataToSave);
 
   if (dbError) {
     console.error("DB ERROR:", dbError);
@@ -1188,65 +1369,77 @@ export async function saveEmpleado(e: Empleado) {
 export async function deleteEmpleado(id: string) {
   // 1. Intentar borrar de Auth primero (vía RPC)
   try {
-    await supabase.rpc('admin_delete_user', { target_user_id: id });
+    await supabase.rpc("admin_delete_user", { target_user_id: id });
   } catch (e) {
     console.warn("No se pudo eliminar el usuario de Auth, procediendo con DB...", e);
   }
 
   // 2. Borrar de la tabla empleados
-  const { error } = await supabase.from('empleados').delete().eq('id', id);
+  const { error } = await supabase.from("empleados").delete().eq("id", id);
   if (error) throw error;
 }
 
 export async function getEmpleadoById(id: string): Promise<Empleado | undefined> {
-  const { data, error } = await supabase.from('empleados').select('*').eq('id', id).single();
+  const { data, error } = await supabase.from("empleados").select("*").eq("id", id).single();
   if (error) return undefined;
   return data;
 }
 
 // ============ Clientes (Supabase) ============
 export async function getClientes(tenant_id: string): Promise<Cliente[]> {
-  const { data, error } = await supabase.from('clientes').select('*').eq('tenant_id', tenant_id).order('nombre');
-  if (error) { console.error("Error getClientes:", error); return []; }
+  const { data, error } = await supabase
+    .from("clientes")
+    .select("*")
+    .eq("tenant_id", tenant_id)
+    .order("nombre");
+  if (error) {
+    console.error("Error getClientes:", error);
+    return [];
+  }
   return data || [];
 }
 
 export async function saveCliente(c: Cliente) {
   try {
-    const { error } = await supabase.from('clientes').upsert(c);
+    const { error } = await supabase.from("clientes").upsert(c);
     if (error) throw error;
   } catch (err) {
     console.error("Offline fallback: saving cliente locally", err);
     const local = read<Cliente[]>(KEY.clientes, []);
-    const exists = local.findIndex(x => x.id === c.id);
-    if (exists >= 0) local[exists] = c; else local.push(c);
+    const exists = local.findIndex((x) => x.id === c.id);
+    if (exists >= 0) local[exists] = c;
+    else local.push(c);
     write(KEY.clientes, local);
-    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function deleteCliente(id: string) {
-  const { error } = await supabase.from('clientes').delete().eq('id', id);
+  const { error } = await supabase.from("clientes").delete().eq("id", id);
   if (error) throw error;
 }
 
 export async function getClienteById(id: string): Promise<Cliente | undefined> {
-  const { data, error } = await supabase.from('clientes').select('*').eq('id', id).single();
+  const { data, error } = await supabase.from("clientes").select("*").eq("id", id).single();
   if (error) return undefined;
   return data;
 }
 
 // ============ Órdenes (Supabase) ============
 export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
-  const { data, error } = await supabase.from('ordenes').select('*').eq('tenant_id', tenant_id).order('creado_en', { ascending: false });
+  const { data, error } = await supabase
+    .from("ordenes")
+    .select("*")
+    .eq("tenant_id", tenant_id)
+    .order("creado_en", { ascending: false });
   let results = data || [];
 
   if (isBrowser()) {
-    const local = read<Orden[]>(KEY.ordenes, []).filter(o => o.tenant_id === tenant_id);
+    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
     // Combinar y desduplicar por ID, priorizando local si hay colisión (ya que local podría ser una edición más reciente offline)
     const combined = [...results];
-    local.forEach(lo => {
-      if (!combined.some(co => co.id === lo.id)) {
+    local.forEach((lo) => {
+      if (!combined.some((co) => co.id === lo.id)) {
         combined.push(lo);
       }
     });
@@ -1256,58 +1449,67 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
   return results;
 }
 
-export async function getOrdenesByPeriod(filters: { tenant_id: string; empleado_id?: string; desde?: string; hasta?: string }): Promise<Orden[]> {
-  let query = supabase.from('ordenes').select('*').eq('tenant_id', filters.tenant_id);
+export async function getOrdenesByPeriod(filters: {
+  tenant_id: string;
+  empleado_id?: string;
+  desde?: string;
+  hasta?: string;
+}): Promise<Orden[]> {
+  let query = supabase.from("ordenes").select("*").eq("tenant_id", filters.tenant_id);
 
-  if (filters.empleado_id && filters.empleado_id !== 'all') {
-    query = query.eq('empleado_id', filters.empleado_id);
+  if (filters.empleado_id && filters.empleado_id !== "all") {
+    query = query.eq("empleado_id", filters.empleado_id);
   }
 
   if (filters.desde) {
-    query = query.gte('creado_en', filters.desde);
+    query = query.gte("creado_en", filters.desde);
   }
 
   if (filters.hasta) {
-    query = query.lte('creado_en', filters.hasta + 'T23:59:59Z');
+    query = query.lte("creado_en", filters.hasta + "T23:59:59Z");
   }
 
-  const { data, error } = await query.order('creado_en', { ascending: false });
-  if (error) { console.error("Error getOrdenesByPeriod:", error); return []; }
+  const { data, error } = await query.order("creado_en", { ascending: false });
+  if (error) {
+    console.error("Error getOrdenesByPeriod:", error);
+    return [];
+  }
   return data || [];
 }
 
 export async function saveOrden(o: Orden) {
   try {
-    const { error } = await supabase.from('ordenes').upsert(o);
+    const { error } = await supabase.from("ordenes").upsert(o);
     if (error) throw error;
   } catch (err) {
     console.error("Offline fallback: saving order locally", err);
     const local = read<Orden[]>(KEY.ordenes, []);
-    const exists = local.findIndex(x => x.id === o.id);
-    if (exists >= 0) local[exists] = o; else local.push(o);
+    const exists = local.findIndex((x) => x.id === o.id);
+    if (exists >= 0) local[exists] = o;
+    else local.push(o);
     write(KEY.ordenes, local);
-    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function updateOrdenEstado(id: string, estado: EstadoOrden, ubicacion_ropa?: string) {
   const updates: Record<string, any> = { estado };
   if (ubicacion_ropa !== undefined) updates.ubicacion_ropa = ubicacion_ropa;
-  
+
   // Siempre intentar actualizar localmente por si la orden no se ha sincronizado
   const local = read<Orden[]>(KEY.ordenes, []);
-  const idx = local.findIndex(x => x.id === id);
+  const idx = local.findIndex((x) => x.id === id);
   let localUpdated = false;
   if (idx >= 0) {
     local[idx].estado = estado;
     if (ubicacion_ropa !== undefined) local[idx].ubicacion_ropa = ubicacion_ropa;
     write(KEY.ordenes, local);
-    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     localUpdated = true;
   }
 
   try {
-    const { error } = await supabase.from('ordenes').update(updates).eq('id', id);
+    const { error } = await supabase.from("ordenes").update(updates).eq("id", id);
     if (error) throw error;
   } catch (err) {
     console.error("Offline fallback: updating order estado locally failed", err);
@@ -1315,7 +1517,7 @@ export async function updateOrdenEstado(id: string, estado: EstadoOrden, ubicaci
 }
 
 export async function getOrdenById(id: string): Promise<Orden | undefined> {
-  const { data, error } = await supabase.from('ordenes').select('*').eq('id', id).single();
+  const { data, error } = await supabase.from("ordenes").select("*").eq("id", id).single();
   if (error) return undefined;
   return data;
 }
@@ -1323,10 +1525,11 @@ export async function getOrdenById(id: string): Promise<Orden | undefined> {
 export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   // Para un sistema robusto, podríamos usar una tabla de secuencias en Supabase
   // Por ahora, buscaremos el número más alto
-  const { data, error } = await supabase.from('ordenes')
-    .select('numero')
-    .eq('tenant_id', tenant_id)
-    .order('creado_en', { ascending: false })
+  const { data, error } = await supabase
+    .from("ordenes")
+    .select("numero")
+    .eq("tenant_id", tenant_id)
+    .order("creado_en", { ascending: false })
     .limit(1);
 
   let next = 1;
@@ -1343,40 +1546,56 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
 
 // ============ Caja (Supabase) ============
 export async function getCajas(tenant_id: string): Promise<Caja[]> {
-  const { data, error } = await supabase.from('cajas').select('*').eq('tenant_id', tenant_id).order('abierta_en', { ascending: false });
+  const { data, error } = await supabase
+    .from("cajas")
+    .select("*")
+    .eq("tenant_id", tenant_id)
+    .order("abierta_en", { ascending: false });
   if (error) return [];
   return data || [];
 }
 
-export async function getHistoricoCierres(filters: { tenant_id: string; empleado_id?: string; desde?: string; hasta?: string }): Promise<Caja[]> {
-  let query = supabase.from('cajas').select('*').eq('tenant_id', filters.tenant_id).eq('estado', 'CERRADA');
+export async function getHistoricoCierres(filters: {
+  tenant_id: string;
+  empleado_id?: string;
+  desde?: string;
+  hasta?: string;
+}): Promise<Caja[]> {
+  let query = supabase
+    .from("cajas")
+    .select("*")
+    .eq("tenant_id", filters.tenant_id)
+    .eq("estado", "CERRADA");
 
-  if (filters.empleado_id && filters.empleado_id !== 'all') {
-    query = query.eq('empleado_id', filters.empleado_id);
+  if (filters.empleado_id && filters.empleado_id !== "all") {
+    query = query.eq("empleado_id", filters.empleado_id);
   }
 
   if (filters.desde) {
-    query = query.gte('abierta_en', filters.desde);
+    query = query.gte("abierta_en", filters.desde);
   }
 
   if (filters.hasta) {
-    query = query.lte('abierta_en', filters.hasta + 'T23:59:59Z');
+    query = query.lte("abierta_en", filters.hasta + "T23:59:59Z");
   }
 
-  const { data, error } = await query.order('cerrada_en', { ascending: false });
-  if (error) { console.error("Error getHistoricoCierres:", error); return []; }
+  const { data, error } = await query.order("cerrada_en", { ascending: false });
+  if (error) {
+    console.error("Error getHistoricoCierres:", error);
+    return [];
+  }
   return data || [];
 }
 
 export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
-  if (!tenant_id || tenant_id === 'admin') return null;
+  if (!tenant_id || tenant_id === "admin") return null;
   try {
     const { data, error } = await supabase
-      .from('cajas')
-      .select('*')
-      .eq('tenant_id', tenant_id)
-      .eq('estado', 'ABIERTA')
-      .order('abierta_en', { ascending: false });
+      .from("cajas")
+      .select("*")
+      .eq("tenant_id", tenant_id)
+      .eq("estado", "ABIERTA")
+      .order("abierta_en", { ascending: false });
 
     if (error) {
       console.error("Error getCajaAbierta:", error);
@@ -1391,43 +1610,50 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
 }
 
 export async function saveCaja(c: Caja) {
-  const { error } = await supabase.from('cajas').upsert(c);
+  const { error } = await supabase.from("cajas").upsert(c);
   if (error) throw error;
 }
 
-export async function getMovimientos(tenant_id: string, caja_id?: string): Promise<MovimientoCaja[]> {
-  let query = supabase.from('movimientos_caja').select('*').eq('tenant_id', tenant_id);
-  if (caja_id) query = query.eq('caja_id', caja_id);
-  const { data, error } = await query.order('creado_en', { ascending: true });
+export async function getMovimientos(
+  tenant_id: string,
+  caja_id?: string,
+): Promise<MovimientoCaja[]> {
+  let query = supabase.from("movimientos_caja").select("*").eq("tenant_id", tenant_id);
+  if (caja_id) query = query.eq("caja_id", caja_id);
+  const { data, error } = await query.order("creado_en", { ascending: true });
   if (error) return [];
   return data || [];
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
   try {
-    const { error } = await supabase.from('movimientos_caja').insert(m);
+    const { error } = await supabase.from("movimientos_caja").insert(m);
     if (error) throw error;
   } catch (err) {
     console.error("Offline fallback: saving movimiento locally", err);
     const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-    if (!local.some(x => x.id === m.id)) {
+    if (!local.some((x) => x.id === m.id)) {
       local.push(m);
     }
     write(KEY.movimientos, local);
-    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 // ============ Gastos (Supabase) ============
 export async function getGastos(tenant_id: string): Promise<Gasto[]> {
-  const { data, error } = await supabase.from('gastos').select('*').eq('tenant_id', tenant_id).order('fecha', { ascending: false });
+  const { data, error } = await supabase
+    .from("gastos")
+    .select("*")
+    .eq("tenant_id", tenant_id)
+    .order("fecha", { ascending: false });
   let results = data || [];
 
   if (isBrowser()) {
-    const local = read<Gasto[]>(KEY.gastos, []).filter(g => g.tenant_id === tenant_id);
+    const local = read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);
     const combined = [...results];
-    local.forEach(lg => {
-      if (!combined.some(cg => cg.id === lg.id)) {
+    local.forEach((lg) => {
+      if (!combined.some((cg) => cg.id === lg.id)) {
         combined.push(lg);
       }
     });
@@ -1439,50 +1665,57 @@ export async function getGastos(tenant_id: string): Promise<Gasto[]> {
 
 export async function saveGasto(g: Gasto) {
   try {
-    const { error } = await supabase.from('gastos').upsert(g);
+    const { error } = await supabase.from("gastos").upsert(g);
     if (error) throw error;
   } catch (err) {
     console.error("Offline fallback: saving gasto locally", err);
     const local = read<Gasto[]>(KEY.gastos, []);
-    const exists = local.findIndex(x => x.id === g.id);
-    if (exists >= 0) local[exists] = g; else local.push(g);
+    const exists = local.findIndex((x) => x.id === g.id);
+    if (exists >= 0) local[exists] = g;
+    else local.push(g);
     write(KEY.gastos, local);
-    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function deleteGasto(id: string) {
   try {
-    await supabase.from('movimientos_caja').delete().eq('referencia', id);
+    await supabase.from("movimientos_caja").delete().eq("referencia", id);
   } catch (e) {
     console.error("Error deleting related movimiento:", e);
   }
-  const { error } = await supabase.from('gastos').delete().eq('id', id);
+  const { error } = await supabase.from("gastos").delete().eq("id", id);
   if (error) throw error;
 
   if (isBrowser()) {
     const local = read<Gasto[]>(KEY.gastos, []);
-    write(KEY.gastos, local.filter(x => x.id !== id));
+    write(
+      KEY.gastos,
+      local.filter((x) => x.id !== id),
+    );
   }
 }
 
 // ============ Catálogo (Supabase) ============
 export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   const { data, error } = await supabase
-    .from('catalogo_items')
-    .select('*')
+    .from("catalogo_items")
+    .select("*")
     .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
-    .order('categoria', { ascending: true })
-    .order('nombre', { ascending: true });
+    .order("categoria", { ascending: true })
+    .order("nombre", { ascending: true });
 
   if (error) {
-    console.error('Error cargando catálogo:', error);
+    console.error("Error cargando catálogo:", error);
     return [];
   }
 
   // Normaliza tildes/acentos para comparación robusta
   const normalize = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
   // Desduplicar: Si existe una versión del tenant, ocultar la versión 'admin' (global)
   const results: CatalogoItem[] = data || [];
@@ -1490,45 +1723,47 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   const namesSet = new Set<string>();
 
   // Primero añadimos los del tenant
-  results.filter(i => i.tenant_id !== 'admin').forEach(i => {
-    finalItems.push(i);
-    namesSet.add(normalize(i.nombre));
-  });
+  results
+    .filter((i) => i.tenant_id !== "admin")
+    .forEach((i) => {
+      finalItems.push(i);
+      namesSet.add(normalize(i.nombre));
+    });
 
   // Luego añadimos los admin solo si no hay uno del tenant con el mismo nombre (normalizado)
-  results.filter(i => i.tenant_id === 'admin').forEach(i => {
-    if (!namesSet.has(normalize(i.nombre))) {
-      finalItems.push(i);
-    }
-  });
+  results
+    .filter((i) => i.tenant_id === "admin")
+    .forEach((i) => {
+      if (!namesSet.has(normalize(i.nombre))) {
+        finalItems.push(i);
+      }
+    });
 
   return finalItems;
 }
 
 export async function saveCatalogoItem(item: CatalogoItem) {
   // Guard: never save with an invalid tenant_id
-  if (!item.tenant_id || item.tenant_id === '__loading__') {
-    console.error('saveCatalogoItem: tenant_id inválido, abortando.', item.tenant_id);
-    throw new Error('tenant_id inválido');
+  if (!item.tenant_id || item.tenant_id === "__loading__") {
+    console.error("saveCatalogoItem: tenant_id inválido, abortando.", item.tenant_id);
+    throw new Error("tenant_id inválido");
   }
   try {
-    const { error } = await supabase.from('catalogo_items').upsert(item);
+    const { error } = await supabase.from("catalogo_items").upsert(item);
     if (error) throw error;
   } catch (err) {
     console.error("Offline fallback: saving catalog locally", err);
     const local = read<CatalogoItem[]>(KEY.catalogo, []);
-    const exists = local.findIndex(x => x.id === item.id);
-    if (exists >= 0) local[exists] = item; else local.push(item);
+    const exists = local.findIndex((x) => x.id === item.id);
+    if (exists >= 0) local[exists] = item;
+    else local.push(item);
     write(KEY.catalogo, local);
-    window.dispatchEvent(new CustomEvent('klynn-offline-save'));
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function deleteCatalogoItem(id: string) {
-  const { error } = await supabase
-    .from('catalogo_items')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from("catalogo_items").delete().eq("id", id);
 
   if (error) throw error;
 }
@@ -1536,57 +1771,59 @@ export async function deleteCatalogoItem(id: string) {
 // ============ Servicios (Supabase) ============
 export async function getServicios(tenant_id: string): Promise<Servicio[]> {
   const { data, error } = await supabase
-    .from('servicios')
-    .select('*')
+    .from("servicios")
+    .select("*")
     .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
-    .order('nombre', { ascending: true });
+    .order("nombre", { ascending: true });
 
   if (error) {
-    console.error('Error cargando servicios:', error);
+    console.error("Error cargando servicios:", error);
     return [];
   }
 
   // Normaliza tildes/acentos para comparación robusta
   const normalize = (s: string) =>
-    s.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
 
   // Desduplicar: Priorizar los servicios del propio tenant
   const results: Servicio[] = data || [];
   const finalItems: Servicio[] = [];
   const namesSet = new Set<string>();
 
-  results.filter(s => s.tenant_id !== 'admin').forEach(s => {
-    finalItems.push(s);
-    namesSet.add(normalize(s.nombre));
-  });
-
-  results.filter(s => s.tenant_id === 'admin').forEach(s => {
-    if (!namesSet.has(normalize(s.nombre))) {
+  results
+    .filter((s) => s.tenant_id !== "admin")
+    .forEach((s) => {
       finalItems.push(s);
-    }
-  });
+      namesSet.add(normalize(s.nombre));
+    });
+
+  results
+    .filter((s) => s.tenant_id === "admin")
+    .forEach((s) => {
+      if (!namesSet.has(normalize(s.nombre))) {
+        finalItems.push(s);
+      }
+    });
 
   return finalItems;
 }
 
 export async function saveServicio(s: Servicio) {
   // Guard: never save with an invalid tenant_id
-  if (!s.tenant_id || s.tenant_id === '__loading__') {
-    console.error('saveServicio: tenant_id inválido, abortando.', s.tenant_id);
-    throw new Error('tenant_id inválido');
+  if (!s.tenant_id || s.tenant_id === "__loading__") {
+    console.error("saveServicio: tenant_id inválido, abortando.", s.tenant_id);
+    throw new Error("tenant_id inválido");
   }
-  const { error } = await supabase
-    .from('servicios')
-    .upsert(s);
+  const { error } = await supabase.from("servicios").upsert(s);
 
   if (error) throw error;
 }
 
 export async function deleteServicio(id: string) {
-  const { error } = await supabase
-    .from('servicios')
-    .delete()
-    .eq('id', id);
+  const { error } = await supabase.from("servicios").delete().eq("id", id);
 
   if (error) throw error;
 }
@@ -1595,7 +1832,7 @@ export async function deleteServicio(id: string) {
 export async function savePlan(p: Plan) {
   try {
     // Guardar defensivamente en Supabase para evitar fallos si las columnas aún no están migradas en la nube
-    const { error } = await supabase.from('planes').upsert({
+    const { error } = await supabase.from("planes").upsert({
       id: p.id,
       nombre: p.nombre,
       precio_mensual: p.precio_mensual,
@@ -1615,8 +1852,11 @@ export async function savePlan(p: Plan) {
       limite_sucursales_adicionales: p.limite_sucursales_adicionales,
     });
     if (error) {
-      console.warn("Fallo al guardar columnas extendidas en Supabase (posiblemente falta migrar). Reintentando con campos base:", error);
-      await supabase.from('planes').upsert({
+      console.warn(
+        "Fallo al guardar columnas extendidas en Supabase (posiblemente falta migrar). Reintentando con campos base:",
+        error,
+      );
+      await supabase.from("planes").upsert({
         id: p.id,
         nombre: p.nombre,
         precio_mensual: p.precio_mensual,
@@ -1640,36 +1880,53 @@ export async function savePlan(p: Plan) {
   // Fallback / Cache local
   const all = await getPlans();
   const i = all.findIndex((x) => x.id === p.id);
-  if (i >= 0) all[i] = p; else all.push(p);
+  if (i >= 0) all[i] = p;
+  else all.push(p);
   write(KEY.plans, all);
 }
 
 export async function deletePlan(id: PlanId) {
   try {
-    const { error } = await supabase.from('planes').delete().eq('id', id);
+    const { error } = await supabase.from("planes").delete().eq("id", id);
     if (error) console.error("Error deleting plan from Supabase:", error);
   } catch (e) {
     console.error("Error deleting plan:", e);
   }
   const all = await getPlans();
-  write(KEY.plans, all.filter((p) => p.id !== id));
+  write(
+    KEY.plans,
+    all.filter((p) => p.id !== id),
+  );
 }
 
 // ============ Sesión / tenant activo ============
-export function setActiveTenant(slug: string) { if (isBrowser()) localStorage.setItem(KEY.active, slug); }
+export function setActiveTenant(slug: string) {
+  if (isBrowser()) localStorage.setItem(KEY.active, slug);
+}
 export function getActiveTenant(): Tenant | undefined {
   if (!isBrowser()) return undefined;
   const slug = localStorage.getItem(KEY.active);
   return slug ? getTenantBySlug(slug) : undefined;
 }
 
-export interface Session { empleado_id: string; tenant_id: string; iniciado_en: string; }
-export function getSession(): Session | null { return read<Session | null>(KEY.session, null); }
-export function setSession(s: Session | null) { if (s) write(KEY.session, s); else if (isBrowser()) localStorage.removeItem(KEY.session); }
+export interface Session {
+  empleado_id: string;
+  tenant_id: string;
+  iniciado_en: string;
+}
+export function getSession(): Session | null {
+  return read<Session | null>(KEY.session, null);
+}
+export function setSession(s: Session | null) {
+  if (s) write(KEY.session, s);
+  else if (isBrowser()) localStorage.removeItem(KEY.session);
+}
 
-export async function login(slug: string, email: string, password: string):
-  Promise<{ ok: true; empleado: Empleado; tenant: Tenant } | { ok: false; error: string }> {
-
+export async function login(
+  slug: string,
+  email: string,
+  password: string,
+): Promise<{ ok: true; empleado: Empleado; tenant: Tenant } | { ok: false; error: string }> {
   // 1. Verificar el Tenant
   const tenant = await getTenantBySlug(slug);
   if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
@@ -1677,7 +1934,7 @@ export async function login(slug: string, email: string, password: string):
   // 2. Autenticar en Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
     email,
-    password
+    password,
   });
 
   if (authError) return { ok: false, error: "Email o contraseña incorrectos" };
@@ -1705,9 +1962,7 @@ export async function logout() {
 export async function switchSession(tenantId: string, email: string): Promise<boolean> {
   // En Auth real, el cambio de sesión requiere que el usuario tenga acceso a ambos
   const emps = await getEmpleados(tenantId);
-  const emp = emps.find(
-    (e) => e.email.toLowerCase() === email.toLowerCase() && e.activo
-  );
+  const emp = emps.find((e) => e.email.toLowerCase() === email.toLowerCase() && e.activo);
   if (!emp) return false;
   setSession({ empleado_id: emp.id, tenant_id: tenantId, iniciado_en: new Date().toISOString() });
   const tenant = await getTenantById(tenantId);
@@ -1716,10 +1971,12 @@ export async function switchSession(tenantId: string, email: string): Promise<bo
 }
 
 export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Tenant } | null> {
-  const { data: { user } } = await supabase.auth.getUser();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
   if (!user) {
     // Si no hay usuario en Supabase, limpiar sesión local por seguridad
-    if (isBrowser()) localStorage.removeItem('lvx:session');
+    if (isBrowser()) localStorage.removeItem("lvx:session");
     return null;
   }
 
@@ -1727,65 +1984,75 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   const isSuperAdmin = email && ADMIN_EMAILS.includes(email);
 
   // Intentar recuperar la sesión guardada para saber qué perfil/tenant usar
-  const sessionStr = isBrowser() ? localStorage.getItem('lvx:session') : null;
+  const sessionStr = isBrowser() ? localStorage.getItem("lvx:session") : null;
   let session: Session | null = null;
   if (sessionStr) {
-    try { session = JSON.parse(sessionStr); } catch { }
+    try {
+      session = JSON.parse(sessionStr);
+    } catch {}
   }
 
   // Caso 1: Es Super Admin
   if (isSuperAdmin) {
     // Si tiene un tenant_id en la sesión, usar ese
-    if (session?.tenant_id && session.tenant_id !== 'admin') {
+    if (session?.tenant_id && session.tenant_id !== "admin") {
       const ten = await getTenantById(session.tenant_id);
       if (ten) {
         return {
           empleado: {
-            id: 'admin',
+            id: "admin",
             tenant_id: ten.id,
-            nombre: 'Super Admin',
-            email: email || 'admin@klynn.com.do',
-            password: '***',
-            rol: 'ADMIN',
+            nombre: "Super Admin",
+            email: email || "admin@klynn.com.do",
+            password: "***",
+            rol: "ADMIN",
             activo: true,
-            permisos: PERMISOS_SISTEMA.map(p => p.id),
-            creado_en: new Date().toISOString()
+            permisos: PERMISOS_SISTEMA.map((p) => p.id),
+            creado_en: new Date().toISOString(),
           } as Empleado,
-          tenant: ten
+          tenant: ten,
         };
       }
     }
     // Si no, devolver sin tenant específico (o el primero que encuentre)
     return {
       empleado: {
-        id: 'admin',
-        tenant_id: 'admin',
-        nombre: 'Super Admin',
-        email: email || 'admin@klynn.com.do',
-        rol: 'ADMIN',
+        id: "admin",
+        tenant_id: "admin",
+        nombre: "Super Admin",
+        email: email || "admin@klynn.com.do",
+        rol: "ADMIN",
         activo: true,
-        permisos: PERMISOS_SISTEMA.map(p => p.id),
-        creado_en: new Date().toISOString()
+        permisos: PERMISOS_SISTEMA.map((p) => p.id),
+        creado_en: new Date().toISOString(),
       } as any,
-      tenant: { id: 'admin', nombre: 'Administración Global' } as any
+      tenant: { id: "admin", nombre: "Administración Global" } as any,
     };
   }
 
   // Caso 2: Usuario regular
-  const { data: emps } = await supabase.from('empleados').select('*').eq('email', email).eq('activo', true);
-  
+  const { data: emps } = await supabase
+    .from("empleados")
+    .select("*")
+    .eq("email", email)
+    .eq("activo", true);
+
   if (!emps || emps.length === 0) {
-    if (isBrowser()) localStorage.removeItem('lvx:session');
+    if (isBrowser()) localStorage.removeItem("lvx:session");
     return null;
   }
 
   // 1. Intentar hacer match con el tenant_id de la sesión guardada
   if (session?.tenant_id) {
-    const empMatch = emps.find(e => e.tenant_id === session.tenant_id);
+    const empMatch = emps.find((e) => e.tenant_id === session.tenant_id);
     if (empMatch) {
       const ten = await getTenantById(empMatch.tenant_id);
       if (ten) {
-        setSession({ empleado_id: empMatch.id, tenant_id: ten.id, iniciado_en: new Date().toISOString() });
+        setSession({
+          empleado_id: empMatch.id,
+          tenant_id: ten.id,
+          iniciado_en: new Date().toISOString(),
+        });
         return { empleado: empMatch, tenant: ten };
       }
     }
@@ -1796,10 +2063,14 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   if (activeSlug) {
     const ten = await getTenantBySlug(activeSlug);
     if (ten) {
-      const empMatch = emps.find(e => e.tenant_id === ten.id);
+      const empMatch = emps.find((e) => e.tenant_id === ten.id);
       if (empMatch) {
-         setSession({ empleado_id: empMatch.id, tenant_id: ten.id, iniciado_en: new Date().toISOString() });
-         return { empleado: empMatch, tenant: ten };
+        setSession({
+          empleado_id: empMatch.id,
+          tenant_id: ten.id,
+          iniciado_en: new Date().toISOString(),
+        });
+        return { empleado: empMatch, tenant: ten };
       }
     }
   }
@@ -1815,8 +2086,10 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   return null;
 }
 
-
-export function getBillingCycleStart(planStartDateStr: string | Date, now: Date = new Date()): Date {
+export function getBillingCycleStart(
+  planStartDateStr: string | Date,
+  now: Date = new Date(),
+): Date {
   const start = new Date(planStartDateStr);
   if (isNaN(start.getTime())) return new Date(now.getFullYear(), now.getMonth(), 1);
   if (now < start) return start;
@@ -1825,11 +2098,27 @@ export function getBillingCycleStart(planStartDateStr: string | Date, now: Date 
   const month = now.getMonth();
   const day = start.getDate();
 
-  let cycleStart = new Date(year, month, day, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+  let cycleStart = new Date(
+    year,
+    month,
+    day,
+    start.getHours(),
+    start.getMinutes(),
+    start.getSeconds(),
+    start.getMilliseconds(),
+  );
 
   // Manejar el desbordamiento de fin de mes (ej. si el mes tiene menos días que el día de aniversario)
   if (cycleStart.getDate() !== day) {
-    cycleStart = new Date(year, month + 1, 0, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+    cycleStart = new Date(
+      year,
+      month + 1,
+      0,
+      start.getHours(),
+      start.getMinutes(),
+      start.getSeconds(),
+      start.getMilliseconds(),
+    );
   }
 
   // Si la fecha calculada está en el futuro, el ciclo actual comenzó en el mes anterior
@@ -1840,18 +2129,37 @@ export function getBillingCycleStart(planStartDateStr: string | Date, now: Date 
       prevMonth = 11;
       prevYear = year - 1;
     }
-    cycleStart = new Date(prevYear, prevMonth, day, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+    cycleStart = new Date(
+      prevYear,
+      prevMonth,
+      day,
+      start.getHours(),
+      start.getMinutes(),
+      start.getSeconds(),
+      start.getMilliseconds(),
+    );
     if (cycleStart.getDate() !== day) {
-      cycleStart = new Date(prevYear, prevMonth + 1, 0, start.getHours(), start.getMinutes(), start.getSeconds(), start.getMilliseconds());
+      cycleStart = new Date(
+        prevYear,
+        prevMonth + 1,
+        0,
+        start.getHours(),
+        start.getMinutes(),
+        start.getSeconds(),
+        start.getMilliseconds(),
+      );
     }
   }
 
   return cycleStart;
 }
 
-export async function getMonthlyOrderCount(tenantId: string, planFechaInicio?: string): Promise<number> {
-  const all = (await getOrdenes(tenantId)).filter(o => o.estado !== "ANULADA");
-  
+export async function getMonthlyOrderCount(
+  tenantId: string,
+  planFechaInicio?: string,
+): Promise<number> {
+  const all = (await getOrdenes(tenantId)).filter((o) => o.estado !== "ANULADA");
+
   let refDateStr = planFechaInicio;
   if (!refDateStr) {
     const t = await getTenantById(tenantId);
@@ -1862,7 +2170,7 @@ export async function getMonthlyOrderCount(tenantId: string, planFechaInicio?: s
     const now = new Date();
     const month = now.getMonth();
     const year = now.getFullYear();
-    return all.filter(o => {
+    return all.filter((o) => {
       const d = new Date(o.creado_en);
       return d.getMonth() === month && d.getFullYear() === year;
     }).length;
@@ -1871,7 +2179,7 @@ export async function getMonthlyOrderCount(tenantId: string, planFechaInicio?: s
   const now = new Date();
   const cycleStart = getBillingCycleStart(refDateStr, now);
 
-  return all.filter(o => {
+  return all.filter((o) => {
     const d = new Date(o.creado_en);
     return d >= cycleStart;
   }).length;
@@ -1879,8 +2187,8 @@ export async function getMonthlyOrderCount(tenantId: string, planFechaInicio?: s
 
 export async function checkPlanLimits(tenant: Tenant | string) {
   // Asegurar que tenemos el objeto tenant completo
-  const t = typeof tenant === 'string' ? await getTenantById(tenant) : tenant;
-  if (!t || t.id === '__loading__') {
+  const t = typeof tenant === "string" ? await getTenantById(tenant) : tenant;
+  if (!t || t.id === "__loading__") {
     return {
       plan: PLANS[0],
       orderCount: 0,
@@ -1888,15 +2196,15 @@ export async function checkPlanLimits(tenant: Tenant | string) {
       ordersReached: false,
       employeesReached: false,
       orderLimit: PLANS[0].limite_ordenes_mes,
-      employeeLimit: PLANS[0].limite_empleados
+      employeeLimit: PLANS[0].limite_empleados,
     };
   }
 
   const plans = await getPlans();
-  const plan = plans.find(p => p.id === t.plan_id) || PLANS[0];
+  const plan = plans.find((p) => p.id === t.plan_id) || PLANS[0];
 
   const orderCount = await getMonthlyOrderCount(t.id, t.plan_fecha_inicio || t.creado_en);
-  const employeeCount = (await getEmpleados(t.id)).filter(e => e.rol !== "ADMIN").length;
+  const employeeCount = (await getEmpleados(t.id)).filter((e) => e.rol !== "ADMIN").length;
 
   const ordersReached = plan.limite_ordenes_mes !== null && orderCount >= plan.limite_ordenes_mes;
   const employeesReached = employeeCount >= plan.limite_empleados;
@@ -1908,7 +2216,7 @@ export async function checkPlanLimits(tenant: Tenant | string) {
     ordersReached,
     employeesReached,
     orderLimit: plan.limite_ordenes_mes,
-    employeeLimit: plan.limite_empleados
+    employeeLimit: plan.limite_empleados,
   };
 }
 
@@ -1921,7 +2229,10 @@ export function formatRD(n: number): string {
   return `RD$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
 }
 export function formatNumber(n: number, decimals = 2): string {
-  return new Intl.NumberFormat("en-US", { minimumFractionDigits: decimals, maximumFractionDigits: decimals }).format(n || 0);
+  return new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n || 0);
 }
 /** Parse "1,234.56" or "1234.56" into number. */
 export function parseAmount(raw: string): number {
@@ -1964,23 +2275,33 @@ export function formatDateTimeRD(iso: string): string {
   if (!iso || iso === "null") return "";
   const d = new Date(iso);
   if (isNaN(d.getTime())) return iso; // Fallback to original string if invalid date format
-  return d.toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
+  return d.toLocaleString("es-DO", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
 }
 
 // ============ Permissions ============
 export function can(empleado: Empleado, action: string): boolean {
+  if (!empleado) return false;
   if (empleado.rol === "ADMIN") return true;
-  // Si el empleado tiene permisos definidos explícitamente, usarlos
-  if (empleado.permisos) {
-    return empleado.permisos.includes(action);
+
+  const defaults = getPermisosPorRol(empleado.rol);
+
+  if (empleado.permisos && Array.isArray(empleado.permisos)) {
+    if (empleado.permisos.includes(action)) return true;
+    // Retrocompatibilidad: Si el permiso es 'procesos' y el rol lo tiene por defecto
+    if (action === "procesos" && defaults.includes("procesos")) {
+      return true;
+    }
+    return false;
   }
-  // Fallback a lógica de roles antigua (retrocompatibilidad)
-  const rol = empleado.rol;
-  if (rol === "SUPERVISOR") return action !== "configuracion" && action !== "gestionar_personal" && action !== "personal";
-  if (rol === "VENDEDOR") return ["dashboard", "crear_orden", "nueva-orden", "aplicar_descuento", "ver_caja", "caja", "ordenes", "clientes"].includes(action);
-  if (rol === "RECEPCIONISTA") return ["nueva-orden", "gestionar_clientes", "clientes", "ordenes"].includes(action);
-  if (rol === "REPARTIDOR") return ["logistica"].includes(action);
-  return false;
+
+  return defaults.includes(action);
 }
 
 export async function migrateLocalDataToSupabase(tenant_id: string) {
@@ -1993,33 +2314,37 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
 
   // REPARACIÓN PRE-MIGRACIÓN: Corregir IDs no-UUID (generic-...)
   const oldToNewId = new Map<string, string>();
-  localClientes = localClientes.map(c => {
-    if (!c || !c.id) return c;
-    if (typeof c.id === 'string' && c.id.startsWith("generic-")) {
-      const isPersona = c.id.includes("consumidor");
-      const tid = c.tenant_id || tenant_id;
-      const newId = tid.substring(0, 24) + (isPersona ? "f000" : "e000") + tid.substring(28);
-      oldToNewId.set(c.id, newId);
-      return { ...c, id: newId, tenant_id: tid };
-    }
-    return c;
-  }).filter(Boolean);
+  localClientes = localClientes
+    .map((c) => {
+      if (!c || !c.id) return c;
+      if (typeof c.id === "string" && c.id.startsWith("generic-")) {
+        const isPersona = c.id.includes("consumidor");
+        const tid = c.tenant_id || tenant_id;
+        const newId = tid.substring(0, 24) + (isPersona ? "f000" : "e000") + tid.substring(28);
+        oldToNewId.set(c.id, newId);
+        return { ...c, id: newId, tenant_id: tid };
+      }
+      return c;
+    })
+    .filter(Boolean);
 
   if (oldToNewId.size > 0) {
     // Actualizar órdenes locales que apuntaban a los IDs viejos
-    localOrds = localOrds.map(o => {
-      if (!o) return o;
-      if (oldToNewId.has(o.cliente_id)) {
-        return { ...o, cliente_id: oldToNewId.get(o.cliente_id)! };
-      }
-      return o;
-    }).filter(Boolean);
+    localOrds = localOrds
+      .map((o) => {
+        if (!o) return o;
+        if (oldToNewId.has(o.cliente_id)) {
+          return { ...o, cliente_id: oldToNewId.get(o.cliente_id)! };
+        }
+        return o;
+      })
+      .filter(Boolean);
     // Guardar los cambios locales antes de seguir
     write(KEY.clientes, localClientes);
     write(KEY.ordenes, localOrds);
   }
 
-  const toMigrateClientes = localClientes.filter(x => x.tenant_id === tenant_id);
+  const toMigrateClientes = localClientes.filter((x) => x.tenant_id === tenant_id);
   const failedClientesIds = new Set<string>();
   for (let c of toMigrateClientes) {
     try {
@@ -2027,7 +2352,7 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
       if (c.tipo === ("Persona" as any)) c.tipo = "Consumidor Final";
       if (c.limite_credito === undefined) c.limite_credito = 0;
 
-      const { error } = await supabase.from('clientes').upsert(c);
+      const { error } = await supabase.from("clientes").upsert(c);
       if (error) {
         console.error("Migrate Cliente error:", error);
         failedClientesIds.add(c.id);
@@ -2041,11 +2366,11 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
   }
 
   // 2. Órdenes
-  const toMigrateOrds = localOrds.filter(x => x.tenant_id === tenant_id);
+  const toMigrateOrds = localOrds.filter((x) => x.tenant_id === tenant_id);
   const failedOrdsIds = new Set<string>();
   for (const o of toMigrateOrds) {
     try {
-      const { error } = await supabase.from('ordenes').upsert(o);
+      const { error } = await supabase.from("ordenes").upsert(o);
       if (error) {
         console.error("Migrate Orden error:", error);
         failedOrdsIds.add(o.id);
@@ -2060,11 +2385,11 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
 
   // 3. Catálogo
   const localCat = read<CatalogoItem[]>(KEY.catalogo, []);
-  const toMigrateCat = localCat.filter(x => x.tenant_id === tenant_id);
+  const toMigrateCat = localCat.filter((x) => x.tenant_id === tenant_id);
   const failedCatIds = new Set<string>();
   for (const item of toMigrateCat) {
     try {
-      const { error } = await supabase.from('catalogo_items').upsert(item);
+      const { error } = await supabase.from("catalogo_items").upsert(item);
       if (error) {
         console.error("Migrate Catalogo error:", error);
         failedCatIds.add(item.id);
@@ -2079,11 +2404,11 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
 
   // 4. Gastos
   const localGastos = read<Gasto[]>(KEY.gastos, []);
-  const toMigrateGastos = localGastos.filter(x => x.tenant_id === tenant_id);
+  const toMigrateGastos = localGastos.filter((x) => x.tenant_id === tenant_id);
   const failedGastosIds = new Set<string>();
   for (const g of toMigrateGastos) {
     try {
-      const { error } = await supabase.from('gastos').upsert(g);
+      const { error } = await supabase.from("gastos").upsert(g);
       if (error) {
         console.error("Migrate Gasto error:", error);
         failedGastosIds.add(g.id);
@@ -2098,11 +2423,11 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
 
   // 5. Movimientos
   const localMovs = read<MovimientoCaja[]>(KEY.movimientos, []);
-  const toMigrateMovs = localMovs.filter(x => x.tenant_id === tenant_id);
+  const toMigrateMovs = localMovs.filter((x) => x.tenant_id === tenant_id);
   const failedMovsIds = new Set<string>();
   for (const m of toMigrateMovs) {
     try {
-      const { error } = await supabase.from('movimientos_caja').upsert(m);
+      const { error } = await supabase.from("movimientos_caja").upsert(m);
       if (error) {
         console.error("Migrate Movimiento error:", error);
         failedMovsIds.add(m.id);
@@ -2116,11 +2441,31 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
   }
 
   // Limpiar solo lo que se migró exitosamente
-  if (results.clientes > 0) write(KEY.clientes, localClientes.filter(x => x.tenant_id !== tenant_id || failedClientesIds.has(x.id)));
-  if (results.ordenes > 0) write(KEY.ordenes, localOrds.filter(x => x.tenant_id !== tenant_id || failedOrdsIds.has(x.id)));
-  if (results.catalogo > 0) write(KEY.catalogo, localCat.filter(x => x.tenant_id !== tenant_id || failedCatIds.has(x.id)));
-  if (results.gastos > 0) write(KEY.gastos, localGastos.filter(x => x.tenant_id !== tenant_id || failedGastosIds.has(x.id)));
-  if (results.movimientos > 0) write(KEY.movimientos, localMovs.filter(x => x.tenant_id !== tenant_id || failedMovsIds.has(x.id)));
+  if (results.clientes > 0)
+    write(
+      KEY.clientes,
+      localClientes.filter((x) => x.tenant_id !== tenant_id || failedClientesIds.has(x.id)),
+    );
+  if (results.ordenes > 0)
+    write(
+      KEY.ordenes,
+      localOrds.filter((x) => x.tenant_id !== tenant_id || failedOrdsIds.has(x.id)),
+    );
+  if (results.catalogo > 0)
+    write(
+      KEY.catalogo,
+      localCat.filter((x) => x.tenant_id !== tenant_id || failedCatIds.has(x.id)),
+    );
+  if (results.gastos > 0)
+    write(
+      KEY.gastos,
+      localGastos.filter((x) => x.tenant_id !== tenant_id || failedGastosIds.has(x.id)),
+    );
+  if (results.movimientos > 0)
+    write(
+      KEY.movimientos,
+      localMovs.filter((x) => x.tenant_id !== tenant_id || failedMovsIds.has(x.id)),
+    );
 
   return results;
 }
@@ -2153,20 +2498,97 @@ export async function seedDemoIfEmpty() {
   await saveTenant(tenant);
 
   const adminId = uid("emp");
-  await saveEmpleado({ id: adminId, tenant_id: tenantId, nombre: "María González", email: "admin@laburbuja.do", password: "demo1234", rol: "ADMIN", activo: true, creado_en: new Date().toISOString(), pin: "1234" });
-  await saveEmpleado({ id: uid("emp"), tenant_id: tenantId, nombre: "Carlos Rodríguez", email: "vendedor@laburbuja.do", password: "demo1234", rol: "VENDEDOR", activo: true, creado_en: new Date().toISOString(), pin: "5678" });
-  await saveEmpleado({ id: uid("emp"), tenant_id: tenantId, nombre: "Luis Fernández", email: "repartidor@laburbuja.do", password: "demo1234", rol: "REPARTIDOR", activo: true, creado_en: new Date().toISOString() });
+  await saveEmpleado({
+    id: adminId,
+    tenant_id: tenantId,
+    nombre: "María González",
+    email: "admin@laburbuja.do",
+    password: "demo1234",
+    rol: "ADMIN",
+    activo: true,
+    creado_en: new Date().toISOString(),
+    pin: "1234",
+  });
+  await saveEmpleado({
+    id: uid("emp"),
+    tenant_id: tenantId,
+    nombre: "Carlos Rodríguez",
+    email: "vendedor@laburbuja.do",
+    password: "demo1234",
+    rol: "VENDEDOR",
+    activo: true,
+    creado_en: new Date().toISOString(),
+    pin: "5678",
+  });
+  await saveEmpleado({
+    id: uid("emp"),
+    tenant_id: tenantId,
+    nombre: "Luis Fernández",
+    email: "repartidor@laburbuja.do",
+    password: "demo1234",
+    rol: "REPARTIDOR",
+    activo: true,
+    creado_en: new Date().toISOString(),
+  });
 
   // Servicios
   const servSeed: Array<Omit<Servicio, "id" | "tenant_id">> = [
-    { nombre: "Lavado y secado", descripcion: "Lavado completo + secadora", icono: "🧺", activo: true, precio: 0 },
-    { nombre: "Solo lavado", descripcion: "Solo lavado en agua", icono: "💧", activo: true, precio: 0 },
-    { nombre: "Solo secado", descripcion: "Únicamente secadora", icono: "🌬️", activo: true, precio: 0 },
-    { nombre: "Planchado", descripcion: "Planchado profesional", icono: "♨️", activo: true, precio: 0 },
-    { nombre: "Lavado en seco", descripcion: "Dry cleaning para prendas delicadas", icono: "✨", activo: true, precio: 50 },
-    { nombre: "Sastrería", descripcion: "Arreglos y costura", icono: "🪡", activo: true, precio: 100 },
-    { nombre: "Tapicería", descripcion: "Limpieza de muebles y tapizados", icono: "🛋️", activo: true, precio: 500 },
-    { nombre: "Alfombras", descripcion: "Lavado de alfombras y tapetes", icono: "🟫", activo: true, precio: 300 },
+    {
+      nombre: "Lavado y secado",
+      descripcion: "Lavado completo + secadora",
+      icono: "🧺",
+      activo: true,
+      precio: 0,
+    },
+    {
+      nombre: "Solo lavado",
+      descripcion: "Solo lavado en agua",
+      icono: "💧",
+      activo: true,
+      precio: 0,
+    },
+    {
+      nombre: "Solo secado",
+      descripcion: "Únicamente secadora",
+      icono: "🌬️",
+      activo: true,
+      precio: 0,
+    },
+    {
+      nombre: "Planchado",
+      descripcion: "Planchado profesional",
+      icono: "♨️",
+      activo: true,
+      precio: 0,
+    },
+    {
+      nombre: "Lavado en seco",
+      descripcion: "Dry cleaning para prendas delicadas",
+      icono: "✨",
+      activo: true,
+      precio: 50,
+    },
+    {
+      nombre: "Sastrería",
+      descripcion: "Arreglos y costura",
+      icono: "🪡",
+      activo: true,
+      precio: 100,
+    },
+    {
+      nombre: "Tapicería",
+      descripcion: "Limpieza de muebles y tapizados",
+      icono: "🛋️",
+      activo: true,
+      precio: 500,
+    },
+    {
+      nombre: "Alfombras",
+      descripcion: "Lavado de alfombras y tapetes",
+      icono: "🟫",
+      activo: true,
+      precio: 300,
+    },
   ];
   for (const s of servSeed) {
     await saveServicio({ ...s, id: uid("srv"), tenant_id: tenantId });
@@ -2174,17 +2596,54 @@ export async function seedDemoIfEmpty() {
 
   // Clientes
   const clientesData = [
-    { nombre: "Juan Pérez", telefono: "809-321-4567", email: "juan@email.com", direccion: "Calle Duarte 12, Piantini", tipo: "Consumidor Final" as const, limite_credito: 0 },
-    { nombre: "Ana Martínez", telefono: "829-555-1122", email: "ana@email.com", direccion: "Av. 27 de Febrero 88, Bella Vista", tipo: "Consumidor Final" as const, limite_credito: 5000 },
-    { nombre: "Pedro Jiménez", telefono: "849-777-3344", direccion: "Calle El Sol 5, Gazcue", tipo: "Empresa" as const, limite_credito: 3000 },
-    { nombre: "Luisa Reyes", telefono: "809-444-9988", email: "luisa@email.com", tipo: "Consumidor Final" as const, limite_credito: 0 },
-    { nombre: "Roberto Núñez", telefono: "809-222-5566", direccion: "Av. Sarasota 200, Bella Vista", tipo: "Consumidor Final" as const, limite_credito: 0 },
+    {
+      nombre: "Juan Pérez",
+      telefono: "809-321-4567",
+      email: "juan@email.com",
+      direccion: "Calle Duarte 12, Piantini",
+      tipo: "Consumidor Final" as const,
+      limite_credito: 0,
+    },
+    {
+      nombre: "Ana Martínez",
+      telefono: "829-555-1122",
+      email: "ana@email.com",
+      direccion: "Av. 27 de Febrero 88, Bella Vista",
+      tipo: "Consumidor Final" as const,
+      limite_credito: 5000,
+    },
+    {
+      nombre: "Pedro Jiménez",
+      telefono: "849-777-3344",
+      direccion: "Calle El Sol 5, Gazcue",
+      tipo: "Empresa" as const,
+      limite_credito: 3000,
+    },
+    {
+      nombre: "Luisa Reyes",
+      telefono: "809-444-9988",
+      email: "luisa@email.com",
+      tipo: "Consumidor Final" as const,
+      limite_credito: 0,
+    },
+    {
+      nombre: "Roberto Núñez",
+      telefono: "809-222-5566",
+      direccion: "Av. Sarasota 200, Bella Vista",
+      tipo: "Consumidor Final" as const,
+      limite_credito: 0,
+    },
   ];
   const clientesIds: string[] = [];
   for (const c of clientesData) {
     const id = uid("cli");
     clientesIds.push(id);
-    await saveCliente({ ...c, id, tenant_id: tenantId, creado_en: new Date(Date.now() - Math.random() * 60 * 86400000).toISOString() });
+    await saveCliente({
+      ...c,
+      id,
+      tenant_id: tenantId,
+      creado_en: new Date(Date.now() - Math.random() * 60 * 86400000).toISOString(),
+    });
   }
 
   // Caja abierta
@@ -2199,8 +2658,14 @@ export async function seedDemoIfEmpty() {
     notas_apertura: "Apertura turno mañana",
   });
   await saveMovimiento({
-    id: uid("mov"), tenant_id: tenantId, caja_id: cajaId, empleado_id: adminId,
-    tipo: "INGRESO", concepto: "Apertura de caja", monto: 2000, creado_en: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
+    id: uid("mov"),
+    tenant_id: tenantId,
+    caja_id: cajaId,
+    empleado_id: adminId,
+    tipo: "INGRESO",
+    concepto: "Apertura de caja",
+    monto: 2000,
+    creado_en: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
   });
 
   // Algunas órdenes históricas y de hoy
@@ -2216,7 +2681,14 @@ export async function seedDemoIfEmpty() {
     { descripcion: "Sábana king", cantidad: 2, precio_unitario: 280 },
   ];
 
-  async function crearOrden(idx: number, items: OrdenItem[], estado: EstadoOrden, metodo: MetodoPago, hoursAgo: number, urgente = false) {
+  async function crearOrden(
+    idx: number,
+    items: OrdenItem[],
+    estado: EstadoOrden,
+    metodo: MetodoPago,
+    hoursAgo: number,
+    urgente = false,
+  ) {
     const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
     const itbis = +(subtotal * 0.18).toFixed(2);
     const total = +(subtotal + itbis).toFixed(2);
@@ -2226,16 +2698,37 @@ export async function seedDemoIfEmpty() {
     const numero = await nextOrdenNumero(tenantId);
     const creado = new Date(Date.now() - hoursAgo * 3600 * 1000).toISOString();
     await saveOrden({
-      id, tenant_id: tenantId, numero, cliente_id: clientesIds[idx % clientesIds.length],
-      empleado_id: adminId, servicios: ["Lavado y secado"], items,
-      subtotal, itbis, descuento: 0, total, pagado, saldo,
-      metodo_pago: metodo, estado, fecha_entrega: new Date(Date.now() + 2 * 86400000).toISOString(),
-      es_urgente: urgente, creado_en: creado,
+      id,
+      tenant_id: tenantId,
+      numero,
+      cliente_id: clientesIds[idx % clientesIds.length],
+      empleado_id: adminId,
+      servicios: ["Lavado y secado"],
+      items,
+      subtotal,
+      itbis,
+      descuento: 0,
+      total,
+      pagado,
+      saldo,
+      metodo_pago: metodo,
+      estado,
+      fecha_entrega: new Date(Date.now() + 2 * 86400000).toISOString(),
+      es_urgente: urgente,
+      creado_en: creado,
     });
     if (metodo !== "CREDITO" && estado !== "ANULADA") {
       await saveMovimiento({
-        id: uid("mov"), tenant_id: tenantId, caja_id: cajaId, empleado_id: adminId,
-        tipo: "VENTA", concepto: `Venta ${numero}`, monto: total, metodo, orden_id: id, creado_en: creado,
+        id: uid("mov"),
+        tenant_id: tenantId,
+        caja_id: cajaId,
+        empleado_id: adminId,
+        tipo: "VENTA",
+        concepto: `Venta ${numero}`,
+        monto: total,
+        metodo,
+        orden_id: id,
+        creado_en: creado,
       });
     }
   }
@@ -2247,8 +2740,29 @@ export async function seedDemoIfEmpty() {
   await crearOrden(4, items2, "EN_PROCESO", "TRANSFERENCIA", 0.5);
 
   // Gastos
-  await saveGasto({ id: uid("gas"), tenant_id: tenantId, empleado_id: adminId, categoria: "Suministros", descripcion: "Detergente líquido 5gal", monto: 850, metodo_pago: "Efectivo", proveedor: "Distribuidora Sol", fecha: new Date().toISOString(), aprobado: true });
-  await saveGasto({ id: uid("gas"), tenant_id: tenantId, empleado_id: adminId, categoria: "Servicios (luz, agua, internet)", descripcion: "Factura EDESUR", monto: 4200, metodo_pago: "Transferencia", fecha: new Date(Date.now() - 86400000).toISOString(), aprobado: true });
+  await saveGasto({
+    id: uid("gas"),
+    tenant_id: tenantId,
+    empleado_id: adminId,
+    categoria: "Suministros",
+    descripcion: "Detergente líquido 5gal",
+    monto: 850,
+    metodo_pago: "Efectivo",
+    proveedor: "Distribuidora Sol",
+    fecha: new Date().toISOString(),
+    aprobado: true,
+  });
+  await saveGasto({
+    id: uid("gas"),
+    tenant_id: tenantId,
+    empleado_id: adminId,
+    categoria: "Servicios (luz, agua, internet)",
+    descripcion: "Factura EDESUR",
+    monto: 4200,
+    metodo_pago: "Transferencia",
+    fecha: new Date(Date.now() - 86400000).toISOString(),
+    aprobado: true,
+  });
 
   setActiveTenant(tenant.slug);
 }
@@ -2257,9 +2771,9 @@ export async function seedDemoIfEmpty() {
 export async function incrementWhatsAppCount(tenantId: string) {
   // 1. Obtener datos actuales
   const { data: t, error: fetchErr } = await supabase
-    .from('tenants')
-    .select('whatsapp_sent_month, whatsapp_last_reset')
-    .eq('id', tenantId)
+    .from("tenants")
+    .select("whatsapp_sent_month, whatsapp_last_reset")
+    .eq("id", tenantId)
     .single();
 
   if (fetchErr || !t) return;
@@ -2271,72 +2785,93 @@ export async function incrementWhatsAppCount(tenantId: string) {
   let nextCount = (t.whatsapp_sent_month || 0) + 1;
   let nextReset = t.whatsapp_last_reset;
 
-  if (!lastReset || lastReset.getMonth() !== now.getMonth() || lastReset.getFullYear() !== now.getFullYear()) {
+  if (
+    !lastReset ||
+    lastReset.getMonth() !== now.getMonth() ||
+    lastReset.getFullYear() !== now.getFullYear()
+  ) {
     nextCount = 1;
     nextReset = now.toISOString();
   }
 
   await supabase
-    .from('tenants')
+    .from("tenants")
     .update({
       whatsapp_sent_month: nextCount,
-      whatsapp_last_reset: nextReset
+      whatsapp_last_reset: nextReset,
     })
-    .eq('id', tenantId);
+    .eq("id", tenantId);
 }
 
 // ============ ECF Storage Functions ============
 
 export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> {
-  const { data, error } = await supabase.from('ecf_config').select('*').eq('tenant_id', tenantId).maybeSingle();
+  const { data, error } = await supabase
+    .from("ecf_config")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .maybeSingle();
   if (error) return null;
   return data;
 }
 
 export async function saveECFConfig(config: ECFConfig) {
-  const { error } = await supabase.from('ecf_config').upsert(config);
+  const { error } = await supabase.from("ecf_config").upsert(config);
   if (error) throw error;
 }
 
 export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> {
-  const { data, error } = await supabase.from('ecf_sequences').select('*').eq('tenant_id', tenantId);
+  const { data, error } = await supabase
+    .from("ecf_sequences")
+    .select("*")
+    .eq("tenant_id", tenantId);
   if (error) return [];
   return data || [];
 }
 
 export async function saveECFSequence(seq: ECFSequence) {
-  const { error } = await supabase.from('ecf_sequences').upsert(seq);
+  const { error } = await supabase.from("ecf_sequences").upsert(seq);
   if (error) throw error;
 }
 
 export async function deleteECFSequence(id: string) {
-  const { error } = await supabase.from('ecf_sequences').delete().eq('id', id);
+  const { error } = await supabase.from("ecf_sequences").delete().eq("id", id);
   if (error) throw error;
 }
 
 export async function getECFDocuments(tenantId: string): Promise<ECFDocument[]> {
-  const { data, error } = await supabase.from('ecf_documents').select('*').eq('tenant_id', tenantId).order('fecha_emision', { ascending: false });
+  const { data, error } = await supabase
+    .from("ecf_documents")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("fecha_emision", { ascending: false });
   if (error) return [];
   return data || [];
 }
 
 export async function saveECFDocument(doc: ECFDocument) {
-  const { error } = await supabase.from('ecf_documents').upsert(doc);
+  const { error } = await supabase.from("ecf_documents").upsert(doc);
   if (error) throw error;
 }
 
-export async function nextECFNumero(tenantId: string, tipo: string): Promise<{ ncf: string; expiration_date?: string }> {
+export async function nextECFNumero(
+  tenantId: string,
+  tipo: string,
+): Promise<{ ncf: string; expiration_date?: string }> {
   try {
-    const { data, error } = await supabase.rpc('reservar_proximo_ncf', {
+    const { data, error } = await supabase.rpc("reservar_proximo_ncf", {
       p_tenant_id: tenantId,
-      p_tipo_ecf: tipo
+      p_tipo_ecf: tipo,
     });
 
     if (!error && data && data.length > 0) {
       return { ncf: data[0].ncf, expiration_date: data[0].expiration_date };
     }
     if (error) {
-      console.warn("RPC reservar_proximo_ncf not available, falling back to client logic:", error.message);
+      console.warn(
+        "RPC reservar_proximo_ncf not available, falling back to client logic:",
+        error.message,
+      );
     }
   } catch (rpcErr) {
     console.warn("Error calling RPC, using client fallback:", rpcErr);
@@ -2344,56 +2879,66 @@ export async function nextECFNumero(tenantId: string, tipo: string): Promise<{ n
 
   // Fallback de cliente atómico con padStart de 8 posiciones (11 caracteres totales de NCF)
   const { data: seq, error } = await supabase
-    .from('ecf_sequences')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .eq('tipo_ecf', tipo)
-    .eq('is_active', true)
+    .from("ecf_sequences")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("tipo_ecf", tipo)
+    .eq("is_active", true)
     .single();
 
   if (error || !seq) throw new Error(`No hay secuencia activa para ${tipo}`);
-  if (seq.valor_actual >= seq.valor_final) throw new Error(`Rango de secuencia agotado para ${tipo}`);
+  if (seq.valor_actual >= seq.valor_final)
+    throw new Error(`Rango de secuencia agotado para ${tipo}`);
 
   const proximo = seq.valor_actual + 1;
-  const encf = `${tipo}${String(proximo).padStart(8, '0')}`;
+  const encf = `${tipo}${String(proximo).padStart(8, "0")}`;
 
   // Actualizamos el contador inmediatamente
-  await supabase.from('ecf_sequences').update({ valor_actual: proximo }).eq('id', seq.id);
+  await supabase.from("ecf_sequences").update({ valor_actual: proximo }).eq("id", seq.id);
 
   return { ncf: encf, expiration_date: seq.expiration_date };
 }
 
-import { getProneSoftClient } from './fiscal/pronesoft-client';
+import { getProneSoftClient } from "./fiscal/pronesoft-client";
 
 export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDocumentRecibido[]> {
   try {
     // 1. Obtener desde el SDK de Pronesoft los últimos recibidos
     const pronesoft = getProneSoftClient(tenantId);
     const res = await pronesoft.listReceivedDocuments(1, 100);
-    
+
     // Si hay datos, upsertarlos en la base de datos local
     if (res && res.data && res.data.length > 0) {
-      const { data: config } = await supabase.from('ecf_config').select('is_active').eq('tenant_id', tenantId).single();
-      
+      const { data: config } = await supabase
+        .from("ecf_config")
+        .select("is_active")
+        .eq("tenant_id", tenantId)
+        .single();
+
       // Solo sincronizar si el módulo e-CF está activo
       if (config && config.is_active) {
         const ops = res.data.map((doc: any) => ({
           tenant_id: tenantId,
           // documentId o trackId depende de la estructura, normalmente id o eNcf
           id: doc.id || doc.trackId || doc.eNcf,
-          tipo_ecf: doc.eNcf ? doc.eNcf.substring(0, 3) : 'E31',
-          rnc_emisor: doc.issuerRnc || 'N/A',
-          nombre_emisor: doc.issuerName || 'Proveedor',
-          encf: doc.eNcf || '',
+          tipo_ecf: doc.eNcf ? doc.eNcf.substring(0, 3) : "E31",
+          rnc_emisor: doc.issuerRnc || "N/A",
+          nombre_emisor: doc.issuerName || "Proveedor",
+          encf: doc.eNcf || "",
           monto_total: doc.totalAmount || 0,
-          estado_comercial: doc.commercialStatus === 'ACCEPTED' ? 'APROBADO' : (doc.commercialStatus === 'REJECTED' ? 'RECHAZADO' : 'PENDIENTE'),
+          estado_comercial:
+            doc.commercialStatus === "ACCEPTED"
+              ? "APROBADO"
+              : doc.commercialStatus === "REJECTED"
+                ? "RECHAZADO"
+                : "PENDIENTE",
           pdf_url: doc.pdfUrl || null,
-          creado_en: doc.issueDate || new Date().toISOString()
+          creado_en: doc.issueDate || new Date().toISOString(),
         }));
 
         // Guardamos los documentos en batch si no existen
         for (const op of ops) {
-          await supabase.from('ecf_documentos_recibidos').upsert(op, { onConflict: 'id' });
+          await supabase.from("ecf_documentos_recibidos").upsert(op, { onConflict: "id" });
         }
       }
     }
@@ -2403,10 +2948,10 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
 
   // 2. Obtener de la base de datos local
   const { data, error } = await supabase
-    .from('ecf_documentos_recibidos')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('creado_en', { ascending: false });
+    .from("ecf_documentos_recibidos")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .order("creado_en", { ascending: false });
 
   if (error) throw error;
   return data || [];
@@ -2414,7 +2959,7 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
 
 export async function saveECFDocumentoRecibido(doc: Partial<ECFDocumentRecibido>) {
   const { data, error } = await supabase
-    .from('ecf_documentos_recibidos')
+    .from("ecf_documentos_recibidos")
     .upsert(doc)
     .select()
     .single();
@@ -2423,12 +2968,16 @@ export async function saveECFDocumentoRecibido(doc: Partial<ECFDocumentRecibido>
   return data;
 }
 
-export async function updateEstadoComercialECF(id: string, estado: 'APROBADO' | 'RECHAZADO', tenantId?: string) {
+export async function updateEstadoComercialECF(
+  id: string,
+  estado: "APROBADO" | "RECHAZADO",
+  tenantId?: string,
+) {
   // Primero notificar al SDK
   if (tenantId) {
     try {
       const pronesoft = getProneSoftClient(tenantId);
-      await pronesoft.submitCommercialApproval(id, estado === 'APROBADO' ? 'ACCEPTED' : 'REJECTED');
+      await pronesoft.submitCommercialApproval(id, estado === "APROBADO" ? "ACCEPTED" : "REJECTED");
     } catch (err) {
       console.error("Error al enviar aprobación comercial al SDK:", err);
       // No lanzamos el error para no bloquear la app, pero idealmente se debería manejar
@@ -2436,45 +2985,41 @@ export async function updateEstadoComercialECF(id: string, estado: 'APROBADO' | 
   }
 
   const { error } = await supabase
-    .from('ecf_documentos_recibidos')
+    .from("ecf_documentos_recibidos")
     .update({ estado_comercial: estado })
-    .eq('id', id);
+    .eq("id", id);
 
   if (error) throw error;
 }
 
 export async function updateECFConfig(tenantId: string, updates: Partial<ECFConfig>) {
-  const { error } = await supabase
-    .from('ecf_config')
-    .update(updates)
-    .eq('tenant_id', tenantId);
+  const { error } = await supabase.from("ecf_config").update(updates).eq("tenant_id", tenantId);
 
   if (error) throw error;
 }
 
-export async function validarLicenciaConNube(codigo: string): Promise<{ ok: boolean; licencia?: any; error?: string }> {
+export async function validarLicenciaConNube(
+  codigo: string,
+): Promise<{ ok: boolean; licencia?: any; error?: string }> {
   try {
     const { data, error } = await supabase
-      .from('licencias_locales')
-      .select('*')
-      .eq('codigo', codigo)
-      .eq('estado', 'ACTIVO')
+      .from("licencias_locales")
+      .select("*")
+      .eq("codigo", codigo)
+      .eq("estado", "ACTIVO")
       .single();
 
     if (error) {
-      return { ok: false, error: 'Código de licencia no encontrado o inactivo.' };
+      return { ok: false, error: "Código de licencia no encontrado o inactivo." };
     }
 
-    await supabase.rpc('marcar_licencia_sincronizada', { p_codigo: codigo });
+    await supabase.rpc("marcar_licencia_sincronizada", { p_codigo: codigo });
 
     return { ok: true, licencia: data };
   } catch (err: any) {
-    return { ok: false, error: err.message || 'Error de conexión con el servidor.' };
+    return { ok: false, error: err.message || "Error de conexión con el servidor." };
   }
 }
-
-
-
 
 export interface Notificacion {
   id: string;
@@ -2498,10 +3043,7 @@ export async function getNotificaciones(tenantId: string): Promise<Notificacion[
 }
 
 export async function marcarNotificacionLeida(id: string): Promise<void> {
-  await supabase
-    .from("notificaciones")
-    .update({ leida: true })
-    .eq("id", id);
+  await supabase.from("notificaciones").update({ leida: true }).eq("id", id);
 }
 
 export async function marcarTodasNotificacionesLeidas(tenantId: string): Promise<void> {
