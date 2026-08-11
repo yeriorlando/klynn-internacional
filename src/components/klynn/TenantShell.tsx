@@ -3,9 +3,51 @@ import { useMemo, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import {
-  LayoutDashboard, Wallet, Users, Truck, Settings, LogOut, Bell, Menu, X, Shield, Droplets, ChevronDown, Banknote, BookOpen, Check, PlusCircle, MessageCircle, CreditCard, Phone, HelpCircle,
-  Monitor, ShoppingCart, Package, LayoutGrid, User, BarChart3, Keyboard, Inbox, RotateCw, CheckCircle2, Ban,
-  Sparkles, Scale, Flame, Printer, StickyNote, Trash2, Plus, ChevronRight, Search, FileText, Wrench, Clock, Shirt, AlertTriangle
+  LayoutDashboard,
+  Wallet,
+  Users,
+  Truck,
+  Settings,
+  LogOut,
+  Bell,
+  Menu,
+  X,
+  Shield,
+  Droplets,
+  ChevronDown,
+  Banknote,
+  BookOpen,
+  Check,
+  PlusCircle,
+  MessageCircle,
+  CreditCard,
+  Phone,
+  HelpCircle,
+  Monitor,
+  ShoppingCart,
+  Package,
+  LayoutGrid,
+  User,
+  BarChart3,
+  Keyboard,
+  Inbox,
+  RotateCw,
+  CheckCircle2,
+  Ban,
+  Sparkles,
+  Scale,
+  Flame,
+  Printer,
+  StickyNote,
+  Trash2,
+  Plus,
+  ChevronRight,
+  Search,
+  FileText,
+  Wrench,
+  Clock,
+  Shirt,
+  AlertTriangle,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -19,13 +61,30 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { 
-  logout, getCajaAbierta, formatRD, can, getTenantsForUser, 
-  setActiveTenant, setSession, switchSession, getPlans,
-  getOrdenes, getClientes, getCatalogo, getServicios, 
-  getCajas, getMovimientos, getGastos, getGlobalConfig, getECFConfig,
+import {
+  logout,
+  getCajaAbierta,
+  formatRD,
+  can,
+  getTenantsForUser,
+  setActiveTenant,
+  setSession,
+  switchSession,
+  getPlans,
+  getOrdenes,
+  getClientes,
+  getCatalogo,
+  getServicios,
+  getCajas,
+  getMovimientos,
+  getGastos,
+  getGlobalConfig,
+  getECFConfig,
   isModuleEnabled,
-  getNotificaciones, marcarNotificacionLeida, marcarTodasNotificacionesLeidas, type Notificacion
+  getNotificaciones,
+  marcarNotificacionLeida,
+  marcarTodasNotificacionesLeidas,
+  type Notificacion,
 } from "@/lib/storage";
 import { Toaster, toast } from "sonner";
 import { useEffect } from "react";
@@ -52,10 +111,27 @@ interface NavItem {
 }
 
 const NAV: (slug: string) => NavItem[] = (slug) => [
-  { to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard" },
-  { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
-  {to: `/t/${slug}/nueva-orden`, label: "Punto de Venta", icon: Monitor, permission: "nueva-orden"},
-  {to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes"},
+  {
+    to: `/t/${slug}`,
+    label: "Dashboard",
+    icon: LayoutDashboard,
+    exact: true,
+    permission: "dashboard",
+  },
+  {
+    to: `/t/${slug}/conversations`,
+    label: "Conversaciones",
+    icon: MessageCircle,
+    permission: "conversations",
+  },
+  {
+    to: `/t/${slug}/nueva-orden`,
+    label: "Punto de Venta",
+    icon: Monitor,
+    permission: "nueva-orden",
+  },
+  { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes" },
+  { to: `/t/${slug}/procesos`, label: "Procesos", icon: Wrench, permission: "ordenes" },
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
@@ -63,7 +139,12 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
   { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
-  { to: `/t/${slug}/configuracion`, label: "Configuración", icon: Settings, permission: "configuracion" },
+  {
+    to: `/t/${slug}/configuracion`,
+    label: "Configuración",
+    icon: Settings,
+    permission: "configuracion",
+  },
 ];
 
 export function TenantShell() {
@@ -74,9 +155,11 @@ export function TenantShell() {
   const [showSoporteModal, setShowSoporteModal] = useState(false);
   const [showAtajosModal, setShowAtajosModal] = useState(false);
   const [showHerramientasModal, setShowHerramientasModal] = useState(false);
-  const [activeTool, setActiveTool] = useState<null | "calculadora" | "urgentes" | "ultima_factura" | "notas">(null);
+  const [activeTool, setActiveTool] = useState<
+    null | "calculadora" | "urgentes" | "ultima_factura" | "notas"
+  >(null);
 
-  const { data: cajaData } = useCajaAbierta(user?.tenant?.id || '');
+  const { data: cajaData } = useCajaAbierta(user?.tenant?.id || "");
   const cajaAbierta = !!cajaData;
 
   // UNREAD COUNT BADGE & GLOBAL REAL-TIME NOTIFICATIONS
@@ -90,33 +173,35 @@ export function TenantShell() {
   // NOTIFICACIONES GENERALES
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
   const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>([]);
-  const visibleNotificaciones = notificaciones.filter(n => !deletedNotifIds.includes(n.id));
-  const unreadNotifs = notificaciones.filter(n => !n.leida && !deletedNotifIds.includes(n.id)).length;
+  const visibleNotificaciones = notificaciones.filter((n) => !deletedNotifIds.includes(n.id));
+  const unreadNotifs = notificaciones.filter(
+    (n) => !n.leida && !deletedNotifIds.includes(n.id),
+  ).length;
 
   useEffect(() => {
-    if (!user || user.tenant.id === '__loading__') return;
-    getPlans().then(plans => {
-      const plan = plans.find(p => p.id === user.tenant.plan_id);
-      setHasLogistica(isModuleEnabled(user.tenant, 'logistica', plan));
-      setHasWhatsApp(isModuleEnabled(user.tenant, 'whatsapp', plan));
+    if (!user || user.tenant.id === "__loading__") return;
+    getPlans().then((plans) => {
+      const plan = plans.find((p) => p.id === user.tenant.plan_id);
+      setHasLogistica(isModuleEnabled(user.tenant, "logistica", plan));
+      setHasWhatsApp(isModuleEnabled(user.tenant, "whatsapp", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
   useEffect(() => {
-    if (!tenantId || tenantId === '__loading__') return;
+    if (!tenantId || tenantId === "__loading__") return;
 
     const fetchUnreadCount = async (changedConvId?: string) => {
       const { data, error } = await supabase
-        .from('conversations')
-        .select('unread')
-        .eq('tenant_id', tenantId);
+        .from("conversations")
+        .select("unread")
+        .eq("tenant_id", tenantId);
 
       if (!error && data) {
         const total = data.reduce((acc, current) => acc + (current.unread || 0), 0);
-        
+
         // Play sound only when unread count increased (skip initial load)
         if (prevUnreadRef.current >= 0 && total > prevUnreadRef.current) {
-          const activeChatId = localStorage.getItem('klynn_active_chat_id');
+          const activeChatId = localStorage.getItem("klynn_active_chat_id");
           if (changedConvId && changedConvId === activeChatId) {
             // Do not play sound in any tab if it corresponds to the active chat
           } else if (window.location.pathname.includes("/conversations")) {
@@ -134,20 +219,20 @@ export function TenantShell() {
 
     // Subscribe to real-time updates for unread badge
     const channel = supabase
-      .channel('conversations-unread-badge-shell')
+      .channel("conversations-unread-badge-shell")
       .on(
-        'postgres_changes',
-        { 
-          event: '*', 
-          schema: 'public', 
-          table: 'conversations'
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "conversations",
         },
         (payload) => {
           const row = (payload.new || payload.old) as any;
           if (row && row.tenant_id === tenantId) {
             fetchUnreadCount(row.id);
           }
-        }
+        },
       )
       .subscribe();
 
@@ -158,88 +243,100 @@ export function TenantShell() {
 
   // CARGAR NOTIFICACIONES EN TIEMPO REAL
   useEffect(() => {
-    if (!tenantId || tenantId === '__loading__') return;
-    
+    if (!tenantId || tenantId === "__loading__") return;
+
     // Cargar notificaciones y ordenes para mezclar
     const loadNotificaciones = async () => {
       const dbNotifs = await getNotificaciones(tenantId);
-      const orders = await getOrdenes(tenantId) || [];
-      const clients = await getClientes(tenantId) || [];
-      const clientMap = new Map(clients.map(c => [c.id, c.nombre]));
-      
+      const orders = (await getOrdenes(tenantId)) || [];
+      const clients = (await getClientes(tenantId)) || [];
+      const clientMap = new Map(clients.map((c) => [c.id, c.nombre]));
+
       const virtualNotifs: Notificacion[] = [];
       const today = new Date();
-      today.setHours(0,0,0,0);
+      today.setHours(0, 0, 0, 0);
       const tomorrow = new Date(today);
       tomorrow.setDate(tomorrow.getDate() + 1);
       const dayAfter = new Date(tomorrow);
       dayAfter.setDate(dayAfter.getDate() + 1);
-      
+
       // Leer notificaciones virtuales marcadas como leídas
-      const readVirtualsStr = localStorage.getItem('klynn_read_virtuals') || '[]';
+      const readVirtualsStr = localStorage.getItem("klynn_read_virtuals") || "[]";
       let readVirtuals: string[] = [];
-      try { readVirtuals = JSON.parse(readVirtualsStr); } catch(e){}
+      try {
+        readVirtuals = JSON.parse(readVirtualsStr);
+      } catch (e) {}
 
       // Leer notificaciones virtuales eliminadas
-      const deletedVirtualsStr = localStorage.getItem('klynn_deleted_virtuals') || '[]';
+      const deletedVirtualsStr = localStorage.getItem("klynn_deleted_virtuals") || "[]";
       let deletedVirtuals: string[] = [];
-      try { deletedVirtuals = JSON.parse(deletedVirtualsStr); } catch(e){}
+      try {
+        deletedVirtuals = JSON.parse(deletedVirtualsStr);
+      } catch (e) {}
 
       // Filtrar órdenes pendientes y en proceso (no entregadas, ni anuladas, ni listas)
-      const pendingOrders = orders.filter(o => o.estado !== 'ENTREGADA' && o.estado !== 'ANULADA' && o.estado !== 'LISTA');
-      
+      const pendingOrders = orders.filter(
+        (o) => o.estado !== "ENTREGADA" && o.estado !== "ANULADA" && o.estado !== "LISTA",
+      );
+
       for (const o of pendingOrders) {
         if (!o.fecha_entrega) continue;
         const deliveryDate = new Date(o.fecha_entrega);
         // Si deliveryDate es HOY o MAÑANA
         if (deliveryDate >= today && deliveryDate < dayAfter) {
           const isToday = deliveryDate < tomorrow;
-          const label = isToday ? 'hoy' : 'mañana';
+          const label = isToday ? "hoy" : "mañana";
           const vId = `virtual-orden-${o.id}`;
           if (!deletedVirtuals.includes(vId)) {
-            const clientName = clientMap.get(o.cliente_id) || 'Cliente Desconocido';
+            const clientName = clientMap.get(o.cliente_id) || "Cliente Desconocido";
             virtualNotifs.push({
               id: vId,
               tenant_id: tenantId,
               titulo: `Entrega para ${label}`,
               mensaje: `La orden #${o.numero} del cliente ${clientName} debe entregarse ${label}.`,
-              tipo: 'WARNING',
+              tipo: "WARNING",
               leida: readVirtuals.includes(vId),
               link: `/ordenes?view=${o.numero}`,
-              created_at: new Date().toISOString()
+              created_at: new Date().toISOString(),
             });
           }
         }
       }
-      
-      setNotificaciones([...virtualNotifs, ...dbNotifs].sort((a,b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
+
+      setNotificaciones(
+        [...virtualNotifs, ...dbNotifs].sort(
+          (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
+        ),
+      );
     };
 
     loadNotificaciones();
 
     const channel = supabase
-      .channel('notificaciones-shell')
+      .channel("notificaciones-shell")
       .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'notificaciones' },
+        "postgres_changes",
+        { event: "*", schema: "public", table: "notificaciones" },
         (payload) => {
           const row = (payload.new || payload.old) as any;
           if (row && row.tenant_id === tenantId) {
-            if (payload.eventType === 'INSERT') {
+            if (payload.eventType === "INSERT") {
               playNotificationSoundDebounced();
             }
             loadNotificaciones();
           }
-        }
+        },
       )
       .subscribe();
 
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [tenantId]);
 
   // Protección de rutas — DEBE estar antes del return condicional
   useEffect(() => {
-    if (!user || user.tenant.id === '__loading__') return;
+    if (!user || user.tenant.id === "__loading__") return;
 
     if (pathname.includes("/conversations") && !hasWhatsApp) {
       navigate({ to: `/t/${user.tenant.slug}` });
@@ -251,13 +348,13 @@ export function TenantShell() {
     }
 
     const items = NAV(user.tenant.slug);
-    const current = items.find(i => {
+    const current = items.find((i) => {
       if (i.exact) return pathname === i.to;
       return pathname.startsWith(i.to);
     });
 
     if (current?.permission && !can(user.empleado, current.permission)) {
-      const firstAllowed = items.find(i => can(user.empleado, i.permission!));
+      const firstAllowed = items.find((i) => can(user.empleado, i.permission!));
       if (firstAllowed) {
         navigate({ to: firstAllowed.to });
       }
@@ -274,16 +371,14 @@ export function TenantShell() {
 
       if ((e.key === "k" || e.key === "K") && e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey) {
         e.preventDefault();
-        setShowAtajosModal(prev => !prev);
+        setShowAtajosModal((prev) => !prev);
         return;
       }
 
       const target = e.target as HTMLElement;
       if (
         target &&
-        (target.tagName === "INPUT" ||
-         target.tagName === "TEXTAREA" ||
-         target.isContentEditable)
+        (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable)
       ) {
         return;
       }
@@ -314,7 +409,7 @@ export function TenantShell() {
     };
   }, [user?.tenant?.slug, navigate]);
 
-  if (!user || user.tenant.id === '__loading__') {
+  if (!user || user.tenant.id === "__loading__") {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
         <div className="flex flex-col items-center gap-3">
@@ -328,8 +423,12 @@ export function TenantShell() {
   }
 
   const { tenant, empleado } = user;
-  const trialDays = Math.max(0, Math.ceil((new Date(tenant.trial_hasta).getTime() - Date.now()) / 86400000));
-  const isTrialExpired = tenant.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now();
+  const trialDays = Math.max(
+    0,
+    Math.ceil((new Date(tenant.trial_hasta).getTime() - Date.now()) / 86400000),
+  );
+  const isTrialExpired =
+    tenant.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now();
 
   function onLogout() {
     logout();
@@ -337,9 +436,9 @@ export function TenantShell() {
   }
 
   const isActive = (to: string, exact?: boolean) => {
-    const [toPath, toSearch] = to.split('?');
+    const [toPath, toSearch] = to.split("?");
     if (toSearch) {
-      const currentSearch = typeof window !== 'undefined' ? window.location.search : '';
+      const currentSearch = typeof window !== "undefined" ? window.location.search : "";
       return pathname === toPath && currentSearch.includes(toSearch);
     }
     return exact ? pathname === toPath : pathname === toPath || pathname.startsWith(toPath + "/");
@@ -347,90 +446,98 @@ export function TenantShell() {
 
   const onNotificacionClick = async (n: Notificacion) => {
     if (!n.leida) {
-      if (n.id.startsWith('virtual-')) {
-        const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
+      if (n.id.startsWith("virtual-")) {
+        const readVirtuals = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
         if (!readVirtuals.includes(n.id)) {
           readVirtuals.push(n.id);
-          localStorage.setItem('klynn_read_virtuals', JSON.stringify(readVirtuals));
+          localStorage.setItem("klynn_read_virtuals", JSON.stringify(readVirtuals));
         }
       } else {
         await marcarNotificacionLeida(n.id);
       }
-      setNotificaciones(prev => prev.map(x => x.id === n.id ? { ...x, leida: true } : x));
+      setNotificaciones((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
     }
-    setDeletedNotifIds(prev => [...prev, n.id]);
+    setDeletedNotifIds((prev) => [...prev, n.id]);
     if (n.link) navigate({ to: `/t/${tenant.slug}${n.link}` });
   };
 
   const handleMarcarLeida = async (id: string) => {
-    setDeletedNotifIds(prev => [...prev, id]);
-    if (id.startsWith('virtual-')) {
-      const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
+    setDeletedNotifIds((prev) => [...prev, id]);
+    if (id.startsWith("virtual-")) {
+      const readVirtuals = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
       if (!readVirtuals.includes(id)) {
         readVirtuals.push(id);
-        localStorage.setItem('klynn_read_virtuals', JSON.stringify(readVirtuals));
+        localStorage.setItem("klynn_read_virtuals", JSON.stringify(readVirtuals));
       }
     } else {
       await marcarNotificacionLeida(id);
     }
-    setNotificaciones(prev => prev.map(x => x.id === id ? { ...x, leida: true } : x));
+    setNotificaciones((prev) => prev.map((x) => (x.id === id ? { ...x, leida: true } : x)));
   };
 
   const handleMarcarTodasLeidas = async () => {
     if (tenantId) await marcarTodasNotificacionesLeidas(tenantId);
 
-    const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-') && !n.leida).map(n => n.id);
+    const virtualIds = notificaciones
+      .filter((n) => n.id.startsWith("virtual-") && !n.leida)
+      .map((n) => n.id);
     if (virtualIds.length > 0) {
-      const readVirtuals = JSON.parse(localStorage.getItem('klynn_read_virtuals') || '[]');
-      localStorage.setItem('klynn_read_virtuals', JSON.stringify([...readVirtuals, ...virtualIds]));
+      const readVirtuals = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
+      localStorage.setItem("klynn_read_virtuals", JSON.stringify([...readVirtuals, ...virtualIds]));
     }
 
-    const unreadIds = notificaciones.filter(n => !n.leida).map(n => n.id);
-    setDeletedNotifIds(prev => [...prev, ...unreadIds]);
-    setNotificaciones(prev => prev.map(n => ({ ...n, leida: true })));
+    const unreadIds = notificaciones.filter((n) => !n.leida).map((n) => n.id);
+    setDeletedNotifIds((prev) => [...prev, ...unreadIds]);
+    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
   };
 
   const handleLimpiarNotificaciones = async () => {
-    const allIds = notificaciones.map(n => n.id);
-    setDeletedNotifIds(prev => [...prev, ...allIds]);
+    const allIds = notificaciones.map((n) => n.id);
+    setDeletedNotifIds((prev) => [...prev, ...allIds]);
 
     if (tenantId) {
-      await supabase.from('notificaciones').delete().eq('tenant_id', tenantId);
+      await supabase.from("notificaciones").delete().eq("tenant_id", tenantId);
     }
 
-    const virtualIds = notificaciones.filter(n => n.id.startsWith('virtual-')).map(n => n.id);
+    const virtualIds = notificaciones.filter((n) => n.id.startsWith("virtual-")).map((n) => n.id);
     if (virtualIds.length > 0) {
-      const deletedVirtuals = JSON.parse(localStorage.getItem('klynn_deleted_virtuals') || '[]');
-      localStorage.setItem('klynn_deleted_virtuals', JSON.stringify([...deletedVirtuals, ...virtualIds]));
+      const deletedVirtuals = JSON.parse(localStorage.getItem("klynn_deleted_virtuals") || "[]");
+      localStorage.setItem(
+        "klynn_deleted_virtuals",
+        JSON.stringify([...deletedVirtuals, ...virtualIds]),
+      );
     }
 
     setNotificaciones([]);
   };
 
   const handleEliminarNotificacion = async (id: string) => {
-    setDeletedNotifIds(prev => [...prev, id]);
-    if (id.startsWith('virtual-')) {
-      const deletedVirtuals = JSON.parse(localStorage.getItem('klynn_deleted_virtuals') || '[]');
+    setDeletedNotifIds((prev) => [...prev, id]);
+    if (id.startsWith("virtual-")) {
+      const deletedVirtuals = JSON.parse(localStorage.getItem("klynn_deleted_virtuals") || "[]");
       if (!deletedVirtuals.includes(id)) {
         deletedVirtuals.push(id);
-        localStorage.setItem('klynn_deleted_virtuals', JSON.stringify(deletedVirtuals));
+        localStorage.setItem("klynn_deleted_virtuals", JSON.stringify(deletedVirtuals));
       }
     } else {
-      await supabase.from('notificaciones').delete().eq('id', id);
+      await supabase.from("notificaciones").delete().eq("id", id);
     }
-    setNotificaciones(prev => prev.filter(x => x.id !== id));
+    setNotificaciones((prev) => prev.filter((x) => x.id !== id));
   };
 
-
   return (
-    <div className={`bg-background print:hidden ${pathname.endsWith('/conversations') ? 'h-full overflow-hidden' : 'min-h-screen'}`}>
+    <div
+      className={`bg-background print:hidden ${pathname.endsWith("/conversations") ? "h-full overflow-hidden" : "min-h-screen"}`}
+    >
       <BrandStyle tenant={tenant} />
-      {tenant.estado !== "SUSPENDIDO" && tenant.estado !== "CANCELADO" && <TourManager userId={empleado.id} />}
+      {tenant.estado !== "SUSPENDIDO" && tenant.estado !== "CANCELADO" && (
+        <TourManager userId={empleado.id} />
+      )}
 
       {/* Overlay de Suspensión Premium Compacto */}
       {(tenant.estado === "SUSPENDIDO" || tenant.estado === "CANCELADO") && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/20 backdrop-blur-sm p-4">
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.98, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             className="w-full max-w-sm overflow-hidden rounded-[2rem] border border-white/40 bg-white/90 shadow-[0_20px_50px_rgba(0,0,0,0.1)] backdrop-blur-xl"
@@ -439,7 +546,7 @@ export function TenantShell() {
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-destructive text-white shadow-xl ring-2 ring-white">
                 <Shield className="h-6 w-6" />
               </div>
-              
+
               <div className="inline-flex items-center gap-1.5 rounded-full bg-destructive/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-widest text-destructive mb-3 border border-destructive/20">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-destructive opacity-75"></span>
@@ -451,29 +558,35 @@ export function TenantShell() {
               <h2 className="font-display text-2xl font-black text-slate-900 tracking-tight leading-none mb-2">
                 Acceso pausado
               </h2>
-              
+
               <p className="mx-auto max-w-[240px] text-[13px] font-medium leading-relaxed text-slate-500">
-                El acceso para <span className="text-slate-900 font-bold">{tenant.nombre}</span> ha sido restringido temporalmente.
+                El acceso para <span className="text-slate-900 font-bold">{tenant.nombre}</span> ha
+                sido restringido temporalmente.
               </p>
             </div>
-            
+
             <div className="p-6 pt-0 space-y-4">
               <div className="rounded-xl bg-slate-900/5 p-4 text-center">
                 <p className="text-[11px] font-semibold leading-relaxed text-slate-500">
                   Contacta a soporte para reactivar tu cuenta y servicios.
                 </p>
               </div>
-              
+
               <div className="flex gap-2">
-                <Button 
+                <Button
                   className="h-11 flex-1 rounded-xl bg-slate-950 text-white text-xs font-bold shadow-lg transition-all active:scale-95 group"
-                  onClick={() => window.open(`https://wa.me/18299416546?text=Hola Klynn, mi lavandería ${tenant.nombre} tiene el acceso suspendido. Quisiera más información.`, "_blank")}
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/18299416546?text=Hola Klynn, mi lavandería ${tenant.nombre} tiene el acceso suspendido. Quisiera más información.`,
+                      "_blank",
+                    )
+                  }
                 >
                   <MessageCircle className="mr-1.5 h-3.5 w-3.5 text-emerald-400" /> Soporte
                 </Button>
-                
-                <Button 
-                  variant="outline" 
+
+                <Button
+                  variant="outline"
                   className="h-11 flex-1 rounded-xl text-slate-600 text-xs font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95"
                   onClick={onLogout}
                 >
@@ -482,7 +595,9 @@ export function TenantShell() {
               </div>
 
               <div className="text-center pt-1">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Klynn · ID: {tenant.id.slice(0, 8)}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                  Klynn · ID: {tenant.id.slice(0, 8)}
+                </p>
               </div>
             </div>
           </motion.div>
@@ -492,7 +607,7 @@ export function TenantShell() {
       {/* Overlay de Prueba Vencida Premium */}
       {isTrialExpired && !pathname.endsWith("/configuracion") && (
         <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-slate-950/20 backdrop-blur-sm p-4">
-          <motion.div 
+          <motion.div
             initial={{ scale: 0.98, opacity: 0, y: 10 }}
             animate={{ scale: 1, opacity: 1, y: 0 }}
             className="w-full max-w-md overflow-hidden rounded-[2rem] border border-white/40 bg-white/90 shadow-[0_20px_50px_rgba(0,0,0,0.1)] backdrop-blur-xl"
@@ -501,7 +616,7 @@ export function TenantShell() {
               <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-500 text-white shadow-xl ring-2 ring-white">
                 <Shield className="h-6 w-6 animate-pulse" />
               </div>
-              
+
               <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-widest text-amber-700 mb-3 border border-amber-500/20">
                 <span className="relative flex h-1.5 w-1.5">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-500 opacity-75"></span>
@@ -513,31 +628,35 @@ export function TenantShell() {
               <h2 className="font-display text-2xl font-black text-slate-900 tracking-tight leading-none mb-2">
                 Periodo de Prueba Finalizado
               </h2>
-              
+
               <p className="mx-auto max-w-[320px] text-[13px] font-medium leading-relaxed text-slate-500 mb-6">
-                Tu período de prueba gratuito para <span className="text-slate-900 font-bold">{tenant.nombre}</span> ha expirado. Debes adquirir un plan activo para seguir utilizando Klynn.
+                Tu período de prueba gratuito para{" "}
+                <span className="text-slate-900 font-bold">{tenant.nombre}</span> ha expirado. Debes
+                adquirir un plan activo para seguir utilizando Klynn.
               </p>
 
               <div className="space-y-4 mb-4">
                 <div className="grid grid-cols-2 gap-3">
-                  <Button 
+                  <Button
                     className="h-11 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
                     onClick={() => setShowSoporteModal(true)}
                   >
                     <MessageCircle className="h-4 w-4" /> Contactar soporte
                   </Button>
-                  
-                  <Button 
+
+                  <Button
                     className="h-11 w-full rounded-xl bg-slate-950 hover:bg-slate-900 text-white text-sm font-bold shadow-lg transition-all active:scale-95 flex items-center justify-center gap-2"
-                    onClick={() => navigate({ to: `/t/${tenant.slug}/configuracion?tab=plan&expired=true` })}
+                    onClick={() =>
+                      navigate({ to: `/t/${tenant.slug}/configuracion?tab=plan&expired=true` })
+                    }
                   >
                     <CreditCard className="h-4 w-4" /> Ver planes
                   </Button>
                 </div>
 
                 <div className="flex justify-center">
-                  <Button 
-                    variant="outline" 
+                  <Button
+                    variant="outline"
                     className="h-11 w-32 rounded-xl text-slate-600 text-sm font-bold border-slate-200 hover:bg-slate-50 transition-all active:scale-95 flex items-center justify-center gap-2"
                     onClick={onLogout}
                   >
@@ -547,7 +666,9 @@ export function TenantShell() {
               </div>
 
               <div className="text-center pt-3">
-                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">Klynn · ID: {tenant.id.slice(0, 8)}</p>
+                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                  Klynn · ID: {tenant.id.slice(0, 8)}
+                </p>
               </div>
             </div>
           </motion.div>
@@ -597,10 +718,17 @@ export function TenantShell() {
 
               {/* Tarjeta 2: WhatsApp */}
               <div className="p-3.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 shadow-2xs flex flex-col items-center gap-2.5 text-center">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">Contacta por WhatsApp</span>
-                <Button 
+                <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400">
+                  Contacta por WhatsApp
+                </span>
+                <Button
                   className="h-9 w-full rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-md transition-all active:scale-95 flex items-center justify-center gap-2"
-                  onClick={() => window.open(`https://wa.me/18299416546?text=Hola Klynn, requiero asistencia de soporte técnico para mi lavandería ${tenant.nombre}.`, "_blank")}
+                  onClick={() =>
+                    window.open(
+                      `https://wa.me/18299416546?text=Hola Klynn, requiero asistencia de soporte técnico para mi lavandería ${tenant.nombre}.`,
+                      "_blank",
+                    )
+                  }
                 >
                   <MessageCircle className="h-3.5 w-3.5" /> Abrir WhatsApp
                 </Button>
@@ -608,9 +736,9 @@ export function TenantShell() {
 
               {/* FOOTER */}
               <div className="pt-2 mt-1 border-t border-border/50 flex justify-end">
-                <Button 
+                <Button
                   type="button"
-                  variant="outline" 
+                  variant="outline"
                   className="rounded-xl h-8.5 px-4 text-xs font-medium border-slate-200"
                   onClick={() => setShowSoporteModal(false)}
                 >
@@ -664,8 +792,13 @@ export function TenantShell() {
                 { label: "Órdenes modal", key: "Z" },
                 { label: "Menu atajos", key: "Alt+K" },
               ].map(({ label, key }) => (
-                <div key={key} className="flex h-8.5 min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900">
-                  <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold leading-none text-slate-700 dark:text-slate-300">{label}</span>
+                <div
+                  key={key}
+                  className="flex h-8.5 min-w-0 items-center justify-between gap-2 rounded-xl border border-slate-100 bg-slate-50 px-2.5 shadow-2xs dark:border-slate-800 dark:bg-slate-900"
+                >
+                  <span className="min-w-0 truncate whitespace-nowrap text-xs font-semibold leading-none text-slate-700 dark:text-slate-300">
+                    {label}
+                  </span>
                   <kbd className="flex h-6 min-w-6 shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border-0 bg-primary px-2 text-[10px] font-bold tracking-wide text-white shadow-2xs">
                     {key}
                   </kbd>
@@ -688,35 +821,70 @@ export function TenantShell() {
 
       {/* Modal Principal: Herramientas del Sistema */}
       {showHerramientasModal && (
-        <HerramientasModal 
+        <HerramientasModal
           tenant={tenant}
           empleado={empleado}
-          onClose={() => { setShowHerramientasModal(false); setActiveTool(null); }}
+          onClose={() => {
+            setShowHerramientasModal(false);
+            setActiveTool(null);
+          }}
           activeTool={activeTool}
           setActiveTool={setActiveTool}
         />
       )}
 
-
       {/* Sidebar desktop */}
-      <aside id="tour-sidebar" className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out">
-        <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} setShowSoporteModal={setShowSoporteModal} setShowHerramientasModal={setShowHerramientasModal} hasLogistica={hasLogistica} hasWhatsApp={hasWhatsApp} />
+      <aside
+        id="tour-sidebar"
+        className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out"
+      >
+        <SidebarContent
+          tenant={tenant}
+          empleado={empleado}
+          pathname={pathname}
+          isActive={isActive}
+          unreadCount={unreadCount}
+          setShowSoporteModal={setShowSoporteModal}
+          setShowHerramientasModal={setShowHerramientasModal}
+          hasLogistica={hasLogistica}
+          hasWhatsApp={hasWhatsApp}
+        />
       </aside>
 
       {/* Sidebar móvil */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
           <aside className="absolute inset-y-0 left-0 w-72 bg-surface shadow-elegant flex flex-col">
-            <SidebarContent tenant={tenant} empleado={empleado} pathname={pathname} isActive={isActive} unreadCount={unreadCount} onNavigate={() => setMobileOpen(false)} setShowSoporteModal={setShowSoporteModal} setShowHerramientasModal={setShowHerramientasModal} hasLogistica={hasLogistica} hasWhatsApp={hasWhatsApp} />
+            <SidebarContent
+              tenant={tenant}
+              empleado={empleado}
+              pathname={pathname}
+              isActive={isActive}
+              unreadCount={unreadCount}
+              onNavigate={() => setMobileOpen(false)}
+              setShowSoporteModal={setShowSoporteModal}
+              setShowHerramientasModal={setShowHerramientasModal}
+              hasLogistica={hasLogistica}
+              hasWhatsApp={hasWhatsApp}
+            />
           </aside>
         </div>
       )}
 
-      <div className={`main-content-wrapper lg:pl-64 transition-all duration-500 ease-in-out ${pathname.endsWith('/conversations') ? 'h-full flex flex-col overflow-hidden' : ''}`}>
+      <div
+        className={`main-content-wrapper lg:pl-64 transition-all duration-500 ease-in-out ${pathname.endsWith("/conversations") ? "h-full flex flex-col overflow-hidden" : ""}`}
+      >
         {/* Header */}
         <header className="main-header sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-surface/80 px-4 backdrop-blur-xl md:px-6 transition-all duration-500 ease-in-out shrink-0">
-          <button onClick={() => setMobileOpen(true)} className="rounded-md p-2 hover:bg-accent lg:hidden" aria-label="Menú">
+          <button
+            onClick={() => setMobileOpen(true)}
+            className="rounded-md p-2 hover:bg-accent lg:hidden"
+            aria-label="Menú"
+          >
             <Menu className="h-5 w-5" />
           </button>
 
@@ -725,15 +893,20 @@ export function TenantShell() {
               variant="outline"
               className={`gap-1.5 ${cajaAbierta ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive"}`}
             >
-              <span className={`h-1.5 w-1.5 rounded-full ${cajaAbierta ? "bg-success" : "bg-destructive"} animate-pulse`} />
+              <span
+                className={`h-1.5 w-1.5 rounded-full ${cajaAbierta ? "bg-success" : "bg-destructive"} animate-pulse`}
+              />
               Caja {cajaAbierta ? "ABIERTA" : "CERRADA"}
             </Badge>
             {tenant.estado === "TRIAL" && (
-              <Badge variant="outline" className="hidden border-gold/40 bg-gold/10 text-gold-foreground sm:inline-flex">
+              <Badge
+                variant="outline"
+                className="hidden border-gold/40 bg-gold/10 text-gold-foreground sm:inline-flex"
+              >
                 Prueba gratis · {trialDays} días
               </Badge>
             )}
-            {!pathname.endsWith('/nueva-orden') && <CloudSync tenantId={tenant.id} />}
+            {!pathname.endsWith("/nueva-orden") && <CloudSync tenantId={tenant.id} />}
             <button
               onClick={() => setShowAtajosModal(true)}
               className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
@@ -754,7 +927,9 @@ export function TenantShell() {
               <button
                 type="button"
                 className="relative grid h-10 w-10 place-items-center rounded-xl border border-transparent transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 data-[state=open]:border-slate-200 data-[state=open]:bg-white data-[state=open]:shadow-sm dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:data-[state=open]:border-slate-700 dark:data-[state=open]:bg-slate-900"
-                aria-label={unreadNotifs > 0 ? `Notificaciones, ${unreadNotifs} sin leer` : "Notificaciones"}
+                aria-label={
+                  unreadNotifs > 0 ? `Notificaciones, ${unreadNotifs} sin leer` : "Notificaciones"
+                }
               >
                 <Bell className="h-5 w-5 text-slate-600 dark:text-slate-300" strokeWidth={2} />
                 {unreadNotifs > 0 && (
@@ -782,19 +957,27 @@ export function TenantShell() {
                       )}
                     </div>
                     <div className="min-w-0">
-                      <p className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">Notificaciones</p>
+                      <p className="text-sm font-extrabold leading-5 text-slate-950 dark:text-white">
+                        Notificaciones
+                      </p>
                       <p className="mt-0.5 text-[11px] font-medium leading-4 text-slate-500 dark:text-slate-400">
-                        {unreadNotifs > 0 ? `${unreadNotifs} ${unreadNotifs === 1 ? "pendiente" : "pendientes"} por revisar` : "Estás al día con tu negocio"}
+                        {unreadNotifs > 0
+                          ? `${unreadNotifs} ${unreadNotifs === 1 ? "pendiente" : "pendientes"} por revisar`
+                          : "Estás al día con tu negocio"}
                       </p>
                     </div>
                   </div>
 
-                  <span className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-bold ${
-                    unreadNotifs > 0
-                      ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-300"
-                      : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300"
-                  }`}>
-                    <span className={`h-1.5 w-1.5 rounded-full ${unreadNotifs > 0 ? "bg-amber-500" : "bg-emerald-500"}`} />
+                  <span
+                    className={`mt-0.5 inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-bold ${
+                      unreadNotifs > 0
+                        ? "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/70 dark:bg-amber-950/40 dark:text-amber-300"
+                        : "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/70 dark:bg-emerald-950/40 dark:text-emerald-300"
+                    }`}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${unreadNotifs > 0 ? "bg-amber-500" : "bg-emerald-500"}`}
+                    />
                     {unreadNotifs > 0 ? "Por revisar" : "Todo al día"}
                   </span>
                 </div>
@@ -828,29 +1011,68 @@ export function TenantShell() {
                       <CheckCircle2 className="h-6 w-6" strokeWidth={1.8} />
                       <span className="absolute -bottom-1 -right-1 h-4 w-4 rounded-full border-4 border-white bg-emerald-500 dark:border-slate-950" />
                     </div>
-                    <p className="mt-4 text-sm font-extrabold text-slate-900 dark:text-white">Todo está bajo control</p>
-                    <p className="mt-1 max-w-56 text-xs leading-5 text-slate-500 dark:text-slate-400">No tienes notificaciones pendientes en este momento.</p>
+                    <p className="mt-4 text-sm font-extrabold text-slate-900 dark:text-white">
+                      Todo está bajo control
+                    </p>
+                    <p className="mt-1 max-w-56 text-xs leading-5 text-slate-500 dark:text-slate-400">
+                      No tienes notificaciones pendientes en este momento.
+                    </p>
                   </div>
                 ) : (
                   visibleNotificaciones.map((n) => {
                     const isUnread = !n.leida;
                     // Strip emojis/emoticons from title and message
-                    const emojiRegex = /[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g;
+                    const emojiRegex =
+                      /[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g;
                     const cleanTitle = n.titulo.replace(emojiRegex, "").trim();
                     const cleanMessage = n.mensaje.replace(emojiRegex, "").trim();
-                    
+
                     const getIcon = () => {
-                      const t = (cleanTitle + ' ' + cleanMessage).toLowerCase();
-                      if (t.includes('entrega') || t.includes('domicilio') || t.includes('envío') || t.includes('delivery') || t.includes('orden') || t.includes('prenda')) {
-                        return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20"><Shirt className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
+                      const t = (cleanTitle + " " + cleanMessage).toLowerCase();
+                      if (
+                        t.includes("entrega") ||
+                        t.includes("domicilio") ||
+                        t.includes("envío") ||
+                        t.includes("delivery") ||
+                        t.includes("orden") ||
+                        t.includes("prenda")
+                      ) {
+                        return (
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                            <Shirt className="h-[18px] w-[18px]" strokeWidth={2} />
+                          </span>
+                        );
                       }
-                      if (t.includes('urgente') || t.includes('alerta') || t.includes('advertencia') || t.includes('error')) {
-                        return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/60"><AlertTriangle className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
+                      if (
+                        t.includes("urgente") ||
+                        t.includes("alerta") ||
+                        t.includes("advertencia") ||
+                        t.includes("error")
+                      ) {
+                        return (
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/60">
+                            <AlertTriangle className="h-[18px] w-[18px]" strokeWidth={2} />
+                          </span>
+                        );
                       }
-                      if (t.includes('caja') || t.includes('gasto') || t.includes('pago') || t.includes('cobro') || t.includes('venta')) {
-                        return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60"><Wallet className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
+                      if (
+                        t.includes("caja") ||
+                        t.includes("gasto") ||
+                        t.includes("pago") ||
+                        t.includes("cobro") ||
+                        t.includes("venta")
+                      ) {
+                        return (
+                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60">
+                            <Wallet className="h-[18px] w-[18px]" strokeWidth={2} />
+                          </span>
+                        );
                       }
-                      return <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700"><Bell className="h-[18px] w-[18px]" strokeWidth={2} /></span>;
+                      return (
+                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700">
+                          <Bell className="h-[18px] w-[18px]" strokeWidth={2} />
+                        </span>
+                      );
                     };
 
                     return (
@@ -859,18 +1081,23 @@ export function TenantShell() {
                         onSelect={() => onNotificacionClick(n)}
                         className={`group relative cursor-pointer select-none items-start gap-3 rounded-xl border px-3 py-3 outline-none transition-all ${
                           isUnread
-                            ? 'border-primary/10 bg-primary/[0.045] focus:border-primary/20 focus:bg-primary/[0.08] dark:bg-primary/[0.08] dark:focus:bg-primary/[0.13]'
-                            : 'border-transparent focus:border-slate-200 focus:bg-slate-50 dark:focus:border-slate-800 dark:focus:bg-slate-900'
+                            ? "border-primary/10 bg-primary/[0.045] focus:border-primary/20 focus:bg-primary/[0.08] dark:bg-primary/[0.08] dark:focus:bg-primary/[0.13]"
+                            : "border-transparent focus:border-slate-200 focus:bg-slate-50 dark:focus:border-slate-800 dark:focus:bg-slate-900"
                         }`}
                       >
                         {getIcon()}
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
-                            <span className={`text-[13px] leading-[18px] ${isUnread ? 'font-extrabold text-slate-950 dark:text-white' : 'font-bold text-slate-700 dark:text-slate-300'}`}>
+                            <span
+                              className={`text-[13px] leading-[18px] ${isUnread ? "font-extrabold text-slate-950 dark:text-white" : "font-bold text-slate-700 dark:text-slate-300"}`}
+                            >
                               {cleanTitle}
                             </span>
                             {isUnread && (
-                              <span className="relative mt-1.5 flex h-2 w-2 shrink-0" aria-label="Sin leer">
+                              <span
+                                className="relative mt-1.5 flex h-2 w-2 shrink-0"
+                                aria-label="Sin leer"
+                              >
                                 <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-45" />
                                 <span className="relative inline-flex h-2 w-2 rounded-full bg-primary ring-2 ring-white dark:ring-slate-950" />
                               </span>
@@ -878,24 +1105,37 @@ export function TenantShell() {
                           </div>
                           <div className="mt-0.5 text-xs leading-[18px] text-slate-500 dark:text-slate-400">
                             {cleanMessage.split(/(#KL-[a-zA-Z0-9-]+)/).map((part, i) => {
-                              if (part.startsWith('#KL-')) {
+                              if (part.startsWith("#KL-")) {
                                 return (
-                                  <span key={i} className="mx-0.5 inline-block rounded-md border border-primary/15 bg-primary/10 px-1.5 py-px font-mono text-[10px] font-black tracking-tight text-primary">
-                                    {part.replace('#', '')}
+                                  <span
+                                    key={i}
+                                    className="mx-0.5 inline-block rounded-md border border-primary/15 bg-primary/10 px-1.5 py-px font-mono text-[10px] font-black tracking-tight text-primary"
+                                  >
+                                    {part.replace("#", "")}
                                   </span>
                                 );
                               }
 
                               const formatTextSegment = (text: string): React.ReactNode => {
-                                const clientMatch = text.match(/(.*?\bdel cliente\s+)(.*?)(?=\s+(?:debe|ha|se|creada|registrada)\b|\.|$)(.*)/i);
+                                const clientMatch = text.match(
+                                  /(.*?\bdel cliente\s+)(.*?)(?=\s+(?:debe|ha|se|creada|registrada)\b|\.|$)(.*)/i,
+                                );
                                 if (clientMatch) {
                                   const [_, before, clientName, after] = clientMatch;
 
                                   const formatTimeOnly = (t: string) => {
-                                    const timeRegex = /(\d{1,2}:\d{2}\s*(?:[ap]\.\s*[mr]\.|[ap]m))/i;
+                                    const timeRegex =
+                                      /(\d{1,2}:\d{2}\s*(?:[ap]\.\s*[mr]\.|[ap]m))/i;
                                     return t.split(timeRegex).map((subpart, j) => {
                                       if (timeRegex.test(subpart)) {
-                                        return <strong key={j} className="font-extrabold text-slate-800 dark:text-slate-200">{subpart}</strong>;
+                                        return (
+                                          <strong
+                                            key={j}
+                                            className="font-extrabold text-slate-800 dark:text-slate-200"
+                                          >
+                                            {subpart}
+                                          </strong>
+                                        );
                                       }
                                       return subpart;
                                     });
@@ -904,7 +1144,9 @@ export function TenantShell() {
                                   return (
                                     <>
                                       {formatTimeOnly(before)}
-                                      <strong className="font-extrabold text-slate-800 dark:text-slate-200">{clientName}</strong>
+                                      <strong className="font-extrabold text-slate-800 dark:text-slate-200">
+                                        {clientName}
+                                      </strong>
                                       {formatTimeOnly(after)}
                                     </>
                                   );
@@ -915,7 +1157,14 @@ export function TenantShell() {
                                   <>
                                     {text.split(timeRegex).map((subpart, j) => {
                                       if (timeRegex.test(subpart)) {
-                                        return <strong key={j} className="font-extrabold text-slate-800 dark:text-slate-200">{subpart}</strong>;
+                                        return (
+                                          <strong
+                                            key={j}
+                                            className="font-extrabold text-slate-800 dark:text-slate-200"
+                                          >
+                                            {subpart}
+                                          </strong>
+                                        );
                                       }
                                       return subpart;
                                     })}
@@ -929,9 +1178,14 @@ export function TenantShell() {
                           <div className="mt-2 flex items-center justify-between gap-2">
                             <span className="inline-flex items-center gap-1 text-[10px] font-bold text-slate-500 dark:text-slate-400">
                               <Clock className="h-3 w-3 shrink-0" strokeWidth={2} />
-                              {new Date(n.created_at).toLocaleString('es-DO', { month: 'short', day: 'numeric' })}
+                              {new Date(n.created_at).toLocaleString("es-DO", {
+                                month: "short",
+                                day: "numeric",
+                              })}
                             </span>
-                            <span className={`text-[9px] font-bold uppercase tracking-[0.08em] ${isUnread ? "text-primary" : "text-slate-400 dark:text-slate-500"}`}>
+                            <span
+                              className={`text-[9px] font-bold uppercase tracking-[0.08em] ${isUnread ? "text-primary" : "text-slate-400 dark:text-slate-500"}`}
+                            >
                               {isUnread ? "Nueva" : "Leída"}
                             </span>
                           </div>
@@ -954,13 +1208,15 @@ export function TenantShell() {
           <UserMenu empleado={empleado} onLogout={onLogout} />
         </header>
 
-        <main className={`flex flex-col ${
-          pathname.endsWith('/conversations') 
-            ? 'flex-1 overflow-hidden p-0' 
-            : pathname.endsWith('/nueva-orden')
-              ? 'h-[calc(100vh-4rem)] overflow-hidden p-4 md:p-5'
-              : 'min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8'
-        }`}>
+        <main
+          className={`flex flex-col ${
+            pathname.endsWith("/conversations")
+              ? "flex-1 overflow-hidden p-0"
+              : pathname.endsWith("/nueva-orden")
+                ? "h-[calc(100vh-4rem)] overflow-hidden p-4 md:p-5"
+                : "min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8"
+          }`}
+        >
           <Outlet />
         </main>
       </div>
@@ -969,9 +1225,26 @@ export function TenantShell() {
 }
 
 function SidebarContent({
-  tenant, empleado, pathname, isActive, unreadCount, onNavigate, setShowSoporteModal, setShowHerramientasModal, hasLogistica, hasWhatsApp
+  tenant,
+  empleado,
+  pathname,
+  isActive,
+  unreadCount,
+  onNavigate,
+  setShowSoporteModal,
+  setShowHerramientasModal,
+  hasLogistica,
+  hasWhatsApp,
 }: {
-  tenant: { id: string; nombre: string; slug: string; color_primario: string; color_secundario: string; logo_url?: string; plan_id: string };
+  tenant: {
+    id: string;
+    nombre: string;
+    slug: string;
+    color_primario: string;
+    color_secundario: string;
+    logo_url?: string;
+    plan_id: string;
+  };
   empleado: any;
   pathname: string;
   isActive: (to: string, exact?: boolean) => boolean;
@@ -999,35 +1272,47 @@ function SidebarContent({
   };
 
   const prefetch = (permission: string) => {
-    if (!tenant.id || tenant.id === '__loading__') return;
-    
+    if (!tenant.id || tenant.id === "__loading__") return;
+
     const tid = tenant.id;
-    switch(permission) {
-      case 'ordenes':
-        queryClient.prefetchQuery({ queryKey: ['ordenes', tid], queryFn: () => getOrdenes(tid) });
+    switch (permission) {
+      case "ordenes":
+        queryClient.prefetchQuery({ queryKey: ["ordenes", tid], queryFn: () => getOrdenes(tid) });
         break;
-      case 'clientes':
-        queryClient.prefetchQuery({ queryKey: ['clientes', tid], queryFn: () => getClientes(tid) });
+      case "clientes":
+        queryClient.prefetchQuery({ queryKey: ["clientes", tid], queryFn: () => getClientes(tid) });
         break;
-      case 'catalogo':
-        queryClient.prefetchQuery({ queryKey: ['catalogo', tid], queryFn: () => getCatalogo(tid) });
-        queryClient.prefetchQuery({ queryKey: ['servicios', tid], queryFn: () => getServicios(tid) });
+      case "catalogo":
+        queryClient.prefetchQuery({ queryKey: ["catalogo", tid], queryFn: () => getCatalogo(tid) });
+        queryClient.prefetchQuery({
+          queryKey: ["servicios", tid],
+          queryFn: () => getServicios(tid),
+        });
         break;
-      case 'caja':
-        queryClient.prefetchQuery({ queryKey: ['caja-abierta', tid], queryFn: () => getCajaAbierta(tid) });
-        queryClient.prefetchQuery({ queryKey: ['cajas', tid], queryFn: () => getCajas(tid) });
+      case "caja":
+        queryClient.prefetchQuery({
+          queryKey: ["caja-abierta", tid],
+          queryFn: () => getCajaAbierta(tid),
+        });
+        queryClient.prefetchQuery({ queryKey: ["cajas", tid], queryFn: () => getCajas(tid) });
         break;
-      case 'gastos':
-        queryClient.prefetchQuery({ queryKey: ['gastos', tid], queryFn: () => getGastos(tid) });
+      case "gastos":
+        queryClient.prefetchQuery({ queryKey: ["gastos", tid], queryFn: () => getGastos(tid) });
         break;
-      case 'configuracion':
-        queryClient.prefetchQuery({ queryKey: ['plans'], queryFn: () => getPlans() });
-        queryClient.prefetchQuery({ queryKey: ['global-config'], queryFn: () => getGlobalConfig() });
-        queryClient.prefetchQuery({ queryKey: ['ecf-config', tid], queryFn: () => getECFConfig(tid) });
+      case "configuracion":
+        queryClient.prefetchQuery({ queryKey: ["plans"], queryFn: () => getPlans() });
+        queryClient.prefetchQuery({
+          queryKey: ["global-config"],
+          queryFn: () => getGlobalConfig(),
+        });
+        queryClient.prefetchQuery({
+          queryKey: ["ecf-config", tid],
+          queryFn: () => getECFConfig(tid),
+        });
         break;
-      case 'nueva-orden':
-        queryClient.prefetchQuery({ queryKey: ['catalogo', tid], queryFn: () => getCatalogo(tid) });
-        queryClient.prefetchQuery({ queryKey: ['clientes', tid], queryFn: () => getClientes(tid) });
+      case "nueva-orden":
+        queryClient.prefetchQuery({ queryKey: ["catalogo", tid], queryFn: () => getCatalogo(tid) });
+        queryClient.prefetchQuery({ queryKey: ["clientes", tid], queryFn: () => getClientes(tid) });
         break;
     }
   };
@@ -1038,50 +1323,94 @@ function SidebarContent({
       {
         title: "OPERACIÓN",
         items: [
-          {to: `/t/${slug}`, label: "Dashboard", icon: LayoutDashboard, exact: true, permission: "dashboard", shortcut: "D"},
-          { to: `/t/${slug}/conversations`, label: "Conversaciones", icon: MessageCircle, permission: "conversations" },
-          {to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes", shortcut: "O"},
+          {
+            to: `/t/${slug}`,
+            label: "Dashboard",
+            icon: LayoutDashboard,
+            exact: true,
+            permission: "dashboard",
+            shortcut: "D",
+          },
+          {
+            to: `/t/${slug}/conversations`,
+            label: "Conversaciones",
+            icon: MessageCircle,
+            permission: "conversations",
+          },
+          {
+            to: `/t/${slug}/ordenes`,
+            label: "Órdenes",
+            icon: ShoppingCart,
+            permission: "ordenes",
+            shortcut: "O",
+          },
+          {
+            to: `/t/${slug}/procesos`,
+            label: "Procesos",
+            icon: Wrench,
+            permission: "ordenes",
+            shortcut: "P",
+          },
           { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
           { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
           { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
-        ]
+        ],
       },
       {
         title: "CATÁLOGO",
         items: [
-          { to: `/t/${slug}/catalogo?tab=prendas`, label: "Prendas", icon: Package, permission: "catalogo" },
-          { to: `/t/${slug}/catalogo?tab=servicios`, label: "Servicios", icon: LayoutGrid, permission: "catalogo", hasArrow: true }
-        ]
+          {
+            to: `/t/${slug}/catalogo?tab=prendas`,
+            label: "Prendas",
+            icon: Package,
+            permission: "catalogo",
+          },
+          {
+            to: `/t/${slug}/catalogo?tab=servicios`,
+            label: "Servicios",
+            icon: LayoutGrid,
+            permission: "catalogo",
+            hasArrow: true,
+          },
+        ],
       },
       {
         title: "PERSONAS",
         items: [
           { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
-          { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" }
-        ]
+          { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
+        ],
       },
       {
         title: "ANÁLISIS",
         items: [
-          { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" }
-        ]
+          { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
+        ],
       },
       {
         title: "SISTEMA",
         items: [
-          { to: `/t/${slug}/configuracion`, label: "Configuración", icon: Settings, permission: "configuracion", hasArrow: true },
-          { to: "#", label: "Soporte", icon: HelpCircle, isSoporte: true }
-        ]
-      }
+          {
+            to: `/t/${slug}/configuracion`,
+            label: "Configuración",
+            icon: Settings,
+            permission: "configuracion",
+            hasArrow: true,
+          },
+          { to: "#", label: "Soporte", icon: HelpCircle, isSoporte: true },
+        ],
+      },
     ];
 
-    return itemsList.map(cat => {
-      let items = cat.items;
-      if (!hasLogistica) items = items.filter(i => i.permission !== "logistica");
-      if (!hasWhatsApp) items = items.filter(i => i.permission !== "conversations");
-      items = items.filter(i => !i.permission || can(empleado, i.permission));
-      return { ...cat, items };
-    }).filter(cat => cat.items.length > 0);
+    return itemsList
+      .map((cat) => {
+        let items = cat.items;
+        if (!hasLogistica) items = items.filter((i) => i.permission !== "logistica");
+        if (!hasWhatsApp) items = items.filter((i) => i.permission !== "conversations");
+        items = items.filter((i) => !i.permission || can(empleado, i.permission));
+        return { ...cat, items };
+      })
+      .filter((cat) => cat.items.length > 0);
   }, [tenant.slug, empleado, hasLogistica, hasWhatsApp]);
 
   return (
@@ -1092,22 +1421,33 @@ function SidebarContent({
           Your laundry, simplified.
         </span>
         {onNavigate && (
-          <button onClick={onNavigate} className="absolute right-4 rounded-md p-1.5 hover:bg-accent lg:hidden">
+          <button
+            onClick={onNavigate}
+            className="absolute right-4 rounded-md p-1.5 hover:bg-accent lg:hidden"
+          >
             <X className="h-5 w-5" />
           </button>
         )}
       </div>
 
       <div className="relative border-b border-border/80 px-4 py-3 shrink-0">
-        <div 
+        <div
           className={`flex items-center gap-3.5 transition-all ${
-            empleado.rol === "ADMIN" && myTenants.length > 1 ? "cursor-pointer rounded-2xl p-1 -m-1 hover:bg-accent/50" : ""
+            empleado.rol === "ADMIN" && myTenants.length > 1
+              ? "cursor-pointer rounded-2xl p-1 -m-1 hover:bg-accent/50"
+              : ""
           }`}
-          onClick={() => empleado.rol === "ADMIN" && myTenants.length > 1 && setShowSwitcher(!showSwitcher)}
+          onClick={() =>
+            empleado.rol === "ADMIN" && myTenants.length > 1 && setShowSwitcher(!showSwitcher)
+          }
         >
           <div className="relative h-14 w-14 rounded-full overflow-hidden bg-white shadow-xs border-2 border-primary/30 shrink-0 flex items-center justify-center p-0.5 ring-2 ring-primary/15">
             {tenant.logo_url ? (
-              <img src={tenant.logo_url} alt={tenant.nombre} className="h-full w-full object-contain rounded-full" />
+              <img
+                src={tenant.logo_url}
+                alt={tenant.nombre}
+                className="h-full w-full object-contain rounded-full"
+              />
             ) : (
               <div className="h-full w-full rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center text-white font-black text-lg">
                 {tenant.nombre.slice(0, 2).toUpperCase()}
@@ -1121,10 +1461,12 @@ function SidebarContent({
                 {tenant.nombre}
               </span>
               {empleado.rol === "ADMIN" && myTenants.length > 1 && (
-                <ChevronDown className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${showSwitcher ? "rotate-180" : ""}`} />
+                <ChevronDown
+                  className={`h-3.5 w-3.5 text-muted-foreground transition-transform duration-200 ${showSwitcher ? "rotate-180" : ""}`}
+                />
               )}
             </div>
-            
+
             <div className="mt-1 flex items-center gap-1.5">
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
@@ -1139,20 +1481,31 @@ function SidebarContent({
           <>
             <div className="fixed inset-0 z-40" onClick={() => setShowSwitcher(false)} />
             <div className="absolute left-3.5 right-3.5 top-[calc(100%-4px)] z-50 mt-1 overflow-hidden rounded-2xl border border-border bg-popover shadow-xl animate-in fade-in zoom-in-95 duration-200 p-1.5">
-              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Mis Sucursales</div>
+              <div className="px-2 py-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Mis Sucursales
+              </div>
               <div className="max-h-[220px] overflow-y-auto space-y-1 custom-scrollbar">
                 {myTenants.map((t) => (
                   <button
                     key={t.id}
-                    onClick={() => { switchBranch(t); setShowSwitcher(false); }}
+                    onClick={() => {
+                      switchBranch(t);
+                      setShowSwitcher(false);
+                    }}
                     className={`flex w-full items-center gap-2.5 rounded-xl p-2 text-left transition ${t.id === tenant.id ? "bg-primary/10 text-primary font-bold" : "hover:bg-accent"}`}
                   >
                     <div className="h-7 w-7 rounded-lg overflow-hidden bg-white border border-border shadow-xs shrink-0 flex items-center justify-center">
-                      {t.logo_url ? <img src={t.logo_url} className="h-full w-full object-cover" /> : <Droplets className="h-3.5 w-3.5 text-primary" />}
+                      {t.logo_url ? (
+                        <img src={t.logo_url} className="h-full w-full object-cover" />
+                      ) : (
+                        <Droplets className="h-3.5 w-3.5 text-primary" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-bold">{t.nombre}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">{t.rnc ? `RNC ${t.rnc}` : "Sucursal principal"}</div>
+                      <div className="truncate text-[10px] text-muted-foreground">
+                        {t.rnc ? `RNC ${t.rnc}` : "Sucursal principal"}
+                      </div>
                     </div>
                     {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
                   </button>
@@ -1171,7 +1524,7 @@ function SidebarContent({
               to={`/t/${tenant.slug}/nueva-orden`}
               id="tour-nav-nueva-orden"
               onClick={onNavigate}
-              onMouseEnter={() => prefetch('nueva-orden')}
+              onMouseEnter={() => prefetch("nueva-orden")}
               className="w-full h-11 px-4 rounded-xl text-white shadow-md flex items-center justify-between font-bold text-[14.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
             >
               <div className="flex items-center gap-2.5">
@@ -1230,11 +1583,14 @@ function SidebarContent({
                     }`}
                   >
                     {active && (
-                      <span className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-primary rounded-r-full" style={{ backgroundColor: "var(--primary)" }} />
+                      <span
+                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-primary rounded-r-full"
+                        style={{ backgroundColor: "var(--primary)" }}
+                      />
                     )}
                     <div className="flex items-center gap-3">
-                      <item.icon 
-                        className="h-5 w-5 shrink-0 transition-colors text-primary" 
+                      <item.icon
+                        className="h-5 w-5 shrink-0 transition-colors text-primary"
                         strokeWidth={1.8}
                       />
                       <span>{item.label}</span>
@@ -1245,9 +1601,11 @@ function SidebarContent({
                     )}
 
                     {isConversations && unreadCount > 0 && (
-                      <Badge className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
-                        active ? "bg-primary text-white" : "bg-primary text-primary-foreground"
-                      }`}>
+                      <Badge
+                        className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
+                          active ? "bg-primary text-white" : "bg-primary text-primary-foreground"
+                        }`}
+                      >
                         {unreadCount}
                       </Badge>
                     )}
@@ -1279,7 +1637,7 @@ function SidebarContent({
           <span className="flex-1 text-center font-display font-black text-[14.5px] tracking-tight text-white">
             Herramientas Klynn
           </span>
-          
+
           <div className="h-7.5 w-7.5 rounded-full bg-amber-400 flex items-center justify-center shrink-0 shadow-xs group-hover:scale-110 group-hover:rotate-12 transition-transform">
             <Wrench className="h-4 w-4 text-[#1B365D]" />
           </div>
@@ -1294,13 +1652,16 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
   const { nombre, rol, avatar_url } = empleado;
   const [open, setOpen] = useState(false);
   const avatarName = [nombre, empleado.apellido].filter(Boolean).join(" ");
-  const roleLabel = ({
-    ADMIN: "Administrador",
-    SUPERVISOR: "Supervisor",
-    VENDEDOR: "Vendedor",
-    RECEPCIONISTA: "Recepcionista",
-    REPARTIDOR: "Repartidor",
-  } as Record<string, string>)[rol] ?? rol;
+  const roleLabel =
+    (
+      {
+        ADMIN: "Administrador",
+        SUPERVISOR: "Supervisor",
+        VENDEDOR: "Vendedor",
+        RECEPCIONISTA: "Recepcionista",
+        REPARTIDOR: "Repartidor",
+      } as Record<string, string>
+    )[rol] ?? rol;
 
   return (
     <DropdownMenu open={open} onOpenChange={setOpen}>
@@ -1312,7 +1673,10 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
         >
           <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-primary text-[12px] font-black tracking-wide text-white shadow-sm ring-2 ring-white dark:ring-slate-950">
             <UserAvatar name={avatarName} avatarUrl={avatar_url} size={36} />
-            <span className="absolute -bottom-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
+            <span
+              className="absolute -bottom-0.5 -right-0.5 z-10 h-2.5 w-2.5 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950"
+              aria-hidden="true"
+            />
           </span>
 
           <span className="hidden min-w-0 text-left md:block">
@@ -1324,7 +1688,10 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
             </span>
           </span>
 
-          <ChevronDown className="user-menu-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180" strokeWidth={2} />
+          <ChevronDown
+            className="user-menu-chevron h-4 w-4 shrink-0 text-slate-400 transition-transform duration-200 group-data-[state=open]:rotate-180"
+            strokeWidth={2}
+          />
         </button>
       </DropdownMenuTrigger>
 
@@ -1335,21 +1702,31 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
         className="w-[min(16.5rem,calc(100vw-1rem))] overflow-hidden rounded-2xl border border-slate-200/80 bg-white p-0 text-slate-950 shadow-xl dark:border-slate-800 dark:bg-slate-950 dark:text-slate-50"
       >
         <div className="relative overflow-hidden border-b border-slate-100 bg-gradient-to-br from-primary/[0.10] via-white to-emerald-50/80 px-3.5 py-3 dark:border-slate-800 dark:from-primary/20 dark:via-slate-950 dark:to-emerald-950/30">
-          <div className="absolute -right-10 -top-12 h-24 w-24 rounded-full bg-primary/10 blur-xl" aria-hidden="true" />
+          <div
+            className="absolute -right-10 -top-12 h-24 w-24 rounded-full bg-primary/10 blur-xl"
+            aria-hidden="true"
+          />
           <div className="relative flex items-center gap-2.5">
             <div className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-primary text-xs font-black tracking-wide text-white shadow-sm ring-1 ring-white/80 dark:ring-white/10">
               <UserAvatar name={avatarName} avatarUrl={avatar_url} size={36} />
-              <span className="absolute -bottom-0.5 -right-0.5 z-10 h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950" aria-hidden="true" />
+              <span
+                className="absolute -bottom-0.5 -right-0.5 z-10 h-2 w-2 rounded-full bg-emerald-500 shadow-sm ring-2 ring-white dark:ring-slate-950"
+                aria-hidden="true"
+              />
             </div>
 
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-extrabold leading-4 text-slate-950 dark:text-white">{nombre}</p>
+              <p className="truncate text-xs font-extrabold leading-4 text-slate-950 dark:text-white">
+                {nombre}
+              </p>
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-white/80 px-1.5 py-0.5 text-[9px] font-bold text-primary shadow-sm dark:bg-slate-900/80">
                   <Shield className="h-2.5 w-2.5" strokeWidth={2} />
                   {roleLabel}
                 </span>
-                <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">Sesión activa</span>
+                <span className="text-[9px] font-medium text-slate-500 dark:text-slate-400">
+                  Sesión activa
+                </span>
               </div>
             </div>
           </div>
@@ -1369,13 +1746,21 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
               </span>
               <span className="min-w-0 flex-1">
                 <span className="block text-xs font-bold leading-tight">Panel Administrador</span>
-                <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">Control global del sistema</span>
+                <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                  Control global del sistema
+                </span>
               </span>
               <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-primary dark:text-slate-600" />
             </DropdownMenuItem>
           )}
           <DropdownMenuItem
-            onSelect={() => window.open("https://wa.me/18299416546?text=Hola Klynn, necesito soporte.", "_blank", "noopener,noreferrer")}
+            onSelect={() =>
+              window.open(
+                "https://wa.me/18299416546?text=Hola Klynn, necesito soporte.",
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
             className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-emerald-50 focus:text-slate-950 dark:focus:bg-emerald-950/30 dark:focus:text-white"
           >
             <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 transition-colors group-focus:bg-emerald-100 dark:bg-emerald-950/50 dark:text-emerald-400 dark:ring-emerald-900">
@@ -1383,7 +1768,9 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-xs font-bold leading-tight">Soporte</span>
-              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">Habla con nuestro equipo</span>
+              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                Habla con nuestro equipo
+              </span>
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-emerald-500 dark:text-slate-600" />
           </DropdownMenuItem>
@@ -1397,7 +1784,9 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-xs font-bold leading-tight">Tutoriales y guías</span>
-              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">Guías de uso de Klynn</span>
+              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                Guías de uso de Klynn
+              </span>
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
           </DropdownMenuItem>
@@ -1413,7 +1802,9 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
             </span>
             <span className="min-w-0 flex-1">
               <span className="block text-xs font-bold leading-tight">Cerrar sesión</span>
-              <span className="block text-[9.5px] leading-tight text-rose-500/80 dark:text-rose-400/70 truncate mt-0.5">Salir de forma segura</span>
+              <span className="block text-[9.5px] leading-tight text-rose-500/80 dark:text-rose-400/70 truncate mt-0.5">
+                Salir de forma segura
+              </span>
             </span>
           </DropdownMenuItem>
         </div>
@@ -1429,43 +1820,53 @@ export function EstadoBadge({ estado }: { estado: string }) {
   const config: Record<string, { icon: any; style: string }> = {
     RECIBIDA: {
       icon: Inbox,
-      style: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+      style:
+        "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
     },
     "EN PROCESO": {
       icon: RotateCw,
-      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+      style:
+        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
     },
     EN_PROCESO: {
       icon: RotateCw,
-      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+      style:
+        "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
     },
     LISTA: {
       icon: CheckCircle2,
-      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+      style:
+        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
     },
     EN_CAMINO: {
       icon: Truck,
-      style: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+      style:
+        "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
     },
     "EN CAMINO": {
       icon: Truck,
-      style: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+      style:
+        "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
     },
     ENTREGADA: {
       icon: Truck,
-      style: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
+      style:
+        "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
     },
     PAGADA: {
       icon: CheckCircle2,
-      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+      style:
+        "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
     },
     ANULADA: {
       icon: Ban,
-      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+      style:
+        "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
     },
   };
 
-  const item = config[norm] || config[estado] || { icon: CheckCircle2, style: "border-slate-200 bg-slate-50 text-slate-700" };
+  const item = config[norm] ||
+    config[estado] || { icon: CheckCircle2, style: "border-slate-200 bg-slate-50 text-slate-700" };
   const Icon = item.icon;
 
   return (
@@ -1514,7 +1915,9 @@ function HerramientasModal({
                   <h3 className="font-extrabold text-base text-foreground tracking-tight">
                     Herramientas Klynn
                   </h3>
-                  <p className="text-[11.5px] text-muted-foreground mt-0.5">Utilidades operativas rápidas para tu lavandería</p>
+                  <p className="text-[11.5px] text-muted-foreground mt-0.5">
+                    Utilidades operativas rápidas para tu lavandería
+                  </p>
                 </div>
               </div>
               <button
@@ -1538,8 +1941,12 @@ function HerramientasModal({
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-amber-500 group-hover:translate-x-1 transition-all" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">Calculadora de Libras</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">Calcula costo por peso con tarifa por libra y desgloses</div>
+                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">
+                    Calculadora de Libras
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                    Calcula costo por peso con tarifa por libra y desgloses
+                  </div>
                 </div>
               </button>
 
@@ -1555,8 +1962,12 @@ function HerramientasModal({
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-rose-500 group-hover:translate-x-1 transition-all" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">Órdenes Urgentes</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">Ver y dar seguimiento a órdenes prioritarias del turno</div>
+                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">
+                    Órdenes Urgentes
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                    Ver y dar seguimiento a órdenes prioritarias del turno
+                  </div>
                 </div>
               </button>
 
@@ -1572,8 +1983,12 @@ function HerramientasModal({
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-emerald-500 group-hover:translate-x-1 transition-all" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">Imprimir Última Factura</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">Reimprime de forma instantánea el ticket de la última orden</div>
+                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">
+                    Imprimir Última Factura
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                    Reimprime de forma instantánea el ticket de la última orden
+                  </div>
                 </div>
               </button>
 
@@ -1589,8 +2004,12 @@ function HerramientasModal({
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-sky-500 group-hover:translate-x-1 transition-all" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">Consulta de Delivery</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">Órdenes activas con envío a domicilio y dirección registrada</div>
+                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">
+                    Consulta de Delivery
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                    Órdenes activas con envío a domicilio y dirección registrada
+                  </div>
                 </div>
               </button>
 
@@ -1606,8 +2025,12 @@ function HerramientasModal({
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary group-hover:translate-x-1 transition-all" />
                 </div>
                 <div>
-                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">Ubicación en Conveyor / Perchero</div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">Localiza rápidamente el gancho o perchero colgado de la prenda</div>
+                  <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">
+                    Ubicación en Conveyor / Perchero
+                  </div>
+                  <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
+                    Localiza rápidamente el gancho o perchero colgado de la prenda
+                  </div>
                 </div>
               </button>
             </div>
@@ -1631,10 +2054,16 @@ function HerramientasModal({
 
             {activeTool === "calculadora" && <CalculadoraLibrasTool tenant={tenant} />}
             {activeTool === "urgentes" && <OrdenesUrgentesTool tenant={tenant} onClose={onClose} />}
-            {activeTool === "ultima_factura" && <UltimaFacturaTool tenant={tenant} empleado={empleado} />}
-            {activeTool === "deliveries" && <DeliveryEnveosTool tenant={tenant} onClose={onClose} />}
+            {activeTool === "ultima_factura" && (
+              <UltimaFacturaTool tenant={tenant} empleado={empleado} />
+            )}
+            {activeTool === "deliveries" && (
+              <DeliveryEnveosTool tenant={tenant} onClose={onClose} />
+            )}
             {activeTool === "conveyor" && <UbicacionConveyorTool tenant={tenant} />}
-            {activeTool === "notas" && <NotasRecordatoriosTool tenant={tenant} empleado={empleado} />}
+            {activeTool === "notas" && (
+              <NotasRecordatoriosTool tenant={tenant} empleado={empleado} />
+            )}
           </div>
         )}
       </div>
@@ -1656,14 +2085,20 @@ function CalculadoraLibrasTool({ tenant }: { tenant: any }) {
           <Scale className="h-5 w-5" />
         </div>
         <div>
-          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">Calculadora de Libras</h4>
-          <p className="text-xs text-muted-foreground">Estima rápidamente el costo de lavado por peso</p>
+          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">
+            Calculadora de Libras
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            Estima rápidamente el costo de lavado por peso
+          </p>
         </div>
       </div>
 
       <div className="grid grid-cols-2 gap-3 pt-2">
         <div className="space-y-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Precio por libra (RD$)</label>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Precio por libra (RD$)
+          </label>
           <input
             type="number"
             min="1"
@@ -1674,7 +2109,9 @@ function CalculadoraLibrasTool({ tenant }: { tenant: any }) {
         </div>
 
         <div className="space-y-1.5">
-          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">Cantidad de libras (lbs)</label>
+          <label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+            Cantidad de libras (lbs)
+          </label>
           <input
             type="number"
             min="0.5"
@@ -1687,7 +2124,9 @@ function CalculadoraLibrasTool({ tenant }: { tenant: any }) {
       </div>
 
       <div className="space-y-1">
-        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Añadir libras rápido:</span>
+        <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+          Añadir libras rápido:
+        </span>
         <div className="flex gap-2 flex-wrap">
           {[5, 10, 15, 20, 30, 50].map((num) => (
             <button
@@ -1709,8 +2148,12 @@ function CalculadoraLibrasTool({ tenant }: { tenant: any }) {
 
       <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/15 via-amber-500/5 to-transparent border border-amber-500/25 flex items-center justify-between shadow-2xs">
         <div>
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block">Total Estimado</span>
-          <span className="text-xs text-amber-700/80 dark:text-amber-400">{libras} lbs × RD${precioLibra}.00/lb</span>
+          <span className="text-xs font-bold uppercase tracking-wider text-amber-800 dark:text-amber-300 block">
+            Total Estimado
+          </span>
+          <span className="text-xs text-amber-700/80 dark:text-amber-400">
+            {libras} lbs × RD${precioLibra}.00/lb
+          </span>
         </div>
         <div className="font-display text-3xl font-black text-amber-900 dark:text-amber-200">
           {formatRD(total)}
@@ -1728,11 +2171,10 @@ function OrdenesUrgentesTool({ tenant, onClose }: { tenant: any; onClose: () => 
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      getOrdenes(tenant.id),
-      getClientes(tenant.id)
-    ]).then(([all, clis]) => {
-      const list = (all || []).filter((o: any) => o.es_urgente && o.estado !== "ENTREGADA" && o.estado !== "ANULADA");
+    Promise.all([getOrdenes(tenant.id), getClientes(tenant.id)]).then(([all, clis]) => {
+      const list = (all || []).filter(
+        (o: any) => o.es_urgente && o.estado !== "ENTREGADA" && o.estado !== "ANULADA",
+      );
       setUrgentes(list);
       setClientesList(clis || []);
       setLoading(false);
@@ -1756,31 +2198,49 @@ function OrdenesUrgentesTool({ tenant, onClose }: { tenant: any; onClose: () => 
           <Flame className="h-5 w-5" />
         </div>
         <div>
-          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">Órdenes Urgentes Activas</h4>
-          <p className="text-xs text-muted-foreground">{urgentes.length} órdenes prioritarias pendientes de entrega</p>
+          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">
+            Órdenes Urgentes Activas
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            {urgentes.length} órdenes prioritarias pendientes de entrega
+          </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">Cargando órdenes urgentes...</div>
+        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">
+          Cargando órdenes urgentes...
+        </div>
       ) : urgentes.length === 0 ? (
         <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
-          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">¡No hay órdenes urgentes pendientes!</div>
-          <div className="text-xs text-muted-foreground">Todas las prendas prioritarias han sido entregadas o procesadas.</div>
+          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+            ¡No hay órdenes urgentes pendientes!
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Todas las prendas prioritarias han sido entregadas o procesadas.
+          </div>
         </div>
       ) : (
         <div className="max-h-64 overflow-y-auto space-y-2 custom-scrollbar pr-1">
           {urgentes.map((ord) => (
-            <div key={ord.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-rose-500/25 flex items-center justify-between gap-3 shadow-2xs">
+            <div
+              key={ord.id}
+              className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-rose-500/25 flex items-center justify-between gap-3 shadow-2xs"
+            >
               <div>
                 <div className="flex items-center gap-2">
                   <span className="font-bold text-sm text-foreground">Orden #{ord.numero}</span>
                   <EstadoBadge estado={ord.estado} />
                 </div>
-                <div className="text-xs text-muted-foreground mt-0.5">Cliente: <span className="font-medium text-foreground">{getClienteNombre(ord)}</span></div>
+                <div className="text-xs text-muted-foreground mt-0.5">
+                  Cliente:{" "}
+                  <span className="font-medium text-foreground">{getClienteNombre(ord)}</span>
+                </div>
               </div>
               <div className="text-right">
-                <div className="font-display font-black text-sm text-rose-600 dark:text-rose-400">{formatRD(ord.total)}</div>
+                <div className="font-display font-black text-sm text-rose-600 dark:text-rose-400">
+                  {formatRD(ord.total)}
+                </div>
                 <button
                   onClick={() => {
                     onClose();
@@ -1807,10 +2267,7 @@ function UltimaFacturaTool({ tenant, empleado }: { tenant: any; empleado: any })
   const [clientesList, setClientesList] = useState<any[]>([]);
 
   useEffect(() => {
-    Promise.all([
-      getOrdenes(tenant.id),
-      getClientes(tenant.id)
-    ]).then(([all, clis]) => {
+    Promise.all([getOrdenes(tenant.id), getClientes(tenant.id)]).then(([all, clis]) => {
       if (all && all.length > 0) {
         setUltimaOrden(all[0]);
       }
@@ -1834,29 +2291,48 @@ function UltimaFacturaTool({ tenant, empleado }: { tenant: any; empleado: any })
           <Printer className="h-5 w-5" />
         </div>
         <div>
-          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">Imprimir Última Factura</h4>
-          <p className="text-xs text-muted-foreground">Reimprime el ticket térmico de la orden más reciente</p>
+          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">
+            Imprimir Última Factura
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            Reimprime el ticket térmico de la orden más reciente
+          </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">Buscando última orden registrada...</div>
+        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">
+          Buscando última orden registrada...
+        </div>
       ) : !ultimaOrden ? (
         <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800">
-          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">No hay órdenes en el sistema</div>
-          <div className="text-xs text-muted-foreground mt-0.5">Aún no se han registrado ventas en esta sucursal.</div>
+          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+            No hay órdenes en el sistema
+          </div>
+          <div className="text-xs text-muted-foreground mt-0.5">
+            Aún no se han registrado ventas en esta sucursal.
+          </div>
         </div>
       ) : (
         <div className="space-y-4">
           <div className="p-4 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">Última Orden Registrada</span>
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-800 dark:text-emerald-300">
+                Última Orden Registrada
+              </span>
               <EstadoBadge estado={ultimaOrden.estado} />
             </div>
             <div className="flex items-baseline justify-between pt-1">
               <div>
-                <div className="font-display text-xl font-black text-foreground">Orden #{ultimaOrden.numero}</div>
-                <div className="text-xs text-muted-foreground">Cliente: {clientesList.find(c => c.id === ultimaOrden.cliente_id)?.nombre || ultimaOrden.cliente_nombre || "Consumidor Final"}</div>
+                <div className="font-display text-xl font-black text-foreground">
+                  Orden #{ultimaOrden.numero}
+                </div>
+                <div className="text-xs text-muted-foreground">
+                  Cliente:{" "}
+                  {clientesList.find((c) => c.id === ultimaOrden.cliente_id)?.nombre ||
+                    ultimaOrden.cliente_nombre ||
+                    "Consumidor Final"}
+                </div>
               </div>
               <div className="font-display text-2xl font-black text-emerald-700 dark:text-emerald-400">
                 {formatRD(ultimaOrden.total)}
@@ -1894,23 +2370,22 @@ function DeliveryEnveosTool({ tenant, onClose }: { tenant: any; onClose: () => v
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      getOrdenes(tenant.id),
-      getClientes(tenant.id)
-    ]).then(([all, clis]) => {
-      const activeDeliveries = (all || []).filter((o: any) => {
-        const c = (clis || []).find((x: any) => x.id === o.cliente_id);
-        const tieneCostoEnvio = o.costo_envio && o.costo_envio > 0;
-        const tieneDireccionCliente = c && c.direccion && c.direccion.trim().length > 0;
-        const noFinalizada = o.estado !== "ENTREGADA" && o.estado !== "ANULADA";
-        return (tieneCostoEnvio || tieneDireccionCliente) && noFinalizada;
-      }).map((o: any) => {
-        const c = (clis || []).find((x: any) => x.id === o.cliente_id);
-        return {
-          ...o,
-          cliente_info: c
-        };
-      });
+    Promise.all([getOrdenes(tenant.id), getClientes(tenant.id)]).then(([all, clis]) => {
+      const activeDeliveries = (all || [])
+        .filter((o: any) => {
+          const c = (clis || []).find((x: any) => x.id === o.cliente_id);
+          const tieneCostoEnvio = o.costo_envio && o.costo_envio > 0;
+          const tieneDireccionCliente = c && c.direccion && c.direccion.trim().length > 0;
+          const noFinalizada = o.estado !== "ENTREGADA" && o.estado !== "ANULADA";
+          return (tieneCostoEnvio || tieneDireccionCliente) && noFinalizada;
+        })
+        .map((o: any) => {
+          const c = (clis || []).find((x: any) => x.id === o.cliente_id);
+          return {
+            ...o,
+            cliente_info: c,
+          };
+        });
 
       setDeliveries(activeDeliveries);
       setLoading(false);
@@ -1924,37 +2399,58 @@ function DeliveryEnveosTool({ tenant, onClose }: { tenant: any; onClose: () => v
           <Truck className="h-5 w-5" />
         </div>
         <div>
-          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">Delivery y Envíos Activos</h4>
-          <p className="text-xs text-muted-foreground">{deliveries.length} envíos pendientes de despacho con dirección registrada</p>
+          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">
+            Delivery y Envíos Activos
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            {deliveries.length} envíos pendientes de despacho con dirección registrada
+          </p>
         </div>
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">Cargando envíos activos...</div>
+        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">
+          Cargando envíos activos...
+        </div>
       ) : deliveries.length === 0 ? (
         <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1">
-          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">¡No hay envíos pendientes!</div>
-          <div className="text-xs text-muted-foreground">Todas las órdenes con envío han sido entregadas o no hay direcciones registradas.</div>
+          <div className="text-sm font-bold text-slate-700 dark:text-slate-300">
+            ¡No hay envíos pendientes!
+          </div>
+          <div className="text-xs text-muted-foreground">
+            Todas las órdenes con envío han sido entregadas o no hay direcciones registradas.
+          </div>
         </div>
       ) : (
         <div className="max-h-64 overflow-y-auto space-y-2.5 custom-scrollbar pr-1">
           {deliveries.map((ord) => {
-            const cliName = ord.cliente_info ? `${ord.cliente_info.nombre} ${ord.cliente_info.apellido || ""}`.trim() : ord.cliente_nombre || "Consumidor Final";
+            const cliName = ord.cliente_info
+              ? `${ord.cliente_info.nombre} ${ord.cliente_info.apellido || ""}`.trim()
+              : ord.cliente_nombre || "Consumidor Final";
             const dir = ord.cliente_info?.direccion || "Dirección no especificada";
             const tel = ord.cliente_info?.telefono || ord.telefono;
 
             return (
-              <div key={ord.id} className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-sky-500/25 space-y-2 shadow-2xs">
+              <div
+                key={ord.id}
+                className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-sky-500/25 space-y-2 shadow-2xs"
+              >
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-sm text-foreground">Orden #{ord.numero}</span>
+                    <span className="font-extrabold text-sm text-foreground">
+                      Orden #{ord.numero}
+                    </span>
                     <EstadoBadge estado={ord.estado} />
                   </div>
-                  <span className="font-display font-black text-sm text-sky-700 dark:text-sky-400">{formatRD(ord.total)}</span>
+                  <span className="font-display font-black text-sm text-sky-700 dark:text-sky-400">
+                    {formatRD(ord.total)}
+                  </span>
                 </div>
 
                 <div className="text-xs space-y-0.5 text-muted-foreground">
-                  <div><span className="font-bold text-foreground">Cliente:</span> {cliName}</div>
+                  <div>
+                    <span className="font-bold text-foreground">Cliente:</span> {cliName}
+                  </div>
                   <div className="flex items-start gap-1 text-slate-700 dark:text-slate-300 font-medium">
                     <span className="font-bold text-foreground shrink-0">📍 Dirección:</span>
                     <span className="line-clamp-2">{dir}</span>
@@ -1989,10 +2485,7 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    Promise.all([
-      getOrdenes(tenant.id),
-      getClientes(tenant.id)
-    ]).then(([all, clis]) => {
+    Promise.all([getOrdenes(tenant.id), getClientes(tenant.id)]).then(([all, clis]) => {
       setOrdenes((all || []).filter((o: any) => o.estado === "LISTA"));
       setClientesList(clis || []);
       setLoading(false);
@@ -2016,8 +2509,12 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
           <Package className="h-5 w-5" />
         </div>
         <div>
-          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">Ubicación en Conveyor / Perchero</h4>
-          <p className="text-xs text-muted-foreground">{ordenes.length} órdenes listas colgadas en conveyor o perchero</p>
+          <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">
+            Ubicación en Conveyor / Perchero
+          </h4>
+          <p className="text-xs text-muted-foreground">
+            {ordenes.length} órdenes listas colgadas en conveyor o perchero
+          </p>
         </div>
       </div>
 
@@ -2033,7 +2530,9 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
       </div>
 
       {loading ? (
-        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">Cargando posiciones en conveyor...</div>
+        <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">
+          Cargando posiciones en conveyor...
+        </div>
       ) : result.length === 0 ? (
         <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-muted-foreground">
           No se encontraron coincidencias para la búsqueda.
@@ -2042,16 +2541,25 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
         <div className="max-h-64 overflow-y-auto space-y-2.5 custom-scrollbar pr-1">
           {result.slice(0, 15).map((ord) => {
             const c = clientesList.find((x) => x.id === ord.cliente_id);
-            const cliName = c ? `${c.nombre} ${c.apellido || ""}`.trim() : ord.cliente_nombre || "Consumidor Final";
+            const cliName = c
+              ? `${c.nombre} ${c.apellido || ""}`.trim()
+              : ord.cliente_nombre || "Consumidor Final";
 
             return (
-              <div key={ord.id} className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-2xs">
+              <div
+                key={ord.id}
+                className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-2xs"
+              >
                 <div>
                   <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-sm text-foreground">Orden #{ord.numero}</span>
+                    <span className="font-extrabold text-sm text-foreground">
+                      Orden #{ord.numero}
+                    </span>
                     <EstadoBadge estado={ord.estado} />
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">Cliente: <span className="font-medium text-foreground">{cliName}</span></div>
+                  <div className="text-xs text-muted-foreground mt-0.5">
+                    Cliente: <span className="font-medium text-foreground">{cliName}</span>
+                  </div>
                 </div>
 
                 <div className="text-right">

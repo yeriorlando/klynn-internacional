@@ -5,11 +5,49 @@ import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, Plus, Trash2, Search, UserPlus, Check, AlertTriangle,
-  Printer, Phone, Shirt, Truck, Maximize, Minimize, LayoutGrid, List, Receipt,
-  ShoppingCart, User as UserIcon, X, Minus, CheckCircle2, Loader2, Building, Timer, Scale, WashingMachine,
-  CreditCard, CornerDownLeft, Percent, Box, Calendar as CalendarIcon, Clock, CalendarDays, FileText, ChevronDown, ChevronUp,
-  Building2, Banknote, Sparkles, Tag, Layers, Package
+  ArrowLeft,
+  ArrowRight,
+  Plus,
+  Trash2,
+  Search,
+  UserPlus,
+  Check,
+  AlertTriangle,
+  Printer,
+  Phone,
+  Shirt,
+  Truck,
+  Maximize,
+  Minimize,
+  LayoutGrid,
+  List,
+  Receipt,
+  ShoppingCart,
+  User as UserIcon,
+  X,
+  Minus,
+  CheckCircle2,
+  Loader2,
+  Building,
+  Timer,
+  Scale,
+  WashingMachine,
+  CreditCard,
+  CornerDownLeft,
+  Percent,
+  Box,
+  Calendar as CalendarIcon,
+  Clock,
+  CalendarDays,
+  FileText,
+  ChevronDown,
+  ChevronUp,
+  Building2,
+  Banknote,
+  Sparkles,
+  Tag,
+  Layers,
+  Package,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -21,28 +59,75 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
-  getClientes, getOrdenes, saveCliente, getCatalogo, getServicios, getCajaAbierta, saveOrden, saveMovimiento,
-  nextOrdenNumero, formatRD, formatPhoneRD, uid, DEFAULT_CONFIG,
-  formatAmountInput, parseAmount, saveTenant, getTenantPlan,
-  checkPlanLimits, getECFConfig, getECFSequences, nextECFNumero, saveECFDocument,
+  getClientes,
+  getOrdenes,
+  saveCliente,
+  getCatalogo,
+  getServicios,
+  getCajaAbierta,
+  saveOrden,
+  saveMovimiento,
+  nextOrdenNumero,
+  formatRD,
+  formatPhoneRD,
+  uid,
+  DEFAULT_CONFIG,
+  formatAmountInput,
+  parseAmount,
+  saveTenant,
+  getTenantPlan,
+  checkPlanLimits,
+  getECFConfig,
+  getECFSequences,
+  nextECFNumero,
+  saveECFDocument,
   isModuleEnabled,
-  type Cliente, type OrdenItem, type MetodoPago, type Orden, type CatalogoItem, type Servicio, type Caja,
-  type ECFConfig, type ECFSequence, type ECFDocument, type Empleado, NCF_NOMBRES
+  type Cliente,
+  type OrdenItem,
+  type MetodoPago,
+  type Orden,
+  type CatalogoItem,
+  type Servicio,
+  type Caja,
+  type ECFConfig,
+  type ECFSequence,
+  type ECFDocument,
+  type Empleado,
+  NCF_NOMBRES,
 } from "@/lib/storage";
 import { emitirECF } from "@/lib/fiscal";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { PlanLimitModal } from "@/components/klynn/PlanLimitModal";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
-import { useCatalogo, useServicios, useClientes, useCajaAbierta, useECFConfig, usePlans, useECFSequences } from "@/hooks/use-queries";
+import {
+  useCatalogo,
+  useServicios,
+  useClientes,
+  useCajaAbierta,
+  useECFConfig,
+  usePlans,
+  useECFSequences,
+} from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PriceInput } from "@/components/klynn/PriceInput";
@@ -147,9 +232,9 @@ function NuevaOrdenPage() {
 
   const getFormattedDeliveryLabel = (date?: Date) => {
     if (!date) return "No seleccionada";
-    return date.toLocaleString('es-DO', { 
-      month: 'short',
-      day: 'numeric'
+    return date.toLocaleString("es-DO", {
+      month: "short",
+      day: "numeric",
     });
   };
 
@@ -178,25 +263,27 @@ function NuevaOrdenPage() {
   const isElectronic = fiscalConfigData?.is_active || false;
 
   // Calcular secuencias activas según el modo (electrónico o tradicional)
-  const activeSequences = (ecfSequences || []).filter(s =>
-    s.is_active &&
-    (isElectronic ? s.tipo_ecf.startsWith('E') : s.tipo_ecf.startsWith('B'))
+  const activeSequences = (ecfSequences || []).filter(
+    (s) => s.is_active && (isElectronic ? s.tipo_ecf.startsWith("E") : s.tipo_ecf.startsWith("B")),
   );
 
   // Obtener los tipos únicos disponibles en base a las secuencias configuradas
   const validTipos = useMemo(() => {
     return activeSequences.length > 0
-      ? Array.from(new Set(activeSequences.map(s => s.tipo_ecf))).sort()
-      : (isElectronic ? ["E32", "E31"] : ["B02", "B01"]);
+      ? Array.from(new Set(activeSequences.map((s) => s.tipo_ecf))).sort()
+      : isElectronic
+        ? ["E32", "E31"]
+        : ["B02", "B01"];
   }, [activeSequences, isElectronic]);
 
-  const catalogo = useMemo(() => catalogoData.filter(i => i.activo), [catalogoData]);
-  const servicios = useMemo(() => serviciosData.filter(s => s.activo), [serviciosData]);
+  const catalogo = useMemo(() => catalogoData.filter((i) => i.activo), [catalogoData]);
+  const servicios = useMemo(() => serviciosData.filter((s) => s.activo), [serviciosData]);
   const filteredClients = useMemo(() => {
-    return clientes.filter(c =>
-      c.nombre.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
-      (c.apellido && c.apellido.toLowerCase().includes(clientSearchQuery.toLowerCase())) ||
-      c.telefono.includes(clientSearchQuery)
+    return clientes.filter(
+      (c) =>
+        c.nombre.toLowerCase().includes(clientSearchQuery.toLowerCase()) ||
+        (c.apellido && c.apellido.toLowerCase().includes(clientSearchQuery.toLowerCase())) ||
+        c.telefono.includes(clientSearchQuery),
     );
   }, [clientes, clientSearchQuery]);
   const fiscalConfig = fiscalConfigData || null;
@@ -220,13 +307,14 @@ function NuevaOrdenPage() {
   // 2. Auto-selecciona el tipo de comprobante fiscal cuando cambian datos de cliente o config fiscal
   useEffect(() => {
     if (cliente) {
-      const isEmpresa = cliente.tipo === "Empresa" || (cliente.cedula && cliente.cedula.length >= 9);
+      const isEmpresa =
+        cliente.tipo === "Empresa" || (cliente.cedula && cliente.cedula.length >= 9);
       if (isEmpresa) {
         const target = isElectronic ? "E31" : "B01";
         if (validTipos.includes(target)) {
           setTipoECF(target);
         } else {
-          const fallback = validTipos.find(t => t !== "E32" && t !== "B02");
+          const fallback = validTipos.find((t) => t !== "E32" && t !== "B02");
           if (fallback) setTipoECF(fallback);
         }
       } else {
@@ -244,10 +332,10 @@ function NuevaOrdenPage() {
     if (validTipos.length > 0 && !validTipos.includes(tipoECF)) {
       const isConsumo = tipoECF === "E32" || tipoECF === "B02";
       if (isConsumo) {
-        const matchingConsumo = validTipos.find(t => t === "E32" || t === "B02");
+        const matchingConsumo = validTipos.find((t) => t === "E32" || t === "B02");
         setTipoECF(matchingConsumo || validTipos[0]);
       } else {
-        const matchingCredito = validTipos.find(t => t === "E31" || t === "B01");
+        const matchingCredito = validTipos.find((t) => t === "E31" || t === "B01");
         setTipoECF(matchingCredito || validTipos[0]);
       }
     }
@@ -317,12 +405,12 @@ function NuevaOrdenPage() {
       direccion: "",
       tipo: isPersona ? "Consumidor Final" : "Empresa",
       limite_credito: 0,
-      creado_en: new Date().toISOString()
+      creado_en: new Date().toISOString(),
     };
 
     // Actualización inmediata e instantánea de UI (0ms delay)
     setCliente(c);
-    setTipoECF(isPersona ? (isElectronic ? "E32" : "B02") : (isElectronic ? "E31" : "B01"));
+    setTipoECF(isPersona ? (isElectronic ? "E32" : "B02") : isElectronic ? "E31" : "B01");
     if (!isPosMode) {
       irAlPasoSiguienteDelCliente();
     }
@@ -330,7 +418,7 @@ function NuevaOrdenPage() {
     // Persistencia asíncrona en segundo plano sin congelar/retrasar la UI
     saveCliente(c)
       .then(() => {
-        queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
       })
       .catch((e) => {
         console.warn("Cliente genérico ya existe", e);
@@ -371,19 +459,20 @@ function NuevaOrdenPage() {
     const printerType = tenant.config?.impresora_tipo || "usb";
     if (printerType === "bluetooth" || printerType === "serial") {
       try {
-        const activeClient: Cliente = cliente || clientes.find(c => c.id === ordenToPrint.cliente_id) || {
-          id: ordenToPrint.cliente_id,
-          tenant_id: tenantId,
-          nombre: "Consumidor",
-          apellido: "Final",
-          cedula: "",
-          telefono: "---",
-          email: "",
-          direccion: "",
-          tipo: "Consumidor Final",
-          limite_credito: 0,
-          creado_en: new Date().toISOString()
-        };
+        const activeClient: Cliente = cliente ||
+          clientes.find((c) => c.id === ordenToPrint.cliente_id) || {
+            id: ordenToPrint.cliente_id,
+            tenant_id: tenantId,
+            nombre: "Consumidor",
+            apellido: "Final",
+            cedula: "",
+            telefono: "---",
+            email: "",
+            direccion: "",
+            tipo: "Consumidor Final",
+            limite_credito: 0,
+            creado_en: new Date().toISOString(),
+          };
         const bytes = encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios);
         const success = await printDirectRaw(bytes, tenant.config);
         if (success) {
@@ -402,12 +491,15 @@ function NuevaOrdenPage() {
     }
   };
 
-
-
   const [empresaDialogOpen, setEmpresaDialogOpen] = useState(false);
   const [rncInput, setRncInput] = useState("");
   const [rncLoading, setRncLoading] = useState(false);
-  const [rncResult, setRncResult] = useState<{ name: string; rnc: string; status: string; regime: string } | null>(null);
+  const [rncResult, setRncResult] = useState<{
+    name: string;
+    rnc: string;
+    status: string;
+    regime: string;
+  } | null>(null);
 
   async function handleSearchEmpresaRNC() {
     if (!rncInput.trim() || rncInput.trim().length < 9) {
@@ -417,21 +509,22 @@ function NuevaOrdenPage() {
     setRncLoading(true);
     setRncResult(null);
     try {
-      const { data, error } = await supabase.functions.invoke('pronesoft-proxy', {
+      const { data, error } = await supabase.functions.invoke("pronesoft-proxy", {
         body: {
-          action: 'get-rnc',
-          payload: { rnc: rncInput.trim() }
-        }
+          action: "get-rnc",
+          payload: { rnc: rncInput.trim() },
+        },
       });
 
-      if (error || !data) throw new Error(error?.message || "No se pudo conectar con el servicio de RNC");
+      if (error || !data)
+        throw new Error(error?.message || "No se pudo conectar con el servicio de RNC");
       if (!data.name) throw new Error("No se encontró el contribuyente");
 
       setRncResult({
         name: data.name,
         rnc: data.rnc || rncInput.trim(),
         status: data.status || "DESCONOCIDO",
-        regime: data.regime || "NORMAL"
+        regime: data.regime || "NORMAL",
       });
       toast.success("Datos obtenidos. Por favor verifique.");
     } catch (e: any) {
@@ -457,11 +550,11 @@ function NuevaOrdenPage() {
         direccion: "",
         tipo: "Empresa",
         limite_credito: 0,
-        creado_en: new Date().toISOString()
+        creado_en: new Date().toISOString(),
       };
 
       await saveCliente(c);
-      queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
 
       setCliente(c);
       setTipoECF(isElectronic ? "E31" : "B01");
@@ -481,7 +574,7 @@ function NuevaOrdenPage() {
 
   useEffect(() => {
     async function check() {
-      if (user?.tenant && user.tenant.id !== '__loading__') {
+      if (user?.tenant && user.tenant.id !== "__loading__") {
         const l = await checkPlanLimits(user.tenant);
         setLimits(l);
         if (l.ordersReached) {
@@ -494,7 +587,7 @@ function NuevaOrdenPage() {
 
   const categoriesPrendas = useMemo(() => {
     const map = new Map<string, string>();
-    catalogo.forEach(c => {
+    catalogo.forEach((c) => {
       const cat = (c.categoria || "Otros").trim();
       if (cat) {
         const upper = cat.toUpperCase();
@@ -510,18 +603,21 @@ function NuevaOrdenPage() {
     let list = catalogo;
     if (posFilterTab === "PRENDAS") {
       if (activeCategory !== "TODAS LAS PRENDAS" && activeCategory !== "TODOS") {
-        list = list.filter(c => (c.categoria || "Otros").trim().toUpperCase() === activeCategory.trim().toUpperCase());
+        list = list.filter(
+          (c) =>
+            (c.categoria || "Otros").trim().toUpperCase() === activeCategory.trim().toUpperCase(),
+        );
       }
     }
     if (posSearch) {
-      list = list.filter(c => c.nombre.toLowerCase().includes(posSearch.toLowerCase()));
+      list = list.filter((c) => c.nombre.toLowerCase().includes(posSearch.toLowerCase()));
     }
     return list;
   }, [catalogo, activeCategory, posSearch, posFilterTab]);
 
   const servicesFiltered = useMemo(() => {
     if (posSearch) {
-      return servicios.filter(s => s.nombre.toLowerCase().includes(posSearch.toLowerCase()));
+      return servicios.filter((s) => s.nombre.toLowerCase().includes(posSearch.toLowerCase()));
     }
     return servicios;
   }, [servicios, posSearch]);
@@ -550,7 +646,13 @@ function NuevaOrdenPage() {
       count: 0,
       type: "CATALOGO" as const,
     };
-  }, [catalogFiltered.length, enablePrendas, enableServicios, posFilterTab, servicesFiltered.length]);
+  }, [
+    catalogFiltered.length,
+    enablePrendas,
+    enableServicios,
+    posFilterTab,
+    servicesFiltered.length,
+  ]);
 
   const catalogSummary = useMemo(() => {
     if (posFilterTab === "SERVICIOS") {
@@ -571,18 +673,24 @@ function NuevaOrdenPage() {
 
     return {
       title: "Catálogo",
-      count: (enableServicios ? servicesFiltered.length : 0) + (enablePrendas ? catalogFiltered.length : 0),
+      count:
+        (enableServicios ? servicesFiltered.length : 0) +
+        (enablePrendas ? catalogFiltered.length : 0),
       helper: "Toca un artículo o servicio para agregarlo a la orden",
     };
-  }, [catalogFiltered.length, enablePrendas, enableServicios, posFilterTab, servicesFiltered.length]);
+  }, [
+    catalogFiltered.length,
+    enablePrendas,
+    enableServicios,
+    posFilterTab,
+    servicesFiltered.length,
+  ]);
 
   // Efecto para calcular la fecha de entrega automáticamente
   useEffect(() => {
-    if (!user || user.tenant.id === '__loading__') return;
+    if (!user || user.tenant.id === "__loading__") return;
 
-    const horas = esUrgente
-      ? (cfg.tiempo_entrega_urgente || 6)
-      : (cfg.tiempo_entrega_estandar || 24);
+    const horas = esUrgente ? cfg.tiempo_entrega_urgente || 6 : cfg.tiempo_entrega_estandar || 24;
 
     const d = new Date();
     d.setHours(d.getHours() + horas);
@@ -619,7 +727,8 @@ function NuevaOrdenPage() {
       const state = posStateRef.current;
       if (!state) return;
       const target = e.target as HTMLElement;
-      const isInput = ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
+      const isInput =
+        ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName) || target.isContentEditable;
 
       // Enter to cobrar (open checkout modal) or confirm pay (if modal is open)
       if (e.key === "Enter") {
@@ -632,7 +741,7 @@ function NuevaOrdenPage() {
             }
           } else {
             const isEfectivo = state.metodo === "EFECTIVO";
-            const canConfirm = !isEfectivo || (state.recibido >= state.total);
+            const canConfirm = !isEfectivo || state.recibido >= state.total;
             if (canConfirm) {
               e.preventDefault();
               state.onCrearOrden();
@@ -645,12 +754,16 @@ function NuevaOrdenPage() {
       // Space key to confirm and create order if checkout modal is open
       if (e.key === " " || e.code === "Space") {
         if (state.isCobroModalOpen) {
-          const isTypingText = target.tagName === "TEXTAREA" || (target.tagName === "INPUT" && (target as HTMLInputElement).type === "text" && (target as HTMLInputElement).inputMode !== "decimal");
+          const isTypingText =
+            target.tagName === "TEXTAREA" ||
+            (target.tagName === "INPUT" &&
+              (target as HTMLInputElement).type === "text" &&
+              (target as HTMLInputElement).inputMode !== "decimal");
           if (!isTypingText) {
             e.preventDefault();
             e.stopPropagation();
             const isEfectivo = state.metodo === "EFECTIVO";
-            const canConfirm = !isEfectivo || (state.recibido >= state.total);
+            const canConfirm = !isEfectivo || state.recibido >= state.total;
             if (canConfirm) {
               state.onCrearOrden();
             } else {
@@ -665,7 +778,9 @@ function NuevaOrdenPage() {
       if (e.key === "Control") {
         e.preventDefault();
         setSearchGlow(true);
-        const searchInput = document.querySelector('input[placeholder*="Buscar prenda"]') as HTMLInputElement;
+        const searchInput = document.querySelector(
+          'input[placeholder*="Buscar prenda"]',
+        ) as HTMLInputElement;
         if (searchInput) searchInput.focus();
         return;
       }
@@ -713,10 +828,10 @@ function NuevaOrdenPage() {
       if (e.ctrlKey && e.key.toLowerCase() === "z") {
         e.preventDefault();
         if (state.items.length > 0) {
-          setItems(prev => prev.slice(0, -1));
+          setItems((prev) => prev.slice(0, -1));
           toast.info("Prenda removida (Deshacer) ↩️");
         } else if (state.serviciosSel.length > 0) {
-          setServiciosSel(prev => prev.slice(0, -1));
+          setServiciosSel((prev) => prev.slice(0, -1));
           toast.info("Servicio removido (Deshacer) ↩️");
         }
         return;
@@ -737,37 +852,49 @@ function NuevaOrdenPage() {
     };
   }, [isPosMode]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || user.tenant.id === "__loading__") return null;
   const { tenant, empleado } = user;
 
-  const filtrados = clientes.filter((c) =>
-    c.nombre.toLowerCase().includes(clienteSearch.toLowerCase()) ||
-    c.telefono.includes(clienteSearch),
+  const filtrados = clientes.filter(
+    (c) =>
+      c.nombre.toLowerCase().includes(clienteSearch.toLowerCase()) ||
+      c.telefono.includes(clienteSearch),
   );
 
   // Cálculo detallado de ITBIS
   const itbisRate = (cfg.itbis_porcentaje || 0) / 100;
 
   // Separar montos gravables y exentos
-  const itemsGravables = items.filter(it => !it.is_exento);
-  const itemsExentos = items.filter(it => it.is_exento);
+  const itemsGravables = items.filter((it) => !it.is_exento);
+  const itemsExentos = items.filter((it) => it.is_exento);
 
-  const subtotalGravableBase = itemsGravables.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
-  const subtotalExentoBase = itemsExentos.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
+  const subtotalGravableBase = itemsGravables.reduce(
+    (s, it) => s + it.cantidad * it.precio_unitario,
+    0,
+  );
+  const subtotalExentoBase = itemsExentos.reduce(
+    (s, it) => s + it.cantidad * it.precio_unitario,
+    0,
+  );
 
-  const costoServicios = servicios.filter(s => serviciosSel.includes(s.nombre)).reduce((acc, s) => {
-    const qty = serviciosSel.filter(x => x === s.nombre).length;
-    const price = customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio;
-    return acc + (price * qty);
-  }, 0);
+  const costoServicios = servicios
+    .filter((s) => serviciosSel.includes(s.nombre))
+    .reduce((acc, s) => {
+      const qty = serviciosSel.filter((x) => x === s.nombre).length;
+      const price =
+        customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio;
+      return acc + price * qty;
+    }, 0);
 
   // El recargo de urgencia se aplica al subtotal base de prendas más el costo de los servicios
-  const recargoTotal = esUrgente ? (subtotalGravableBase + subtotalExentoBase + costoServicios) * (cfg.recargo_urgencia / 100) : 0;
+  const recargoTotal = esUrgente
+    ? (subtotalGravableBase + subtotalExentoBase + costoServicios) * (cfg.recargo_urgencia / 100)
+    : 0;
 
   // Costo de domicilio (se agrega al final, no entra en la base gravable de ITBIS por ser un servicio de entrega)
   const costoEnvio = servicioDomicilio ? costoDomicilio : 0;
 
-  // Proporción del recargo que es gravable (si hay items exentos, el recargo suele ser gravable igual por ser un servicio, 
+  // Proporción del recargo que es gravable (si hay items exentos, el recargo suele ser gravable igual por ser un servicio,
   // pero para ser conservadores en este flujo lo sumamos a la base gravable total)
   const baseParaItbis = subtotalGravableBase + costoServicios + recargoTotal;
 
@@ -782,7 +909,7 @@ function NuevaOrdenPage() {
 
   if (cfg.ncf_facturacion_activa && aplicarItbis && itbisRate > 0) {
     if (cfg.itbis_incluido) {
-      // ITBIS ya está en los precios. 
+      // ITBIS ya está en los precios.
       // Calculamos cuánto de la base gravable es ITBIS
       const baseSinItbis = +(baseParaItbis / (1 + itbisRate)).toFixed(2);
       itbis = +(baseParaItbis - baseSinItbis).toFixed(2);
@@ -803,25 +930,41 @@ function NuevaOrdenPage() {
 
   function addItem(it: OrdenItem) {
     setItems((arr) => {
-      const idx = arr.findIndex(x => x.descripcion === it.descripcion && x.precio_unitario === it.precio_unitario);
+      const idx = arr.findIndex(
+        (x) => x.descripcion === it.descripcion && x.precio_unitario === it.precio_unitario,
+      );
       if (idx > -1) {
-        return arr.map((item, i) => i === idx ? { ...item, cantidad: item.cantidad + it.cantidad } : item);
+        return arr.map((item, i) =>
+          i === idx ? { ...item, cantidad: item.cantidad + it.cantidad } : item,
+        );
       }
       return [...arr, it];
     });
   }
-  function removeItem(i: number) { setItems((arr) => arr.filter((_, idx) => idx !== i)); }
+  function removeItem(i: number) {
+    setItems((arr) => arr.filter((_, idx) => idx !== i));
+  }
   function addItemDesglose(it: OrdenItem) {
     if (indexDesglose === null) return;
-    const targetService = it.servicio_origen || desgloseServiceName || (serviciosSel.length > 0 ? serviciosSel[serviciosSel.length - 1] : undefined);
+    const targetService =
+      it.servicio_origen ||
+      desgloseServiceName ||
+      (serviciosSel.length > 0 ? serviciosSel[serviciosSel.length - 1] : undefined);
     const itemWithService: OrdenItem = {
       ...it,
-      servicio_origen: targetService
+      servicio_origen: targetService,
     };
     setItems((arr) => {
-      const idx = arr.findIndex(x => x.descripcion === itemWithService.descripcion && x.precio_unitario === itemWithService.precio_unitario && x.servicio_origen === itemWithService.servicio_origen);
+      const idx = arr.findIndex(
+        (x) =>
+          x.descripcion === itemWithService.descripcion &&
+          x.precio_unitario === itemWithService.precio_unitario &&
+          x.servicio_origen === itemWithService.servicio_origen,
+      );
       if (idx > -1) {
-        return arr.map((item, i) => i === idx ? { ...item, cantidad: item.cantidad + itemWithService.cantidad } : item);
+        return arr.map((item, i) =>
+          i === idx ? { ...item, cantidad: item.cantidad + itemWithService.cantidad } : item,
+        );
       }
 
       const result = [...arr];
@@ -831,18 +974,22 @@ function NuevaOrdenPage() {
       result.splice(indexDesglose + 1, 0, itemWithService);
       return result;
     });
-    toast.success(`${it.descripcion.replace('↳ ', '')} agregada ${targetService ? `a ${targetService}` : 'al desglose'}`);
+    toast.success(
+      `${it.descripcion.replace("↳ ", "")} agregada ${targetService ? `a ${targetService}` : "al desglose"}`,
+    );
   }
   function updateItemQuantity(i: number, delta: number) {
-    setItems((arr) => arr.map((it, idx) => {
-      if (idx !== i) return it;
-      const newQty = Math.max(1, it.cantidad + delta);
-      return { ...it, cantidad: newQty };
-    }));
+    setItems((arr) =>
+      arr.map((it, idx) => {
+        if (idx !== i) return it;
+        const newQty = Math.max(1, it.cantidad + delta);
+        return { ...it, cantidad: newQty };
+      }),
+    );
   }
   function updateServiceQuantity(serviceName: string, delta: number) {
     setServiciosSel((arr) => {
-      const currentCount = arr.filter(x => x === serviceName).length;
+      const currentCount = arr.filter((x) => x === serviceName).length;
       if (delta < 0 && currentCount <= 1) return arr;
       if (delta < 0) {
         const idx = arr.indexOf(serviceName);
@@ -860,11 +1007,14 @@ function NuevaOrdenPage() {
 
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().then(() => {
-        setIsFullscreen(true);
-      }).catch((e) => {
-        console.error(`Error al activar pantalla completa: ${e.message}`);
-      });
+      document.documentElement
+        .requestFullscreen()
+        .then(() => {
+          setIsFullscreen(true);
+        })
+        .catch((e) => {
+          console.error(`Error al activar pantalla completa: ${e.message}`);
+        });
     } else {
       if (document.exitFullscreen) {
         document.exitFullscreen();
@@ -873,12 +1023,13 @@ function NuevaOrdenPage() {
     }
   };
 
-
-
   async function onCrearOrden() {
     if (isCreatingOrden) return;
     setIsCreatingOrden(true);
-    if (opcionPagoSelected === "CREDITO" && (!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))) {
+    if (
+      opcionPagoSelected === "CREDITO" &&
+      (!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))
+    ) {
       toast.error("Las ventas a crédito deben asignarse a un cliente registrado.");
       setIsCreatingOrden(false);
       return;
@@ -900,11 +1051,11 @@ function NuevaOrdenPage() {
           direccion: "",
           tipo: "Consumidor Final",
           limite_credito: 0,
-          creado_en: new Date().toISOString()
+          creado_en: new Date().toISOString(),
         };
         try {
           await saveCliente(c);
-          queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+          queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
         } catch (e) {
           console.warn("Cliente genérico ya existe");
         }
@@ -932,15 +1083,20 @@ function NuevaOrdenPage() {
       return;
     }
     if (metodo === "CREDITO" && abonoCredito >= total) {
-      toast.error("El abono debe ser menor al total. Si desea pagar completo, cambie el método de pago.");
+      toast.error(
+        "El abono debe ser menor al total. Si desea pagar completo, cambie el método de pago.",
+      );
       setIsCreatingOrden(false);
       return;
     }
 
     try {
-      const pagado = opcionPagoSelected === "PAGO_AL_RETIRAR" 
-        ? 0 
-        : (opcionPagoSelected === "CREDITO" ? abonoCredito : total);
+      const pagado =
+        opcionPagoSelected === "PAGO_AL_RETIRAR"
+          ? 0
+          : opcionPagoSelected === "CREDITO"
+            ? abonoCredito
+            : total;
       const saldo = +Math.max(0, total - pagado).toFixed(2);
 
       const numero = await nextOrdenNumero(tenant.id);
@@ -948,34 +1104,49 @@ function NuevaOrdenPage() {
       // Calcular la fecha final de entrega combinando el día del input con la hora calculada
       const deliveryDate = new Date(fechaEntrega || new Date());
 
-      const horasAdd = esUrgente ? (cfg.tiempo_entrega_urgente || 3) : (cfg.tiempo_entrega_estandar || 24);
+      const horasAdd = esUrgente
+        ? cfg.tiempo_entrega_urgente || 3
+        : cfg.tiempo_entrega_estandar || 24;
       const now = new Date();
       now.setHours(now.getHours() + horasAdd);
       deliveryDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
 
       const isElectronic = !!fiscalConfig?.is_active;
       const activeTipo = isElectronic
-        ? (tipoECF.startsWith('E') ? tipoECF : (tipoECF === 'B01' ? 'E31' : 'E32'))
-        : (tipoECF.startsWith('B') ? tipoECF : (tipoECF === 'E31' ? 'B01' : 'B02'));
+        ? tipoECF.startsWith("E")
+          ? tipoECF
+          : tipoECF === "B01"
+            ? "E31"
+            : "E32"
+        : tipoECF.startsWith("B")
+          ? tipoECF
+          : tipoECF === "E31"
+            ? "B01"
+            : "B02";
 
       let ncfVencimiento: string | undefined = undefined;
       let finalNCF: string | undefined = undefined;
 
-      if (cfg.ncf_facturacion_activa && !isElectronic && opcionPagoSelected !== "PAGO_AL_RETIRAR" && opcionPagoSelected !== "CREDITO") {
+      if (
+        cfg.ncf_facturacion_activa &&
+        !isElectronic &&
+        opcionPagoSelected !== "PAGO_AL_RETIRAR" &&
+        opcionPagoSelected !== "CREDITO"
+      ) {
         try {
           const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
           finalNCF = nextNCF;
           ncfVencimiento = expiration_date;
         } catch (seqErr) {
           console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
-          finalNCF = `${cfg.ncf_secuencia || 'B02'}${String(cfg.ncf_proximo || 1).padStart(8, "0")}`;
+          finalNCF = `${cfg.ncf_secuencia || "B02"}${String(cfg.ncf_proximo || 1).padStart(8, "0")}`;
           // Incrementar secuencia global heredada
           await saveTenant({
             ...tenant,
             config: {
               ...cfg,
-              ncf_proximo: (cfg.ncf_proximo || 1) + 1
-            }
+              ncf_proximo: (cfg.ncf_proximo || 1) + 1,
+            },
           });
         }
       }
@@ -987,13 +1158,17 @@ function NuevaOrdenPage() {
         cliente_id: targetCliente.id,
         empleado_id: empleado.id,
         servicios: serviciosSel,
-        servicios_precios: serviciosSel.reduce((acc, sName) => {
-          const sPrice = customServicePrices[sName] !== undefined
-            ? customServicePrices[sName]
-            : (servicios.find(x => x.nombre === sName)?.precio || 0);
-          acc[sName] = sPrice;
-          return acc;
-        }, {} as Record<string, number>),
+        servicios_precios: serviciosSel.reduce(
+          (acc, sName) => {
+            const sPrice =
+              customServicePrices[sName] !== undefined
+                ? customServicePrices[sName]
+                : servicios.find((x) => x.nombre === sName)?.precio || 0;
+            acc[sName] = sPrice;
+            return acc;
+          },
+          {} as Record<string, number>,
+        ),
         items,
         subtotal: +subtotal.toFixed(2),
         itbis,
@@ -1011,18 +1186,26 @@ function NuevaOrdenPage() {
         ncf_vencimiento: ncfVencimiento,
         entrega_domicilio: servicioDomicilio || undefined,
         costo_envio: servicioDomicilio && costoEnvio > 0 ? costoEnvio : undefined,
-        pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : undefined,
+        pago_referencia:
+          (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia
+            ? referencia
+            : undefined,
       };
 
       // --- LOGICA FISCAL ELECTRONICA (Pronesoft) ---
       let ordenActualizada = { ...orden };
-      if (isElectronic && activeTipo && opcionPagoSelected !== "PAGO_AL_RETIRAR" && opcionPagoSelected !== "CREDITO") {
+      if (
+        isElectronic &&
+        activeTipo &&
+        opcionPagoSelected !== "PAGO_AL_RETIRAR" &&
+        opcionPagoSelected !== "CREDITO"
+      ) {
         try {
           let nextNCF: string | undefined = undefined;
 
           // En Sandbox de Pronesoft, las secuencias se generan automáticamente.
           // En Producción, gestionamos las secuencias localmente en Klynn.
-          if (fiscalConfig?.ambiente === 'produccion') {
+          if (fiscalConfig?.ambiente === "produccion") {
             const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
             nextNCF = ncf;
             ncfVencimiento = expiration_date;
@@ -1034,15 +1217,15 @@ function NuevaOrdenPage() {
             fiscalConfig?.pronesoft_tenant_id,
             cfg,
             tenant,
-            activeTipo
+            activeTipo,
           );
 
           const fiscalFields = {
             ncf: result.encf,
             tipo_ecf: activeTipo,
             ecf_id: result.document.id,
-            ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || '',
-            ecf_security_code: result.security_code || '',
+            ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || "",
+            ecf_security_code: result.security_code || "",
             ecf_signature_date: (result.document as any).signature_date || new Date().toISOString(),
             ncf_vencimiento: ncfVencimiento,
           };
@@ -1067,9 +1250,10 @@ function NuevaOrdenPage() {
           caja_id: caja.id,
           empleado_id: empleado.id,
           tipo: metodo === "CREDITO" ? "ABONO" : "VENTA",
-          concepto: metodo === "CREDITO"
-            ? `Abono inicial orden #${ordenActualizada.numero}`
-            : `Venta orden #${ordenActualizada.numero}`,
+          concepto:
+            metodo === "CREDITO"
+              ? `Abono inicial orden #${ordenActualizada.numero}`
+              : `Venta orden #${ordenActualizada.numero}`,
           monto: pagado,
           metodo: metodo === "CREDITO" ? "EFECTIVO" : metodo,
           orden_id: ordenActualizada.id,
@@ -1086,17 +1270,24 @@ function NuevaOrdenPage() {
         handleImprimirTicket({ ...ordenActualizada });
       }
 
-      if (targetCliente && servicioDomicilio && direccionDomicilio.trim() && direccionDomicilio !== targetCliente.direccion) {
+      if (
+        targetCliente &&
+        servicioDomicilio &&
+        direccionDomicilio.trim() &&
+        direccionDomicilio !== targetCliente.direccion
+      ) {
         await saveCliente({ ...targetCliente, direccion: direccionDomicilio.trim() });
       }
 
       if (targetCliente) {
-        queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-        queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
         import("@/lib/whatsapp").then(({ notificarWhatsApp }) =>
-          notificarWhatsApp(tenant, targetCliente, ordenActualizada, "creada", recibido).then((r) => {
-            if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
-          }),
+          notificarWhatsApp(tenant, targetCliente, ordenActualizada, "creada", recibido).then(
+            (r) => {
+              if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+            },
+          ),
         );
       }
       setIsCreatingOrden(false);
@@ -1107,18 +1298,29 @@ function NuevaOrdenPage() {
   }
 
   async function next() {
-    if (limits?.ordersReached) { setShowLimitModal(true); return; }
+    if (limits?.ordersReached) {
+      setShowLimitModal(true);
+      return;
+    }
     if (step === 1 && !cliente) {
       const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
       if (isConsumoFinal) {
         await handleSelectGeneric("Persona");
         return;
       }
-      toast.error("Selecciona un cliente"); return;
+      toast.error("Selecciona un cliente");
+      return;
     }
-    if (step === 2 && serviciosSel.length === 0 && !enablePrendas) { toast.error("Selecciona al menos un servicio"); return; }
+    if (step === 2 && serviciosSel.length === 0 && !enablePrendas) {
+      toast.error("Selecciona al menos un servicio");
+      return;
+    }
     if (step === 3 && items.length === 0 && (enableServicios ? serviciosSel.length === 0 : true)) {
-      toast.error(enableServicios ? "Agrega al menos una prenda o selecciona un servicio" : "Agrega al menos una prenda");
+      toast.error(
+        enableServicios
+          ? "Agrega al menos una prenda o selecciona un servicio"
+          : "Agrega al menos una prenda",
+      );
       return;
     }
 
@@ -1140,10 +1342,10 @@ function NuevaOrdenPage() {
     enableServicios && { id: 2, label: "Servicios" },
     enablePrendas && { id: 3, label: "Prendas" },
     { id: 4, label: "Resumen" },
-    { id: 5, label: "Cobro" }
+    { id: 5, label: "Cobro" },
   ].filter(Boolean) as { id: number; label: string }[];
 
-  const currentVisibleStepIndex = stepsList.findIndex(s => s.id === step);
+  const currentVisibleStepIndex = stepsList.findIndex((s) => s.id === step);
   const currentVisibleStepNumber = currentVisibleStepIndex !== -1 ? currentVisibleStepIndex + 1 : 1;
   const totalVisibleSteps = stepsList.length;
 
@@ -1164,20 +1366,20 @@ function NuevaOrdenPage() {
     toggleFullscreen,
     addItem,
     isCobroModalOpen,
-    setIsCobroModalOpen
+    setIsCobroModalOpen,
   };
 
   const getComprobanteInfo = (tipo: string) => {
     const isConsumo = tipo === "E32" || tipo === "B02";
     const isCredito = tipo === "E31" || tipo === "B01";
-    
+
     const rawName = NCF_NOMBRES[tipo.substring(0, 3)] || "Comprobante";
     const cleanName = rawName.replace("FISCAL", "").trim();
-    
+
     const name = cleanName
       .toLowerCase()
       .split(" ")
-      .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
       .join(" ");
 
     let label = "";
@@ -1193,13 +1395,16 @@ function NuevaOrdenPage() {
     let icon = null;
 
     if (isConsumo) {
-      colorClass = "border-emerald-500/40 text-emerald-600 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 focus:ring-emerald-500/50";
+      colorClass =
+        "border-emerald-500/40 text-emerald-600 hover:bg-emerald-50/30 dark:hover:bg-emerald-950/10 focus:ring-emerald-500/50";
       icon = <UserIcon className="h-3.5 w-3.5 text-emerald-500 shrink-0" />;
     } else if (isCredito) {
-      colorClass = "border-blue-500/40 text-blue-600 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 focus:ring-blue-500/50";
+      colorClass =
+        "border-blue-500/40 text-blue-600 hover:bg-blue-50/30 dark:hover:bg-blue-950/10 focus:ring-blue-500/50";
       icon = <Building className="h-3.5 w-3.5 text-blue-500 shrink-0" />;
     } else {
-      colorClass = "border-amber-500/40 text-amber-600 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 focus:ring-amber-500/50";
+      colorClass =
+        "border-amber-500/40 text-amber-600 hover:bg-amber-50/30 dark:hover:bg-amber-950/10 focus:ring-amber-500/50";
       icon = <Building2 className="h-3.5 w-3.5 text-amber-500 shrink-0" />;
     }
 
@@ -1207,10 +1412,14 @@ function NuevaOrdenPage() {
   };
 
   return (
-    <div style={{ zoom: 0.9 }} className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}>
+    <div
+      style={{ zoom: 0.9 }}
+      className={`mx-auto w-full ${isPosMode ? "max-w-none flex flex-col overflow-hidden h-full px-5 pt-3 pb-0" : "max-w-6xl px-4 md:px-6"}`}
+    >
       {isPosMode ? (
-        <style dangerouslySetInnerHTML={{
-          __html: `
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
           main {
             padding: 0px !important;
             height: calc(100vh - 4rem) !important;
@@ -1218,10 +1427,13 @@ function NuevaOrdenPage() {
             max-height: calc(100vh - 4rem) !important;
             overflow: hidden !important;
           }
-        `}} />
+        `,
+          }}
+        />
       ) : (
-        <style dangerouslySetInnerHTML={{
-          __html: `
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
           main {
             height: auto !important;
             min-height: calc(100vh - 4rem) !important;
@@ -1229,7 +1441,9 @@ function NuevaOrdenPage() {
             overflow-y: auto !important;
             overflow-x: hidden !important;
           }
-        `}} />
+        `,
+          }}
+        />
       )}
       {!caja && (
         <Card className="mb-4 flex items-center gap-3 border-warning/40 bg-warning/10 p-4 text-sm">
@@ -1239,9 +1453,7 @@ function NuevaOrdenPage() {
       )}
 
       {isPosMode ? (
-        <div
-          className="flex gap-6 overflow-hidden min-h-0 w-full flex-1"
-        >
+        <div className="flex gap-6 overflow-hidden min-h-0 w-full flex-1">
           {/* CATALOG GRID */}
           <div className="flex-1 flex flex-col gap-4 overflow-hidden h-full">
             {/* Top row of POS: action buttons */}
@@ -1253,7 +1465,9 @@ function NuevaOrdenPage() {
                   onClick={() => setShowDeliveryPOS(true)}
                   className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${servicioDomicilio ? "bg-blue-700 text-white shadow-inner ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-background" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"}`}
                 >
-                  <Truck className={`h-4 w-4 transition-colors text-white ${servicioDomicilio ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`} />
+                  <Truck
+                    className={`h-4 w-4 transition-colors text-white ${servicioDomicilio ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                  />
                   <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
                 </button>
 
@@ -1262,7 +1476,9 @@ function NuevaOrdenPage() {
                   onClick={() => setShowDiscountPOS(true)}
                   className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${descuento > 0 ? "bg-rose-700 text-white shadow-inner ring-2 ring-rose-400 ring-offset-1 dark:ring-offset-background" : "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"}`}
                 >
-                  <Percent className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`} />
+                  <Percent
+                    className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                  />
                   <span>{descuento > 0 ? `Desc. ${descuento}%` : "Descuento"}</span>
                 </button>
 
@@ -1271,7 +1487,9 @@ function NuevaOrdenPage() {
                   onClick={() => setShowNotesPOS(true)}
                   className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${notas ? "bg-amber-600 hover:bg-amber-700 text-white shadow-inner ring-2 ring-amber-400 ring-offset-1 dark:ring-offset-background" : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm"}`}
                 >
-                  <FileText className={`h-4 w-4 transition-colors text-white ${notas ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`} />
+                  <FileText
+                    className={`h-4 w-4 transition-colors text-white ${notas ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                  />
                   <span>{notas ? "Nota activa" : "Notas"}</span>
                 </button>
 
@@ -1325,12 +1543,17 @@ function NuevaOrdenPage() {
               onOpenChange={(isOpen) => {
                 setShowDeliveryPOS(isOpen);
                 if (!isOpen && cliente) {
-                  const isGenericClient = cliente.nombre === "Consumidor" && cliente.apellido === "Final";
-                  if (!isGenericClient && direccionDomicilio.trim() && direccionDomicilio.trim() !== cliente.direccion) {
+                  const isGenericClient =
+                    cliente.nombre === "Consumidor" && cliente.apellido === "Final";
+                  if (
+                    !isGenericClient &&
+                    direccionDomicilio.trim() &&
+                    direccionDomicilio.trim() !== cliente.direccion
+                  ) {
                     const updatedCliente = { ...cliente, direccion: direccionDomicilio.trim() };
                     setCliente(updatedCliente);
                     saveCliente(updatedCliente).then(() => {
-                      queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+                      queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
                     });
                   }
                 }
@@ -1410,7 +1633,9 @@ function NuevaOrdenPage() {
                               aria-pressed={isSelected}
                               onClick={() => {
                                 setPosFilterTab(tab.id as typeof posFilterTab);
-                                setActiveCategory(tab.id === "PRENDAS" ? "TODAS LAS PRENDAS" : "TODOS");
+                                setActiveCategory(
+                                  tab.id === "PRENDAS" ? "TODAS LAS PRENDAS" : "TODOS",
+                                );
                               }}
                               className={`inline-flex h-8 shrink-0 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 text-[11px] font-extrabold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 md:text-xs ${
                                 isSelected
@@ -1418,7 +1643,9 @@ function NuevaOrdenPage() {
                                   : "text-slate-500 hover:bg-white/70 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100"
                               }`}
                             >
-                              <Icon className={`h-3.5 w-3.5 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`} />
+                              <Icon
+                                className={`h-3.5 w-3.5 ${isSelected ? "text-white" : "text-slate-500 dark:text-slate-400"}`}
+                              />
                               <span>{tab.label}</span>
                             </button>
                           );
@@ -1428,19 +1655,32 @@ function NuevaOrdenPage() {
                   </div>
 
                   {desgloseServiceName && !showDesgloseDialog && (
-                    <div className="mt-2 py-1.5 px-3 rounded-xl bg-emerald-50 border border-emerald-300 dark:bg-emerald-950/40 dark:border-emerald-800 flex items-center justify-between gap-3 shadow-2xs">
-                      <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-800 dark:text-emerald-300">
-                        <Plus className="h-3.5 w-3.5 text-emerald-600 shrink-0 stroke-[3]" />
-                        <span>Añadiendo prendas a: <strong className="uppercase font-black text-emerald-900 dark:text-emerald-200">{desgloseServiceName}</strong></span>
+                    <div className="mt-2 py-2 px-3 rounded-xl bg-primary text-white shadow-sm border border-primary/20 flex items-center justify-between gap-3 animate-in fade-in duration-200">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7.5 w-7.5 rounded-lg bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-white shrink-0 shadow-inner">
+                          <Shirt className="h-4 w-4 text-white fill-white" />
+                        </div>
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span className="text-[10px] font-black uppercase tracking-widest text-white/90 shrink-0 hidden sm:inline">
+                            DESGLOSE DE PRENDAS:
+                          </span>
+                          <div className="text-xs font-black text-white truncate flex items-center gap-1.5">
+                            <span className="opacity-90 font-bold">Añadiendo prendas a:</span>
+                            <span className="bg-[#F0B900] text-[#1B4B73] px-2.5 py-0.5 rounded-md font-black uppercase tracking-wider text-[11px] shadow-2xs">
+                              {desgloseServiceName}
+                            </span>
+                          </div>
+                        </div>
                       </div>
+
                       <Button
                         type="button"
-                        variant="outline"
                         size="sm"
-                        className="h-6 px-2.5 text-[11px] font-extrabold bg-white text-slate-700 hover:bg-slate-100 dark:bg-slate-900 dark:text-slate-200 rounded-md shadow-2xs border-slate-300 cursor-pointer shrink-0"
+                        className="h-7 px-3 text-[11px] font-black bg-white hover:bg-white/90 text-primary rounded-lg shadow-2xs transition-all active:scale-95 border border-white/40 cursor-pointer shrink-0 flex items-center gap-1.5"
                         onClick={() => setDesgloseServiceName("")}
                       >
-                        <Check className="h-3 w-3 text-emerald-600 mr-1 stroke-[3]" /> Finalizar
+                        <CheckCircle2 className="h-3.5 w-3.5 text-primary stroke-[2.5]" />
+                        <span>Finalizar</span>
                       </Button>
                     </div>
                   )}
@@ -1454,7 +1694,10 @@ function NuevaOrdenPage() {
                   const scrollTop = scrollContainer.scrollTop;
                   const previousScrollTop = catalogScrollTopRef.current;
                   const scrollDelta = scrollTop - previousScrollTop;
-                  const maxScrollTop = Math.max(0, scrollContainer.scrollHeight - scrollContainer.clientHeight);
+                  const maxScrollTop = Math.max(
+                    0,
+                    scrollContainer.scrollHeight - scrollContainer.clientHeight,
+                  );
                   const isNearBottom = maxScrollTop - scrollTop <= 12;
 
                   if (scrollTop <= 16) {
@@ -1471,7 +1714,9 @@ function NuevaOrdenPage() {
                 <>
                   <div className="flex items-center gap-3">
                     <div className="flex flex-1 items-center gap-2 min-w-0">
-                      <div className={`relative flex-1 rounded-xl transition-all duration-200 ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}>
+                      <div
+                        className={`relative flex-1 rounded-xl transition-all duration-200 ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}
+                      >
                         <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
                         <Input
                           value={posSearch}
@@ -1480,8 +1725,8 @@ function NuevaOrdenPage() {
                             posFilterTab === "SERVICIOS"
                               ? "Búsqueda de servicios..."
                               : posFilterTab === "PRENDAS"
-                              ? "Búsqueda de prendas..."
-                              : "Buscar prenda o servicio..."
+                                ? "Búsqueda de prendas..."
+                                : "Buscar prenda o servicio..."
                           }
                           aria-label="Buscar en el catálogo"
                           className="h-10 rounded-xl border-slate-200 bg-slate-50/80 pl-10 pr-3 shadow-none transition-colors focus-visible:border-primary/40 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900/80 dark:focus-visible:bg-slate-900 text-xs font-medium"
@@ -1505,108 +1750,64 @@ function NuevaOrdenPage() {
                         </Button>
                       )}
                     </div>
-
-                    </div>
+                  </div>
 
                   {/* SECCION SERVICIOS */}
-                  {enableServicios && (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS") && servicesFiltered.length > 0 && (
-                    <div className="space-y-4 animate-in fade-in duration-200">
-                      <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
-                        {servicesFiltered.map(s => {
-                          const srvCount = serviciosSel.filter(x => x === s.nombre).length;
-                          return (
-                            <button
-                              key={s.id}
-                              onClick={() => setServiciosSel((arr) => [...arr, s.nombre])}
-                              className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${srvCount > 0 ? "border-primary bg-primary/10 shadow-glow" : "border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
-                                }`}
-                            >
-                              {s.imagen_url ? (
-                                <div className="h-24 w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                                  <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
-                                </div>
-                              ) : (
-                                <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
-                                  {s.icono || "🧹"}
-                                </div>
-                              )}
-                              <div className="w-full text-center">
-                                <div className="text-sm font-bold leading-tight line-clamp-1">{s.nombre}</div>
-                                <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(s.precio)}</div>
-                              </div>
-                              {srvCount > 0 && (
-                                <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
-                                  {srvCount}
-                                </div>
-                              )}
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
-                  {enablePrendas && (posFilterTab === "TODOS" || posFilterTab === "PRENDAS") && Array.from(new Set(catalogFiltered.map(c => c.categoria || "Otros"))).map(catName => {
-                    const itemsInCat = catalogFiltered.filter(c => (c.categoria || "Otros") === catName);
-                    if (itemsInCat.length === 0) return null;
-
-                    return (
-                      <div key={catName} className="space-y-4">
-                        <div className="flex items-center justify-between gap-3">
-                          <h3 className="flex items-center gap-2.5 text-sm font-black text-slate-800 dark:text-slate-100 md:text-base">
-                            <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
-                              <Shirt className="h-4 w-4" strokeWidth={2.2} />
-                            </span>
-                            {catName}
-                          </h3>
-                        </div>
-                        <div className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? 'xl:grid-cols-5' : ''} gap-3`}>
-                          {itemsInCat.map(item => {
-                            const countInCart = items.filter(it => it.descripcion === item.nombre).reduce((acc, it) => acc + it.cantidad, 0);
-
+                  {enableServicios &&
+                    (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS") &&
+                    servicesFiltered.length > 0 && (
+                      <div className="space-y-4 animate-in fade-in duration-200">
+                        <div
+                          className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? "xl:grid-cols-5" : ""} gap-3`}
+                        >
+                          {servicesFiltered.map((s) => {
+                            const srvCount = serviciosSel.filter((x) => x === s.nombre).length;
                             return (
                               <button
-                                key={item.id}
+                                key={s.id}
                                 onClick={() => {
-                                  if (desgloseServiceName) {
-                                    addItemDesglose({
-                                      descripcion: `↳ ${item.nombre}`,
-                                      cantidad: 1,
-                                      precio_unitario: item.precio || 0,
-                                      es_libra: item.por_libra || false,
-                                      is_exento: (item.precio || 0) === 0,
-                                      servicio_origen: desgloseServiceName
-                                    });
-                                  } else {
-                                    addItem({
-                                      descripcion: item.nombre,
-                                      cantidad: 1,
-                                      precio_unitario: item.precio,
-                                      es_libra: item.por_libra,
-                                      is_exento: item.is_exento
-                                    });
+                                  setServiciosSel((arr) => [...arr, s.nombre]);
+                                  setDesgloseServiceName(s.nombre);
+                                  setIndexDesglose(-1);
+                                  if (enablePrendas) {
+                                    setPosFilterTab("PRENDAS");
+                                    setActiveCategory("TODAS LAS PRENDAS");
+                                    toast.info(
+                                      `Servicio "${s.nombre}" activo. Selecciona las prendas asociadas.`,
+                                      { duration: 3000 },
+                                    );
                                   }
                                 }}
-                                className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
+                                className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${
+                                  srvCount > 0
+                                    ? "border-primary bg-primary/10 shadow-glow"
+                                    : "border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant"
+                                }`}
                               >
-                                {item.imagen_url ? (
+                                {s.imagen_url ? (
                                   <div className="h-24 w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                                    <img src={item.imagen_url} alt={item.nombre} className="h-full w-full object-cover" />
+                                    <img
+                                      src={s.imagen_url}
+                                      alt={s.nombre}
+                                      className="h-full w-full object-cover"
+                                    />
                                   </div>
                                 ) : (
                                   <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
-                                    {item.icono || "👕"}
+                                    {s.icono || "🧹"}
                                   </div>
                                 )}
                                 <div className="w-full text-center">
-                                  <div className="text-sm font-bold leading-tight line-clamp-1">{item.nombre}</div>
-                                  <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">{formatRD(item.precio)}</div>
+                                  <div className="text-sm font-bold leading-tight line-clamp-1">
+                                    {s.nombre}
+                                  </div>
+                                  <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
+                                    {formatRD(s.precio)}
+                                  </div>
                                 </div>
-
-                                {countInCart > 0 && (
-                                  <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
-                                    {countInCart}
+                                {srvCount > 0 && (
+                                  <div className="absolute -top-2 -right-2 flex h-8 w-8 items-center justify-center rounded-full bg-primary text-white text-xs font-black shadow-glow animate-in zoom-in duration-300 ring-4 ring-background">
+                                    {srvCount}
                                   </div>
                                 )}
                               </button>
@@ -1614,11 +1815,115 @@ function NuevaOrdenPage() {
                           })}
                         </div>
                       </div>
-                    );
-                  })}
+                    )}
+
+                  {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
+                  {enablePrendas &&
+                    (posFilterTab === "TODOS" || posFilterTab === "PRENDAS") &&
+                    Array.from(new Set(catalogFiltered.map((c) => c.categoria || "Otros"))).map(
+                      (catName) => {
+                        const itemsInCat = catalogFiltered.filter(
+                          (c) => (c.categoria || "Otros") === catName,
+                        );
+                        if (itemsInCat.length === 0) return null;
+
+                        return (
+                          <div key={catName} className="space-y-4">
+                            <div className="flex items-center justify-between gap-3">
+                              <h3 className="flex items-center gap-2.5 text-sm font-black text-slate-800 dark:text-slate-100 md:text-base">
+                                <span className="grid h-8 w-8 place-items-center rounded-full bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
+                                  <Shirt className="h-4 w-4" strokeWidth={2.2} />
+                                </span>
+                                {catName}
+                              </h3>
+                            </div>
+                            <div
+                              className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? "xl:grid-cols-5" : ""} gap-3`}
+                            >
+                              {itemsInCat.map((item) => {
+                                const countInCart = items
+                                  .filter((it) => it.descripcion === item.nombre)
+                                  .reduce((acc, it) => acc + it.cantidad, 0);
+
+                                return (
+                                  <button
+                                    key={item.id}
+                                    onClick={() => {
+                                      const targetService =
+                                        desgloseServiceName ||
+                                        (serviciosSel.length > 0
+                                          ? serviciosSel[serviciosSel.length - 1]
+                                          : "");
+
+                                      if (targetService) {
+                                        if (!desgloseServiceName) {
+                                          setDesgloseServiceName(targetService);
+                                          setIndexDesglose(-1);
+                                        }
+                                        addItemDesglose({
+                                          descripcion: `↳ ${item.nombre}`,
+                                          cantidad: 1,
+                                          precio_unitario: item.precio || 0,
+                                          es_libra: item.por_libra || false,
+                                          is_exento: (item.precio || 0) === 0,
+                                          servicio_origen: targetService,
+                                        });
+                                      } else if (enableServicios) {
+                                        toast.warning(
+                                          "Por favor, selecciona primero un servicio (ej: Lavado, Secado, Planchado) antes de agregar prendas.",
+                                          { duration: 4000 },
+                                        );
+                                        setPosFilterTab("SERVICIOS");
+                                        setActiveCategory("TODOS");
+                                      } else {
+                                        addItem({
+                                          descripcion: item.nombre,
+                                          cantidad: 1,
+                                          precio_unitario: item.precio,
+                                          es_libra: item.por_libra,
+                                          is_exento: item.is_exento,
+                                        });
+                                      }
+                                    }}
+                                    className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
+                                  >
+                                    {item.imagen_url ? (
+                                      <div className="h-24 w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                        <img
+                                          src={item.imagen_url}
+                                          alt={item.nombre}
+                                          className="h-full w-full object-cover"
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
+                                        {item.icono || "👕"}
+                                      </div>
+                                    )}
+                                    <div className="w-full text-center">
+                                      <div className="text-sm font-bold leading-tight line-clamp-1">
+                                        {item.nombre}
+                                      </div>
+                                      <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
+                                        {formatRD(item.precio)}
+                                      </div>
+                                    </div>
+
+                                    {countInCart > 0 && (
+                                      <div className="absolute top-2 right-2 flex h-6 w-6 items-center justify-center rounded-full bg-primary text-white text-[10px] font-bold shadow-glow animate-in zoom-in duration-200">
+                                        {countInCart}
+                                      </div>
+                                    )}
+                                  </button>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      },
+                    )}
                 </>
               </div>
-
             </Card>
           </div>
 
@@ -1642,9 +1947,11 @@ function NuevaOrdenPage() {
                     }
                   }}
                 >
-                  <SelectTrigger className={`h-9 flex-1 bg-white dark:bg-slate-900 border transition-all rounded-xl text-xs font-bold shadow-2xs px-3 flex items-center justify-between gap-2 focus:ring-1 duration-200 cursor-pointer ${
-                    getComprobanteInfo(tipoECF).colorClass
-                  }`}>
+                  <SelectTrigger
+                    className={`h-9 flex-1 bg-white dark:bg-slate-900 border transition-all rounded-xl text-xs font-bold shadow-2xs px-3 flex items-center justify-between gap-2 focus:ring-1 duration-200 cursor-pointer ${
+                      getComprobanteInfo(tipoECF).colorClass
+                    }`}
+                  >
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="rounded-xl border border-border/80 shadow-md min-w-[220px]">
@@ -1655,20 +1962,27 @@ function NuevaOrdenPage() {
                         return isModuleEnabled(
                           user.tenant,
                           "facturacion_fiscal",
-                          plans.find((p) => p.id === user.tenant.plan_id)
+                          plans.find((p) => p.id === user.tenant.plan_id),
                         );
                       })
                       .map((tipo) => {
                         const info = getComprobanteInfo(tipo);
-                        let itemStyles = "focus:bg-emerald-500/10 focus:text-emerald-600 data-[state=checked]:bg-emerald-50 data-[state=checked]:text-emerald-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-emerald-950/40 dark:data-[state=checked]:text-emerald-400";
+                        let itemStyles =
+                          "focus:bg-emerald-500/10 focus:text-emerald-600 data-[state=checked]:bg-emerald-50 data-[state=checked]:text-emerald-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-emerald-950/40 dark:data-[state=checked]:text-emerald-400";
                         if (tipo === "E31" || tipo === "B01") {
-                          itemStyles = "focus:bg-blue-500/10 focus:text-blue-600 data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-400";
+                          itemStyles =
+                            "focus:bg-blue-500/10 focus:text-blue-600 data-[state=checked]:bg-blue-50 data-[state=checked]:text-blue-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-blue-950/40 dark:data-[state=checked]:text-blue-400";
                         } else if (tipo !== "E32" && tipo !== "B02") {
-                          itemStyles = "focus:bg-amber-500/10 focus:text-amber-600 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-amber-950/40 dark:data-[state=checked]:text-amber-400";
+                          itemStyles =
+                            "focus:bg-amber-500/10 focus:text-amber-600 data-[state=checked]:bg-amber-50 data-[state=checked]:text-amber-600 data-[state=checked]:font-extrabold dark:data-[state=checked]:bg-amber-950/40 dark:data-[state=checked]:text-amber-400";
                         }
 
                         return (
-                          <SelectItem key={tipo} value={tipo} className={`rounded-lg text-xs font-bold py-2.5 px-3 cursor-pointer transition-colors ${itemStyles}`}>
+                          <SelectItem
+                            key={tipo}
+                            value={tipo}
+                            className={`rounded-lg text-xs font-bold py-2.5 px-3 cursor-pointer transition-colors ${itemStyles}`}
+                          >
                             {info.label}
                           </SelectItem>
                         );
@@ -1685,7 +1999,10 @@ function NuevaOrdenPage() {
                       {cliente.tipo === "Empresa" ? (
                         <Building className="h-4 w-4" />
                       ) : (
-                        <span>{`${cliente.nombre[0] || ""}${cliente.apellido ? cliente.apellido[0] : ""}`.toUpperCase() || "CL"}</span>
+                        <span>
+                          {`${cliente.nombre[0] || ""}${cliente.apellido ? cliente.apellido[0] : ""}`.toUpperCase() ||
+                            "CL"}
+                        </span>
                       )}
                     </div>
                     <div className="flex flex-col min-w-0 flex-1">
@@ -1693,7 +2010,10 @@ function NuevaOrdenPage() {
                         <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                           {cliente.nombre} {cliente.apellido || ""}
                         </span>
-                        <Badge variant="outline" className="text-[9px] px-1 py-0 h-4 font-bold border-primary/30 text-primary shrink-0">
+                        <Badge
+                          variant="outline"
+                          className="text-[9px] px-1 py-0 h-4 font-bold border-primary/30 text-primary shrink-0"
+                        >
                           {cliente.tipo === "Empresa" ? "Empresa" : "Cliente"}
                         </Badge>
                       </div>
@@ -1705,9 +2025,7 @@ function NuevaOrdenPage() {
                           </span>
                         )}
                         {cliente.cedula && (
-                          <span className="truncate text-slate-400">
-                            ID: {cliente.cedula}
-                          </span>
+                          <span className="truncate text-slate-400">ID: {cliente.cedula}</span>
                         )}
                       </div>
                     </div>
@@ -1747,7 +2065,9 @@ function NuevaOrdenPage() {
                     </div>
                     <div className="flex flex-col min-w-0 flex-1">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-primary transition-colors truncate">
-                        {cliente ? `${cliente.nombre} ${cliente.apellido || ""}` : "Buscar y añadir cliente"}
+                        {cliente
+                          ? `${cliente.nombre} ${cliente.apellido || ""}`
+                          : "Buscar y añadir cliente"}
                       </span>
                       <span className="text-[9.5px] font-medium text-slate-400 dark:text-slate-500 truncate -mt-0.5">
                         Seleccionar o registrar cliente
@@ -1767,104 +2087,145 @@ function NuevaOrdenPage() {
               {items.length === 0 && serviciosSel.length === 0 ? (
                 <div className="flex flex-col items-center justify-center text-center px-4 h-full animate-in fade-in duration-300 -mt-3">
                   <Receipt className="h-11 w-11 text-slate-400 mb-3 shrink-0" />
-                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">La orden está vacía</h4>
+                  <h4 className="text-sm font-bold text-slate-700 dark:text-slate-200">
+                    La orden está vacía
+                  </h4>
                   <p className="text-xs text-slate-400 mt-1">Agrega artículos desde el catálogo</p>
                 </div>
               ) : (
                 <>
                   {/* Servicios Seleccionados en Carrito POS */}
-                  {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
-                    const count = serviciosSel.filter(x => x === srv.nombre).length;
-                    const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
-                    const prendasDelServicio = items.filter(it => it.descripcion.startsWith("↳") && (it.servicio_origen ? it.servicio_origen === srv.nombre : serviciosSel[0] === srv.nombre));
+                  {servicios
+                    .filter((s) => serviciosSel.includes(s.nombre))
+                    .map((srv, idx) => {
+                      const count = serviciosSel.filter((x) => x === srv.nombre).length;
+                      const unitPrice =
+                        customServicePrices[srv.nombre] !== undefined
+                          ? customServicePrices[srv.nombre]
+                          : srv.precio || 0;
+                      const prendasDelServicio = items.filter(
+                        (it) =>
+                          it.descripcion.startsWith("↳") &&
+                          (it.servicio_origen
+                            ? it.servicio_origen === srv.nombre
+                            : serviciosSel[0] === srv.nombre),
+                      );
 
-                    const isActiveService = desgloseServiceName === srv.nombre;
+                      const isActiveService = desgloseServiceName === srv.nombre;
 
-                    return (
-                      <div key={'pos-srv-' + idx} className="space-y-2 mb-3">
-                        <div className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all animate-in fade-in duration-200 ${isActiveService ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 shadow-md ring-2 ring-emerald-400/50" : "border-primary/20 bg-primary/5"}`}>
-                          <div className="flex justify-between items-start">
-                            <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
-                              <WashingMachine className="h-3.5 w-3.5 text-primary shrink-0" />
-                              <span className="line-clamp-1">Servicio: {srv.nombre}</span>
-                            </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
-                              onClick={() => {
-                                setServiciosSel(prev => {
-                                  const index = prev.indexOf(srv.nombre);
-                                  if (index > -1) {
-                                    const next = [...prev];
-                                    next.splice(index, 1);
-                                    return next;
-                                  }
-                                  return prev;
-                                });
-                                setItems(prev => prev.filter(it => !(it.descripcion.startsWith("↳") && it.servicio_origen === srv.nombre)));
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
-                          </div>
-                          <div className="flex justify-between items-center">
-                            <div className="flex items-center gap-2">
-                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
-                                <Minus className="h-2.5 w-2.5" />
-                              </Button>
-                              <span className="text-xs font-bold w-5 text-center">{count}</span>
-                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
-                                <Plus className="h-2.5 w-2.5" />
-                              </Button>
+                      return (
+                        <div key={"pos-srv-" + idx} className="space-y-2 mb-3">
+                          <div
+                            className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all animate-in fade-in duration-200 ${isActiveService ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 shadow-md ring-2 ring-emerald-400/50" : "border-primary/20 bg-primary/5"}`}
+                          >
+                            <div className="flex justify-between items-start">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
+                                <WashingMachine className="h-3.5 w-3.5 text-primary shrink-0" />
+                                <span className="line-clamp-1">Servicio: {srv.nombre}</span>
+                              </div>
                               <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                className={`h-6 px-2.5 text-[10px] font-extrabold gap-1.5 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1 text-white ${
-                                  isActiveService
-                                    ? "bg-emerald-800 text-white hover:bg-emerald-900 border-emerald-800"
-                                    : "bg-primary text-white hover:bg-primary/90 border-primary"
-                                }`}
-                                title={`Añadir prendas para ${srv.nombre}`}
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
                                 onClick={() => {
-                                  setIndexDesglose(-1);
-                                  if (isActiveService) {
-                                    setDesgloseServiceName("");
-                                  } else {
-                                    setDesgloseServiceName(srv.nombre);
-                                    if (cfg?.pos_modal_desglose === true) {
-                                      setShowDesgloseDialog(true);
-                                    } else {
-                                      setPosFilterTab("PRENDAS");
-                                      setActiveCategory("TODAS LAS PRENDAS");
-                                      toast.info(`Modo Servicio Activo: Se añadirán prendas a ${srv.nombre}`, { duration: 3000 });
+                                  setServiciosSel((prev) => {
+                                    const index = prev.indexOf(srv.nombre);
+                                    if (index > -1) {
+                                      const next = [...prev];
+                                      next.splice(index, 1);
+                                      return next;
                                     }
-                                  }
+                                    return prev;
+                                  });
+                                  setItems((prev) =>
+                                    prev.filter(
+                                      (it) =>
+                                        !(
+                                          it.descripcion.startsWith("↳") &&
+                                          it.servicio_origen === srv.nombre
+                                        ),
+                                    ),
+                                  );
                                 }}
                               >
-                                {isActiveService ? (
-                                  <>
-                                    <Check className="h-3 w-3 stroke-[2.5]" />
-                                    <span className="whitespace-nowrap">Finalizar</span>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Plus className="h-3 w-3 stroke-[2.5]" />
-                                    <span className="whitespace-nowrap">Añadir prendas</span>
-                                  </>
-                                )}
+                                <Trash2 className="h-3.5 w-3.5" />
                               </Button>
                             </div>
+                            <div className="flex justify-between items-center">
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
+                                  onClick={() => updateServiceQuantity(srv.nombre, -1)}
+                                >
+                                  <Minus className="h-2.5 w-2.5" />
+                                </Button>
+                                <span className="text-xs font-bold w-5 text-center">{count}</span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                                  onClick={() => updateServiceQuantity(srv.nombre, 1)}
+                                >
+                                  <Plus className="h-2.5 w-2.5" />
+                                </Button>
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  size="sm"
+                                  className={`h-6 px-2.5 text-[10px] font-extrabold gap-1.5 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1 text-white ${
+                                    isActiveService
+                                      ? "bg-emerald-800 text-white hover:bg-emerald-900 border-emerald-800"
+                                      : "bg-primary text-white hover:bg-primary/90 border-primary"
+                                  }`}
+                                  title={`Añadir prendas para ${srv.nombre}`}
+                                  onClick={() => {
+                                    setIndexDesglose(-1);
+                                    if (isActiveService) {
+                                      setDesgloseServiceName("");
+                                    } else {
+                                      setDesgloseServiceName(srv.nombre);
+                                      if (cfg?.pos_modal_desglose === true) {
+                                        setShowDesgloseDialog(true);
+                                      } else {
+                                        setPosFilterTab("PRENDAS");
+                                        setActiveCategory("TODAS LAS PRENDAS");
+                                        toast.info(
+                                          `Modo Servicio Activo: Se añadirán prendas a ${srv.nombre}`,
+                                          { duration: 3000 },
+                                        );
+                                      }
+                                    }
+                                  }}
+                                >
+                                  {isActiveService ? (
+                                    <>
+                                      <Check className="h-3 w-3 stroke-[2.5]" />
+                                      <span className="whitespace-nowrap">Finalizar</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Plus className="h-3 w-3 stroke-[2.5]" />
+                                      <span className="whitespace-nowrap">Añadir prendas</span>
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                               {srv.permitir_editar_precio ? (
                                 <div className="flex flex-col items-end gap-1">
                                   <div className="flex items-center gap-1">
-                                    <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
+                                    <span className="text-[10px] font-bold text-muted-foreground">
+                                      RD$
+                                    </span>
                                     <PriceInput
                                       className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
                                       value={unitPrice}
                                       onChange={(val) => {
-                                        setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
+                                        setCustomServicePrices((prev) => ({
+                                          ...prev,
+                                          [srv.nombre]: val,
+                                        }));
                                       }}
                                     />
                                   </div>
@@ -1882,140 +2243,207 @@ function NuevaOrdenPage() {
                             </div>
                           </div>
 
-                        {/* Prendas del Servicio */}
-                        {prendasDelServicio.map((it) => {
-                          const itemOriginalIndex = items.indexOf(it);
-                          return (
-                            <div key={'pos-detail-' + itemOriginalIndex} className="flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all bg-accent/5 ml-5 border-dashed border-primary/20 text-muted-foreground animate-in fade-in duration-200">
-                              <div className="flex justify-between items-start">
-                                <div className="flex flex-col flex-1 min-w-0">
-                                  <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
-                                    <Shirt className="h-3 w-3 text-primary shrink-0" />
-                                    <span className="line-clamp-1">{it.descripcion}{it.cantidad > 1 ? ` (x${it.cantidad})` : ""}</span>
+                          {/* Prendas del Servicio */}
+                          {prendasDelServicio.map((it) => {
+                            const itemOriginalIndex = items.indexOf(it);
+                            return (
+                              <div
+                                key={"pos-detail-" + itemOriginalIndex}
+                                className="flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all bg-accent/5 ml-5 border-dashed border-primary/20 text-muted-foreground animate-in fade-in duration-200"
+                              >
+                                <div className="flex justify-between items-start">
+                                  <div className="flex flex-col flex-1 min-w-0">
+                                    <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
+                                      <Shirt className="h-3 w-3 text-primary shrink-0" />
+                                      <span className="line-clamp-1">
+                                        {it.descripcion}
+                                        {it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                                      </span>
+                                    </div>
+                                  </div>
+                                  <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
+                                    onClick={() => removeItem(itemOriginalIndex)}
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </Button>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
+                                      onClick={() => updateItemQuantity(itemOriginalIndex, -1)}
+                                    >
+                                      <Minus className="h-2.5 w-2.5" />
+                                    </Button>
+                                    <span className="text-xs font-bold w-5 text-center">
+                                      {it.cantidad}
+                                    </span>
+                                    <Button
+                                      variant="outline"
+                                      size="icon"
+                                      className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                                      onClick={() => updateItemQuantity(itemOriginalIndex, 1)}
+                                    >
+                                      <Plus className="h-2.5 w-2.5" />
+                                    </Button>
+                                  </div>
+                                  <div className="text-xs font-black text-primary">
+                                    {formatRD(it.cantidad * it.precio_unitario)}
                                   </div>
                                 </div>
-                                <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md" onClick={() => removeItem(itemOriginalIndex)}>
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                </Button>
                               </div>
-                              <div className="flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                  <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateItemQuantity(itemOriginalIndex, -1)}>
-                                    <Minus className="h-2.5 w-2.5" />
-                                  </Button>
-                                  <span className="text-xs font-bold w-5 text-center">{it.cantidad}</span>
-                                  <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateItemQuantity(itemOriginalIndex, 1)}>
-                                    <Plus className="h-2.5 w-2.5" />
-                                  </Button>
-                                </div>
-                                <div className="text-xs font-black text-primary">
-                                  {formatRD(it.cantidad * it.precio_unitario)}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })}
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
 
                   {/* Prendas / Items Generales del Catálogo */}
-                  {items.filter(it => !it.descripcion.startsWith("↳")).map((it, i) => {
-                    const isDetail = it.descripcion.startsWith("↳");
-                    const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
-                    return (
-                      <div key={i} className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all ${isDetail ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground" : "bg-card shadow-sm hover:border-primary/25"
-                        }`}>
-                        <div className="flex justify-between items-start">
-                          <div className="flex flex-col flex-1 min-w-0">
-                            <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
-                              {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
-                              <span className="line-clamp-1">{it.descripcion}{isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}</span>
-                            </div>
-                            {it.es_libra && (
-                              <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                                {formatRD(it.precio_unitario)} por libra
+                  {items
+                    .filter((it) => !it.descripcion.startsWith("↳"))
+                    .map((it, i) => {
+                      const isDetail = it.descripcion.startsWith("↳");
+                      const catalogMatch = catalogo.find((c) => c.nombre === it.descripcion);
+                      return (
+                        <div
+                          key={i}
+                          className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all ${
+                            isDetail
+                              ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground"
+                              : "bg-card shadow-sm hover:border-primary/25"
+                          }`}
+                        >
+                          <div className="flex justify-between items-start">
+                            <div className="flex flex-col flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
+                                {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
+                                <span className="line-clamp-1">
+                                  {it.descripcion}
+                                  {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                                </span>
                               </div>
-                            )}
-                          </div>
-                          <Button variant="ghost" size="icon" className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md" onClick={() => removeItem(i)}>
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </Button>
-                        </div>
-                        <div className="flex justify-between items-center">
-                          {it.es_libra ? (
-                            <div className="flex items-center gap-1.5 text-xs font-semibold">
-                              <span className="text-slate-850 dark:text-slate-300 text-[10px] font-black">Peso:</span>
-                              <Input
-                                type="number"
-                                step="any"
-                                min="0.1"
-                                className="w-20 h-7 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-sm p-1"
-                                value={it.cantidad}
-                                onChange={(e) => {
-                                  const val = parseFloat(e.target.value) || 0;
-                                  setItems(prev => prev.map((item, idx) => idx === i ? { ...item, cantidad: val } : item));
-                                }}
-                              />
-                              <span className="text-muted-foreground text-[10px] font-bold">Libras</span>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateItemQuantity(i, -1)}>
-                                <Minus className="h-2.5 w-2.5" />
-                              </Button>
-                              <span className="text-xs font-bold w-5 text-center">{it.cantidad}</span>
-                              <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateItemQuantity(i, 1)}>
-                                <Plus className="h-2.5 w-2.5" />
-                              </Button>
-                              {!isDetail && catalogMatch?.permitir_desglose && (
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="sm"
-                                  className="h-6 px-2 text-[10px] font-extrabold gap-1 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/60 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-2"
-                                  title="Añadir prenda"
-                                  onClick={() => {
-                                    setIndexDesglose(i);
-                                    setDesgloseServiceName(it.descripcion);
-                                    setShowDesgloseDialog(true);
-                                  }}
-                                >
-                                  <Plus className="h-3 w-3 stroke-[2.5]" />
-                                  <span className="whitespace-nowrap">Añadir prenda</span>
-                                </Button>
+                              {it.es_libra && (
+                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
+                                  {formatRD(it.precio_unitario)} por libra
+                                </div>
                               )}
                             </div>
-                          )}
-                          <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            {(!isDetail && catalogMatch?.permitir_editar_precio) ? (
-                              <div className="flex flex-col items-end gap-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
-                                  <PriceInput
-                                    className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={it.precio_unitario || 0}
-                                    onChange={(val) => {
-                                      setItems(prev => prev.map((item, idx) => idx === i ? { ...item, precio_unitario: val } : item));
-                                    }}
-                                  />
-                                </div>
-                                {it.cantidad > 1 && (
-                                  <span className="text-[9px] text-muted-foreground font-semibold">
-                                    Tot: {formatRD(it.cantidad * it.precio_unitario)}
-                                  </span>
-                                )}
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
+                              onClick={() => removeItem(i)}
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                          <div className="flex justify-between items-center">
+                            {it.es_libra ? (
+                              <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                <span className="text-slate-850 dark:text-slate-300 text-[10px] font-black">
+                                  Peso:
+                                </span>
+                                <Input
+                                  type="number"
+                                  step="any"
+                                  min="0.1"
+                                  className="w-20 h-7 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-sm p-1"
+                                  value={it.cantidad}
+                                  onChange={(e) => {
+                                    const val = parseFloat(e.target.value) || 0;
+                                    setItems((prev) =>
+                                      prev.map((item, idx) =>
+                                        idx === i ? { ...item, cantidad: val } : item,
+                                      ),
+                                    );
+                                  }}
+                                />
+                                <span className="text-muted-foreground text-[10px] font-bold">
+                                  Libras
+                                </span>
                               </div>
                             ) : (
-                              <div className="text-xs font-black text-primary">
-                                {isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
+                                  onClick={() => updateItemQuantity(i, -1)}
+                                >
+                                  <Minus className="h-2.5 w-2.5" />
+                                </Button>
+                                <span className="text-xs font-bold w-5 text-center">
+                                  {it.cantidad}
+                                </span>
+                                <Button
+                                  variant="outline"
+                                  size="icon"
+                                  className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                                  onClick={() => updateItemQuantity(i, 1)}
+                                >
+                                  <Plus className="h-2.5 w-2.5" />
+                                </Button>
+                                {!isDetail && catalogMatch?.permitir_desglose && (
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] font-extrabold gap-1 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/60 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-2"
+                                    title="Añadir prenda"
+                                    onClick={() => {
+                                      setIndexDesglose(i);
+                                      setDesgloseServiceName(it.descripcion);
+                                      setShowDesgloseDialog(true);
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3 stroke-[2.5]" />
+                                    <span className="whitespace-nowrap">Añadir prenda</span>
+                                  </Button>
+                                )}
                               </div>
                             )}
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                              {!isDetail && catalogMatch?.permitir_editar_precio ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-[10px] font-bold text-muted-foreground">
+                                      RD$
+                                    </span>
+                                    <PriceInput
+                                      className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                      value={it.precio_unitario || 0}
+                                      onChange={(val) => {
+                                        setItems((prev) =>
+                                          prev.map((item, idx) =>
+                                            idx === i ? { ...item, precio_unitario: val } : item,
+                                          ),
+                                        );
+                                      }}
+                                    />
+                                  </div>
+                                  {it.cantidad > 1 && (
+                                    <span className="text-[9px] text-muted-foreground font-semibold">
+                                      Tot: {formatRD(it.cantidad * it.precio_unitario)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="text-xs font-black text-primary">
+                                  {isDetail
+                                    ? "RD$0.00"
+                                    : formatRD(it.cantidad * it.precio_unitario)}
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </>
               )}
             </div>
@@ -2047,7 +2475,7 @@ function NuevaOrdenPage() {
               </div>
 
               {fechaEntrega && (
-                <div 
+                <div
                   onClick={() => setShowDeliveryDatePickerPOS(true)}
                   className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl border border-transparent bg-primary text-white shadow-md hover:bg-primary/95 transition-all cursor-pointer group"
                 >
@@ -2055,7 +2483,9 @@ function NuevaOrdenPage() {
                     <CalendarIcon className="h-4 w-4 text-white shrink-0" />
                     <span className="text-[13px] font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">
                       {(() => {
-                        const weekday = fechaEntrega.toLocaleDateString("es-DO", { weekday: "long" });
+                        const weekday = fechaEntrega.toLocaleDateString("es-DO", {
+                          weekday: "long",
+                        });
                         const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
                         const day = fechaEntrega.getDate();
                         const month = fechaEntrega.toLocaleDateString("es-DO", { month: "long" });
@@ -2129,7 +2559,9 @@ function NuevaOrdenPage() {
                 <Button
                   disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
                   className="w-full h-14 text-base bg-primary hover:bg-primary/95 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2.5 rounded-2xl relative px-10"
-                  onClick={() => { setIsCobroModalOpen(true); }}
+                  onClick={() => {
+                    setIsCobroModalOpen(true);
+                  }}
                 >
                   <div className="flex items-center gap-2 justify-center">
                     <CreditCard className="h-5.5 w-5.5 text-white" />
@@ -2144,7 +2576,9 @@ function NuevaOrdenPage() {
                 <Button
                   disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
                   className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2"
-                  onClick={() => { setIsCobroModalOpen(true); }}
+                  onClick={() => {
+                    setIsCobroModalOpen(true);
+                  }}
                 >
                   COBRAR <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -2187,11 +2621,19 @@ function NuevaOrdenPage() {
           </div>
 
           <Card className="w-full max-w-4xl mx-auto mt-0 p-6 md:p-8">
-            <motion.div key={step} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.25 }} className="w-full">
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.25 }}
+              className="w-full"
+            >
               {step === 1 && (
                 <>
                   <h2 className="mb-1 text-2xl font-display">Cliente</h2>
-                  <p className="mb-5 text-sm text-muted-foreground">Busca por nombre o teléfono. Si no existe, créalo.</p>
+                  <p className="mb-5 text-sm text-muted-foreground">
+                    Busca por nombre o teléfono. Si no existe, créalo.
+                  </p>
 
                   <div className="flex items-center gap-2 mt-2 mb-3">
                     <span className="text-xs font-black uppercase tracking-widest text-slate-500 dark:text-slate-400">
@@ -2203,11 +2645,21 @@ function NuevaOrdenPage() {
                     {validTipos.map((tipo) => {
                       const isConsumo = tipo === "E32" || tipo === "B02";
                       const isCredito = tipo === "E31" || tipo === "B01";
-                      const name = NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() || "Empresa";
+                      const name =
+                        NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() ||
+                        "Empresa";
 
-                      const label = isConsumo ? "Consumidor Final (01)" : (isCredito ? "Crédito Fiscal (02)" : name);
-                      const subLabel = isConsumo ? "Factura Consumo" : (isCredito ? "Crédito Fiscal" : `Comprobante ${tipo}`);
-                      const Icon = isConsumo ? UserIcon : (isCredito ? Truck : Building);
+                      const label = isConsumo
+                        ? "Consumidor Final (01)"
+                        : isCredito
+                          ? "Crédito Fiscal (02)"
+                          : name;
+                      const subLabel = isConsumo
+                        ? "Factura Consumo"
+                        : isCredito
+                          ? "Crédito Fiscal"
+                          : `Comprobante ${tipo}`;
+                      const Icon = isConsumo ? UserIcon : isCredito ? Truck : Building;
 
                       const isSelected = tipoECF === tipo;
                       let borderClass = "";
@@ -2217,33 +2669,64 @@ function NuevaOrdenPage() {
                       let subTextClass = "";
 
                       if (isConsumo) {
-                        bgClass = isSelected ? "bg-emerald-50/70 dark:bg-emerald-950/20" : "bg-emerald-50/20 dark:bg-emerald-950/5";
+                        bgClass = isSelected
+                          ? "bg-emerald-50/70 dark:bg-emerald-950/20"
+                          : "bg-emerald-50/20 dark:bg-emerald-950/5";
                         borderClass = isSelected
                           ? "border-emerald-500 ring-2 ring-emerald-500/20"
                           : "border-emerald-200/80 dark:border-emerald-900/40 hover:border-emerald-300";
-                        bgIconClass = isSelected ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-                        textClass = isSelected ? "text-emerald-700 dark:text-emerald-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
-                        subTextClass = isSelected ? "text-emerald-600 dark:text-emerald-400" : "text-slate-500 dark:text-slate-400";
+                        bgIconClass = isSelected
+                          ? "bg-emerald-100 text-emerald-600 dark:bg-emerald-900/50 dark:text-emerald-400"
+                          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected
+                          ? "text-emerald-700 dark:text-emerald-300 font-extrabold"
+                          : "text-slate-700 dark:text-slate-355 font-bold";
+                        subTextClass = isSelected
+                          ? "text-emerald-600 dark:text-emerald-400"
+                          : "text-slate-500 dark:text-slate-400";
                       } else if (isCredito) {
-                        bgClass = isSelected ? "bg-blue-50/70 dark:bg-blue-950/20" : "bg-blue-50/20 dark:bg-blue-950/5";
+                        bgClass = isSelected
+                          ? "bg-blue-50/70 dark:bg-blue-950/20"
+                          : "bg-blue-50/20 dark:bg-blue-950/5";
                         borderClass = isSelected
                           ? "border-blue-500 ring-2 ring-blue-500/20"
                           : "border-blue-200/80 dark:border-blue-900/40 hover:border-blue-300";
-                        bgIconClass = isSelected ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-                        textClass = isSelected ? "text-blue-700 dark:text-blue-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
-                        subTextClass = isSelected ? "text-blue-600 dark:text-blue-400" : "text-slate-500 dark:text-slate-400";
+                        bgIconClass = isSelected
+                          ? "bg-blue-100 text-blue-600 dark:bg-blue-900/50 dark:text-blue-400"
+                          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected
+                          ? "text-blue-700 dark:text-blue-300 font-extrabold"
+                          : "text-slate-700 dark:text-slate-355 font-bold";
+                        subTextClass = isSelected
+                          ? "text-blue-600 dark:text-blue-400"
+                          : "text-slate-500 dark:text-slate-400";
                       } else {
-                        bgClass = isSelected ? "bg-amber-50/70 dark:bg-amber-950/20" : "bg-amber-50/20 dark:bg-amber-950/5";
+                        bgClass = isSelected
+                          ? "bg-amber-50/70 dark:bg-amber-950/20"
+                          : "bg-amber-50/20 dark:bg-amber-950/5";
                         borderClass = isSelected
                           ? "border-amber-500 ring-2 ring-amber-500/20"
                           : "border-amber-200/80 dark:border-amber-900/40 hover:border-amber-300";
-                        bgIconClass = isSelected ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400" : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
-                        textClass = isSelected ? "text-amber-700 dark:text-amber-300 font-extrabold" : "text-slate-700 dark:text-slate-355 font-bold";
-                        subTextClass = isSelected ? "text-amber-600 dark:text-amber-400" : "text-slate-500 dark:text-slate-400";
+                        bgIconClass = isSelected
+                          ? "bg-amber-100 text-amber-600 dark:bg-amber-900/50 dark:text-amber-400"
+                          : "bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400";
+                        textClass = isSelected
+                          ? "text-amber-700 dark:text-amber-300 font-extrabold"
+                          : "text-slate-700 dark:text-slate-355 font-bold";
+                        subTextClass = isSelected
+                          ? "text-amber-600 dark:text-amber-400"
+                          : "text-slate-500 dark:text-slate-400";
                       }
 
                       // We only show non-consumo buttons if billing is active
-                      if (!isConsumo && !isModuleEnabled(user.tenant, 'facturacion_fiscal', plans.find(p => p.id === user.tenant.plan_id))) {
+                      if (
+                        !isConsumo &&
+                        !isModuleEnabled(
+                          user.tenant,
+                          "facturacion_fiscal",
+                          plans.find((p) => p.id === user.tenant.plan_id),
+                        )
+                      ) {
                         return null;
                       }
 
@@ -2260,12 +2743,22 @@ function NuevaOrdenPage() {
                           }}
                           className={`relative flex items-center gap-2.5 p-3 rounded-2xl border transition-all group text-left shadow-sm ${bgClass} ${borderClass}`}
                         >
-                          <div className={`h-8 w-8 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}>
+                          <div
+                            className={`h-8 w-8 rounded-full flex items-center justify-center group-hover:scale-105 transition-transform shrink-0 ${bgIconClass}`}
+                          >
                             <Icon className="h-4 w-4" />
                           </div>
                           <div className="min-w-0 flex-1 pr-4">
-                            <div className={`font-bold text-sm leading-tight line-clamp-1 ${textClass}`}>{label}</div>
-                            <div className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap ${subTextClass}`}>{subLabel}</div>
+                            <div
+                              className={`font-bold text-sm leading-tight line-clamp-1 ${textClass}`}
+                            >
+                              {label}
+                            </div>
+                            <div
+                              className={`text-[10px] font-bold uppercase tracking-wider mt-0.5 whitespace-nowrap ${subTextClass}`}
+                            >
+                              {subLabel}
+                            </div>
                           </div>
                           {isSelected && (
                             <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
@@ -2295,13 +2788,21 @@ function NuevaOrdenPage() {
                       </span>
                       <div className="flex-1 h-px bg-primary/10 mr-4" />
                     </div>
-                    <Button className="bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95 shrink-0" size="sm" onClick={() => setShowNewCliente(true)}>
+                    <Button
+                      className="bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95 shrink-0"
+                      size="sm"
+                      onClick={() => setShowNewCliente(true)}
+                    >
                       <UserPlus className="mr-1.5 h-4 w-4" /> Nuevo cliente
                     </Button>
                   </div>
 
                   <div className="mt-4 max-h-80 grid gap-3 grid-cols-1 sm:grid-cols-2 overflow-auto rounded-xl border border-border bg-accent/10 p-3">
-                    {filtrados.length === 0 && <div className="col-span-full py-12 text-center text-sm text-muted-foreground">No se encontraron clientes</div>}
+                    {filtrados.length === 0 && (
+                      <div className="col-span-full py-12 text-center text-sm text-muted-foreground">
+                        No se encontraron clientes
+                      </div>
+                    )}
                     {filtrados.map((c) => (
                       <button
                         key={c.id}
@@ -2311,18 +2812,28 @@ function NuevaOrdenPage() {
                             irAlPasoSiguienteDelCliente();
                           }
                         }}
-                        className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all min-w-0 ${cliente?.id === c.id
-                          ? "border-primary bg-primary/10 ring-1 ring-primary shadow-sm"
-                          : "border-border bg-card hover:border-primary/50 hover:bg-accent/30 hover:shadow-elegant"
-                          }`}
+                        className={`flex w-full items-center justify-between rounded-lg border p-4 text-left transition-all min-w-0 ${
+                          cliente?.id === c.id
+                            ? "border-primary bg-primary/10 ring-1 ring-primary shadow-sm"
+                            : "border-border bg-card hover:border-primary/50 hover:bg-accent/30 hover:shadow-elegant"
+                        }`}
                       >
                         <div className="flex items-center gap-4 min-w-0 flex-1">
-                          <div className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold shrink-0 ${cliente?.id === c.id ? "bg-primary text-white" : "bg-accent text-muted-foreground"
-                            }`}>
-                            {c.nombre.charAt(0)}{c.apellido?.charAt(0) || ""}
+                          <div
+                            className={`flex h-10 w-10 items-center justify-center rounded-full text-xs font-bold shrink-0 ${
+                              cliente?.id === c.id
+                                ? "bg-primary text-white"
+                                : "bg-accent text-muted-foreground"
+                            }`}
+                          >
+                            {c.nombre.charAt(0)}
+                            {c.apellido?.charAt(0) || ""}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <div className="font-display text-base font-semibold line-clamp-1" title={`${c.nombre} ${c.apellido || ""}`}>
+                            <div
+                              className="font-display text-base font-semibold line-clamp-1"
+                              title={`${c.nombre} ${c.apellido || ""}`}
+                            >
                               {c.nombre} {c.apellido || ""}
                             </div>
                             <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
@@ -2332,11 +2843,23 @@ function NuevaOrdenPage() {
                         </div>
                         <div className="flex items-center gap-3 shrink-0">
                           {c.tipo === "Empresa" ? (
-                            <Badge variant="outline" className="border-blue-500/20 bg-blue-500/10 text-blue-600">Empresa</Badge>
+                            <Badge
+                              variant="outline"
+                              className="border-blue-500/20 bg-blue-500/10 text-blue-600"
+                            >
+                              Empresa
+                            </Badge>
                           ) : (
-                            <Badge variant="outline" className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600">Consumidor Final</Badge>
+                            <Badge
+                              variant="outline"
+                              className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
+                            >
+                              Consumidor Final
+                            </Badge>
                           )}
-                          {cliente?.id === c.id && <Check className="h-5 w-5 text-primary animate-in zoom-in duration-200" />}
+                          {cliente?.id === c.id && (
+                            <Check className="h-5 w-5 text-primary animate-in zoom-in duration-200" />
+                          )}
                         </div>
                       </button>
                     ))}
@@ -2347,7 +2870,9 @@ function NuevaOrdenPage() {
               {step === 2 && (
                 <>
                   <h2 className="mb-1 text-2xl font-display">Servicios</h2>
-                  <p className="mb-5 text-sm text-muted-foreground">Selecciona los servicios incluidos en esta orden.</p>
+                  <p className="mb-5 text-sm text-muted-foreground">
+                    Selecciona los servicios incluidos en esta orden.
+                  </p>
                   {servicios.length === 0 ? (
                     <div className="rounded-lg border border-dashed border-border py-10 text-center text-sm text-muted-foreground">
                       No hay servicios. Agrégalos en <strong>Catálogo</strong>.
@@ -2355,14 +2880,14 @@ function NuevaOrdenPage() {
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {servicios.map((s) => {
-                        const srvCount = serviciosSel.filter(x => x === s.nombre).length;
+                        const srvCount = serviciosSel.filter((x) => x === s.nombre).length;
                         return (
                           <button
                             key={s.id}
                             type="button"
                             onClick={() => {
                               if (srvCount > 0) {
-                                setServiciosSel((arr) => arr.filter(x => x !== s.nombre));
+                                setServiciosSel((arr) => arr.filter((x) => x !== s.nombre));
                                 setCustomServicePrices((prev) => {
                                   const next = { ...prev };
                                   delete next[s.nombre];
@@ -2380,7 +2905,11 @@ function NuevaOrdenPage() {
                           >
                             {s.imagen_url ? (
                               <div className="h-16 w-16 rounded-xl bg-background shadow-xs overflow-hidden group-hover:scale-105 transition-transform duration-300">
-                                <img src={s.imagen_url} alt={s.nombre} className="h-full w-full object-cover" />
+                                <img
+                                  src={s.imagen_url}
+                                  alt={s.nombre}
+                                  className="h-full w-full object-cover"
+                                />
                               </div>
                             ) : (
                               <div className="flex h-16 w-16 items-center justify-center rounded-xl bg-accent/30 text-2xl group-hover:bg-primary/10 transition-colors">
@@ -2388,7 +2917,9 @@ function NuevaOrdenPage() {
                               </div>
                             )}
                             <div className="w-full text-center">
-                              <div className="text-xs font-bold leading-tight line-clamp-1 text-slate-800 dark:text-slate-100">{s.nombre}</div>
+                              <div className="text-xs font-bold leading-tight line-clamp-1 text-slate-800 dark:text-slate-100">
+                                {s.nombre}
+                              </div>
                               <div className="mt-0.5 text-xs font-display font-extrabold text-emerald-600 tracking-tight">
                                 {s.precio > 0 ? formatRD(s.precio) : "RD$0.00"}
                               </div>
@@ -2409,119 +2940,163 @@ function NuevaOrdenPage() {
               {step === 3 && (
                 <>
                   <h2 className="mb-1 text-2xl font-display">Prendas y precios</h2>
-                  <p className="mb-5 text-sm text-muted-foreground">Agrega cada prenda o desglosa los servicios contratados.</p>
+                  <p className="mb-5 text-sm text-muted-foreground">
+                    Agrega cada prenda o desglosa los servicios contratados.
+                  </p>
 
                   <div className="space-y-2">
                     {/* Servicios Seleccionados para desglose */}
-                    {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
-                      const count = serviciosSel.filter(x => x === srv.nombre).length;
-                      const unitPrice = customServicePrices[srv.nombre] !== undefined ? customServicePrices[srv.nombre] : (srv.precio || 0);
-                      return (
-                        <div key={'srv-' + idx} className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200">
-                          <div className="flex-1">
-                            <div className="font-semibold text-primary flex items-center gap-1.5 text-sm sm:text-base">
-                              <span>🧺</span> Servicio: {srv.nombre}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {srv.permitir_desglose
-                                ? "Servicio de la orden · Haz clic en \"+\" para detallar sus prendas"
-                                : "Servicio de la orden"}
-                            </div>
-                          </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60" onClick={() => updateServiceQuantity(srv.nombre, -1)}>
-                              <Minus className="h-2.5 w-2.5" />
-                            </Button>
-                            <span className="text-xs font-bold w-5 text-center">{count}</span>
-                            <Button variant="outline" size="icon" className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60" onClick={() => updateServiceQuantity(srv.nombre, 1)}>
-                              <Plus className="h-2.5 w-2.5" />
-                            </Button>
-                          </div>
-
-                          <div className="flex flex-col items-end gap-0.5 shrink-0">
-                            {srv.permitir_editar_precio ? (
-                              <div className="flex flex-col items-end gap-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs font-bold text-muted-foreground">RD$</span>
-                                  <PriceInput
-                                    className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                    value={unitPrice}
-                                    onChange={(val) => {
-                                      setCustomServicePrices(prev => ({ ...prev, [srv.nombre]: val }));
-                                    }}
-                                  />
-                                </div>
-                                {count > 1 && (
-                                  <span className="text-[10px] text-muted-foreground font-semibold">
-                                    Tot: {formatRD(count * unitPrice)}
-                                  </span>
-                                )}
+                    {servicios
+                      .filter((s) => serviciosSel.includes(s.nombre))
+                      .map((srv, idx) => {
+                        const count = serviciosSel.filter((x) => x === srv.nombre).length;
+                        const unitPrice =
+                          customServicePrices[srv.nombre] !== undefined
+                            ? customServicePrices[srv.nombre]
+                            : srv.precio || 0;
+                        return (
+                          <div
+                            key={"srv-" + idx}
+                            className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200"
+                          >
+                            <div className="flex-1">
+                              <div className="font-semibold text-primary flex items-center gap-1.5 text-sm sm:text-base">
+                                <span>🧺</span> Servicio: {srv.nombre}
                               </div>
-                            ) : (
-                              <div className="font-display text-base sm:text-lg font-bold text-primary">
-                                {formatRD(count * unitPrice)}
+                              <div className="text-xs text-muted-foreground">
+                                {srv.permitir_desglose
+                                  ? 'Servicio de la orden · Haz clic en "+" para detallar sus prendas'
+                                  : "Servicio de la orden"}
                               </div>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-1">
-                            {srv.permitir_desglose && (
+                            </div>
+
+                            <div className="flex items-center gap-2">
                               <Button
-                                type="button"
-                                variant="default"
-                                size="sm"
-                                className="h-7 px-2.5 text-xs font-extrabold gap-1 bg-primary text-white hover:bg-primary/90 border-primary rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1"
-                                title={`Desglosar prendas para el servicio ${srv.nombre}`}
-                                onClick={() => {
-                                  setIndexDesglose(-1);
-                                  setDesgloseServiceName(srv.nombre);
-                                  setShowDesgloseDialog(true);
-                                }}
+                                variant="outline"
+                                size="icon"
+                                className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
+                                onClick={() => updateServiceQuantity(srv.nombre, -1)}
                               >
-                                <Plus className="h-3 w-3 stroke-[2.5]" />
-                                <span className="whitespace-nowrap">Desglosar prendas</span>
+                                <Minus className="h-2.5 w-2.5" />
                               </Button>
-                            )}
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
-                              onClick={() => setServiciosSel(prev => prev.filter(x => x !== srv.nombre))}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
+                              <span className="text-xs font-bold w-5 text-center">{count}</span>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                                onClick={() => updateServiceQuantity(srv.nombre, 1)}
+                              >
+                                <Plus className="h-2.5 w-2.5" />
+                              </Button>
+                            </div>
+
+                            <div className="flex flex-col items-end gap-0.5 shrink-0">
+                              {srv.permitir_editar_precio ? (
+                                <div className="flex flex-col items-end gap-1">
+                                  <div className="flex items-center gap-1">
+                                    <span className="text-xs font-bold text-muted-foreground">
+                                      RD$
+                                    </span>
+                                    <PriceInput
+                                      className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                      value={unitPrice}
+                                      onChange={(val) => {
+                                        setCustomServicePrices((prev) => ({
+                                          ...prev,
+                                          [srv.nombre]: val,
+                                        }));
+                                      }}
+                                    />
+                                  </div>
+                                  {count > 1 && (
+                                    <span className="text-[10px] text-muted-foreground font-semibold">
+                                      Tot: {formatRD(count * unitPrice)}
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div className="font-display text-base sm:text-lg font-bold text-primary">
+                                  {formatRD(count * unitPrice)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="flex items-center gap-1">
+                              {srv.permitir_desglose && (
+                                <Button
+                                  type="button"
+                                  variant="default"
+                                  size="sm"
+                                  className="h-7 px-2.5 text-xs font-extrabold gap-1 bg-primary text-white hover:bg-primary/90 border-primary rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1"
+                                  title={`Desglosar prendas para el servicio ${srv.nombre}`}
+                                  onClick={() => {
+                                    setIndexDesglose(-1);
+                                    setDesgloseServiceName(srv.nombre);
+                                    setShowDesgloseDialog(true);
+                                  }}
+                                >
+                                  <Plus className="h-3 w-3 stroke-[2.5]" />
+                                  <span className="whitespace-nowrap">Desglosar prendas</span>
+                                </Button>
+                              )}
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
+                                onClick={() =>
+                                  setServiciosSel((prev) => prev.filter((x) => x !== srv.nombre))
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                        </div>
-                      );
-                    })}
+                        );
+                      })}
 
                     {/* Items normal */}
                     {items.map((it, i) => {
                       const isDetail = it.descripcion.startsWith("↳");
-                      const catalogMatch = catalogo.find(c => c.nombre === it.descripcion);
+                      const catalogMatch = catalogo.find((c) => c.nombre === it.descripcion);
                       return (
-                        <div key={i} className={`flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-all ${isDetail ? "bg-accent/5 ml-8 border-dashed border-primary/20 text-muted-foreground" : "bg-surface-elevated"
-                          }`}>
+                        <div
+                          key={i}
+                          className={`flex items-center justify-between gap-3 rounded-lg border border-border p-3 transition-all ${
+                            isDetail
+                              ? "bg-accent/5 ml-8 border-dashed border-primary/20 text-muted-foreground"
+                              : "bg-surface-elevated"
+                          }`}
+                        >
                           <div className="flex-1">
                             <div className="font-medium flex items-center gap-2">
                               {isDetail && <Shirt className="h-3 w-3 text-primary" />}
-                              {it.descripcion}{isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                              {it.descripcion}
+                              {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              {isDetail ? `${it.cantidad} ${it.cantidad > 1 ? "unidades" : "unidad"} en Hamper (Lavado Incluido)` : (it.es_libra ? `${it.cantidad} lb × ${formatRD(it.precio_unitario)}` : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`)}
+                              {isDetail
+                                ? `${it.cantidad} ${it.cantidad > 1 ? "unidades" : "unidad"} en Hamper (Lavado Incluido)`
+                                : it.es_libra
+                                  ? `${it.cantidad} lb × ${formatRD(it.precio_unitario)}`
+                                  : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`}
                               {it.notas ? ` · ${it.notas}` : ""}
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            {(!isDetail && catalogMatch?.permitir_editar_precio) ? (
+                            {!isDetail && catalogMatch?.permitir_editar_precio ? (
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1">
-                                  <span className="text-xs font-bold text-muted-foreground">RD$</span>
+                                  <span className="text-xs font-bold text-muted-foreground">
+                                    RD$
+                                  </span>
                                   <PriceInput
                                     className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
                                     value={it.precio_unitario || 0}
                                     onChange={(val) => {
-                                      setItems(prev => prev.map((item, idx) => idx === i ? { ...item, precio_unitario: val } : item));
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === i ? { ...item, precio_unitario: val } : item,
+                                        ),
+                                      );
                                     }}
                                   />
                                 </div>
@@ -2553,15 +3128,29 @@ function NuevaOrdenPage() {
                                 <Plus className="h-4 w-4" />
                               </Button>
                             )}
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => removeItem(i)}><Trash2 className="h-4 w-4" /></Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-destructive"
+                              onClick={() => removeItem(i)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
                           </div>
                         </div>
                       );
                     })}
-                    {items.length === 0 && serviciosSel.length === 0 && <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">No hay prendas ni servicios agregados. Haz clic en "Agregar prenda".</div>}
+                    {items.length === 0 && serviciosSel.length === 0 && (
+                      <div className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
+                        No hay prendas ni servicios agregados. Haz clic en "Agregar prenda".
+                      </div>
+                    )}
                   </div>
 
-                  <Button className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95" onClick={() => setShowAddItem(true)}>
+                  <Button
+                    className="mt-4 bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm transition-all active:scale-95"
+                    onClick={() => setShowAddItem(true)}
+                  >
                     <Shirt className="mr-2 h-4 w-4" /> Agregar prenda
                   </Button>
 
@@ -2579,7 +3168,9 @@ function NuevaOrdenPage() {
               {step === 4 && (
                 <>
                   <h2 className="mb-1 text-2xl font-display">Resumen</h2>
-                  <p className="mb-5 text-sm text-muted-foreground">Revisa precios, fecha de entrega y opciones.</p>
+                  <p className="mb-5 text-sm text-muted-foreground">
+                    Revisa precios, fecha de entrega y opciones.
+                  </p>
 
                   <div className="space-y-1 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-5 shadow-sm">
                     <div className="mb-4 flex items-center justify-between border-b border-slate-200 dark:border-slate-800 pb-3">
@@ -2590,43 +3181,57 @@ function NuevaOrdenPage() {
                         </span>
                       </div>
                       <Badge className="bg-primary text-white hover:bg-primary/90 border-none shadow-sm text-[10px] font-bold uppercase tracking-wider px-2 py-0.5">
-                        {serviciosSel.length + items.length} {(serviciosSel.length + items.length) === 1 ? "artículo" : "artículos"}
+                        {serviciosSel.length + items.length}{" "}
+                        {serviciosSel.length + items.length === 1 ? "artículo" : "artículos"}
                       </Badge>
                     </div>
                     <div className="space-y-0 divide-y divide-dashed divide-slate-200 dark:divide-slate-800">
-                      {servicios.filter(s => serviciosSel.includes(s.nombre)).map((srv, idx) => {
-                        const count = serviciosSel.filter(x => x === srv.nombre).length;
-                        const sPrice = customServicePrices[srv.nombre] !== undefined
-                          ? customServicePrices[srv.nombre]
-                          : (srv.precio || 0);
-                        return (
-                          <div key={`srv-${idx}`} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group">
-                            <div className="flex items-center gap-3 min-w-0">
-                              <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-450 shrink-0">
-                                <LayoutGrid className="h-4 w-4" />
-                              </div>
-                              <div className="min-w-0">
-                                <div className="font-bold text-sm text-foreground truncate">{srv.nombre}</div>
-                                <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
-                                  Servicio • {count} {count > 1 ? "unidades" : "unidad"}
+                      {servicios
+                        .filter((s) => serviciosSel.includes(s.nombre))
+                        .map((srv, idx) => {
+                          const count = serviciosSel.filter((x) => x === srv.nombre).length;
+                          const sPrice =
+                            customServicePrices[srv.nombre] !== undefined
+                              ? customServicePrices[srv.nombre]
+                              : srv.precio || 0;
+                          return (
+                            <div
+                              key={`srv-${idx}`}
+                              className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group"
+                            >
+                              <div className="flex items-center gap-3 min-w-0">
+                                <div className="h-8 w-8 rounded-lg bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-450 shrink-0">
+                                  <LayoutGrid className="h-4 w-4" />
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="font-bold text-sm text-foreground truncate">
+                                    {srv.nombre}
+                                  </div>
+                                  <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
+                                    Servicio • {count} {count > 1 ? "unidades" : "unidad"}
+                                  </div>
                                 </div>
                               </div>
+                              <div className="font-display font-black text-base text-primary font-bold">
+                                {formatRD(count * sPrice)}
+                              </div>
                             </div>
-                            <div className="font-display font-black text-base text-primary font-bold">
-                              {formatRD(count * sPrice)}
-                            </div>
-                          </div>
-                        );
-                      })}
+                          );
+                        })}
 
                       {items.map((it, i) => (
-                        <div key={i} className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group">
+                        <div
+                          key={i}
+                          className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group"
+                        >
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="h-8 w-8 rounded-lg bg-emerald-500/10 flex items-center justify-center text-emerald-600 dark:text-emerald-450 shrink-0">
                               <Shirt className="h-4 w-4" />
                             </div>
                             <div className="min-w-0">
-                              <div className="font-bold text-sm text-foreground truncate">{it.descripcion}</div>
+                              <div className="font-bold text-sm text-foreground truncate">
+                                {it.descripcion}
+                              </div>
                               <div className="text-[10px] text-muted-foreground uppercase font-medium tracking-wider mt-0.5">
                                 Prenda • {it.cantidad} {it.es_libra ? "lb" : "unid."}
                               </div>
@@ -2652,9 +3257,10 @@ function NuevaOrdenPage() {
                             value={descuento}
                             onChange={(e) => {
                               const val = Math.min(100, Math.max(0, Number(e.target.value) || 0));
-                              const maxLimit = user?.empleado?.rol === "ADMIN" 
-                                ? 100 
-                                : (user?.empleado?.max_descuento_porcentaje ?? 100);
+                              const maxLimit =
+                                user?.empleado?.rol === "ADMIN"
+                                  ? 100
+                                  : (user?.empleado?.max_descuento_porcentaje ?? 100);
                               if (val > maxLimit) {
                                 toast.error(`Límite permitido: ${maxLimit}%`);
                                 setDescuento(maxLimit);
@@ -2676,25 +3282,45 @@ function NuevaOrdenPage() {
                               <div className="h-9 w-9 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-600 dark:text-blue-450 shrink-0">
                                 <Truck className="h-4.5 w-4.5" />
                               </div>
-                              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Servicio a domicilio</span>
+                              <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                Servicio a domicilio
+                              </span>
                             </div>
-                            <Switch checked={servicioDomicilio} onCheckedChange={setServicioDomicilio} />
+                            <Switch
+                              checked={servicioDomicilio}
+                              onCheckedChange={setServicioDomicilio}
+                            />
                           </div>
 
                           {servicioDomicilio && (
-                            <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} className="space-y-3 pl-12 pt-2 border-t border-dashed">
+                            <motion.div
+                              initial={{ opacity: 0, height: 0 }}
+                              animate={{ opacity: 1, height: "auto" }}
+                              className="space-y-3 pl-12 pt-2 border-t border-dashed"
+                            >
                               <Field label="Dirección de entrega">
                                 <Input
                                   value={direccionDomicilio}
                                   onChange={(e) => setDireccionDomicilio(e.target.value)}
                                   onBlur={() => {
                                     if (cliente) {
-                                      const isGenericClient = cliente.nombre === "Consumidor" && cliente.apellido === "Final";
-                                      if (!isGenericClient && direccionDomicilio.trim() && direccionDomicilio.trim() !== cliente.direccion) {
-                                        const updatedCliente = { ...cliente, direccion: direccionDomicilio.trim() };
+                                      const isGenericClient =
+                                        cliente.nombre === "Consumidor" &&
+                                        cliente.apellido === "Final";
+                                      if (
+                                        !isGenericClient &&
+                                        direccionDomicilio.trim() &&
+                                        direccionDomicilio.trim() !== cliente.direccion
+                                      ) {
+                                        const updatedCliente = {
+                                          ...cliente,
+                                          direccion: direccionDomicilio.trim(),
+                                        };
                                         setCliente(updatedCliente);
                                         saveCliente(updatedCliente).then(() => {
-                                          queryClient.invalidateQueries({ queryKey: ['clientes', tenantId] });
+                                          queryClient.invalidateQueries({
+                                            queryKey: ["clientes", tenantId],
+                                          });
                                         });
                                       }
                                     }
@@ -2727,7 +3353,9 @@ function NuevaOrdenPage() {
                             <div className="h-9 w-9 rounded-full bg-rose-500/10 flex items-center justify-center text-rose-600 dark:text-rose-450 shrink-0">
                               <AlertTriangle className="h-4.5 w-4.5" />
                             </div>
-                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Pedido Urgente (+{cfg.recargo_urgencia}%)</span>
+                            <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                              Pedido Urgente (+{cfg.recargo_urgencia}%)
+                            </span>
                           </div>
                           <Switch checked={esUrgente} onCheckedChange={setEsUrgente} />
                         </div>
@@ -2742,7 +3370,9 @@ function NuevaOrdenPage() {
                                 <div className="h-9 w-9 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-600 dark:text-purple-450 shrink-0">
                                   <Percent className="h-4 w-4" />
                                 </div>
-                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200">Aplicar ITBIS ({cfg.itbis_porcentaje}%)</span>
+                                <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                                  Aplicar ITBIS ({cfg.itbis_porcentaje}%)
+                                </span>
                               </div>
                               <Switch checked={aplicarItbis} onCheckedChange={setAplicarItbis} />
                             </div>
@@ -2752,21 +3382,34 @@ function NuevaOrdenPage() {
 
                       {/* Notas (Observaciones) at the end */}
                       <Field label="Notas">
-                        <Textarea value={notas} onChange={(e) => setNotas(e.target.value)} placeholder="Observaciones..." rows={3} />
+                        <Textarea
+                          value={notas}
+                          onChange={(e) => setNotas(e.target.value)}
+                          placeholder="Observaciones..."
+                          rows={3}
+                        />
                       </Field>
                     </div>
 
                     <div className="rounded-2xl border-2 border-primary/20 bg-primary/5 p-6">
                       <div className="space-y-4 text-center">
                         <div className="space-y-1">
-                          <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Subtotal prendas</div>
-                          <div className="text-2xl font-display font-bold">{formatRD(subtotalBase)}</div>
+                          <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                            Subtotal prendas
+                          </div>
+                          <div className="text-2xl font-display font-bold">
+                            {formatRD(subtotalBase)}
+                          </div>
                         </div>
 
                         {costoServicios > 0 && (
                           <div className="space-y-1">
-                            <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">Costo servicios</div>
-                            <div className="text-2xl font-display font-bold text-primary/80">{formatRD(costoServicios)}</div>
+                            <div className="text-xs uppercase tracking-wider text-muted-foreground font-semibold">
+                              Costo servicios
+                            </div>
+                            <div className="text-2xl font-display font-bold text-primary/80">
+                              {formatRD(costoServicios)}
+                            </div>
                           </div>
                         )}
 
@@ -2778,13 +3421,14 @@ function NuevaOrdenPage() {
 
                         {servicioDomicilio && costoEnvio > 0 && (
                           <div className="flex items-center justify-center gap-1 text-xs font-bold text-teal-600 uppercase">
-                            <Truck className="h-3 w-3" />
-                            + {formatRD(costoEnvio)} Envío a domicilio
+                            <Truck className="h-3 w-3" />+ {formatRD(costoEnvio)} Envío a domicilio
                           </div>
                         )}
 
                         <div className="pt-4 border-t border-primary/20">
-                          <div className="text-xs uppercase tracking-wider text-primary font-bold">Total a pagar</div>
+                          <div className="text-xs uppercase tracking-wider text-primary font-bold">
+                            Total a pagar
+                          </div>
                           <div className="mt-2 text-5xl font-display font-black text-primary animate-in zoom-in duration-300">
                             {formatRD(total)}
                           </div>
@@ -2804,21 +3448,54 @@ function NuevaOrdenPage() {
               {step === 5 && (
                 <>
                   <div className="flex flex-col items-center text-center mb-10 mt-2">
-                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">Total a cobrar</span>
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">
+                      Total a cobrar
+                    </span>
                     <div className="text-6xl font-display font-black text-primary tracking-tight">
                       {formatRD(total)}
                     </div>
                     <div className="mt-6 w-16 h-1 bg-primary/10 rounded-full mb-6"></div>
-                    <p className="text-sm font-bold text-muted-foreground/80">Selecciona el método de pago</p>
+                    <p className="text-sm font-bold text-muted-foreground/80">
+                      Selecciona el método de pago
+                    </p>
                   </div>
 
                   <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 max-w-4xl mx-auto w-full">
                     {[
-                      { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: Timer, color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
-                      { id: "EFECTIVO", label: "Efectivo", icon: Banknote, color: "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700" },
-                      { id: "TARJETA", label: "Tarjeta", icon: CreditCard, color: "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700" },
-                      { id: "TRANSFERENCIA", label: "Transferencia", icon: Building2, color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700" },
-                      { id: "CREDITO", label: "Crédito", icon: FileText, color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700" }
+                      {
+                        id: "PAGO_AL_RETIRAR",
+                        label: "Pago al retirar",
+                        icon: Timer,
+                        color:
+                          "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700",
+                      },
+                      {
+                        id: "EFECTIVO",
+                        label: "Efectivo",
+                        icon: Banknote,
+                        color:
+                          "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700",
+                      },
+                      {
+                        id: "TARJETA",
+                        label: "Tarjeta",
+                        icon: CreditCard,
+                        color:
+                          "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700",
+                      },
+                      {
+                        id: "TRANSFERENCIA",
+                        label: "Transferencia",
+                        icon: Building2,
+                        color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700",
+                      },
+                      {
+                        id: "CREDITO",
+                        label: "Crédito",
+                        icon: FileText,
+                        color:
+                          "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700",
+                      },
                     ].map((m) => {
                       const isSelected = opcionPagoSelected === m.id;
                       const Icon = m.icon;
@@ -2827,17 +3504,28 @@ function NuevaOrdenPage() {
                           key={m.id}
                           type="button"
                           onClick={() => handleOpcionPagoChange(m.id)}
-                          className={`relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-5 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${isSelected
-                            ? `bg-gradient-to-br ${m.color} ring-2 ring-primary/20 shadow-md scale-102`
-                            : "border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm text-slate-500"
-                            }`}
+                          className={`relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-5 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${
+                            isSelected
+                              ? `bg-gradient-to-br ${m.color} ring-2 ring-primary/20 shadow-md scale-102`
+                              : "border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm text-slate-500"
+                          }`}
                         >
-                          <div className={`flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-300 group-hover:scale-105 shadow-inner ${isSelected ? "bg-white dark:bg-slate-900" : "bg-slate-100 dark:bg-slate-800"
-                            }`}>
+                          <div
+                            className={`flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-300 group-hover:scale-105 shadow-inner ${
+                              isSelected
+                                ? "bg-white dark:bg-slate-900"
+                                : "bg-slate-100 dark:bg-slate-800"
+                            }`}
+                          >
                             <Icon className="h-6 w-6 shrink-0" />
                           </div>
-                          <div className={`font-black text-xs uppercase tracking-wider ${isSelected ? "font-black text-inherit" : "text-slate-600 dark:text-slate-400"
-                            }`}>
+                          <div
+                            className={`font-black text-xs uppercase tracking-wider ${
+                              isSelected
+                                ? "font-black text-inherit"
+                                : "text-slate-600 dark:text-slate-400"
+                            }`}
+                          >
                             {m.label}
                           </div>
                           {isSelected && (
@@ -2855,8 +3543,14 @@ function NuevaOrdenPage() {
                       <div className="flex items-center gap-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-500/[0.03] p-4 text-teal-800 dark:text-teal-200">
                         <Timer className="h-8 w-8 text-teal-600 shrink-0" />
                         <div>
-                          <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
-                          <span className="text-xs">La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a retirar su ropa.</span>
+                          <strong className="block text-sm">
+                            Cobro contra entrega (Pago al retirar)
+                          </strong>
+                          <span className="text-xs">
+                            La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo
+                            pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente
+                            venga a retirar su ropa.
+                          </span>
                         </div>
                       </div>
                     </div>
@@ -2864,7 +3558,9 @@ function NuevaOrdenPage() {
 
                   {cfg.ncf_facturacion_activa && (
                     <div className="mt-4 rounded-2xl border-2 border-primary/20 bg-primary/5 p-4">
-                      <div className="text-xs font-bold uppercase tracking-widest text-primary mb-3">TIPO DE COMPROBANTE FISCAL</div>
+                      <div className="text-xs font-bold uppercase tracking-widest text-primary mb-3">
+                        TIPO DE COMPROBANTE FISCAL
+                      </div>
                       {validTipos.length <= 2 ? (
                         <div className="flex gap-2">
                           {validTipos.map((tipo) => (
@@ -2874,7 +3570,9 @@ function NuevaOrdenPage() {
                               className={`flex-1 h-12 rounded-xl font-bold transition-all border-2 ${tipoECF === tipo ? "bg-primary text-white border-primary shadow-glow hover:bg-primary/90 hover:text-white" : "bg-card text-muted-foreground border-border hover:bg-accent/50"}`}
                               onClick={() => setTipoECF(tipo)}
                             >
-                              {NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() || "COMPROBANTE"} ({tipo})
+                              {NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() ||
+                                "COMPROBANTE"}{" "}
+                              ({tipo})
                             </Button>
                           ))}
                         </div>
@@ -2885,7 +3583,11 @@ function NuevaOrdenPage() {
                           </SelectTrigger>
                           <SelectContent className="rounded-xl">
                             {validTipos.map((tipo) => (
-                              <SelectItem key={tipo} value={tipo} className="font-bold py-3 cursor-pointer">
+                              <SelectItem
+                                key={tipo}
+                                value={tipo}
+                                className="font-bold py-3 cursor-pointer"
+                              >
                                 {NCF_NOMBRES[tipo.substring(0, 3)] || "COMPROBANTE"} ({tipo})
                               </SelectItem>
                             ))}
@@ -2900,7 +3602,9 @@ function NuevaOrdenPage() {
                       <div className="grid gap-6 md:grid-cols-2 items-center">
                         <Field label="Monto recibido">
                           <div className="relative h-24">
-                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">RD$</span>
+                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">
+                              RD$
+                            </span>
                             <PriceInput
                               className="h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30"
                               value={recibido}
@@ -2910,10 +3614,13 @@ function NuevaOrdenPage() {
                           </div>
                         </Field>
 
-                        <div className={`flex flex-col items-center justify-center h-28 rounded-xl border-2 transition-all duration-300 ${faltante > 0
-                          ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                          : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
-                          }`}>
+                        <div
+                          className={`flex flex-col items-center justify-center h-28 rounded-xl border-2 transition-all duration-300 ${
+                            faltante > 0
+                              ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
+                              : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
+                          }`}
+                        >
                           <div className="text-xs font-black uppercase tracking-widest opacity-70">
                             {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
                           </div>
@@ -2946,7 +3653,11 @@ function NuevaOrdenPage() {
                               type="text"
                               value={referencia}
                               onChange={(e) => setReferencia(e.target.value)}
-                              placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
+                              placeholder={
+                                metodo === "TARJETA"
+                                  ? "Número de aprobación, autorización, Auth # o APR."
+                                  : "Número de aprobación, transferencia, cuenta, etc."
+                              }
                               className="h-12 bg-white border-2 border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium"
                               autoFocus
                             />
@@ -2969,12 +3680,16 @@ function NuevaOrdenPage() {
 
                   {opcionPagoSelected === "CREDITO" && (
                     <div className="space-y-4 mt-6 w-full max-w-2xl mx-auto">
-                      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-warning-foreground">
+                      <motion.div
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-warning-foreground"
+                      >
                         <AlertTriangle className="h-6 w-6 text-warning shrink-0" />
                         <div>
                           <strong className="block text-base">Venta a crédito</strong>
-                          Esta orden se registrará como pendiente de cobro en el balance de <strong>{cliente?.nombre}</strong>.
+                          Esta orden se registrará como pendiente de cobro en el balance de{" "}
+                          <strong>{cliente?.nombre}</strong>.
                         </div>
                       </motion.div>
 
@@ -2992,15 +3707,30 @@ function NuevaOrdenPage() {
                               key={op.dias}
                               type="button"
                               onClick={() => actualizarLimiteDias(op.dias)}
-                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${limiteDiasSel === op.dias
-                                ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                                : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                                }`}
+                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+                                limiteDiasSel === op.dias
+                                  ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                                  : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                              }`}
                             >
-                              <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700 dark:text-amber-300" : "text-foreground"
-                                }`}>{op.dias}</span>
-                              <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
-                                }`}>DÍAS</span>
+                              <span
+                                className={`text-xl font-display font-black leading-none mb-1 ${
+                                  limiteDiasSel === op.dias
+                                    ? "text-amber-700 dark:text-amber-300"
+                                    : "text-foreground"
+                                }`}
+                              >
+                                {op.dias}
+                              </span>
+                              <span
+                                className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                                  limiteDiasSel === op.dias
+                                    ? "text-amber-600"
+                                    : "text-muted-foreground"
+                                }`}
+                              >
+                                DÍAS
+                              </span>
                               {limiteDiasSel === op.dias && (
                                 <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
                               )}
@@ -3014,7 +3744,9 @@ function NuevaOrdenPage() {
                           ¿Monto a abonar inicialmente? (Opcional)
                         </Label>
                         <div className="relative h-20">
-                          <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
+                          <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">
+                            RD$
+                          </span>
                           <PriceInput
                             className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 dark:text-amber-300 font-bold"
                             value={abonoCredito}
@@ -3029,7 +3761,9 @@ function NuevaOrdenPage() {
                           />
                         </div>
                         <p className="mt-2 text-xs text-amber-600/70 font-medium">
-                          El monto abonado se registrará en la caja activa. El saldo restante (<strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                          El monto abonado se registrará en la caja activa. El saldo restante (
+                          <strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de{" "}
+                          <strong>{cliente?.nombre}</strong>.
                         </p>
                       </div>
                     </div>
@@ -3038,14 +3772,16 @@ function NuevaOrdenPage() {
               )}
             </motion.div>
 
-            <div className={`mt-4 flex ${step === 5 ? "flex-col items-center gap-6" : "items-center justify-between"} border-t border-border pt-8`}>
+            <div
+              className={`mt-4 flex ${step === 5 ? "flex-col items-center gap-6" : "items-center justify-between"} border-t border-border pt-8`}
+            >
               {step === 5 ? (
                 <>
                   <Button
                     size="lg"
                     className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white shadow-none transition-all active:scale-95"
                     onClick={onCrearOrden}
-                    disabled={(metodo === "EFECTIVO" && (faltante > 0)) || isCreatingOrden}
+                    disabled={(metodo === "EFECTIVO" && faltante > 0) || isCreatingOrden}
                   >
                     {isCreatingOrden ? (
                       <>
@@ -3075,7 +3811,10 @@ function NuevaOrdenPage() {
                   >
                     <ArrowLeft className="mr-2 h-3 w-3" /> ATRÁS
                   </Button>
-                  <Button onClick={next} className="bg-gradient-primary text-white shadow-elegant hover:opacity-95 rounded-xl h-10 px-8 font-bold text-xs uppercase tracking-wider">
+                  <Button
+                    onClick={next}
+                    className="bg-gradient-primary text-white shadow-elegant hover:opacity-95 rounded-xl h-10 px-8 font-bold text-xs uppercase tracking-wider"
+                  >
                     Continuar <ArrowRight className="ml-2 h-3 w-3" />
                   </Button>
                 </>
@@ -3086,7 +3825,12 @@ function NuevaOrdenPage() {
       )}
 
       {/* Modal ticket */}
-      <Dialog open={showTicket} onOpenChange={(o) => { if (!o) resetPosOrder(); }}>
+      <Dialog
+        open={showTicket}
+        onOpenChange={(o) => {
+          if (!o) resetPosOrder();
+        }}
+      >
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>✓ Orden creada — {creada?.numero}</DialogTitle>
@@ -3096,12 +3840,27 @@ function NuevaOrdenPage() {
           </DialogHeader>
           {creada && cliente && (
             <div className="max-h-[60vh] overflow-auto rounded-lg bg-zinc-100 p-4 dark:bg-zinc-800">
-              <Ticket orden={creada} tenant={tenant} empleado={empleado} cliente={cliente} formato={cfg.formato_ticket} pagoRecibido={metodo === "EFECTIVO" ? recibido : undefined} serviciosList={servicios} />
+              <Ticket
+                orden={creada}
+                tenant={tenant}
+                empleado={empleado}
+                cliente={cliente}
+                formato={cfg.formato_ticket}
+                pagoRecibido={metodo === "EFECTIVO" ? recibido : undefined}
+                serviciosList={servicios}
+              />
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={resetPosOrder}>Cerrar</Button>
-            <Button onClick={() => handleImprimirTicket(creada)} className="bg-gradient-primary text-white"><Printer className="mr-1.5 h-4 w-4" /> Imprimir</Button>
+            <Button variant="outline" onClick={resetPosOrder}>
+              Cerrar
+            </Button>
+            <Button
+              onClick={() => handleImprimirTicket(creada)}
+              className="bg-gradient-primary text-white"
+            >
+              <Printer className="mr-1.5 h-4 w-4" /> Imprimir
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -3152,11 +3911,12 @@ function NuevaOrdenPage() {
               </div>
 
               {filteredClients
-                .filter(c =>
-                  c.id !== (tenantId.substring(0, 24) + "f000" + tenantId.substring(28)) &&
-                  c.id !== (tenantId.substring(0, 24) + "e000" + tenantId.substring(28))
+                .filter(
+                  (c) =>
+                    c.id !== tenantId.substring(0, 24) + "f000" + tenantId.substring(28) &&
+                    c.id !== tenantId.substring(0, 24) + "e000" + tenantId.substring(28),
                 )
-                .map(c => (
+                .map((c) => (
                   <button
                     key={c.id}
                     type="button"
@@ -3164,37 +3924,62 @@ function NuevaOrdenPage() {
                       setCliente(c);
                       setIsClientModalOpen(false);
                       const isEmpresa = c.tipo === "Empresa" || (c.cedula && c.cedula.length >= 9);
-                      const target = isElectronic ? (isEmpresa ? "E31" : "E32") : (isEmpresa ? "B01" : "B02");
+                      const target = isElectronic
+                        ? isEmpresa
+                          ? "E31"
+                          : "E32"
+                        : isEmpresa
+                          ? "B01"
+                          : "B02";
                       if (validTipos.includes(target)) {
                         setTipoECF(target);
                       }
                     }}
-                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all text-left border ${cliente?.id === c.id
-                      ? "bg-primary border-transparent text-white font-bold shadow-sm"
-                      : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                      }`}
+                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all text-left border ${
+                      cliente?.id === c.id
+                        ? "bg-primary border-transparent text-white font-bold shadow-sm"
+                        : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
+                    }`}
                   >
                     <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div className={`h-9 w-9 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${cliente?.id === c.id
-                        ? "bg-white/20 text-white"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-white/20 group-hover:text-white"
-                        }`}>
-                        {c.tipo === "Empresa" ? <Building className="h-4.5 w-4.5" /> : <UserIcon className="h-4.5 w-4.5" />}
+                      <div
+                        className={`h-9 w-9 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${
+                          cliente?.id === c.id
+                            ? "bg-white/20 text-white"
+                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-white/20 group-hover:text-white"
+                        }`}
+                      >
+                        {c.tipo === "Empresa" ? (
+                          <Building className="h-4.5 w-4.5" />
+                        ) : (
+                          <UserIcon className="h-4.5 w-4.5" />
+                        )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-sm truncate leading-snug">{c.nombre} {c.apellido || ""}</div>
-                        <div className={`text-xs transition-colors mt-0.5 ${cliente?.id === c.id
-                          ? "text-white/80"
-                          : "text-muted-foreground group-hover:text-white/85"
-                          }`}>{c.telefono}</div>
+                        <div className="font-bold text-sm truncate leading-snug">
+                          {c.nombre} {c.apellido || ""}
+                        </div>
+                        <div
+                          className={`text-xs transition-colors mt-0.5 ${
+                            cliente?.id === c.id
+                              ? "text-white/80"
+                              : "text-muted-foreground group-hover:text-white/85"
+                          }`}
+                        >
+                          {c.telefono}
+                        </div>
                       </div>
                     </div>
-                    {cliente?.id === c.id && <Check className="h-4.5 w-4.5 text-white shrink-0 transition-colors" />}
+                    {cliente?.id === c.id && (
+                      <Check className="h-4.5 w-4.5 text-white shrink-0 transition-colors" />
+                    )}
                   </button>
                 ))}
 
               {filteredClients.length === 0 && (
-                <div className="py-6 text-center text-muted-foreground text-[10px]">No se encontraron clientes</div>
+                <div className="py-6 text-center text-muted-foreground text-[10px]">
+                  No se encontraron clientes
+                </div>
               )}
             </div>
           </div>
@@ -3227,15 +4012,20 @@ function NuevaOrdenPage() {
         </DialogContent>
       </Dialog>
 
-      <ClienteDialog open={showNewCliente} onOpenChange={setShowNewCliente} tenant={user.tenant} onDone={(c) => {
-        if (c) {
-          setCliente(c);
-          if (!isPosMode) {
-            irAlPasoSiguienteDelCliente();
+      <ClienteDialog
+        open={showNewCliente}
+        onOpenChange={setShowNewCliente}
+        tenant={user.tenant}
+        onDone={(c) => {
+          if (c) {
+            setCliente(c);
+            if (!isPosMode) {
+              irAlPasoSiguienteDelCliente();
+            }
           }
-        }
-        setShowNewCliente(false);
-      }} />
+          setShowNewCliente(false);
+        }}
+      />
 
       <PlanLimitModal
         open={showLimitModal}
@@ -3245,15 +4035,24 @@ function NuevaOrdenPage() {
         tenant={user.tenant}
       />
 
-      <Dialog open={empresaDialogOpen} onOpenChange={(o) => {
-        setEmpresaDialogOpen(o);
-        if (!o) { setRncResult(null); setRncInput(""); }
-      }}>
+      <Dialog
+        open={empresaDialogOpen}
+        onOpenChange={(o) => {
+          setEmpresaDialogOpen(o);
+          if (!o) {
+            setRncResult(null);
+            setRncInput("");
+          }
+        }}
+      >
         <DialogContent className="max-w-lg rounded-2xl p-6">
           <DialogHeader>
-            <DialogTitle className="text-xl font-display font-bold">Buscar Empresa por RNC</DialogTitle>
+            <DialogTitle className="text-xl font-display font-bold">
+              Buscar Empresa por RNC
+            </DialogTitle>
             <DialogDescription>
-              Se conectará automáticamente con la base de datos de Pronesoft/DGII para obtener el nombre del contribuyente.
+              Se conectará automáticamente con la base de datos de Pronesoft/DGII para obtener el
+              nombre del contribuyente.
             </DialogDescription>
           </DialogHeader>
           <div className="py-4 space-y-4">
@@ -3274,7 +4073,11 @@ function NuevaOrdenPage() {
                   disabled={rncLoading}
                   className="h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white gap-2 font-bold shadow-sm transition-all active:scale-95"
                 >
-                  {rncLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
+                  {rncLoading ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Search className="h-4 w-4" />
+                  )}
                   <span>Buscar</span>
                 </Button>
               </div>
@@ -3288,10 +4091,16 @@ function NuevaOrdenPage() {
               >
                 <div className="flex justify-between items-start gap-4">
                   <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-widest text-primary font-black opacity-60">Nombre / Razón Social</Label>
-                    <div className="font-bold text-foreground text-xl leading-tight uppercase">{rncResult.name}</div>
+                    <Label className="text-[10px] uppercase tracking-widest text-primary font-black opacity-60">
+                      Nombre / Razón Social
+                    </Label>
+                    <div className="font-bold text-foreground text-xl leading-tight uppercase">
+                      {rncResult.name}
+                    </div>
                   </div>
-                  <Badge className={`${rncResult.status === "ACTIVO" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"} font-black px-3 py-1 rounded-full border-none shadow-sm`}>
+                  <Badge
+                    className={`${rncResult.status === "ACTIVO" ? "bg-emerald-500 text-white" : "bg-rose-500 text-white"} font-black px-3 py-1 rounded-full border-none shadow-sm`}
+                  >
                     {rncResult.status}
                   </Badge>
                 </div>
@@ -3300,23 +4109,40 @@ function NuevaOrdenPage() {
 
                 <div className="grid grid-cols-2 gap-8">
                   <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-widest text-primary font-black opacity-60">RNC</Label>
-                    <div className="font-bold text-foreground text-lg tracking-tight">{rncResult.rnc}</div>
+                    <Label className="text-[10px] uppercase tracking-widest text-primary font-black opacity-60">
+                      RNC
+                    </Label>
+                    <div className="font-bold text-foreground text-lg tracking-tight">
+                      {rncResult.rnc}
+                    </div>
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-[10px] uppercase tracking-widest text-primary font-black opacity-60">Régimen de Pago</Label>
-                    <div className="font-bold text-foreground/80 uppercase text-sm tracking-tight">{rncResult.regime}</div>
+                    <Label className="text-[10px] uppercase tracking-widest text-primary font-black opacity-60">
+                      Régimen de Pago
+                    </Label>
+                    <div className="font-bold text-foreground/80 uppercase text-sm tracking-tight">
+                      {rncResult.regime}
+                    </div>
                   </div>
                 </div>
               </motion.div>
             )}
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" onClick={() => setEmpresaDialogOpen(false)} disabled={rncLoading} className="rounded-xl font-bold border-border hover:bg-accent h-10">
+            <Button
+              variant="outline"
+              onClick={() => setEmpresaDialogOpen(false)}
+              disabled={rncLoading}
+              className="rounded-xl font-bold border-border hover:bg-accent h-10"
+            >
               Cancelar
             </Button>
             {rncResult && (
-              <Button onClick={handleConfirmEmpresa} disabled={rncLoading} className="bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-bold shadow-glow transition-all active:scale-95 h-10">
+              <Button
+                onClick={handleConfirmEmpresa}
+                disabled={rncLoading}
+                className="bg-primary hover:bg-primary/90 text-white gap-2 rounded-xl font-bold shadow-glow transition-all active:scale-95 h-10"
+              >
                 <Check className="h-4 w-4" /> Continuar y Seleccionar
               </Button>
             )}
@@ -3364,7 +4190,7 @@ function NuevaOrdenPage() {
           {/* Grid de Categorías Horizontales Elegantes */}
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2.5 max-h-[55vh] overflow-y-auto custom-scrollbar p-1">
             {/* Opción TODAS */}
-            {("TODAS LAS PRENDAS").toLowerCase().includes(categorySearchQuery.toLowerCase()) && (
+            {"TODAS LAS PRENDAS".toLowerCase().includes(categorySearchQuery.toLowerCase()) && (
               <button
                 type="button"
                 onClick={() => {
@@ -3379,12 +4205,16 @@ function NuevaOrdenPage() {
                 }`}
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <div className={`p-1.5 rounded-xl shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}>
+                  <div
+                    className={`p-1.5 rounded-xl shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/20 text-white" : "bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300"}`}
+                  >
                     <Shirt className="h-4 w-4" />
                   </div>
                   <span className="font-extrabold text-xs tracking-tight truncate">TODAS</span>
                 </div>
-                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/25 text-white" : "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400"}`}>
+                <span
+                  className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/25 text-white" : "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400"}`}
+                >
                   {catalogo.length}
                 </span>
               </button>
@@ -3392,21 +4222,55 @@ function NuevaOrdenPage() {
 
             {/* Categorías filtradas */}
             {categoriesPrendas
-              .filter(cat => cat.toLowerCase().includes(categorySearchQuery.toLowerCase()))
+              .filter((cat) => cat.toLowerCase().includes(categorySearchQuery.toLowerCase()))
               .map((cat, idx) => {
-                const catCount = catalogo.filter(c => (c.categoria || "Otros").trim().toUpperCase() === cat.trim().toUpperCase()).length;
+                const catCount = catalogo.filter(
+                  (c) => (c.categoria || "Otros").trim().toUpperCase() === cat.trim().toUpperCase(),
+                ).length;
                 const isSelected = activeCategory.trim().toUpperCase() === cat.trim().toUpperCase();
 
                 // Paleta de colores pastel aplicados únicamente al icono y la insignia
                 const PASTELS = [
-                  { iconBg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300", badgeBg: "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300" },
-                  { iconBg: "bg-sky-100 text-sky-700 dark:bg-sky-950/80 dark:text-sky-300", badgeBg: "bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300" },
-                  { iconBg: "bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300", badgeBg: "bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300" },
-                  { iconBg: "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300", badgeBg: "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300" },
-                  { iconBg: "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300", badgeBg: "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300" },
-                  { iconBg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300", badgeBg: "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300" },
-                  { iconBg: "bg-teal-100 text-teal-700 dark:bg-teal-950/80 dark:text-teal-300", badgeBg: "bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300" },
-                  { iconBg: "bg-orange-100 text-orange-700 dark:bg-orange-950/80 dark:text-orange-300", badgeBg: "bg-orange-100 text-orange-800 dark:bg-orange-950/80 dark:text-orange-300" },
+                  {
+                    iconBg:
+                      "bg-emerald-100 text-emerald-700 dark:bg-emerald-950/80 dark:text-emerald-300",
+                    badgeBg:
+                      "bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300",
+                  },
+                  {
+                    iconBg: "bg-sky-100 text-sky-700 dark:bg-sky-950/80 dark:text-sky-300",
+                    badgeBg: "bg-sky-100 text-sky-800 dark:bg-sky-950/80 dark:text-sky-300",
+                  },
+                  {
+                    iconBg:
+                      "bg-purple-100 text-purple-700 dark:bg-purple-950/80 dark:text-purple-300",
+                    badgeBg:
+                      "bg-purple-100 text-purple-800 dark:bg-purple-950/80 dark:text-purple-300",
+                  },
+                  {
+                    iconBg: "bg-amber-100 text-amber-700 dark:bg-amber-950/80 dark:text-amber-300",
+                    badgeBg: "bg-amber-100 text-amber-800 dark:bg-amber-950/80 dark:text-amber-300",
+                  },
+                  {
+                    iconBg: "bg-rose-100 text-rose-700 dark:bg-rose-950/80 dark:text-rose-300",
+                    badgeBg: "bg-rose-100 text-rose-800 dark:bg-rose-950/80 dark:text-rose-300",
+                  },
+                  {
+                    iconBg:
+                      "bg-indigo-100 text-indigo-700 dark:bg-indigo-950/80 dark:text-indigo-300",
+                    badgeBg:
+                      "bg-indigo-100 text-indigo-800 dark:bg-indigo-950/80 dark:text-indigo-300",
+                  },
+                  {
+                    iconBg: "bg-teal-100 text-teal-700 dark:bg-teal-950/80 dark:text-teal-300",
+                    badgeBg: "bg-teal-100 text-teal-800 dark:bg-teal-950/80 dark:text-teal-300",
+                  },
+                  {
+                    iconBg:
+                      "bg-orange-100 text-orange-700 dark:bg-orange-950/80 dark:text-orange-300",
+                    badgeBg:
+                      "bg-orange-100 text-orange-800 dark:bg-orange-950/80 dark:text-orange-300",
+                  },
                 ];
                 const theme = PASTELS[idx % PASTELS.length];
 
@@ -3426,12 +4290,18 @@ function NuevaOrdenPage() {
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`p-1.5 rounded-xl shrink-0 ${isSelected ? "bg-white/20 text-white" : theme.iconBg}`}>
+                      <div
+                        className={`p-1.5 rounded-xl shrink-0 ${isSelected ? "bg-white/20 text-white" : theme.iconBg}`}
+                      >
                         <Shirt className="h-4 w-4" />
                       </div>
-                      <span className="font-extrabold text-xs tracking-tight truncate uppercase">{cat}</span>
+                      <span className="font-extrabold text-xs tracking-tight truncate uppercase">
+                        {cat}
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${isSelected ? "bg-white/25 text-white" : theme.badgeBg}`}>
+                    <span
+                      className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${isSelected ? "bg-white/25 text-white" : theme.badgeBg}`}
+                    >
                       {catCount}
                     </span>
                   </button>
@@ -3444,7 +4314,9 @@ function NuevaOrdenPage() {
       <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
         <DialogContent className="max-w-2xl p-4 sm:p-5 rounded-2xl overflow-y-auto max-h-[92vh] custom-scrollbar top-[50%]">
           <DialogHeader className="pb-0">
-            <DialogTitle className="text-xl font-display font-bold text-foreground">Panel de Cobro</DialogTitle>
+            <DialogTitle className="text-xl font-display font-bold text-foreground">
+              Panel de Cobro
+            </DialogTitle>
             <DialogDescription className="sr-only">
               Selecciona el método de pago y confirma la creación de la orden.
             </DialogDescription>
@@ -3461,11 +4333,38 @@ function NuevaOrdenPage() {
           <div className="py-0.5 space-y-3">
             <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-2">
               {[
-                { id: "PAGO_AL_RETIRAR", label: "Pago al retirar", icon: Timer, color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700" },
-                { id: "EFECTIVO", label: "Efectivo", icon: Banknote, color: "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700" },
-                { id: "TARJETA", label: "Tarjeta", icon: CreditCard, color: "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700" },
-                { id: "TRANSFERENCIA", label: "Transf.", icon: Building2, color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700" },
-                { id: "CREDITO", label: "Crédito", icon: FileText, color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700" }
+                {
+                  id: "PAGO_AL_RETIRAR",
+                  label: "Pago al retirar",
+                  icon: Timer,
+                  color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700",
+                },
+                {
+                  id: "EFECTIVO",
+                  label: "Efectivo",
+                  icon: Banknote,
+                  color:
+                    "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700",
+                },
+                {
+                  id: "TARJETA",
+                  label: "Tarjeta",
+                  icon: CreditCard,
+                  color:
+                    "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700",
+                },
+                {
+                  id: "TRANSFERENCIA",
+                  label: "Transf.",
+                  icon: Building2,
+                  color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700",
+                },
+                {
+                  id: "CREDITO",
+                  label: "Crédito",
+                  icon: FileText,
+                  color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700",
+                },
               ].map((m) => {
                 const isSelected = opcionPagoSelected === m.id;
                 const Icon = m.icon;
@@ -3474,13 +4373,16 @@ function NuevaOrdenPage() {
                     key={m.id}
                     type="button"
                     onClick={() => handleOpcionPagoChange(m.id)}
-                    className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${isSelected
-                      ? `bg-gradient-to-br ${m.color} ring-1 ring-primary shadow-glow scale-102`
-                      : "border-border bg-card hover:border-primary/40 hover:shadow-xs text-slate-500"
-                      }`}
+                    className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${
+                      isSelected
+                        ? `bg-gradient-to-br ${m.color} ring-1 ring-primary shadow-glow scale-102`
+                        : "border-border bg-card hover:border-primary/40 hover:shadow-xs text-slate-500"
+                    }`}
                   >
                     <Icon className="h-5 w-5 transition-transform duration-300 group-hover:scale-105 shrink-0" />
-                    <div className={`font-bold text-xs uppercase tracking-tight ${isSelected ? "font-black text-inherit" : "text-foreground"}`}>
+                    <div
+                      className={`font-bold text-xs uppercase tracking-tight ${isSelected ? "font-black text-inherit" : "text-foreground"}`}
+                    >
                       {m.label}
                     </div>
                     {isSelected && (
@@ -3498,8 +4400,14 @@ function NuevaOrdenPage() {
                 <div className="flex items-center gap-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-500/[0.03] p-4 text-teal-800 dark:text-teal-200">
                   <Timer className="h-8 w-8 text-teal-600 shrink-0" />
                   <div>
-                    <strong className="block text-sm">Cobro contra entrega (Pago al retirar)</strong>
-                    <span className="text-xs">La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a retirar su ropa.</span>
+                    <strong className="block text-sm">
+                      Cobro contra entrega (Pago al retirar)
+                    </strong>
+                    <span className="text-xs">
+                      La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo
+                      pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a
+                      retirar su ropa.
+                    </span>
                   </div>
                 </div>
               </div>
@@ -3507,24 +4415,27 @@ function NuevaOrdenPage() {
 
             {cfg.ncf_facturacion_activa && (
               <div className="mb-4 p-4 rounded-2xl border-2 border-primary/10 bg-primary/5">
-                <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">Tipo de Comprobante Fiscal</Label>
+                <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">
+                  Tipo de Comprobante Fiscal
+                </Label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     onClick={() => setTipoECF(isElectronic ? "E32" : "B02")}
-                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${(tipoECF === "E32" || tipoECF === "B02") ? "bg-primary text-white" : "bg-background border border-border"}`}
+                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${tipoECF === "E32" || tipoECF === "B02" ? "bg-primary text-white" : "bg-background border border-border"}`}
                   >
                     CONSUMO ({isElectronic ? "E32" : "B02"})
                   </button>
                   <button
                     onClick={() => setTipoECF(isElectronic ? "E31" : "B01")}
-                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${(tipoECF === "E31" || tipoECF === "B01") ? "bg-primary text-white" : "bg-background border border-border"}`}
+                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${tipoECF === "E31" || tipoECF === "B01" ? "bg-primary text-white" : "bg-background border border-border"}`}
                   >
                     CRÉDITO FISCAL ({isElectronic ? "E31" : "B01"})
                   </button>
                 </div>
                 {(tipoECF === "E31" || tipoECF === "B01") && !cliente?.cedula && (
                   <p className="mt-2 text-[10px] text-destructive font-bold flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" /> El cliente debe tener RNC/Cédula para Crédito Fiscal.
+                    <AlertTriangle className="h-3 w-3" /> El cliente debe tener RNC/Cédula para
+                    Crédito Fiscal.
                   </p>
                 )}
               </div>
@@ -3535,7 +4446,9 @@ function NuevaOrdenPage() {
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
                   <Field label="Monto recibido">
                     <div className="relative h-16">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/50">RD$</span>
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/50">
+                        RD$
+                      </span>
                       <PriceInput
                         className="!h-full pl-16 !text-3xl font-black font-display bg-background border border-primary/20 focus-visible:ring-primary/30 rounded-xl"
                         value={recibido}
@@ -3549,11 +4462,16 @@ function NuevaOrdenPage() {
                   </Field>
 
                   <Field label={faltante > 0 ? "Faltante" : "Cambio a entregar"}>
-                    <div className={`flex items-center justify-center h-16 px-4 rounded-xl border transition-all duration-300 ${faltante > 0
-                      ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                      : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
-                      }`}>
-                      <div className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 999999 ? "text-lg" : "text-2xl"}`}>
+                    <div
+                      className={`flex items-center justify-center h-16 px-4 rounded-xl border transition-all duration-300 ${
+                        faltante > 0
+                          ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
+                          : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
+                      }`}
+                    >
+                      <div
+                        className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 999999 ? "text-lg" : "text-2xl"}`}
+                      >
                         {formatRD(faltante > 0 ? faltante : vuelto)}
                       </div>
                     </div>
@@ -3583,7 +4501,11 @@ function NuevaOrdenPage() {
                         type="text"
                         value={referencia}
                         onChange={(e) => setReferencia(e.target.value)}
-                        placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
+                        placeholder={
+                          metodo === "TARJETA"
+                            ? "Número de aprobación, autorización, Auth # o APR."
+                            : "Número de aprobación, transferencia, cuenta, etc."
+                        }
                         className="h-10 bg-white border border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium text-xs"
                         autoFocus
                       />
@@ -3610,7 +4532,8 @@ function NuevaOrdenPage() {
                   <AlertTriangle className="h-8 w-8 text-warning shrink-0" />
                   <div>
                     <strong className="block text-lg">Venta a crédito</strong>
-                    Se registrará en el balance de <span className="font-bold">{cliente?.nombre}</span>.
+                    Se registrará en el balance de{" "}
+                    <span className="font-bold">{cliente?.nombre}</span>.
                   </div>
                 </div>
 
@@ -3627,15 +4550,28 @@ function NuevaOrdenPage() {
                         key={op.dias}
                         type="button"
                         onClick={() => actualizarLimiteDias(op.dias)}
-                        className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${limiteDiasSel === op.dias
-                          ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                          : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                          }`}
+                        className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
+                          limiteDiasSel === op.dias
+                            ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
+                            : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
+                        }`}
                       >
-                        <span className={`text-xl font-display font-black leading-none mb-1 ${limiteDiasSel === op.dias ? "text-amber-700 dark:text-amber-300" : "text-foreground"
-                          }`}>{op.dias}</span>
-                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
-                          }`}>DÍAS</span>
+                        <span
+                          className={`text-xl font-display font-black leading-none mb-1 ${
+                            limiteDiasSel === op.dias
+                              ? "text-amber-700 dark:text-amber-300"
+                              : "text-foreground"
+                          }`}
+                        >
+                          {op.dias}
+                        </span>
+                        <span
+                          className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                            limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
+                          }`}
+                        >
+                          DÍAS
+                        </span>
                         {limiteDiasSel === op.dias && (
                           <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
                         )}
@@ -3649,7 +4585,9 @@ function NuevaOrdenPage() {
                     ¿Monto a abonar inicialmente? (Opcional)
                   </Label>
                   <div className="relative h-20">
-                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">RD$</span>
+                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">
+                      RD$
+                    </span>
                     <PriceInput
                       className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 dark:text-amber-300 font-bold"
                       value={abonoCredito}
@@ -3664,7 +4602,9 @@ function NuevaOrdenPage() {
                     />
                   </div>
                   <p className="mt-2 text-xs text-amber-600/70 font-medium">
-                    El monto abonado se registrará en la caja activa. El saldo restante (<strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                    El monto abonado se registrará en la caja activa. El saldo restante (
+                    <strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de{" "}
+                    <strong>{cliente?.nombre}</strong>.
                   </p>
                 </div>
               </div>
@@ -3700,13 +4640,21 @@ function NuevaOrdenPage() {
   );
 }
 
-function Stepper({ step, enableServicios, enablePrendas }: { step: number; enableServicios: boolean; enablePrendas: boolean }) {
+function Stepper({
+  step,
+  enableServicios,
+  enablePrendas,
+}: {
+  step: number;
+  enableServicios: boolean;
+  enablePrendas: boolean;
+}) {
   const stepsList = [
     { id: 1, label: "Cliente", icon: UserIcon },
     enableServicios && { id: 2, label: "Servicios", icon: LayoutGrid },
     enablePrendas && { id: 3, label: "Prendas", icon: Shirt },
     { id: 4, label: "Resumen", icon: Receipt },
-    { id: 5, label: "Cobro", icon: CreditCard }
+    { id: 5, label: "Cobro", icon: CreditCard },
   ].filter(Boolean) as { id: number; label: string; icon: any }[];
 
   return (
@@ -3721,12 +4669,13 @@ function Stepper({ step, enableServicios, enablePrendas }: { step: number; enabl
             {/* Step circle */}
             <div className="flex flex-col items-center text-center group">
               <div
-                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300 ${done
-                  ? "bg-emerald-600 text-white shadow-md scale-105"
-                  : cur
-                    ? "bg-primary text-white shadow-glow ring-4 ring-primary/20 scale-110"
-                    : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-250 dark:border-slate-700"
-                  }`}
+                className={`flex h-11 w-11 items-center justify-center rounded-full transition-all duration-300 ${
+                  done
+                    ? "bg-emerald-600 text-white shadow-md scale-105"
+                    : cur
+                      ? "bg-primary text-white shadow-glow ring-4 ring-primary/20 scale-110"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 border border-slate-250 dark:border-slate-700"
+                }`}
                 title={stepItem.label}
               >
                 {done ? (
@@ -3735,8 +4684,15 @@ function Stepper({ step, enableServicios, enablePrendas }: { step: number; enabl
                   <Icon className="h-5 w-5 stroke-[1.8]" />
                 )}
               </div>
-              <div className={`mt-2 text-[10px] md:text-[11px] font-black uppercase tracking-wider ${cur ? "text-primary font-black animate-pulse" : done ? "text-emerald-700 font-bold" : "text-muted-foreground font-medium"
-                }`}>
+              <div
+                className={`mt-2 text-[10px] md:text-[11px] font-black uppercase tracking-wider ${
+                  cur
+                    ? "text-primary font-black animate-pulse"
+                    : done
+                      ? "text-emerald-700 font-bold"
+                      : "text-muted-foreground font-medium"
+                }`}
+              >
                 {stepItem.label}
               </div>
             </div>
@@ -3744,8 +4700,11 @@ function Stepper({ step, enableServicios, enablePrendas }: { step: number; enabl
             {/* Connector Line */}
             {index < stepsList.length - 1 && (
               <div className="flex items-center justify-center px-1 md:px-3">
-                <div className={`h-1 w-6 md:w-12 rounded-full transition-all duration-500 -mt-4 ${done ? "bg-emerald-600" : "bg-slate-200 dark:bg-slate-800"
-                  }`} />
+                <div
+                  className={`h-1 w-6 md:w-12 rounded-full transition-all duration-500 -mt-4 ${
+                    done ? "bg-emerald-600" : "bg-slate-200 dark:bg-slate-800"
+                  }`}
+                />
               </div>
             )}
           </div>
@@ -3756,10 +4715,20 @@ function Stepper({ step, enableServicios, enablePrendas }: { step: number; enabl
 }
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return <div><Label className="mb-1.5 block text-sm font-medium">{label}</Label>{children}</div>;
+  return (
+    <div>
+      <Label className="mb-1.5 block text-sm font-medium">{label}</Label>
+      {children}
+    </div>
+  );
 }
 function Row({ k, v, className = "" }: { k: string; v: string; className?: string }) {
-  return <div className={`flex justify-between text-sm ${className}`}><span className="text-muted-foreground">{k}</span><span className="font-medium">{v}</span></div>;
+  return (
+    <div className={`flex justify-between text-sm ${className}`}>
+      <span className="text-muted-foreground">{k}</span>
+      <span className="font-medium">{v}</span>
+    </div>
+  );
 }
 
 // === Add Item Dialog ===
@@ -3772,7 +4741,7 @@ function AddItemDialog({
   onUpdateQty,
   isDesglose = false,
   onAddDesglose,
-  serviceName
+  serviceName,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -3788,17 +4757,17 @@ function AddItemDialog({
   const [search, setSearch] = useState("");
 
   const categories = useMemo(() => {
-    const cats = new Set(catalogo.map(c => c.categoria || "Otros"));
+    const cats = new Set(catalogo.map((c) => c.categoria || "Otros"));
     return ["TODOS", ...Array.from(cats)];
   }, [catalogo]);
 
   const itemsFiltered = useMemo(() => {
     let list = catalogo;
     if (activeCat !== "TODOS") {
-      list = list.filter(c => (c.categoria || "Otros") === activeCat);
+      list = list.filter((c) => (c.categoria || "Otros") === activeCat);
     }
     if (search) {
-      list = list.filter(c => c.nombre.toLowerCase().includes(search.toLowerCase()));
+      list = list.filter((c) => c.nombre.toLowerCase().includes(search.toLowerCase()));
     }
     return list;
   }, [catalogo, activeCat, search]);
@@ -3812,14 +4781,26 @@ function AddItemDialog({
 
   function handleItemClick(it: CatalogoItem) {
     if (isDesglose && onAddDesglose) {
-      onAddDesglose({ descripcion: `↳ ${it.nombre}`, cantidad: 1, precio_unitario: it.precio || 0, es_libra: it.por_libra || false, is_exento: (it.precio || 0) === 0, servicio_origen: serviceName });
+      onAddDesglose({
+        descripcion: `↳ ${it.nombre}`,
+        cantidad: 1,
+        precio_unitario: it.precio || 0,
+        es_libra: it.por_libra || false,
+        is_exento: (it.precio || 0) === 0,
+        servicio_origen: serviceName,
+      });
       return;
     }
-    const existingIdx = items.findIndex(x => x.descripcion === it.nombre);
+    const existingIdx = items.findIndex((x) => x.descripcion === it.nombre);
     if (existingIdx > -1) {
       onUpdateQty(existingIdx, 1);
     } else {
-      onAdd({ descripcion: it.nombre, cantidad: 1, precio_unitario: it.precio, es_libra: it.por_libra });
+      onAdd({
+        descripcion: it.nombre,
+        cantidad: 1,
+        precio_unitario: it.precio,
+        es_libra: it.por_libra,
+      });
     }
   }
 
@@ -3832,7 +4813,11 @@ function AddItemDialog({
         <DialogHeader className="p-6 pb-2 border-b border-border/50">
           <div className="flex items-center justify-between gap-4">
             <DialogTitle className="text-2xl font-display font-bold">
-              {isDesglose ? (serviceName ? `Añadir prendas para ${serviceName}` : "Añadir prendas al servicio") : "Seleccionar Prendas"}
+              {isDesglose
+                ? serviceName
+                  ? `Añadir prendas para ${serviceName}`
+                  : "Añadir prendas al servicio"
+                : "Seleccionar Prendas"}
             </DialogTitle>
             <DialogDescription className="sr-only">
               Selecciona las prendas que deseas agregar a la orden.
@@ -3849,14 +4834,17 @@ function AddItemDialog({
           </div>
 
           <div className="flex gap-2 py-4 overflow-x-auto no-scrollbar">
-            {categories.map(c => (
+            {categories.map((c) => (
               <Button
                 key={c}
                 variant={activeCat === c ? "default" : "outline"}
                 size="sm"
                 onClick={() => setActiveCat(c)}
-                className={`rounded-full px-5 h-9 text-xs font-bold uppercase tracking-tight transition-all ${activeCat === c ? "bg-primary text-white shadow-glow" : "opacity-70 hover:opacity-100 bg-background"
-                  }`}
+                className={`rounded-full px-5 h-9 text-xs font-bold uppercase tracking-tight transition-all ${
+                  activeCat === c
+                    ? "bg-primary text-white shadow-glow"
+                    : "opacity-70 hover:opacity-100 bg-background"
+                }`}
               >
                 {c}
               </Button>
@@ -3873,25 +4861,36 @@ function AddItemDialog({
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
               {itemsFiltered.map((it) => {
-                const count = items.filter(x => x.descripcion === it.nombre).reduce((acc, x) => acc + x.cantidad, 0);
+                const count = items
+                  .filter((x) => x.descripcion === it.nombre)
+                  .reduce((acc, x) => acc + x.cantidad, 0);
                 return (
                   <button
                     key={it.id}
                     onClick={() => handleItemClick(it)}
-                    className={`group relative flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border-2 transition-all active:scale-90 text-center ${count > 0
-                      ? "border-primary bg-primary/5"
-                      : "border-border bg-background hover:border-primary/40"
-                      }`}
+                    className={`group relative flex flex-col items-center justify-center gap-3 p-5 rounded-3xl border-2 transition-all active:scale-90 text-center ${
+                      count > 0
+                        ? "border-primary bg-primary/5"
+                        : "border-border bg-background hover:border-primary/40"
+                    }`}
                   >
                     {it.imagen_url ? (
-                      <img src={it.imagen_url} alt={it.nombre} className={`h-16 w-16 rounded-2xl object-cover shadow-sm transition-all duration-300 ${count > 0 ? "scale-110 ring-4 ring-primary/20" : "group-hover:scale-105"}`} />
+                      <img
+                        src={it.imagen_url}
+                        alt={it.nombre}
+                        className={`h-16 w-16 rounded-2xl object-cover shadow-sm transition-all duration-300 ${count > 0 ? "scale-110 ring-4 ring-primary/20" : "group-hover:scale-105"}`}
+                      />
                     ) : (
-                      <div className={`flex h-16 w-16 items-center justify-center rounded-2xl text-3xl transition-all duration-300 ${count > 0 ? "bg-primary text-white scale-110 shadow-glow" : "bg-accent/30 group-hover:bg-primary/10"}`}>
+                      <div
+                        className={`flex h-16 w-16 items-center justify-center rounded-2xl text-3xl transition-all duration-300 ${count > 0 ? "bg-primary text-white scale-110 shadow-glow" : "bg-accent/30 group-hover:bg-primary/10"}`}
+                      >
                         {it.icono || "👕"}
                       </div>
                     )}
                     <div>
-                      <div className="text-sm font-bold leading-tight line-clamp-1">{it.nombre}</div>
+                      <div className="text-sm font-bold leading-tight line-clamp-1">
+                        {it.nombre}
+                      </div>
                       {it.por_libra && (
                         <div className="mt-1.5 flex justify-center">
                           <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[10px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/30 dark:text-amber-400">
@@ -3900,7 +4899,8 @@ function AddItemDialog({
                         </div>
                       )}
                       <div className="mt-1 text-xs font-black text-primary">
-                        {formatRD(it.precio)}{it.por_libra ? "/lb" : ""}
+                        {formatRD(it.precio)}
+                        {it.por_libra ? "/lb" : ""}
                       </div>
                     </div>
 
@@ -3917,7 +4917,10 @@ function AddItemDialog({
         </div>
 
         <DialogFooter className="p-4 bg-background border-t border-border/50">
-          <Button onClick={() => onOpenChange(false)} className="w-full md:w-auto px-12 h-11 text-lg font-bold bg-primary text-white rounded-md shadow-glow border-none">
+          <Button
+            onClick={() => onOpenChange(false)}
+            className="w-full md:w-auto px-12 h-11 text-lg font-bold bg-primary text-white rounded-md shadow-glow border-none"
+          >
             Listo
           </Button>
         </DialogFooter>
@@ -3927,12 +4930,23 @@ function AddItemDialog({
 }
 
 function DeliveryPOSDialog({
-  open, onOpenChange, enabled, setEnabled, address, setAddress, cost, setCost
+  open,
+  onOpenChange,
+  enabled,
+  setEnabled,
+  address,
+  setAddress,
+  cost,
+  setCost,
 }: {
-  open: boolean; onOpenChange: (o: boolean) => void;
-  enabled: boolean; setEnabled: (e: boolean) => void;
-  address: string; setAddress: (a: string) => void;
-  cost: number; setCost: (c: number) => void;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  enabled: boolean;
+  setEnabled: (e: boolean) => void;
+  address: string;
+  setAddress: (a: string) => void;
+  cost: number;
+  setCost: (c: number) => void;
 }) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -3956,7 +4970,11 @@ function DeliveryPOSDialog({
           </div>
 
           {enabled && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="space-y-4"
+            >
               <div className="space-y-2">
                 <Label className="font-bold text-sm">Dirección de Entrega</Label>
                 <Input
@@ -3970,7 +4988,9 @@ function DeliveryPOSDialog({
               <div className="space-y-2">
                 <Label className="font-bold text-sm">Costo de Envío (RD$)</Label>
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-muted-foreground/50">RD$</span>
+                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-muted-foreground/50">
+                    RD$
+                  </span>
                   <PriceInput
                     value={cost}
                     onChange={setCost}
@@ -3984,7 +5004,10 @@ function DeliveryPOSDialog({
           )}
         </div>
         <DialogFooter>
-          <Button onClick={() => onOpenChange(false)} className="w-full h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none">
+          <Button
+            onClick={() => onOpenChange(false)}
+            className="w-full h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none"
+          >
             Confirmar
           </Button>
         </DialogFooter>
@@ -3994,17 +5017,21 @@ function DeliveryPOSDialog({
 }
 
 function DiscountPOSDialog({
-  open, onOpenChange, discount, setDiscount, empleado
+  open,
+  onOpenChange,
+  discount,
+  setDiscount,
+  empleado,
 }: {
-  open: boolean; onOpenChange: (o: boolean) => void;
-  discount: number; setDiscount: (d: number) => void;
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  discount: number;
+  setDiscount: (d: number) => void;
   empleado?: Empleado;
 }) {
   const [val, setVal] = useState(discount > 0 ? String(discount) : "");
 
-  const maxLimit = empleado?.rol === "ADMIN" 
-    ? 100 
-    : (empleado?.max_descuento_porcentaje ?? 100);
+  const maxLimit = empleado?.rol === "ADMIN" ? 100 : (empleado?.max_descuento_porcentaje ?? 100);
 
   useEffect(() => {
     if (open) {
@@ -4052,7 +5079,9 @@ function DiscountPOSDialog({
               type="text"
               inputMode="decimal"
             />
-            <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">%</span>
+            <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">
+              %
+            </span>
           </div>
           <p className="text-xs text-muted-foreground text-center">
             El descuento se aplicará al total de la orden.
@@ -4064,10 +5093,20 @@ function DiscountPOSDialog({
           </p>
         </div>
         <DialogFooter className="gap-2">
-          <Button variant="outline" onClick={() => { setDiscount(0); onOpenChange(false); }} className="flex-1 h-11 rounded-md border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold">
+          <Button
+            variant="outline"
+            onClick={() => {
+              setDiscount(0);
+              onOpenChange(false);
+            }}
+            className="flex-1 h-11 rounded-md border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold"
+          >
             Quitar Desc.
           </Button>
-          <Button onClick={apply} className="flex-1 h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none">
+          <Button
+            onClick={apply}
+            className="flex-1 h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none"
+          >
             Aplicar
           </Button>
         </DialogFooter>
@@ -4082,14 +5121,14 @@ function TicketPrintPortal({
   cliente,
   empleado,
   serviciosList,
-  onClose
+  onClose,
 }: {
   orden: Orden;
   tenant: any;
   cliente: any;
   empleado: any;
   serviciosList: any[];
-  onClose: () => void
+  onClose: () => void;
 }) {
   useEffect(() => {
     const printerType = tenant.config?.impresora_tipo || "usb";
@@ -4126,13 +5165,21 @@ function TicketPrintPortal({
         <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000] hidden">
           <Button
             variant="outline"
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onClose();
+            }}
             className="cursor-pointer"
           >
             Cerrar vista de impresión
           </Button>
           <Button
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              window.print();
+            }}
             className="bg-primary text-white gap-2 cursor-pointer"
           >
             <Printer className="h-4 w-4" /> Imprimir ahora
@@ -4149,8 +5196,9 @@ function TicketPrintPortal({
         />
       </div>
 
-      <style dangerouslySetInnerHTML={{
-        __html: `
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
         @media print {
           @page {
             size: ${tenant.config?.formato_ticket === "57mm" ? "57mm auto" : "80mm auto"};
@@ -4192,9 +5240,11 @@ function TicketPrintPortal({
             display: none !important;
           }
         }
-      `}} />
+      `,
+        }}
+      />
     </div>,
-    document.body
+    document.body,
   );
 }
 
@@ -4205,7 +5255,7 @@ function DeliveryDatePickerPOSDialog({
   setFechaEntrega,
   esUrgente,
   setEsUrgente,
-  cfg
+  cfg,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -4268,7 +5318,7 @@ function DeliveryDatePickerPOSDialog({
               <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-2">
                 Atajos Rápidos
               </span>
-              
+
               <div className="grid grid-cols-2 gap-3">
                 {/* COLUMNA URGENTE */}
                 <div className="space-y-2">
@@ -4276,12 +5326,18 @@ function DeliveryDatePickerPOSDialog({
                     type="button"
                     onClick={() => aplicarAtajo(tiempoUrgente, true)}
                     className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-semibold tracking-tight transition-all text-center flex items-center justify-center gap-1 cursor-pointer h-9.5 ${
-                      tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000)) < 60000
+                      tempIsUrgente &&
+                      tempDate &&
+                      Math.abs(
+                        tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000),
+                      ) < 60000
                         ? "bg-rose-500 border-rose-500 text-white shadow-xs"
                         : "bg-rose-50 border-rose-100 text-rose-700 hover:bg-rose-100/70 hover:text-rose-800 dark:bg-rose-950/20 dark:border-rose-900/40 dark:text-rose-400"
                     }`}
                   >
-                    <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000)) < 60000 ? "text-white" : "text-rose-500"}`} />
+                    <AlertTriangle
+                      className={`h-3.5 w-3.5 shrink-0 ${tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000)) < 60000 ? "text-white" : "text-rose-500"}`}
+                    />
                     <span>Urgente ({tiempoUrgente}h)</span>
                   </button>
 
@@ -4289,23 +5345,29 @@ function DeliveryDatePickerPOSDialog({
                     Otros plazos urgentes:
                   </div>
                   <div className="grid grid-cols-2 gap-1">
-                    {[3, 6, 12].filter(h => h !== tiempoUrgente).map(h => {
-                      const isAct = tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) < 60000;
-                      return (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() => aplicarAtajo(h, true)}
-                          className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
-                            isAct
-                              ? "bg-rose-500 border-rose-500 text-white shadow-xs"
-                              : "border-rose-100 bg-rose-50/20 text-rose-600 hover:bg-rose-50 dark:border-rose-900/20 dark:bg-rose-950/10 dark:text-rose-400"
-                          }`}
-                        >
-                          {h}h
-                        </button>
-                      );
-                    })}
+                    {[3, 6, 12]
+                      .filter((h) => h !== tiempoUrgente)
+                      .map((h) => {
+                        const isAct =
+                          tempIsUrgente &&
+                          tempDate &&
+                          Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) <
+                            60000;
+                        return (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => aplicarAtajo(h, true)}
+                            className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
+                              isAct
+                                ? "bg-rose-500 border-rose-500 text-white shadow-xs"
+                                : "border-rose-100 bg-rose-50/20 text-rose-600 hover:bg-rose-50 dark:border-rose-900/20 dark:bg-rose-950/10 dark:text-rose-400"
+                            }`}
+                          >
+                            {h}h
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
 
@@ -4315,41 +5377,54 @@ function DeliveryDatePickerPOSDialog({
                     type="button"
                     onClick={() => aplicarAtajo(tiempoEstandar, false)}
                     className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-semibold tracking-tight transition-all text-center flex items-center justify-center gap-1 cursor-pointer h-9.5 ${
-                      !tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoEstandar * 3600000)) < 60000
+                      !tempIsUrgente &&
+                      tempDate &&
+                      Math.abs(
+                        tempDate.getTime() - (new Date().getTime() + tiempoEstandar * 3600000),
+                      ) < 60000
                         ? "bg-primary border-primary text-white shadow-xs"
                         : "bg-primary/5 border-primary/10 text-primary hover:bg-primary/10 dark:bg-primary/20 dark:border-primary/40 dark:text-primary-foreground"
                     }`}
                   >
-                    <span>Estándar ({tiempoEstandar >= 24 ? `${tiempoEstandar / 24}d` : `${tiempoEstandar}h`})</span>
+                    <span>
+                      Estándar (
+                      {tiempoEstandar >= 24 ? `${tiempoEstandar / 24}d` : `${tiempoEstandar}h`})
+                    </span>
                   </button>
 
                   <div className="text-[9px] font-bold text-slate-400 dark:text-slate-550 block mb-1">
                     Otros plazos estándar:
                   </div>
                   <div className="grid grid-cols-3 gap-1">
-                    {[24, 48, 72, 96].filter(h => h !== tiempoEstandar).map(h => {
-                      const isAct = !tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) < 60000;
-                      const labelMap: Record<number, string> = {
-                        24: "1d",
-                        48: "2d",
-                        72: "3d",
-                        96: "4d"
-                      };
-                      return (
-                        <button
-                          key={h}
-                          type="button"
-                          onClick={() => aplicarAtajo(h, false)}
-                          className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
-                            isAct
-                              ? "bg-primary border-primary text-white shadow-xs"
-                              : "border-primary/10 bg-primary/5 text-primary hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-primary-foreground"
-                          }`}
-                        >
-                          {labelMap[h]}
-                        </button>
-                      );
-                    })}
+                    {[24, 48, 72, 96]
+                      .filter((h) => h !== tiempoEstandar)
+                      .map((h) => {
+                        const isAct =
+                          !tempIsUrgente &&
+                          tempDate &&
+                          Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) <
+                            60000;
+                        const labelMap: Record<number, string> = {
+                          24: "1d",
+                          48: "2d",
+                          72: "3d",
+                          96: "4d",
+                        };
+                        return (
+                          <button
+                            key={h}
+                            type="button"
+                            onClick={() => aplicarAtajo(h, false)}
+                            className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
+                              isAct
+                                ? "bg-primary border-primary text-white shadow-xs"
+                                : "border-primary/10 bg-primary/5 text-primary hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-primary-foreground"
+                            }`}
+                          >
+                            {labelMap[h]}
+                          </button>
+                        );
+                      })}
                   </div>
                 </div>
               </div>
@@ -4363,7 +5438,13 @@ function DeliveryDatePickerPOSDialog({
                   Fecha de entrega
                 </div>
                 <div className="text-[13px] font-black text-slate-800 dark:text-slate-100 capitalize">
-                  {tempDate ? tempDate.toLocaleDateString('es-DO', { weekday: 'long', day: 'numeric', month: 'long' }) : 'No definida'}
+                  {tempDate
+                    ? tempDate.toLocaleDateString("es-DO", {
+                        weekday: "long",
+                        day: "numeric",
+                        month: "long",
+                      })
+                    : "No definida"}
                 </div>
                 {tempIsUrgente && (
                   <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-455 text-[8px] font-black uppercase tracking-wider">
@@ -4423,7 +5504,7 @@ function NotesPOSDialog({
   open,
   onOpenChange,
   notas,
-  setNotas
+  setNotas,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -4449,7 +5530,7 @@ function NotesPOSDialog({
   };
 
   const handleAddPreset = (presetText: string) => {
-    setTempNotes(prev => {
+    setTempNotes((prev) => {
       if (!prev.trim()) return presetText;
       if (prev.includes(presetText)) return prev;
       return `${prev.trim()}, ${presetText}`;
@@ -4489,8 +5570,8 @@ function NotesPOSDialog({
                 "Sin almidón",
                 "No planchar",
                 "Detalle/Daño previo",
-                "Prioridad de entrega"
-              ].map(preset => (
+                "Prioridad de entrega",
+              ].map((preset) => (
                 <button
                   key={preset}
                   type="button"

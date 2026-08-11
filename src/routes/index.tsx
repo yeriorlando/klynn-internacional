@@ -280,87 +280,83 @@ function LandingPage() {
 
       <LandingNavbar />
 
-      {/* HERO */}
-      <section className="relative overflow-hidden bg-gradient-hero">
-        <div className="mx-auto grid max-w-7xl gap-12 px-4 pt-8 pb-6 md:px-6 md:pt-12 md:pb-10 lg:grid-cols-2 lg:pt-16 lg:pb-14">
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-            className="flex flex-col justify-center"
-          >
-            <div className="mb-6 inline-flex w-fit items-center gap-2 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-card">
-              <Sparkles className="h-3.5 w-3.5 text-gold" />
-              Hecho en República Dominicana 🇩🇴 — ITBIS y NCF listos
+      {/* HERO SECTION - EXACT HUM-07 HTML 1:1 REPLICATION */}
+      <section className="hero">
+        <div className="hero__grid">
+          <div className="hero__lead">
+            <div className="hero__badge">
+              <span className="hero__badge-sparkle"></span> Hecho en República Dominicana 🇩🇴 — ITBIS y NCF listos
             </div>
-            <h1 className="text-balance text-4xl leading-[1.05] text-foreground sm:text-5xl md:text-6xl lg:text-7xl">
-              El software #1 para <span className="text-primary">lavanderías</span> en República Dominicana.
+            <h1 className="hero__title">
+              El software #1 para <span style={{ color: "var(--color-anil, #1B4B73)" }}>lavanderías</span> en República Dominicana.
             </h1>
-            <p className="mt-6 max-w-xl text-balance text-lg text-muted-foreground">
-              Cobra con ITBIS y NCF, imprime tickets térmicos 57/80mm, controla caja, clientes y entregas
-              desde una sola pantalla. Multi-sucursal, en pesos dominicanos y con soporte criollo por WhatsApp.
+            <p className="hero__lede">
+              Cobra con ITBIS y NCF, imprime tickets térmicos 57/80mm, controla caja, clientes y entregas desde una sola pantalla. Multi-sucursal, en pesos dominicanos y con soporte criollo por WhatsApp.
             </p>
-            <div className="mt-10 flex flex-wrap items-center gap-4">
-              <Link to="/registro">
-                <Button className="h-12 px-8 text-base bg-primary shadow-glow hover:opacity-95 font-bold">
-                  Comenzar prueba de 14 días <ArrowRight className="ml-2 h-5 w-5" />
-                </Button>
+            <div className="hero__cta">
+              <Link to="/registro" className="btn btn--anil">
+                Comenzar prueba de 14 días <span className="btn__arrow">→</span>
               </Link>
-              <a href="https://wa.link/vxstq4">
-                <Button variant="outline" className="h-12 px-8 text-base border-slate-200 hover:bg-slate-50 font-bold">
-                  Solicitar demostración
-                </Button>
+              <a href="https://wa.link/vxstq4" target="_blank" rel="noopener noreferrer" className="btn btn--outline btn--ink">
+                Solicitar demostración
               </a>
             </div>
-            <div className="mt-8 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-muted-foreground">
-              <div className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-success" /> Sin tarjeta de crédito</div>
-              <div className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-success" /> Soporte en español 🇩🇴</div>
-              <div className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-success" /> Cancela cuando quieras</div>
-              <div className="flex items-center gap-1.5"><Check className="h-3.5 w-3.5 text-success" /> Datos en la nube</div>
+            <div className="hero__checks">
+              <span><span className="check-icon">✓</span> Sin tarjeta de crédito</span>
+              <span><span className="check-icon">✓</span> Cancela cuando quieras</span>
+              <span><span className="check-icon">✓</span> Datos en la nube</span>
             </div>
-          </motion.div>
+          </div>
 
-          {/* MOCK TICKET */}
-          <motion.div
-            initial={{ opacity: 0, scale: 0.95, rotate: 2 }}
-            animate={{ opacity: 1, scale: 1, rotate: 1.5 }}
-            transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1], delay: 0.2 }}
-            className="relative -mt-8 flex items-center justify-center lg:-mt-16"
-          >
-            <div className="absolute -inset-10 -z-10 bg-gradient-primary opacity-20 blur-3xl" />
-            <div className="w-[300px] rounded-2xl border border-border bg-surface p-6 font-mono text-[11px] leading-relaxed text-foreground shadow-elegant">
-              <div className="flex flex-col items-center border-b border-dashed border-border pb-3">
-                <Logo size="sm" showWordmark={false} />
-                <div className="mt-2 font-display text-base">Lavandería La Burbuja</div>
-                <div className="text-muted-foreground">RNC: 131-12345-6</div>
-                <div className="text-muted-foreground">Tel: 809-555-0142</div>
+          <div className="hero__stage">
+            <div className="ticket-card" id="starter">
+              <div className="ticket-card__head">
+                <div className="ticket-card__logo">
+                  <span className="bub-mark" aria-hidden="true"></span>
+                </div>
+                <p className="ticket-card__title">Lavandería La Burbuja</p>
+                <p className="ticket-card__sub">RNC: 131-12345-6<br />Tel: 809-555-0142</p>
               </div>
-              <div className="border-b border-dashed border-border py-2">
+              <hr className="ticket-card__hr" />
+              <div className="ticket-card__meta">
                 <div>ORDEN: LX-202605-0042</div>
                 <div>NCF: B0200000123</div>
                 <div>Fecha: 02/05/2026 10:30 AM</div>
                 <div>Cliente: Juan Pérez</div>
               </div>
-              <div className="border-b border-dashed border-border py-2 space-y-1">
-                <div className="flex justify-between"><span>Camisa M/L x2</span><span>RD$300</span></div>
-                <div className="flex justify-between"><span>Pantalón vestir x1</span><span>RD$200</span></div>
-                <div className="flex justify-between"><span>Lavado/lb 3.5lb</span><span>RD$280</span></div>
-              </div>
-              <div className="space-y-1 py-2">
-                <div className="flex justify-between"><span>Subtotal</span><span>RD$ 780.00</span></div>
-                <div className="flex justify-between"><span>ITBIS 18%</span><span>RD$ 140.40</span></div>
-                <div className="flex justify-between border-t border-border pt-1 font-display text-base">
-                  <span>TOTAL</span><span>{formatRD(920.4)}</span>
+              <hr className="ticket-card__hr" />
+              <div className="ticket-card__items">
+                <div className="ticket-card__item">
+                  <span>Camisa M/L x2</span>
+                  <span>RD$ 300.00</span>
+                </div>
+                <div className="ticket-card__item">
+                  <span>Pantalón vestir x1</span>
+                  <span>RD$ 200.00</span>
+                </div>
+                <div className="ticket-card__item">
+                  <span>Lavado/lb 3.5lb</span>
+                  <span>RD$ 280.00</span>
                 </div>
               </div>
-              <div className="border-t border-dashed border-border pt-2 text-center text-muted-foreground">
-                ¡Gracias por su visita! 🧺
+              <hr className="ticket-card__hr" />
+              <div className="ticket-card__totals">
+                <div className="ticket-card__total-row">
+                  <span>Subtotal</span>
+                  <span>RD$ 780.00</span>
+                </div>
+                <div className="ticket-card__total-row">
+                  <span>ITBIS 18%</span>
+                  <span>RD$ 140.40</span>
+                </div>
+                <div className="ticket-card__total-row ticket-card__total-row--final">
+                  <span>TOTAL</span>
+                  <span>RD$ 920.40</span>
+                </div>
               </div>
+              <p className="ticket-card__footer">¡Gracias por su visita! 🧺 · 57mm / 80mm</p>
             </div>
-            <div className="absolute -bottom-4 -right-2 rounded-full bg-gold px-3 py-1.5 text-xs font-semibold text-gold-foreground shadow-elegant">
-              57mm / 80mm
-            </div>
-          </motion.div>
+          </div>
         </div>
       </section>
 
