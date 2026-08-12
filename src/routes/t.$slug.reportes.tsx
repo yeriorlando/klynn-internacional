@@ -91,7 +91,7 @@ function ReportesPage() {
   const [isExporting, setIsExporting] = useState(false);
 
   const tenant = user?.tenant;
-  const primaryColor = tenant?.color_primario || '#0F4C81';
+  const primaryColor = tenant?.color_primario || '#1B4B73';
 
   useEffect(() => {
     async function load() {

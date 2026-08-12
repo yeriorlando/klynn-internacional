@@ -5,7 +5,7 @@ import { getCurrentUser, type Empleado, type Tenant } from "@/lib/storage";
 // Dummy placeholder while loading — prevents hook ordering violations in child components
 const LOADING_TENANT: Tenant = {
   id: '__loading__', nombre: '', slug: '', rnc: '', telefono: '', direccion: '',
-  ciudad: '', provincia: '', email: '', color_primario: '#0F4C81', color_secundario: '#E0A82E',
+  ciudad: '', provincia: '', email: '', color_primario: '#1B4B73', color_secundario: '#F0B900',
   plan_id: 'basico', estado: 'TRIAL', trial_hasta: new Date().toISOString(),
   config: {} as any, creado_en: new Date().toISOString()
 };

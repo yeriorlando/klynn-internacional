@@ -70,8 +70,8 @@ const initial: FormState = {
   provincia: "",
   slug: "",
   slugTouched: false,
-  color_primario: "#0F4C81",
-  color_secundario: "#E0A82E",
+  color_primario: "#1B4B73",
+  color_secundario: "#F0B900",
   logo_url: "",
   itbis_porcentaje: 18,
   ncf_tipos: ["B01", "B02"],
@@ -795,7 +795,7 @@ function Field({ label, error, className = "", children }: { label: string; erro
 
 function ColorField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   const presets = [
-    { name: "Klynn Blue", hex: "#0F4C81" },
+    { name: "Klynn Blue", hex: "#1B4B73" },
     { name: "Teal", hex: "#0D9488" },
     { name: "Emerald", hex: "#059669" },
     { name: "Purple", hex: "#7C3AED" },

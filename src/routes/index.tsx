@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import {
   ArrowRight,
   Sparkles,
@@ -66,8 +66,13 @@ export const Route = createFileRoute("/")({
     ],
   }),
   loader: async () => {
-    const plans = await getPlans();
-    return { plans };
+    try {
+      const plans = await getPlans();
+      return { plans: plans && plans.length > 0 ? plans : STATIC_PLANS };
+    } catch (e) {
+      console.warn("Loader failed to fetch dynamic plans, falling back to static plans", e);
+      return { plans: STATIC_PLANS };
+    }
   },
   component: LandingPage,
 });
@@ -143,7 +148,55 @@ const ciudades = [
   "San Francisco de Macorís", "Baní", "Azua", "Barahona", "Mao", "Nagua",
 ];
 
+/* ── CountUp: tick-up animation on viewport enter (hum-07 1:1) ── */
+function CountUp({ to }: { to: number }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const hasRun = useRef(false);
 
+  const runCount = useCallback(() => {
+    const el = ref.current;
+    if (!el || hasRun.current) return;
+    hasRun.current = true;
+
+    const prefersReduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (prefersReduced || to === 0) {
+      el.textContent = to.toLocaleString("en-US");
+      return;
+    }
+
+    const dur = 1200;
+    const start = performance.now();
+    function tick(now: number) {
+      const p = Math.min((now - start) / dur, 1);
+      const eased = 1 - Math.pow(1 - p, 3); // cubic ease-out
+      el!.textContent = Math.round(to * eased).toLocaleString("en-US");
+      if (p < 1) {
+        requestAnimationFrame(tick);
+      } else {
+        el!.textContent = to.toLocaleString("en-US");
+        el!.animate?.(
+          [{ transform: "scale(1)" }, { transform: "scale(1.07)" }, { transform: "scale(1)" }],
+          { duration: 320, easing: "ease-out" },
+        );
+      }
+    }
+    requestAnimationFrame(tick);
+  }, [to]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (!("IntersectionObserver" in window)) { runCount(); return; }
+    const io = new IntersectionObserver(
+      (entries) => { entries.forEach((e) => { if (e.isIntersecting) { runCount(); io.unobserve(e.target); } }); },
+      { threshold: 0.6 },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [runCount]);
+
+  return <span ref={ref}>0</span>;
+}
 
 function LandingPage() {
   const { plans: initialPlans } = Route.useLoaderData();
@@ -362,7 +415,7 @@ function LandingPage() {
 
       {/* TRUST STRIP */}
       <section className="border-y border-border bg-surface">
-        <div className="mx-auto grid max-w-7xl grid-cols-2 gap-6 px-6 py-10 md:grid-cols-4">
+        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-6 py-8 md:grid-cols-4">
           {[
             { n: "+250", l: "Lavanderías activas en RD" },
             { n: "+1.2M", l: "Órdenes procesadas" },
@@ -377,124 +430,112 @@ function LandingPage() {
         </div>
       </section>
 
-      {/* KLYNN DESKTOP */}
-      <section id="desktop" className="mx-auto max-w-7xl px-6 py-24">
-        <div className="relative overflow-hidden rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/5 via-background to-primary/10 p-10 shadow-elegant lg:p-16">
-          {/* Background glow */}
-          <div className="pointer-events-none absolute -right-20 -top-20 h-64 w-64 rounded-full bg-primary/15 blur-3xl" />
-          <div className="pointer-events-none absolute -bottom-16 -left-16 h-48 w-48 rounded-full bg-primary/10 blur-2xl" />
-
-          <div className="relative grid gap-12 lg:grid-cols-2 lg:items-center">
+      {/* ─── Section · Klynn Desktop ─── */}
+      <section className="mx-auto max-w-6xl px-4 md:px-6 py-6 md:py-10" id="desktop" aria-labelledby="desktop-title">
+        <div className="desktop-box">
+          <div className="desktop-grid">
             <div>
-              <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-1.5 text-xs font-semibold text-primary">
-                <Sparkles className="h-3.5 w-3.5" />
-                ¡Nuevo! Versión Desktop
-              </div>
-              <h2 className="text-balance text-4xl md:text-5xl">
-                Klynn <span className="text-primary">Desktop</span>
-              </h2>
-              <p className="mt-5 text-lg text-muted-foreground">
-                Toda la potencia de Klynn instalada directamente en tu computadora Windows.
-                Sin internet, sin suscripción mensual, con acceso ilimitado a tus datos.
+              <p className="eyebrow" style={{ color: "var(--color-anil, #1B4B73)", opacity: 1 }}>
+                <span className="eyebrow__dot" style={{ background: "var(--color-yellow, #F0B900)" }}></span> ¡NUEVO! VERSIÓN DESKTOP
               </p>
-              <ul className="mt-6 space-y-3">
-                {[
-                  { icon: Wifi, t: "Funciona 100% sin internet", d: "Ideal para zonas con señal inestable o apagones." },
-                  { icon: HardDrive, t: "Datos en tu equipo", d: "Tu información se guarda localmente, tú la controlas." },
-                  { icon: Printer, t: "Impresoras térmicas ESC/POS", d: "57mm y 80mm. Plug & play igual que la versión cloud." },
-                  { icon: Zap, t: "Rendimiento ultra rápido", d: "Sin latencia de red. Respuesta instantánea en cada acción." },
-                ].map((item) => (
-                  <li key={item.t} className="flex items-start gap-3">
-                    <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                      <item.icon className="h-3.5 w-3.5 text-primary" />
-                    </div>
-                    <div>
-                      <span className="text-sm font-semibold text-foreground">{item.t}</span>
-                      <span className="ml-2 text-sm text-muted-foreground">{item.d}</span>
-                    </div>
-                  </li>
-                ))}
+              <h2 className="section__title" id="desktop-title">
+                Klynn <span style={{ color: "var(--color-anil, #1B4B73)" }}>Desktop</span>
+              </h2>
+              <p className="section__lede">
+                Toda la potencia de Klynn instalada directamente en tu computadora Windows. Sin internet, sin suscripción mensual, con acceso ilimitado a tus datos.
+              </p>
+              <ul className="desktop-features">
+                <li>
+                  <span className="desktop-features__icon">✓</span>
+                  <span><strong>Funciona 100% sin internet:</strong> Ideal para zonas con señal inestable o apagones.</span>
+                </li>
+                <li>
+                  <span className="desktop-features__icon">✓</span>
+                  <span><strong>Datos en tu equipo:</strong> Tu información se guarda localmente, tú la controlas.</span>
+                </li>
+                <li>
+                  <span className="desktop-features__icon">✓</span>
+                  <span><strong>Impresoras térmicas ESC/POS:</strong> 57mm y 80mm. Plug & play igual que la versión cloud.</span>
+                </li>
+                <li>
+                  <span className="desktop-features__icon">✓</span>
+                  <span><strong>Rendimiento ultra rápido:</strong> Sin latencia de red. Respuesta instantánea en cada acción.</span>
+                </li>
               </ul>
-              <div className="mt-10 flex flex-wrap gap-4">
-                <Link to="/descargar" search={{ autostart: true }}>
-                  <button
-                    id="btn-descargar-klynn-desktop"
-                    className="inline-flex h-12 items-center gap-2 rounded-xl bg-primary px-8 text-base font-bold text-white shadow-glow transition hover:opacity-90 active:scale-95"
-                  >
-                    <Download className="h-5 w-5" />
-                    Descargar gratis
-                  </button>
+              <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", marginTop: "1.5rem" }}>
+                <Link to="/descargar" search={{ autostart: true }} className="btn btn--anil">
+                  Descargar gratis <span className="btn__arrow" aria-hidden="true">↓</span>
                 </Link>
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Check className="h-4 w-4 text-success" />
+                <span style={{ fontFamily: "var(--font-label, monospace)", fontSize: "11px", color: "var(--color-muted, #64748b)" }}>
                   Windows 10 / 11 · 174 MB
+                </span>
+              </div>
+            </div>
+            <div className="desktop-window">
+              <div className="desktop-window__bar">
+                <span className="desktop-window__dot desktop-window__dot--red"></span>
+                <span className="desktop-window__dot desktop-window__dot--yellow"></span>
+                <span className="desktop-window__dot desktop-window__dot--green"></span>
+                <span className="desktop-window__title">Klynn Desktop v2.4</span>
+              </div>
+              <div className="desktop-window__body">
+                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--color-rule, #e2e8f0)" }}>
+                  <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>Caja #1 Mostrador</span>
+                  <span style={{ background: "#16a34a", color: "#fff", fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "99px" }}>MODO OFFLINE</span>
+                </div>
+                <div style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.75rem", color: "var(--color-ink-2, #334155)", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4829</span><span>RD$ 450.00</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4830</span><span>RD$ 1,200.00</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4831</span><span>RD$ 380.00</span></div>
+                </div>
+                <div style={{ background: "rgba(27, 75, 115, 0.08)", padding: "0.6rem", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 600, textAlign: "center", color: "var(--color-anil, #1B4B73)" }}>
+                  ✓ Sincronización automática pendiente (3 órdenes)
                 </div>
               </div>
             </div>
-
-            {/* Visual */}
-            <motion.div
-              initial={{ opacity: 0, x: 30 }}
-              whileInView={{ opacity: 1, x: 0 }}
-              viewport={{ once: true, margin: "-80px" }}
-              transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
-              className="flex items-center justify-center"
-            >
-              <div className="relative">
-                {/* Window chrome */}
-                <div className="w-[340px] rounded-2xl border border-border bg-surface shadow-elegant overflow-hidden">
-                  {/* Title bar */}
-                  <div className="flex items-center gap-2 border-b border-border bg-surface-elevated px-4 py-3">
-                    <div className="flex gap-1.5">
-                      <div className="h-3 w-3 rounded-full bg-red-400" />
-                      <div className="h-3 w-3 rounded-full bg-yellow-400" />
-                      <div className="h-3 w-3 rounded-full bg-green-400" />
-                    </div>
-                    <div className="flex-1 text-center">
-                      <span className="text-xs text-muted-foreground font-medium">Klynn Desktop</span>
-                    </div>
-                    <Monitor className="h-3.5 w-3.5 text-muted-foreground" />
-                  </div>
-                  {/* App content preview */}
-                  <div className="p-5 space-y-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center">
-                        <Receipt className="h-4 w-4 text-primary" />
-                      </div>
-                      <div>
-                        <div className="h-2.5 w-32 rounded-full bg-foreground/20" />
-                        <div className="mt-1.5 h-2 w-20 rounded-full bg-foreground/10" />
-                      </div>
-                      <div className="ml-auto h-6 w-16 rounded-lg bg-primary/20" />
-                    </div>
-                    {[1, 2, 3].map((i) => (
-                      <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-3">
-                        <div className="h-7 w-7 rounded-lg bg-surface-elevated" />
-                        <div className="flex-1 space-y-1.5">
-                          <div className={`h-2 rounded-full bg-foreground/15 w-${i === 1 ? '28' : i === 2 ? '20' : '24'}`} />
-                          <div className="h-1.5 w-12 rounded-full bg-foreground/10" />
-                        </div>
-                        <div className="h-5 w-14 rounded-md bg-primary/10" />
-                      </div>
-                    ))}
-                    <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-center gap-2">
-                      <Check className="h-4 w-4 text-success" />
-                      <span className="text-xs font-medium text-foreground">Caja cerrada · RD$ 48,230.00</span>
-                    </div>
-                  </div>
-                </div>
-                {/* Badge */}
-                <div className="absolute -bottom-3 -right-3 rounded-full bg-success px-3 py-1.5 text-xs font-bold text-white shadow-elegant">
-                  Sin internet ✓
-                </div>
-              </div>
-            </motion.div>
           </div>
         </div>
       </section>
 
+      {/* ─── EL IMPACTO EN TU LAVANDERÍA (HUM-07 1:1) ─── */}
+      <section className="border-y border-border bg-surface-elevated py-16 md:py-20" id="impacto">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="mb-12 text-center">
+            <p className="eyebrow justify-center">
+              <span className="eyebrow__dot" style={{ background: "#22c55e" }}></span> EL IMPACTO EN TU LAVANDERÍA
+            </p>
+            <h2 className="section__title text-balance" style={{ margin: "0 auto", maxWidth: "42ch" }}>
+              Más rapidez en mostrador. Control total de tus ingresos.
+            </h2>
+          </div>
+          <dl className="numbers">
+            <div className="bignum">
+              <dd className="bignum__v">
+                <span className="bignum__pre">≈</span>
+                <CountUp to={30} />
+                <span className="bignum__u">seg</span>
+              </dd>
+              <dt className="bignum__k">Tiempo promedio para registrar una orden de cliente.</dt>
+            </div>
+            <div className="bignum">
+              <dd className="bignum__v">
+                <CountUp to={100} />
+                <span className="bignum__u">%</span>
+              </dd>
+              <dt className="bignum__k">Facturación electrónica 100% operativa con NCF, e-CF e ITBIS integrado.</dt>
+            </div>
+            <div className="bignum">
+              <dd className="bignum__v">
+                <CountUp to={0} />
+              </dd>
+              <dt className="bignum__k">Prendas extraviadas gracias a la gestión eficaz del sistema Klynn.</dt>
+            </div>
+          </dl>
+        </div>
+      </section>
+
       {/* PROBLEMA / SOLUCIÓN */}
-      <section className="mx-auto max-w-7xl px-6 py-24">
+      <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="grid gap-12 lg:grid-cols-2 lg:items-center">
           <div>
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">¿Por qué Klynn?</div>
@@ -533,10 +574,10 @@ function LandingPage() {
 
       {/* FEATURES */}
       <section id="features" className="border-y border-border bg-surface-elevated">
-        <div className="mx-auto max-w-7xl px-6 py-24">
-          <div className="mb-14 max-w-2xl">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mb-14 mx-auto max-w-2xl text-center">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Operación completa</div>
-            <h2 className="text-balance text-4xl md:text-5xl">Todo lo que necesita una lavandería moderna en RD.</h2>
+            <h2 className="text-balance text-3xl md:text-4xl">Todo lo que necesita una lavandería moderna en RD.</h2>
             <p className="mt-4 text-lg text-muted-foreground">
               Diseñado junto a lavanderías de Santo Domingo, Santiago y la zona Este. Cubrimos cada paso desde
               que el cliente entra por la puerta hasta el cierre de caja del día.
@@ -564,7 +605,7 @@ function LandingPage() {
       </section>
 
       {/* CÓMO FUNCIONA */}
-      <section className="mx-auto max-w-7xl px-6 py-24">
+      <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="mb-14 text-center">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Empieza en 5 minutos</div>
           <h2 className="text-balance text-4xl md:text-5xl">Así de fácil arrancas con tu lavandería.</h2>
@@ -573,12 +614,12 @@ function LandingPage() {
           {[
             { n: "01", t: "Crea tu cuenta", d: "Regístrate gratis en 1 minuto. Sin tarjeta de crédito." },
             { n: "02", t: "Configura tu negocio", d: "Sube tu logo, RNC, sucursales y precios de prendas." },
-            { n: "03", t: "Conecta tu impresora", d: "Térmica 57 u 80mm. Plug & play con ESC/POS." },
+            { n: "03", t: "Usa tu impresora", d: "Térmica 57 u 80mm. Plug & play con ESC/POS." },
             { n: "04", t: "Empieza a cobrar", d: "Recibe órdenes, imprime tickets y cuadra caja." },
           ].map((s) => (
             <div key={s.n} className="relative rounded-2xl border border-border bg-surface p-6 shadow-card">
-              <div className="font-display text-5xl text-primary/20">{s.n}</div>
-              <div className="mt-2 font-display text-xl">{s.t}</div>
+              <div className="font-display text-5xl font-black text-primary/35 tracking-tight">{s.n}</div>
+              <div className="mt-2 font-display text-xl font-bold text-slate-900">{s.t}</div>
               <div className="mt-2 text-sm text-muted-foreground">{s.d}</div>
             </div>
           ))}
@@ -588,10 +629,10 @@ function LandingPage() {
 
       {/* PARA QUIÉN */}
       <section id="sectores" className="border-y border-border bg-surface-elevated">
-        <div className="mx-auto max-w-7xl px-6 py-24">
-          <div className="mb-14 max-w-2xl">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mb-14 mx-auto max-w-2xl text-center">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Para quién es</div>
-            <h2 className="text-balance text-4xl md:text-5xl">Cualquier lavandería dominicana, sin importar el tamaño.</h2>
+            <h2 className="text-balance text-3xl md:text-4xl">Cualquier lavandería dominicana, sin importar el tamaño.</h2>
           </div>
           <div className="grid gap-6 md:grid-cols-3">
             {[
@@ -601,7 +642,7 @@ function LandingPage() {
             ].map((s) => (
               <div key={s.t} className="rounded-2xl border border-border bg-surface p-7 shadow-card">
                 <s.icon className="mb-4 h-7 w-7 text-primary" />
-                <div className="font-display text-2xl">{s.t}</div>
+                <div className="font-display text-2xl font-bold text-slate-900">{s.t}</div>
                 <p className="mt-3 text-sm leading-relaxed text-muted-foreground">{s.d}</p>
               </div>
             ))}
@@ -610,7 +651,7 @@ function LandingPage() {
       </section>
 
       {/* TESTIMONIOS */}
-      <section className="mx-auto max-w-7xl px-6 py-24">
+      <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="mb-14 text-center">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Lo que dicen los dueños</div>
           <h2 className="text-balance text-4xl md:text-5xl">Lavanderías dominicanas hablando claro.</h2>
@@ -633,7 +674,7 @@ function LandingPage() {
 
       {/* PLANES */}
       <section id="planes" className="border-y border-border bg-surface-elevated">
-        <div className="mx-auto max-w-7xl px-6 py-24">
+        <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="mb-14 text-center">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Planes en RD$</div>
             <h2 className="text-balance text-4xl md:text-5xl">Precios honestos, sin sorpresas.</h2>
@@ -671,21 +712,18 @@ function LandingPage() {
               return (
                 <div
                   key={plan.id}
-                  className={`relative flex flex-col rounded-2xl border p-7 transition ${plan.destacado
-                      ? "border-primary bg-surface shadow-elegant lg:scale-[1.03]"
-                      : "border-border bg-surface shadow-card hover:shadow-elegant"
-                    }`}
+                  className={`plan-card ${plan.destacado ? "plan-card--featured" : ""}`}
                 >
                   {plan.destacado && (
-                    <div className="absolute -top-3 left-1/2 -translate-x-1/2 rounded-full bg-gradient-gold px-3 py-1 text-xs font-semibold text-gold-foreground shadow-elegant">
-                      Más popular
-                    </div>
+                    <div className="plan-card__badge">Más popular</div>
                   )}
-                  <div className="font-display text-2xl">{plan.nombre}</div>
-                  <div className="mt-2 flex items-baseline gap-1">
-                    <span className="font-display text-5xl">{formatRD(price).replace("DOP", "RD$")}</span>
+                  <div className="flex flex-col">
+                    <div className="font-display text-2xl font-bold text-slate-900">{plan.nombre}</div>
+                    <div className="mt-1.5 flex items-baseline gap-1">
+                      <span className="font-display text-3xl font-bold tracking-tight text-slate-900">{formatRD(price).replace("DOP", "RD$")}</span>
+                    </div>
+                    <div className="-mt-0.5 text-xs font-semibold text-slate-500">{billingCycle === "monthly" ? "por mes" : "por año"}</div>
                   </div>
-                  <div className="text-sm text-muted-foreground">{billingCycle === "monthly" ? "por mes" : "por año"}</div>
 
                   <div className="my-6 space-y-4.5 text-sm">
                     {/* Límites / Características Básicas */}
@@ -787,24 +825,20 @@ function LandingPage() {
                   </div>
 
                   {polarUrl ? (
-                    <a href={checkoutUrl} target="_blank" rel="noopener noreferrer" className="mt-auto">
-                      <Button
-                        className={`w-full h-11 px-6 font-bold shadow-elegant hover:opacity-95 ${plan.destacado ? "bg-primary text-white" : ""}`}
-                        variant={plan.destacado ? "default" : "outline"}
-                      >
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Suscribirse a {plan.nombre}
-                      </Button>
+                    <a
+                      href={checkoutUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className={`plan-btn mt-auto ${plan.destacado ? "plan-btn--yellow" : "plan-btn--outline"}`}
+                    >
+                      {plan.destacado ? `Probar Plan ${plan.nombre}` : `Comenzar 14 días gratis`}
                     </a>
                   ) : (
-                    <Link to="/registro" className="mt-auto">
-                      <Button
-                        className={`w-full h-11 px-6 font-bold shadow-elegant hover:opacity-95 ${plan.destacado ? "bg-primary text-white" : ""}`}
-                        variant={plan.destacado ? "default" : "outline"}
-                      >
-                        <Sparkles className="mr-2 h-4 w-4" />
-                        Empezar con {plan.nombre}
-                      </Button>
+                    <Link
+                      to="/registro"
+                      className={`plan-btn mt-auto ${plan.destacado ? "plan-btn--yellow" : "plan-btn--outline"}`}
+                    >
+                      {plan.destacado ? `Probar Plan ${plan.nombre}` : plan.id === "enterprise" ? "Contactar ventas" : "Comenzar 14 días gratis"}
                     </Link>
                   )}
                 </div>
@@ -813,31 +847,11 @@ function LandingPage() {
           </div>
 
           <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-muted-foreground">
-            ¿Necesitas un plan a la medida o tienes una cadena con +5 sucursales? Escríbenos por WhatsApp y armamos algo
-            que te haga sentido. Aceptamos transferencia bancaria, tarjeta y AzulPagos.
+            Todos los planes incluyen 14 días gratis. Sin compromiso, cancela cuando quieras.
+            Aceptamos transferencia bancaria, tarjeta de crédito y AzulPagos.
           </p>
         </div>
       </section>
-
-      {/* CIUDADES */}
-      <section className="mx-auto max-w-7xl px-6 py-20">
-        <div className="mb-10 text-center">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">
-            <MapPin className="mr-1 inline h-3 w-3" /> Cobertura nacional
-          </div>
-          <h2 className="text-balance text-3xl md:text-4xl">Lavanderías usándonos en todo el país.</h2>
-          <p className="mt-3 text-muted-foreground">De la frontera al Este, del Cibao al Sur.</p>
-        </div>
-        <div className="flex flex-wrap justify-center gap-2">
-          {ciudades.map((c) => (
-            <span key={c} className="rounded-full border border-border bg-surface px-4 py-1.5 text-sm text-muted-foreground shadow-card">
-              {c}
-            </span>
-          ))}
-        </div>
-      </section>
-
-      <DRMap />
 
       {/* FAQ */}
       <section id="faq" className="border-y border-border bg-surface-elevated">
@@ -849,7 +863,7 @@ function LandingPage() {
           <div className="space-y-4">
             {faqs.map((f) => (
               <details key={f.q} className="group rounded-2xl border border-border bg-surface p-6 shadow-card">
-                <summary className="flex cursor-pointer items-center justify-between gap-4 font-display text-lg">
+                <summary className="flex cursor-pointer items-center justify-between gap-4 font-display text-lg font-bold">
                   {f.q}
                   <span className="text-primary transition group-open:rotate-45">+</span>
                 </summary>
@@ -860,19 +874,18 @@ function LandingPage() {
         </div>
       </section>
 
-
       {/* CONTACTO */}
-      <section className="mx-auto max-w-7xl px-6 pb-24">
+      <section className="mx-auto max-w-7xl px-6 py-16">
         <div className="grid gap-6 md:grid-cols-3">
           {[
-            { icon: MessageCircle, t: "WhatsApp", d: "+1 (829) 941-6546", s: "Lun–Sáb 8am–8pm" },
-            { icon: Phone, t: "Teléfono", d: "+1 (829) 941-6546", s: "Soporte técnico" },
+            { icon: MessageCircle, t: "WhatsApp", d: "+1 (849) 918-2727", s: "Lun–Sáb 8am–8pm" },
+            { icon: Phone, t: "Teléfono", d: "+1 (849) 918-2727", s: "Soporte técnico" },
             { icon: Globe, t: "Oficina", d: "Av. 27 de Febrero, Santo Domingo", s: "República Dominicana" },
           ].map((c) => (
             <div key={c.t} className="rounded-2xl border border-border bg-surface p-6 shadow-card">
               <c.icon className="mb-3 h-6 w-6 text-primary" />
-              <div className="font-display text-lg">{c.t}</div>
-              <div className="mt-1 text-sm text-foreground">{c.d}</div>
+              <div className="font-display text-lg font-bold text-slate-900">{c.t}</div>
+              <div className="mt-1 text-sm font-bold text-slate-900">{c.d}</div>
               <div className="text-xs text-muted-foreground">{c.s}</div>
             </div>
           ))}
@@ -921,18 +934,6 @@ function LandingPage() {
                 <li><Link to="/terminos" className="hover:text-foreground">Términos de Uso</Link></li>
                 <li><Link to="/privacidad" className="hover:text-foreground">Política de Privacidad</Link></li>
                 <li><Link to="/cookies" className="hover:text-foreground">Política de Cookies</Link></li>
-              </ul>
-            </div>
-            <div>
-              <div className="mb-3 text-sm font-semibold">Contacto</div>
-              <ul className="space-y-2 text-xs text-muted-foreground">
-                <li className="flex items-center gap-1.5">
-                  <a href="https://wa.link/vxstq4" className="flex items-center gap-1.5 hover:text-primary transition-colors">
-                    <MessageCircle className="h-3 w-3" /> +1 (829) 941-6546
-                  </a>
-                </li>
-                <li className="flex items-center gap-1.5"><Clock className="h-3 w-3" /> Lun–Sáb 8am–8pm</li>
-                <li className="flex items-center gap-1.5"><MapPin className="h-3 w-3" /> Santo Domingo, RD</li>
               </ul>
             </div>
           </div>

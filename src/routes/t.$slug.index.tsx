@@ -550,7 +550,7 @@ function DashboardPage() {
           </div>
           {caja ? (
             <>
-              <div className="font-display text-3xl">{formatRD(efectivo)}</div>
+              <div className="font-display text-3xl font-black tracking-tight">{formatRD(efectivo)}</div>
               <div className="mt-1.5 flex items-center">
                 <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/80 shadow-2xs">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
@@ -559,9 +559,9 @@ function DashboardPage() {
                 </span>
               </div>
               <div className="mt-4 space-y-1.5 text-sm">
-                <Row k="Apertura" v={formatRD(caja.monto_inicial)} />
+                <Row k="Apertura" v={formatRD(caja.monto_inicial)} bold />
                 <Row k="Movimientos" v={String(movs.length)} />
-                <Row k="Gastos hoy" v={formatRD(gastosHoy)} />
+                <Row k="Gastos hoy" v={formatRD(gastosHoy)} bold />
               </div>
               <Link to="/t/$slug/caja" params={{ slug: tenant.slug }} className="mt-4 block">
                 <Button className="w-full bg-primary hover:bg-primary/95 text-white font-bold rounded-xl h-9 text-xs gap-1.5 shadow-sm transition-all active:scale-[0.98]">
@@ -995,11 +995,11 @@ function KPI({
   );
 }
 
-function Row({ k, v }: { k: string; v: string }) {
+function Row({ k, v, bold = false }: { k: string; v: string; bold?: boolean }) {
   return (
     <div className="flex justify-between">
       <span className="text-muted-foreground">{k}</span>
-      <span className="font-medium">{v}</span>
+      <span className={bold ? "font-bold text-foreground font-mono" : "font-medium"}>{v}</span>
     </div>
   );
 }

@@ -286,7 +286,7 @@ function ReportesPage() {
     const serviceCounts: Record<string, { count: number; total: number }> = {};
     ordenes.forEach(o => {
       if (Array.isArray(o.servicios)) {
-        o.servicios.forEach((sName) => {
+        o.servicios.forEach((sName: string) => {
           const price = o.servicios_precios?.[sName] || 0;
           if (!serviceCounts[sName]) {
             serviceCounts[sName] = { count: 0, total: 0 };
@@ -417,7 +417,7 @@ function ReportesPage() {
               )}
               <p 
                 className="text-xl font-bold font-display mt-4"
-                style={{ color: selectedInspectTenant.color_primario || '#0F4C81' }}
+                style={{ color: selectedInspectTenant.color_primario || '#1B4B73' }}
               >
                 Reportes y estadísticas
               </p>
@@ -624,7 +624,7 @@ function ReportesPage() {
                       </h3>
                       <div className="space-y-3">
                         {Object.entries(inspectStats.porCategoria).length > 0 ? (
-                          Object.entries(inspectStats.porCategoria).map(([cat, val]) => {
+                          Object.entries(inspectStats.porCategoria).map(([cat, val]: [string, any]) => {
                             const pct = inspectStats.totalGastos > 0 ? (val / inspectStats.totalGastos) * 100 : 0;
                             return (
                               <div key={cat}>
@@ -990,7 +990,7 @@ function ReportesPage() {
                               className="h-full text-[8px] font-bold text-white flex items-center justify-center transition-all" 
                               style={{ 
                                 width: `${inspectStats.pctDomicilio}%`,
-                                backgroundColor: selectedInspectTenant.color_primario || '#0F4C81'
+                                backgroundColor: selectedInspectTenant.color_primario || '#1B4B73'
                               }} 
                               title={`Delivery: ${inspectStats.pctDomicilio}%`}
                             >
@@ -1041,7 +1041,7 @@ function ReportesPage() {
                               className="h-full rounded-full transition-all duration-500" 
                               style={{ 
                                 width: `${inspectStats.pctUrgencia}%`,
-                                backgroundColor: inspectStats.pctUrgencia > 20 ? '#D97706' : (selectedInspectTenant.color_primario || '#0F4C81')
+                                backgroundColor: inspectStats.pctUrgencia > 20 ? '#D97706' : (selectedInspectTenant.color_primario || '#1B4B73')
                               }} 
                             />
                           </div>

@@ -29,6 +29,7 @@ import {
   getTenantsForUser, 
   getOrdenes, 
   getPlans,
+  PLANS,
   formatRD, 
   setActiveTenant,
   setSession,
@@ -669,7 +670,7 @@ function DashboardAdminPage() {
               <div 
                 className="p-6 text-white relative overflow-hidden flex flex-col items-center justify-center text-center gap-2 transition-all duration-300"
                 style={{ 
-                  background: `linear-gradient(135deg, ${selectedInspectTenant.color_primario || '#0F4C81'}, ${selectedInspectTenant.color_secundario || '#0D9488'})`
+                  background: `linear-gradient(135deg, ${selectedInspectTenant.color_primario || '#1B4B73'}, ${selectedInspectTenant.color_secundario || '#F0B900'})`
                 }}
               >
                 <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" />
@@ -837,7 +838,7 @@ function DashboardAdminPage() {
                         </h3>
                         <div className="space-y-3">
                           {Object.entries(inspectStats.porCategoria).length > 0 ? (
-                            Object.entries(inspectStats.porCategoria).map(([cat, val]) => {
+                            Object.entries(inspectStats.porCategoria).map(([cat, val]: [string, any]) => {
                               const pct = inspectStats.totalGastos > 0 ? (val / inspectStats.totalGastos) * 100 : 0;
                               return (
                                 <div key={cat}>
@@ -1013,7 +1014,7 @@ function DashboardAdminPage() {
                           👥 Equipo de Trabajo
                         </h3>
                         <div className="space-y-3">
-                          {inspectData.empleados.length > 0 ? (
+                          {inspectData?.empleados && inspectData.empleados.length > 0 ? (
                             inspectData.empleados.map((emp) => (
                               <div key={emp.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100/50">
                                 <div className="flex items-center gap-2.5">
@@ -1047,10 +1048,10 @@ function DashboardAdminPage() {
                           📊 Ventas por Empleado
                         </h3>
                         <div className="space-y-3">
-                          {inspectData.empleados.length > 0 ? (
+                          {inspectData?.empleados && inspectData.empleados.length > 0 ? (
                             (() => {
                               const empData = inspectData.empleados.map(emp => {
-                                const empOrds = inspectData.ordenes.filter(o => o.empleado_id === emp.id);
+                                const empOrds = (inspectData.ordenes || []).filter(o => o.empleado_id === emp.id);
                                 const total = empOrds.reduce((s, o) => s + (o.total || 0), 0);
                                 const count = empOrds.length;
                                 return { emp, total, count };
@@ -1122,7 +1123,7 @@ function DashboardAdminPage() {
                                 className="h-full text-[8px] font-bold text-white flex items-center justify-center transition-all" 
                                 style={{ 
                                   width: `${inspectStats.pctDomicilio}%`,
-                                  backgroundColor: selectedInspectTenant.color_primario || '#0F4C81'
+                                  backgroundColor: selectedInspectTenant.color_primario || '#1B4B73'
                                 }} 
                                 title={`Delivery: ${inspectStats.pctDomicilio}%`}
                               >
@@ -1173,7 +1174,7 @@ function DashboardAdminPage() {
                                 className="h-full rounded-full transition-all duration-500" 
                                 style={{ 
                                   width: `${inspectStats.pctUrgencia}%`,
-                                  backgroundColor: inspectStats.pctUrgencia > 20 ? '#D97706' : (selectedInspectTenant.color_primario || '#0F4C81')
+                                  backgroundColor: inspectStats.pctUrgencia > 20 ? '#D97706' : (selectedInspectTenant.color_primario || '#1B4B73')
                                 }} 
                               />
                             </div>

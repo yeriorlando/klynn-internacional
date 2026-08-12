@@ -28,7 +28,7 @@ export function Logo({ size = "md", showWordmark = true, className = "", iconCol
     <Link to={to} className={`flex items-center gap-2 transition-opacity hover:opacity-80 ${className}`}>
       <div className={`${dim} flex items-center justify-center`}>
         <Droplets 
-          className={`h-full w-full ${iconColor ? "" : "text-[#0074ff]"}`} 
+          className={`h-full w-full ${iconColor ? "" : "text-[#1B4B73]"}`} 
           style={iconColor ? { color: iconColor } : {}}
           strokeWidth={2.2} 
         />

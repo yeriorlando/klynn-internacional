@@ -554,7 +554,7 @@ Característica escritura: —
                 <div className="flex flex-col items-center justify-center text-center w-full mt-4">
                   <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-slate-50/80 border border-slate-200/50 rounded-full shadow-inner w-full max-w-[340px] mx-auto">
                     {[
-                      { name: "Klynn Blue", hex: "#0F4C81" },
+                      { name: "Klynn Blue", hex: "#1B4B73" },
                       { name: "Teal", hex: "#0D9488" },
                       { name: "Emerald", hex: "#059669" },
                       { name: "Purple", hex: "#7C3AED" },
