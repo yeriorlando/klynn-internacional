@@ -41,7 +41,7 @@ import { Ticket } from "@/components/klynn/Ticket";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
-  CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar,
+  CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar, Clock,
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban
 } from "lucide-react";
@@ -492,6 +492,56 @@ Característica escritura: —
                   </Select>
                 </Field>
                 <Field label="Dirección"><Input className={FIELD} placeholder="Calle Principal #123, Edificio Los Laureles" value={tenant.direccion} onChange={(e) => setTenant({ ...tenant, direccion: e.target.value })} /></Field>
+              </div>
+
+              {/* Fila 3: Parámetros de prendas no retiradas */}
+              <div className="pt-4 border-t space-y-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-amber-500/25 bg-amber-500/5 dark:bg-amber-500/10">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <Clock className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        Días de almacenamiento antes de considerar prendas sin retirar
+                      </div>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Tiempo límite en días (estado LISTA) para alertar en el resumen operativo e inventario de almacén.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-amber-500/20 shadow-xs">
+                    {[3, 5, 7, 14].map((d) => (
+                      <button
+                        key={d}
+                        type="button"
+                        onClick={() => updateCfg({ dias_almacenamiento_sin_retirar: d })}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
+                          (tenant.config?.dias_almacenamiento_sin_retirar || tenant.config?.whatsapp?.dias_recordatorio_sin_retirar || 5) === d
+                            ? "bg-amber-500 text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
+                        }`}
+                      >
+                        {d}d
+                      </button>
+                    ))}
+
+                    <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
+
+                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-200/80 dark:border-slate-700">
+                      <Input
+                        className="h-6 w-10 text-xs font-black text-center p-0 border-0 bg-transparent focus-visible:ring-0"
+                        type="number"
+                        min={1}
+                        max={90}
+                        value={tenant.config?.dias_almacenamiento_sin_retirar || tenant.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}
+                        onChange={(e) => updateCfg({ dias_almacenamiento_sin_retirar: Math.max(1, Number(e.target.value)) })}
+                      />
+                      <span className="text-[10px] font-extrabold text-amber-700 dark:text-amber-400 uppercase tracking-wider">días</span>
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             <div className="mt-8 pt-6 border-t flex justify-start">
@@ -1585,105 +1635,93 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
               <h3 className="font-display text-2xl">Planes de Suscripción</h3>
               <p className="text-sm text-muted-foreground">Elige el plan que mejor se adapte al crecimiento de tu lavandería.</p>
             </div>
-            <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50">
-              <Button 
-                variant={billingPeriod === "monthly" ? "default" : "ghost"} 
-                size="sm" 
-                className={`rounded-lg font-bold text-xs px-4 h-8 transition-all ${billingPeriod === "monthly" ? "text-white shadow-sm" : "text-muted-foreground"}`}
-                style={{ backgroundColor: billingPeriod === "monthly" ? tenant.color_primario : undefined }}
-                onClick={() => setBillingPeriod("monthly")}
-              >
-                Mensual
-              </Button>
-              <Button 
-                variant={billingPeriod === "yearly" ? "default" : "ghost"} 
-                size="sm" 
-                className={`rounded-lg font-bold text-xs px-4 h-8 transition-all ${billingPeriod === "yearly" ? "text-white shadow-sm" : "text-muted-foreground"}`}
-                style={{ backgroundColor: billingPeriod === "yearly" ? tenant.color_primario : undefined }}
-                onClick={() => setBillingPeriod("yearly")}
-              >
-                Anual
-              </Button>
+            <div className="flex items-center gap-2">
+              <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50">
+                <Button 
+                  variant={billingPeriod === "monthly" ? "default" : "ghost"} 
+                  size="sm" 
+                  className={`rounded-lg font-bold text-xs px-4 h-8 transition-all ${billingPeriod === "monthly" ? "text-white shadow-sm" : "text-muted-foreground"}`}
+                  style={{ backgroundColor: billingPeriod === "monthly" ? tenant.color_primario : undefined }}
+                  onClick={() => setBillingPeriod("monthly")}
+                >
+                  Mensual
+                </Button>
+                <Button 
+                  variant={billingPeriod === "yearly" ? "default" : "ghost"} 
+                  size="sm" 
+                  className={`rounded-lg font-bold text-xs px-4 h-8 transition-all ${billingPeriod === "yearly" ? "text-white shadow-sm" : "text-muted-foreground"}`}
+                  style={{ backgroundColor: billingPeriod === "yearly" ? tenant.color_primario : undefined }}
+                  onClick={() => setBillingPeriod("yearly")}
+                >
+                  Anual
+                </Button>
+              </div>
+              <span className="rounded-full bg-[#F0B900]/20 px-2.5 py-1 text-[10px] font-black text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 shadow-xs uppercase tracking-wider flex items-center gap-1">
+                🎁 2 MESES GRATIS
+              </span>
             </div>
           </div>
 
-          {/* Plan Actual Banner */}
-          <div 
-            className="mb-8 p-6 rounded-3xl flex flex-col sm:flex-row sm:items-center justify-between gap-6 shadow-xl transition-all border-none text-white relative overflow-hidden"
-            style={{ 
-              background: `linear-gradient(135deg, ${tenant.color_primario || '#e11d48'}, ${tenant.color_secundario || '#9f1239'})` 
-            }}
-          >
-            {/* Ambient glows inside the card */}
-            <div className="absolute -right-10 -top-10 h-32 w-32 rounded-full bg-white/10 blur-2xl pointer-events-none" />
-            <div className="absolute -left-10 -bottom-10 h-32 w-32 rounded-full bg-black/10 blur-2xl pointer-events-none" />
-
-            <div className="flex items-center gap-4 relative z-10">
+          {/* Plan Actual Banner — Premium Light Surface Redesign */}
+          <div className="mb-8 rounded-2xl border border-border bg-card p-6 sm:p-7 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition-all hover:shadow-md">
+            <div className="flex items-center gap-4">
               <div 
-                className="h-14 w-14 rounded-2xl bg-white flex items-center justify-center shadow-lg hover:scale-105 transition-transform shrink-0"
-                style={{ color: tenant.color_primario || '#e11d48' }}
+                className="h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs border"
+                style={{ 
+                  backgroundColor: `${tenant.color_primario || '#1B4B73'}10`,
+                  borderColor: `${tenant.color_primario || '#1B4B73'}25`,
+                  color: tenant.color_primario || '#1B4B73'
+                }}
               >
-                <CreditCard className="h-7 w-7" />
+                <CreditCard className="h-6 w-6" />
               </div>
-              <div className="space-y-1.5">
-                <div className="text-[10px] font-extrabold uppercase tracking-widest text-white/80">Suscripción actual</div>
-                <div className="flex flex-wrap items-center gap-2">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Suscripción Actual</span>
                   {(() => {
-                    const planConfig = {
-                      basico: { label: "Básico", className: "bg-white text-blue-700 font-extrabold border-transparent" },
-                      pro: { label: "Pro", className: "bg-white text-indigo-700 font-extrabold border-transparent" },
-                      enterprise: { label: "Enterprise", className: "bg-white text-amber-700 font-extrabold border-transparent" },
-                    }[tenant.plan_id as string] || { label: tenant.plan_id, className: "bg-white text-primary font-extrabold border-transparent" };
+                    const statusClass = tenant.estado === "ACTIVO" 
+                      ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800" 
+                      : isTrialExpired 
+                        ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800" 
+                        : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-400 dark:border-amber-800";
                     
                     return (
-                      <span className={`px-3 py-1 rounded-full uppercase text-[10px] font-black tracking-widest border shadow-sm ${planConfig.className}`}>
-                        {planConfig.label}
+                      <span className={`px-2.5 py-0.5 rounded-md text-[10px] font-extrabold uppercase tracking-wider border ${statusClass}`}>
+                        ● {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expirado" : "Prueba gratis") : tenant.estado}
                       </span>
                     );
                   })()}
+                </div>
 
-                  {(() => {
-                    const statusClass = tenant.estado === "ACTIVO" 
-                      ? "bg-emerald-500 text-white font-extrabold border-transparent shadow-md" 
-                      : isTrialExpired 
-                        ? "bg-rose-500 text-white font-extrabold border-transparent shadow-md" 
-                        : "bg-amber-500 text-white font-extrabold border-transparent shadow-md";
-                    
-                    return (
-                      <Badge 
-                        variant="outline" 
-                        className={`px-3 py-0.5 rounded-full text-xs font-black uppercase tracking-wider ${statusClass}`}
-                      >
-                        {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expirado" : "Prueba") : tenant.estado}
-                      </Badge>
-                    );
-                  })()}
+                <div className="flex items-center gap-3">
+                  <h3 className="font-display text-2xl font-black text-foreground tracking-tight">
+                    Plan {({ basico: "Básico", pro: "Pro", enterprise: "Enterprise" } as Record<string, string>)[tenant.plan_id] || tenant.plan_id}
+                  </h3>
                 </div>
               </div>
             </div>
 
-            {/* Renewal status info - highly visible block */}
-            <div className="flex items-center gap-3 bg-white dark:bg-slate-900 border border-slate-200/80 rounded-2xl p-4 shadow-lg min-w-[240px] relative z-10">
+            {/* Renewal status info chip */}
+            <div className="flex items-center gap-3.5 bg-muted/40 border border-border rounded-xl px-4.5 py-3 shrink-0">
               <div 
-                className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0"
-                style={{ color: tenant.color_primario || '#e11d48' }}
+                className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border"
+                style={{
+                  backgroundColor: `${tenant.color_primario || '#1B4B73'}15`,
+                  borderColor: `${tenant.color_primario || '#1B4B73'}25`,
+                  color: tenant.color_primario || '#1B4B73'
+                }}
               >
-                <Calendar className="h-5 w-5" />
+                <Calendar className="h-4 w-4" />
               </div>
-              <div className="space-y-0.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
                   {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expiró el" : "Vence el") : "Próxima renovación"}
                 </div>
-                <div className="text-base font-black tracking-wide">
+                <div className="text-sm font-black tracking-wide text-foreground">
                   {tenant.trial_hasta ? (
-                    <span 
-                      style={{ color: tenant.color_primario || '#e11d48' }}
-                      className="font-black text-base"
-                    >
-                      {new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}
-                    </span>
+                    <span>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</span>
                   ) : (
-                    <span className="text-slate-400 font-semibold">N/A</span>
+                    <span className="text-muted-foreground font-semibold">Sin fecha</span>
                   )}
                 </div>
               </div>
@@ -1692,7 +1730,9 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
 
           <div className="grid gap-6 md:grid-cols-3 items-start">
             {plans.map(p => {
-              const isCurrent = p.id === tenant.plan_id;
+              const tenantBillingPeriod = (tenant as any)?.plan_periodo || "monthly";
+              const isCurrentPeriodMatch = billingPeriod === tenantBillingPeriod;
+              const isCurrent = p.id === tenant.plan_id && isCurrentPeriodMatch;
               const showActualBadge = isCurrent && !isTrialExpired;
               const isCurrentActivePlan = isCurrent && tenant.estado !== "TRIAL";
 
@@ -1708,13 +1748,20 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                   {showActualBadge && <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold uppercase tracking-widest">Actual</div>}
                   <div className="font-display text-xl mb-1">{p.nombre}</div>
                   <div className="flex flex-col mb-4">
-                    <div className="text-2xl font-display text-primary">
+                    <div className="text-2xl font-black text-primary">
                       {formatRD(price)}
                       <span className="text-xs font-normal text-muted-foreground">{period}</span>
                     </div>
-                    {billingPeriod === "yearly" && savings > 0 && (
-                      <div className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
-                        Ahorras {savings}% vs mensual
+                    {billingPeriod === "yearly" && (
+                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                        <span className="rounded-md bg-[#F0B900]/20 text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                          🎁 2 MESES GRATIS
+                        </span>
+                        {savings > 0 && (
+                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
+                            (Ahorras {savings}% vs mensual)
+                          </span>
+                        )}
                       </div>
                     )}
                   </div>
@@ -1752,7 +1799,8 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                           { key: "whatsapp", label: "Mensajería WhatsApp" },
                           { key: "facturacion_fiscal", label: "Facturación Electrónica" },
                           { key: "multisucursal", label: "Multisucursal" },
-                          { key: "logistica", label: "Logística" }
+                          { key: "logistica", label: "Envío a domicilio" },
+                          { key: "procesos", label: "Tablero de Procesos" },
                         ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
@@ -1856,6 +1904,9 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
       plantilla_creada: wa.plantilla_creada || DEFAULT_CONFIG.whatsapp.plantilla_creada,
       plantilla_lista: wa.plantilla_lista || DEFAULT_CONFIG.whatsapp.plantilla_lista,
       plantilla_entregada: wa.plantilla_entregada || DEFAULT_CONFIG.whatsapp.plantilla_entregada,
+      notif_orden_sin_retirar: wa.notif_orden_sin_retirar !== false,
+      dias_recordatorio_sin_retirar: wa.dias_recordatorio_sin_retirar || 5,
+      plantilla_sin_retirar: wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar,
     };
   });
   const [testPhone, setTestPhone] = useState(tenant.telefono || "");
@@ -2016,14 +2067,15 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
 
         <div className="mt-8">
           <Label className={LABEL}>Eventos automáticos</Label>
-          <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
             {[
               { k: "notif_orden_creada", label: "Al crear orden" },
               { k: "notif_orden_lista", label: "Cuando esté lista" },
               { k: "notif_orden_entregada", label: "Al entregar" },
+              { k: "notif_orden_sin_retirar", label: "Recordatorio prendas no retiradas" },
             ].map((it) => (
               <label key={it.k} className="flex items-center justify-between rounded-xl border border-input p-4 hover:bg-accent/30 transition-colors">
-                <span className="text-sm font-medium">{it.label}</span>
+                <span className="text-xs font-semibold leading-tight">{it.label}</span>
                 <Switch
                   checked={(draft as any)[it.k]}
                   onCheckedChange={(v) => setDraft({ ...draft, [it.k]: v } as WhatsAppConfig)}
@@ -2032,6 +2084,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
             ))}
           </div>
         </div>
+
 
         <div className="mt-8 grid gap-4">
           <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {lavanderia_dir} {numero} {fecha} {cliente} {cliente_tel} {cliente_dir} {detalle} {subtotal} {total} {metodo_pago} {pagado} {saldo} {entrega} {estado} {web_url} {ticket_pie} {ticket_nota}">
@@ -2042,6 +2095,9 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
           </Field>
           <Field label="Plantilla — Orden entregada">
             <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_entregada} onChange={(e) => setDraft({ ...draft, plantilla_entregada: e.target.value })} />
+          </Field>
+          <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables adicionales: {dias} (días en almacén)">
+            <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_sin_retirar} onChange={(e) => setDraft({ ...draft, plantilla_sin_retirar: e.target.value })} />
           </Field>
         </div>
 

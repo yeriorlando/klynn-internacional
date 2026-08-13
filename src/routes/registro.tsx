@@ -294,16 +294,21 @@ function RegistroPage() {
   return (
     <div className="min-h-[112vh] bg-gradient-hero">
       <SeedBootstrap />
-      <header className="flex h-24 items-center justify-center px-6 relative">
-        <Link to="/"><Logo size="lg" /></Link>
-        <div className="absolute right-6 hidden text-sm md:block">
+      <header className="flex flex-col items-center justify-center pt-5 pb-1 px-6 relative">
+        <Link to="/" className="flex flex-col items-center">
+          <Logo size="lg" />
+          <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
+            Tu lavandería, simplificada.
+          </span>
+        </Link>
+        <div className="absolute right-6 top-6 hidden text-sm md:block">
           <span className="text-muted-foreground">¿Ya tienes cuenta? </span>
           <Link to="/login" className="font-semibold text-primary hover:underline">Inicia sesión</Link>
         </div>
       </header>
 
-      <main className="container mx-auto pb-20 pt-10">
-        <div className="mx-auto mb-12 max-w-2xl px-4">
+      <main className="container mx-auto pb-16 pt-3">
+        <div className="mx-auto mb-5 max-w-2xl px-4">
           <div className="flex items-center gap-2 rounded-full border border-border bg-white/50 p-1.5 shadow-sm">
             {filteredSteps.map((s) => {
               const done = step > s.id;

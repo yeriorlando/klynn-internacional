@@ -14,7 +14,7 @@ import {
   Sparkles,
   RefreshCw,
 } from "lucide-react";
-import { Logo } from "@/components/klynn/Logo";
+import { LandingNavbar } from "@/components/klynn/LandingNavbar";
 import { Button } from "@/components/ui/button";
 import { Link } from "@tanstack/react-router";
 
@@ -84,22 +84,8 @@ function DownloadPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
-      {/* Navbar */}
-      <nav className="sticky top-0 z-40 border-b border-border bg-surface/80 backdrop-blur-md">
-        <div className="mx-auto flex max-w-7xl items-center gap-4 px-6 py-4">
-          <Link to="/">
-            <Logo size="sm" />
-          </Link>
-          <div className="ml-auto">
-            <Link to="/">
-              <Button variant="ghost" size="sm" className="gap-2 text-muted-foreground hover:text-foreground">
-                <ArrowLeft className="h-4 w-4" />
-                Volver al inicio
-              </Button>
-            </Link>
-          </div>
-        </div>
-      </nav>
+      {/* Navbar de la landing */}
+      <LandingNavbar />
 
       {/* Main content */}
       <main className="flex flex-1 flex-col items-center justify-center px-4 py-16">

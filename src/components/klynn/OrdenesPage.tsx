@@ -2,7 +2,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind } from "lucide-react";
-import { notificarWhatsApp } from "@/lib/whatsapp";
+import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { exportToCsv } from "@/lib/export";
@@ -23,7 +23,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2 } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -90,7 +90,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos" | "hoy" | "urgente">("todos");
-  const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas">("todas");
+  const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas" | "sin_retirar">("todas");
   const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar">("todas");
   const [filtroPago, setFiltroPago] = useState<"todas" | MetodoPago>("todas");
   const [view, setView] = useState<Orden | null>(null);
@@ -141,7 +141,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: empleados = [] } = useEmpleados(tenantId);
   const { data: servicios = [] } = useServicios(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
-  const searchParams = useSearch({ strict: false }) as { view?: string; action?: string };
+  const searchParams = useSearch({ strict: false }) as { view?: string; action?: string; filter?: string };
+
+  useEffect(() => {
+    if (searchParams.filter === "almacenadas" || searchParams.filter === "sin_retirar") {
+      setFiltroEntrega("sin_retirar");
+    }
+  }, [searchParams.filter]);
 
   const emp = user?.empleado;
   const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
@@ -203,6 +209,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         if (!esParaHoy(o.fecha_entrega)) return false;
       } else if (filtroEntrega === "atrasadas") {
         if (!esAtrasada(o.fecha_entrega, o.estado)) return false;
+      } else if (filtroEntrega === "sin_retirar") {
+        const diasAlmacen = calcularDiasEnAlmacen(o.creado_en);
+        const minDias = tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5;
+        if (o.estado !== "LISTA" || diasAlmacen < minDias) return false;
       }
 
       // Filtro de urgencia
@@ -971,14 +981,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número de orden, cliente, monto, fecha..." className="pl-10" />
         </div>
         <Select value={filtroEntrega} onValueChange={(v: any) => setFiltroEntrega(v)}>
-          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
+          <SelectTrigger className="w-[175px] font-semibold text-xs shrink-0">
             <Calendar className="h-4 w-4 text-primary shrink-0 mr-1.5" />
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="min-w-[220px]">
             <SelectItem value="todas">Todas</SelectItem>
             <SelectItem value="hoy">Para hoy</SelectItem>
             <SelectItem value="atrasadas">Atrasadas</SelectItem>
+            <SelectItem value="sin_retirar">Sin retirar ({`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`})</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
@@ -1175,6 +1186,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               Atrasada
                             </Badge>
                           )}
+                          {o.estado === "LISTA" && calcularDiasEnAlmacen(o.creado_en) >= (tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5) && (
+                            <Badge className="bg-amber-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
+                              <Clock className="h-2.5 w-2.5" /> {calcularDiasEnAlmacen(o.creado_en)}d en almacén
+                            </Badge>
+                          )}
+                          {o.estado === "LISTA" && fueNotificadoHoy(o.ultimo_recordatorio_en) && (
+                            <Badge className="bg-emerald-600 text-white text-[9px] font-black uppercase tracking-wider py-0.5 px-1.5 rounded-sm gap-0.5 shadow-sm border-0">
+                              <Check className="h-2.5 w-2.5" /> Notificado hoy
+                            </Badge>
+                          )}
                         </div>
                       </div>
                     </td>
@@ -1197,6 +1218,29 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               >
                                 <Eye /> Ver Detalles
                               </button>
+                              
+                              {o.estado === "LISTA" && (
+                                <button 
+                                  onClick={async () => {
+                                    setOpenMenuId(null);
+                                    const cli = clientes.find((c) => c.id === o.cliente_id);
+                                    if (!cli) {
+                                      toast.error("No se encontró la información del cliente");
+                                      return;
+                                    }
+                                    const res = await notificarWhatsApp(tenant, cli, o, "sin_retirar");
+                                    if (res.ok) {
+                                      toast.success(`Recordatorio WhatsApp enviado a ${cli.nombre} ✅`);
+                                      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+                                    } else {
+                                      toast.error(`No se pudo enviar: ${res.reason || "Error de red"}`);
+                                    }
+                                  }}
+                                  className="text-emerald-600 dark:text-emerald-400 font-bold"
+                                >
+                                  <MessageCircle className="text-emerald-500" /> Notificar WhatsApp
+                                </button>
+                              )}
                               
                               {o.saldo > 0 && o.estado !== "ANULADA" && (
                                 <button 

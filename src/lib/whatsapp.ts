@@ -1,7 +1,7 @@
 import type { Tenant, Cliente, Orden } from "@/lib/storage";
-import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAppCount } from "@/lib/storage";
+import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAppCount, saveOrden } from "@/lib/storage";
 
-type Evento = "creada" | "lista" | "en_camino" | "entregada";
+type Evento = "creada" | "lista" | "en_camino" | "entregada" | "sin_retirar";
 
 function normalizePhoneRD(tel: string): string {
   const d = tel.replace(/\D/g, "");
@@ -62,6 +62,7 @@ export async function notificarWhatsApp(
     evento === "creada" ? wa.notif_orden_creada :
     evento === "lista" ? wa.notif_orden_lista :
     evento === "en_camino" ? true : // Activado por defecto para logística
+    evento === "sin_retirar" ? (wa.notif_orden_sin_retirar !== false) :
     wa.notif_orden_entregada;
   if (!flag) return { ok: false, reason: "Notificación desactivada" };
 
@@ -69,6 +70,7 @@ export async function notificarWhatsApp(
     evento === "creada" ? wa.plantilla_creada :
     evento === "lista" ? wa.plantilla_lista :
     evento === "en_camino" ? "*¡Tu orden va en camino!* 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de {lavanderia} y va de camino a tu dirección: {cliente_dir}.\n\n¡Nos vemos pronto!" :
+    evento === "sin_retirar" ? (wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar!) :
     wa.plantilla_entregada;
 
   const detalleStr = (evento === "creada")
@@ -96,6 +98,8 @@ export async function notificarWhatsApp(
     else tipoDoc = "COMPROBANTE FISCAL";
   }
 
+  const diasAlmacenado = calcularDiasEnAlmacen(orden.creado_en);
+
   const mensaje = render(tpl, {
     lavanderia: tenant.nombre,
     lavanderia_tel: tenant.telefono || "",
@@ -107,6 +111,7 @@ export async function notificarWhatsApp(
     cliente_dir: cliente.direccion || "",
     cliente_cedula: cliente.cedula || "",
     cliente_tipo_doc: cliente.tipo === "Empresa" ? "RNC" : "Cédula",
+    dias: String(diasAlmacenado),
     ncf: orden.ncf || "",
     ncf_vencimiento: orden.ncf_vencimiento ? new Date(orden.ncf_vencimiento).toLocaleDateString("es-DO") : "",
     rnc: tenant.rnc || "",
@@ -157,8 +162,46 @@ export async function notificarWhatsApp(
     // 2. Incrementar contador en caso de éxito
     await incrementWhatsAppCount(tenant.id);
     
+    if (evento === "sin_retirar") {
+      try {
+        await saveOrden({ ...orden, ultimo_recordatorio_en: new Date().toISOString() });
+      } catch (e) {
+        console.error("Error al guardar timestamp de recordatorio", e);
+      }
+    }
+
     return { ok: true };
   } catch (e) {
     return { ok: false, reason: (e as Error).message };
   }
+}
+
+export function calcularDiasEnAlmacen(creadoEn: string): number {
+  if (!creadoEn) return 0;
+  const diffTime = Math.max(0, Date.now() - new Date(creadoEn).getTime());
+  return Math.floor(diffTime / (1000 * 60 * 60 * 24));
+}
+
+export function fueNotificadoHoy(fechaIso?: string): boolean {
+  if (!fechaIso) return false;
+  const d = new Date(fechaIso);
+  const hoy = new Date();
+  return (
+    d.getDate() === hoy.getDate() &&
+    d.getMonth() === hoy.getMonth() &&
+    d.getFullYear() === hoy.getFullYear()
+  );
+}
+
+export function obtenerTodasOrdenesSinRetirar(ordenes: Orden[], diasMinimos = 5): { orden: Orden; dias: number }[] {
+  return (ordenes || [])
+    .filter(o => o.estado === "LISTA")
+    .map(o => ({ orden: o, dias: calcularDiasEnAlmacen(o.creado_en) }))
+    .filter(item => item.dias >= diasMinimos)
+    .sort((a, b) => b.dias - a.dias);
+}
+
+export function obtenerOrdenesSinRetirar(ordenes: Orden[], diasMinimos = 5): { orden: Orden; dias: number }[] {
+  return obtenerTodasOrdenesSinRetirar(ordenes, diasMinimos)
+    .filter(item => !fueNotificadoHoy(item.orden.ultimo_recordatorio_en));
 }

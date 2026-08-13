@@ -17,6 +17,7 @@ export interface Plan {
     facturacion_fiscal: boolean;
     multisucursal: boolean;
     logistica?: boolean;
+    procesos?: boolean;
   };
   destacado?: boolean;
   polar_product_monthly_url?: string;
@@ -116,6 +117,7 @@ export interface TenantConfig {
   bancarios?: string;
   tiempo_entrega_estandar: number; // en horas
   tiempo_entrega_urgente: number; // en horas
+  dias_almacenamiento_sin_retirar?: number; // días límite para considerar ropa sin retirar (default: 5)
   whatsapp?: WhatsAppConfig;
 
   // Alertas de Secuencias NCF/e-CF
@@ -133,6 +135,7 @@ export interface TenantConfig {
     facturacion_fiscal?: boolean;
     multisucursal?: boolean;
     logistica?: boolean;
+    procesos?: boolean;
   };
 }
 export interface WhatsAppConfig {
@@ -143,9 +146,12 @@ export interface WhatsAppConfig {
   notif_orden_creada: boolean;
   notif_orden_lista: boolean;
   notif_orden_entregada: boolean;
+  notif_orden_sin_retirar?: boolean;
+  dias_recordatorio_sin_retirar?: number;
   plantilla_creada: string;
   plantilla_lista: string;
   plantilla_entregada: string;
+  plantilla_sin_retirar?: string;
 }
 
 export interface LicenciaLocal {
@@ -235,6 +241,7 @@ export interface Orden {
   nota_debito_ncf?: string; // NCF de la nota de débito (E33)
   nota_debito_id?: string; // ID del documento ECF E33
   nota_debito_monto?: number; // Monto adicionado
+  ultimo_recordatorio_en?: string; // Fecha ISO del último recordatorio por WhatsApp enviada para prendas almacenadas
   entrega_domicilio?: boolean;
   costo_envio?: number;
   repartidor_id?: string;
@@ -452,7 +459,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 2,
     limite_ordenes_mes: 300,
     limite_whatsapp_mes: 300,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false },
+    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false, procesos: true },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
     polar_sucursal_url: "",
@@ -465,7 +472,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 10,
     limite_ordenes_mes: 1000,
     limite_whatsapp_mes: 1000,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true },
+    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true, procesos: true },
     destacado: true,
     precio_sucursal_adicional: 1200,
     limite_sucursales_adicionales: 3,
@@ -479,7 +486,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 999,
     limite_ordenes_mes: null,
     limite_whatsapp_mes: 5000,
-    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true },
+    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true, procesos: true },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
     polar_sucursal_url: "",
@@ -493,7 +500,7 @@ export function getTenantPlan(tenant: Tenant | null): Plan {
 
 export function isModuleEnabled(
   tenant: Tenant | null,
-  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica",
+  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos",
   plan?: Plan,
 ): boolean {
   if (!tenant) return false;
@@ -543,6 +550,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
     notif_orden_creada: true,
     notif_orden_lista: true,
     notif_orden_entregada: false,
+    notif_orden_sin_retirar: true,
+    dias_recordatorio_sin_retirar: 5,
     plantilla_creada: `✨ *{tipo_documento}* ✨
 -----------------------------------
 🧺 *{lavanderia}*
@@ -584,6 +593,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
       "Hola 👋, {cliente} ✨, tu orden {numero} de {detalle} en {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
     plantilla_entregada:
       "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
+    plantilla_sin_retirar:
+      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} ({detalle}) lleva {dias} días lista en {lavanderia}. Saldo pendiente: {saldo}. ¡Pasa a retirarla cuando gustes en {lavanderia_dir}!",
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
@@ -783,6 +794,7 @@ export async function getPlans(): Promise<Plan[]> {
           facturacion_fiscal: !!p.facturacion_fiscal,
           multisucursal: !!p.multisucursal,
           logistica: !!p.logistica,
+          procesos: p.procesos !== undefined ? !!p.procesos : (PLANS.find((sp) => sp.id === p.id)?.modulos?.procesos ?? true),
         },
         limite_whatsapp_mes: p.limite_whatsapp_mes || 0,
         destacado: !!p.destacado,
@@ -1843,6 +1855,7 @@ export async function savePlan(p: Plan) {
       facturacion_fiscal: p.modulos.facturacion_fiscal,
       multisucursal: p.modulos.multisucursal,
       logistica: p.modulos.logistica,
+      procesos: p.modulos.procesos,
       limite_whatsapp_mes: p.limite_whatsapp_mes,
       destacado: p.destacado,
       polar_product_monthly_url: p.polar_product_monthly_url,
@@ -1856,7 +1869,8 @@ export async function savePlan(p: Plan) {
         "Fallo al guardar columnas extendidas en Supabase (posiblemente falta migrar). Reintentando con campos base:",
         error,
       );
-      await supabase.from("planes").upsert({
+      // Fallback: retry without newer columns that may not exist in Supabase yet
+      const { error: fallbackError } = await supabase.from("planes").upsert({
         id: p.id,
         nombre: p.nombre,
         precio_mensual: p.precio_mensual,
@@ -1872,6 +1886,9 @@ export async function savePlan(p: Plan) {
         polar_product_monthly_url: p.polar_product_monthly_url,
         polar_product_yearly_url: p.polar_product_yearly_url,
       });
+      if (fallbackError) {
+        console.error("Fallback save also failed:", fallbackError);
+      }
     }
   } catch (e) {
     console.error("Error saving plan:", e);

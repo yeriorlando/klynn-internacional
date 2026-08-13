@@ -23,7 +23,9 @@ import {
   type EstadoOrden,
   type Tenant,
   can,
+  isModuleEnabled,
 } from "@/lib/storage";
+import { usePlans } from "@/hooks/use-queries";
 import {
   Receipt,
   Package,
@@ -55,6 +57,8 @@ import {
   Info,
   ArrowRight,
   Clock,
+  MessageCircle,
+  Loader2,
 } from "lucide-react";
 import {
   useOrdenes,
@@ -75,7 +79,7 @@ import {
   DropdownMenuLabel,
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
-import { notificarWhatsApp } from "@/lib/whatsapp";
+import { notificarWhatsApp, obtenerOrdenesSinRetirar } from "@/lib/whatsapp";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import {
@@ -126,6 +130,7 @@ function DashboardPage() {
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: movs = [], isLoading: loadingMovs } = useMovimientos(tenantId, caja?.id);
   const { data: empleados = [] } = useEmpleados(tenantId);
+  const { data: plans = [] } = usePlans();
 
   const [currentPage, setCurrentPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -150,10 +155,50 @@ function DashboardPage() {
   );
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
+  const [notificandoLote, setNotificandoLote] = useState(false);
 
   const loading = loadingOrdenes || loadingCaja || loadingGastos || loadingClientes || loadingMovs;
 
   const tenant = user?.tenant as Tenant;
+  const plan = plans.find((p) => p.id === tenant?.plan_id);
+  const hasWhatsApp = isModuleEnabled(tenant, "whatsapp", plan);
+  const hasProcesos = isModuleEnabled(tenant, "procesos", plan);
+  const diasSinRetirarConfig = tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5;
+
+  const ordenesSinRetirar = useMemo(() => {
+    return obtenerOrdenesSinRetirar(ordenes, diasSinRetirarConfig);
+  }, [ordenes, diasSinRetirarConfig]);
+
+  async function notificarTodosAlmacenados() {
+    if (ordenesSinRetirar.length === 0) return;
+    setNotificandoLote(true);
+    let enviados = 0;
+    let errores = 0;
+    const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
+
+    for (let i = 0; i < ordenesSinRetirar.length; i++) {
+      const item = ordenesSinRetirar[i];
+      const cli = clientes.find((c) => c.id === item.orden.cliente_id);
+      if (cli && cli.telefono) {
+        const res = await notificarWhatsApp(tenant, cli, item.orden, "sin_retirar");
+        if (res.ok) enviados++;
+        else errores++;
+
+        // Pausa anti-spam humanizada (2.5s - 3.5s) entre cada mensaje
+        if (i < ordenesSinRetirar.length - 1) {
+          await delay(2500 + Math.random() * 1000);
+        }
+      }
+    }
+
+    setNotificandoLote(false);
+    if (enviados > 0) {
+      toast.success(`Se enviaron ${enviados} recordatorio(s) por WhatsApp ✅`);
+    }
+    if (errores > 0) {
+      toast.error(`${errores} cliente(s) no pudieron ser notificados.`);
+    }
+  }
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden) {
     if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
@@ -341,6 +386,47 @@ function DashboardPage() {
       </PageHeader>
 
       {/* Alertas */}
+      {hasProcesos && ordenesSinRetirar.length > 0 && (
+        <Card className="mb-4 border-amber-500/30 bg-amber-500/10 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 font-bold">
+              <Package className="h-5 w-5" />
+            </div>
+            <div>
+              <div className="font-bold text-sm text-foreground">
+                {ordenesSinRetirar.length} orden(es) almacenadas sin retirar (Más de {diasSinRetirarConfig} días)
+              </div>
+              <div className="text-xs text-muted-foreground mt-0.5">
+                Prendas en estado LISTA desde hace más de {diasSinRetirarConfig} días. Notifica a tus clientes por WhatsApp para acelerar el retiro.
+              </div>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} search={{ filter: "almacenadas" }}>
+              <Button
+                variant="outline"
+                size="sm"
+                className="font-bold text-xs rounded-xl gap-1.5 h-9 bg-background/80 hover:bg-background border-amber-500/30 text-amber-900 dark:text-amber-200"
+              >
+                <Eye className="h-3.5 w-3.5" />
+                Ver órdenes
+              </Button>
+            </Link>
+            {hasWhatsApp && (
+              <Button
+                size="sm"
+                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm gap-1.5 h-9"
+                disabled={notificandoLote}
+                onClick={notificarTodosAlmacenados}
+              >
+                {notificandoLote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
+                Notificar por WhatsApp ({ordenesSinRetirar.length})
+              </Button>
+            )}
+          </div>
+        </Card>
+      )}
+
       {!caja && (
         <Card className="mb-6 flex flex-wrap items-center gap-3 border-destructive/30 bg-destructive/5 p-4">
           <AlertCircle className="h-5 w-5 text-destructive" />

@@ -136,7 +136,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
   { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
-  { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
+  { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
   { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
   {
@@ -169,6 +169,7 @@ export function TenantShell() {
 
   const [hasLogistica, setHasLogistica] = useState<boolean>(true);
   const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(true);
+  const [hasProcesos, setHasProcesos] = useState<boolean>(true);
 
   // NOTIFICACIONES GENERALES
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -184,6 +185,7 @@ export function TenantShell() {
       const plan = plans.find((p) => p.id === user.tenant.plan_id);
       setHasLogistica(isModuleEnabled(user.tenant, "logistica", plan));
       setHasWhatsApp(isModuleEnabled(user.tenant, "whatsapp", plan));
+      setHasProcesos(isModuleEnabled(user.tenant, "procesos", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
@@ -397,6 +399,9 @@ export function TenantShell() {
       } else if (key === "O") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/ordenes` });
+      } else if (key === "P") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/procesos` });
       } else if (key === "C") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/caja` });
@@ -788,7 +793,7 @@ export function TenantShell() {
                 { label: "Cobrar", key: "Enter" },
                 { label: "Facturar", key: "Espacio" },
                 { label: "Buscar", key: "Ctrl" },
-                { label: "Pantalla completa", key: "P" },
+                { label: "Ir a Operaciones", key: "P" },
                 { label: "Órdenes modal", key: "Z" },
                 { label: "Menu atajos", key: "Alt+K" },
               ].map(({ label, key }) => (
@@ -848,6 +853,7 @@ export function TenantShell() {
           setShowHerramientasModal={setShowHerramientasModal}
           hasLogistica={hasLogistica}
           hasWhatsApp={hasWhatsApp}
+          hasProcesos={hasProcesos}
         />
       </aside>
 
@@ -870,6 +876,7 @@ export function TenantShell() {
               setShowHerramientasModal={setShowHerramientasModal}
               hasLogistica={hasLogistica}
               hasWhatsApp={hasWhatsApp}
+              hasProcesos={hasProcesos}
             />
           </aside>
         </div>
@@ -1235,6 +1242,7 @@ function SidebarContent({
   setShowHerramientasModal,
   hasLogistica,
   hasWhatsApp,
+  hasProcesos,
 }: {
   tenant: {
     id: string;
@@ -1254,6 +1262,7 @@ function SidebarContent({
   setShowHerramientasModal: (show: boolean) => void;
   hasLogistica: boolean;
   hasWhatsApp: boolean;
+  hasProcesos: boolean;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
@@ -1353,7 +1362,7 @@ function SidebarContent({
           },
           { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
           { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
-          { to: `/t/${slug}/logistica`, label: "Logística", icon: Truck, permission: "logistica" },
+          { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
         ],
       },
       {
@@ -1407,18 +1416,19 @@ function SidebarContent({
         let items = cat.items;
         if (!hasLogistica) items = items.filter((i) => i.permission !== "logistica");
         if (!hasWhatsApp) items = items.filter((i) => i.permission !== "conversations");
+        if (!hasProcesos) items = items.filter((i) => i.permission !== "procesos");
         items = items.filter((i) => !i.permission || can(empleado, i.permission));
         return { ...cat, items };
       })
       .filter((cat) => cat.items.length > 0);
-  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp]);
+  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos]);
 
   return (
     <>
-      <div className="relative flex h-24 flex-col items-center justify-center border-b border-border px-5">
+      <div className="relative flex min-h-[110px] py-3.5 flex-col items-center justify-center border-b border-border px-5">
         <Logo size="md" />
-        <span className="mt-1 text-[10px] font-medium tracking-[0.1em] text-muted-foreground/60 uppercase">
-          Your laundry, simplified.
+        <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
+          Tu lavandería, simplificada.
         </span>
         {onNavigate && (
           <button

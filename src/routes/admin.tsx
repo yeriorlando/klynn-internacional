@@ -122,6 +122,7 @@ function AdminPage() {
   const [modOverrideFiscal, setModOverrideFiscal] = useState(false);
   const [modOverrideMultisucursal, setModOverrideMultisucursal] = useState(false);
   const [modOverrideLogistica, setModOverrideLogistica] = useState(false);
+  const [modOverrideProcesos, setModOverrideProcesos] = useState(false);
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -168,7 +169,8 @@ function AdminPage() {
         whatsapp: modOverrideWa,
         facturacion_fiscal: modOverrideFiscal,
         multisucursal: modOverrideMultisucursal,
-        logistica: modOverrideLogistica
+        logistica: modOverrideLogistica,
+        procesos: modOverrideProcesos,
       });
 
       toast.success("Información de lavandería actualizada");
@@ -322,6 +324,9 @@ function AdminPage() {
                                       setModOverrideLogistica(t.config?.modulos_override?.logistica !== undefined
                                         ? t.config.modulos_override.logistica
                                         : !!pOfTenant?.modulos.logistica);
+                                      setModOverrideProcesos(t.config?.modulos_override?.procesos !== undefined
+                                        ? t.config.modulos_override.procesos
+                                        : (pOfTenant?.modulos.procesos !== undefined ? !!pOfTenant.modulos.procesos : true));
 
                                       setOpenEditModal(true);
                                     }}
@@ -445,7 +450,8 @@ function AdminPage() {
                           { key: "whatsapp", label: "Mensajería WhatsApp" },
                           { key: "facturacion_fiscal", label: "Facturación Electrónica" },
                           { key: "multisucursal", label: "Multisucursal" },
-                          { key: "logistica", label: "Logística" }
+                          { key: "logistica", label: "Envío a domicilio" },
+                          { key: "procesos", label: "Tablero de Procesos" },
                         ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
@@ -654,6 +660,7 @@ function AdminPage() {
                     setModOverrideFiscal(!!newPlan.modulos.facturacion_fiscal);
                     setModOverrideMultisucursal(!!newPlan.modulos.multisucursal);
                     setModOverrideLogistica(!!newPlan.modulos.logistica);
+                    setModOverrideProcesos(newPlan.modulos.procesos !== undefined ? !!newPlan.modulos.procesos : true);
                   }
                 }}
               >
@@ -757,6 +764,17 @@ function AdminPage() {
                     onCheckedChange={setModOverrideLogistica}
                   />
                 </label>
+
+                <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                  <div className="flex flex-col">
+                    <span className="text-xs font-semibold">Procesos</span>
+                    <span className="text-[9px] text-muted-foreground leading-tight font-medium">Control de producción</span>
+                  </div>
+                  <Switch
+                    checked={modOverrideProcesos}
+                    onCheckedChange={setModOverrideProcesos}
+                  />
+                </label>
               </div>
             </div>
           </div>
@@ -825,7 +843,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       id: ("plan_" + Date.now()) as PlanId,
       nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
       limite_whatsapp_mes: 300,
-      modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false },
+      modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true },
     });
   }, [open, initial]);
 
@@ -946,7 +964,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
             <div>
               <Label className="mb-3 block text-sm font-bold text-muted-foreground uppercase tracking-wider">Módulos incluidos</Label>
               <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-2xl border border-border p-5 bg-accent/30 backdrop-blur-sm">
-                {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica"] as const).map((m) => (
+                {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica", "procesos"] as const).map((m) => (
                   <label key={m} className="flex items-center gap-3 text-sm p-1 rounded-lg transition-colors cursor-pointer group">
                     <Switch
                       checked={!!mods?.[m]}
@@ -954,7 +972,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                       className="data-[state=checked]:bg-primary"
                     />
                     <span className="font-semibold capitalize text-foreground group-hover:text-primary transition-colors">
-                      {m === "logistica" ? "Logística y Repartidores" : m === "facturacion_fiscal" ? "Facturación Electrónica" : m.replace(/_/g, " ")}
+                      {m === "logistica" ? "Envío a domicilio" : m === "facturacion_fiscal" ? "Facturación Electrónica" : m === "procesos" ? "Tablero de Procesos" : m.replace(/_/g, " ")}
                     </span>
                   </label>
                 ))}

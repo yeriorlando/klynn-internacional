@@ -82,7 +82,7 @@ const features = [
   { icon: Printer, title: "Tickets térmicos 57/80mm", desc: "Impresión ESC/POS compatible con Epson, Xprinter, Bixolon y Star. Logo, RNC y pie de página personalizados." },
   { icon: Wallet, title: "Caja y cuadre diario", desc: "Apertura, movimientos en vivo, gastos de caja chica, cobros por efectivo, tarjeta y transferencia. Cierre con firma del cajero." },
   { icon: Users, title: "CRM dominicano", desc: "Historial por cliente, deudas, abonos, clientes VIP y crédito autorizado. Cumpleaños y avisos automáticos por WhatsApp." },
-  { icon: Truck, title: "Entregas a domicilio", desc: "Asigna repartidores, rutas por sector (Naco, Piantini, Bella Vista, Los Jardines…) y notifica al cliente al salir y al llegar." },
+  { icon: Truck, title: "Entregas a domicilio", desc: "Asigna repartidores, rutas por sector (Naco, Piantini, Bella Vista, Los Jardinesâ€¦) y notifica al cliente al salir y al llegar." },
   { icon: BarChart3, title: "Reportes para la DGII", desc: "606, 607 y resumen de ITBIS exportable en CSV y XLSX. Llega listo a tu contador cada mes." },
   { icon: Scissors, title: "Módulo de sastrería", desc: "Ajustes, ruedos, cierres y composturas con medidas, fotos y entrega coordinada con el lavado." },
   { icon: Package, title: "Lavado por libra y prendas", desc: "Cobra por peso (lb/kg) o por prenda. Combina ambos en la misma orden con cargos de planchado, suavizante o rapidez." },
@@ -98,12 +98,12 @@ const testimonios = [
   {
     nombre: "Manuel Tavárez",
     negocio: "Express Wash, Santiago de los Caballeros",
-    texto: "Lo mejor es que está en español dominicano y el soporte responde rápido por WhatsApp. Los reportes para la DGII son los que más tiempo me ahorran cada mes.",
+    texto: "El soporte responde al instante por WhatsApp y la plataforma es sumamente fácil de usar. La generación de comprobantes fiscales y reportes me ahorra horas de trabajo cada mes.",
   },
   {
     nombre: "Carolina Méndez",
     negocio: "Cleanette, Punta Cana",
-    texto: "Manejo 3 sucursales desde el celular. Veo en vivo cuánto vendió cada una y el inventario de bolsas y suavizante. Una maravilla, la verdad.",
+    texto: "Superviso mis sucursales directamente desde la laptop en mi oficina. Veo en tiempo real cuánto vende cada local y el estado del dinero en caja al cierre del día. Excelente sistema.",
   },
 ];
 
@@ -148,7 +148,7 @@ const ciudades = [
   "San Francisco de Macorís", "Baní", "Azua", "Barahona", "Mao", "Nagua",
 ];
 
-/* ── CountUp: tick-up animation on viewport enter (hum-07 1:1) ── */
+/* â”€â”€ CountUp: tick-up animation on viewport enter (hum-07 1:1) â”€â”€ */
 function CountUp({ to }: { to: number }) {
   const ref = useRef<HTMLSpanElement>(null);
   const hasRun = useRef(false);
@@ -202,6 +202,7 @@ function LandingPage() {
   const { plans: initialPlans } = Route.useLoaderData();
   const [plans, setPlans] = useState<Plan[]>(initialPlans || STATIC_PLANS);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
+  const [activeWaTab, setActiveWaTab] = useState<"lista" | "recibo">("lista");
 
   useEffect(() => {
     if (!initialPlans || initialPlans.length === 0) {
@@ -337,8 +338,9 @@ function LandingPage() {
       <section className="hero">
         <div className="hero__grid">
           <div className="hero__lead">
-            <div className="hero__badge">
-              <span className="hero__badge-sparkle"></span> Hecho en República Dominicana 🇩🇴 — ITBIS y NCF listos
+            <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 mb-3 select-none">
+              <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <span>Software de Gestión Operativa</span>
             </div>
             <h1 className="hero__title">
               El software #1 para <span style={{ color: "var(--color-anil, #1B4B73)" }}>lavanderías</span> en República Dominicana.
@@ -372,7 +374,7 @@ function LandingPage() {
               </div>
               <hr className="ticket-card__hr" />
               <div className="ticket-card__meta">
-                <div>ORDEN: LX-202605-0042</div>
+                <div>ORDEN: KL-202605-0042</div>
                 <div>NCF: B0200000123</div>
                 <div>Fecha: 02/05/2026 10:30 AM</div>
                 <div>Cliente: Juan Pérez</div>
@@ -408,90 +410,6 @@ function LandingPage() {
                 </div>
               </div>
               <p className="ticket-card__footer">¡Gracias por su visita! 🧺 · 57mm / 80mm</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* TRUST STRIP */}
-      <section className="border-y border-border bg-surface">
-        <div className="mx-auto grid max-w-6xl grid-cols-2 gap-6 px-6 py-8 md:grid-cols-4">
-          {[
-            { n: "+250", l: "Lavanderías activas en RD" },
-            { n: "+1.2M", l: "Órdenes procesadas" },
-            { n: "99.9%", l: "Tiempo en línea" },
-            { n: "4.9/5", l: "Calificación promedio" },
-          ].map((s) => (
-            <div key={s.l} className="text-center">
-              <div className="font-display text-3xl text-primary md:text-4xl">{s.n}</div>
-              <div className="mt-1 text-xs text-muted-foreground md:text-sm">{s.l}</div>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ─── Section · Klynn Desktop ─── */}
-      <section className="mx-auto max-w-6xl px-4 md:px-6 py-6 md:py-10" id="desktop" aria-labelledby="desktop-title">
-        <div className="desktop-box">
-          <div className="desktop-grid">
-            <div>
-              <p className="eyebrow" style={{ color: "var(--color-anil, #1B4B73)", opacity: 1 }}>
-                <span className="eyebrow__dot" style={{ background: "var(--color-yellow, #F0B900)" }}></span> ¡NUEVO! VERSIÓN DESKTOP
-              </p>
-              <h2 className="section__title" id="desktop-title">
-                Klynn <span style={{ color: "var(--color-anil, #1B4B73)" }}>Desktop</span>
-              </h2>
-              <p className="section__lede">
-                Toda la potencia de Klynn instalada directamente en tu computadora Windows. Sin internet, sin suscripción mensual, con acceso ilimitado a tus datos.
-              </p>
-              <ul className="desktop-features">
-                <li>
-                  <span className="desktop-features__icon">✓</span>
-                  <span><strong>Funciona 100% sin internet:</strong> Ideal para zonas con señal inestable o apagones.</span>
-                </li>
-                <li>
-                  <span className="desktop-features__icon">✓</span>
-                  <span><strong>Datos en tu equipo:</strong> Tu información se guarda localmente, tú la controlas.</span>
-                </li>
-                <li>
-                  <span className="desktop-features__icon">✓</span>
-                  <span><strong>Impresoras térmicas ESC/POS:</strong> 57mm y 80mm. Plug & play igual que la versión cloud.</span>
-                </li>
-                <li>
-                  <span className="desktop-features__icon">✓</span>
-                  <span><strong>Rendimiento ultra rápido:</strong> Sin latencia de red. Respuesta instantánea en cada acción.</span>
-                </li>
-              </ul>
-              <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", marginTop: "1.5rem" }}>
-                <Link to="/descargar" search={{ autostart: true }} className="btn btn--anil">
-                  Descargar gratis <span className="btn__arrow" aria-hidden="true">↓</span>
-                </Link>
-                <span style={{ fontFamily: "var(--font-label, monospace)", fontSize: "11px", color: "var(--color-muted, #64748b)" }}>
-                  Windows 10 / 11 · 174 MB
-                </span>
-              </div>
-            </div>
-            <div className="desktop-window">
-              <div className="desktop-window__bar">
-                <span className="desktop-window__dot desktop-window__dot--red"></span>
-                <span className="desktop-window__dot desktop-window__dot--yellow"></span>
-                <span className="desktop-window__dot desktop-window__dot--green"></span>
-                <span className="desktop-window__title">Klynn Desktop v2.4</span>
-              </div>
-              <div className="desktop-window__body">
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--color-rule, #e2e8f0)" }}>
-                  <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>Caja #1 Mostrador</span>
-                  <span style={{ background: "#16a34a", color: "#fff", fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "99px" }}>MODO OFFLINE</span>
-                </div>
-                <div style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.75rem", color: "var(--color-ink-2, #334155)", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4829</span><span>RD$ 450.00</span></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4830</span><span>RD$ 1,200.00</span></div>
-                  <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4831</span><span>RD$ 380.00</span></div>
-                </div>
-                <div style={{ background: "rgba(27, 75, 115, 0.08)", padding: "0.6rem", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 600, textAlign: "center", color: "var(--color-anil, #1B4B73)" }}>
-                  ✓ Sincronización automática pendiente (3 órdenes)
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -604,6 +522,263 @@ function LandingPage() {
         </div>
       </section>
 
+      {/* WHATSAPP INTEGRATION FEATURE SECTION */}
+      <section id="whatsapp-integration" className="bg-[#0b132b] text-white py-20 border-y border-slate-800 relative overflow-hidden">
+        {/* Glow backdrop decorative gradient */}
+        <div className="absolute top-1/2 left-1/4 -translate-y-1/2 -translate-x-1/2 w-[500px] h-[500px] bg-[#25D366]/10 rounded-full blur-[120px] pointer-events-none" />
+
+        <div className="mx-auto max-w-6xl px-6 relative z-10">
+          <div className="max-w-3xl mb-14">
+            <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#25D366]/15 border border-[#25D366]/30 text-[#25D366] text-xs font-bold uppercase tracking-wider mb-6 shadow-[0_0_15px_rgba(37,211,102,0.2)]">
+              <span>★</span> FUNCIONALIDAD ESTRELLA
+            </div>
+            <h2 className="text-4xl md:text-5xl lg:text-6xl font-black tracking-tight leading-[1.1]">
+              Tu lavandería habla <br />
+              <span className="text-[#25D366] drop-shadow-[0_0_25px_rgba(37,211,102,0.45)]">por WhatsApp</span>
+            </h2>
+            <p className="mt-5 text-lg md:text-xl text-slate-300 leading-relaxed max-w-2xl font-normal">
+              Klynn envía notificaciones automáticas a tus clientes directo a WhatsApp. Sin llamadas, sin malentendidos — el cliente sabe exactamente cuándo está lista su ropa.
+            </p>
+          </div>
+
+          <div className="grid gap-8 lg:grid-cols-12 items-center">
+            {/* Left side: Feature Cards */}
+            <div className="lg:col-span-7 grid gap-4 sm:grid-cols-2">
+              {[
+                {
+                  title: "Aviso automático cuando la orden está lista",
+                  desc: "Klynn envía el mensaje en cuanto cambias el estado de la orden a 'Lista'. Sin esfuerzo extra para tu personal.",
+                  badge: "Tiempo real",
+                },
+                {
+                  title: "Resumen de orden con detalle y precio",
+                  desc: "El cliente recibe número de orden, desglose de prendas, ITBIS y total a pagar transparente en su chat.",
+                  badge: "Detalle claro",
+                },
+                {
+                  title: "Menos llamadas, más tiempo para trabajar",
+                  desc: "Elimina las interrupciones constantes. Tus clientes se mantienen 100% informados sin mover un solo dedo.",
+                  badge: "+90% eficiencia",
+                },
+                {
+                  title: "Tickets térmicos digitales y avisos de retiro",
+                  desc: "Envía el comprobante con código QR y programa recordatorios automáticos para prendas almacenadas más de 5 días.",
+                  badge: "Cero extravíos",
+                },
+              ].map((item, idx) => (
+                <div
+                  key={idx}
+                  className="group relative rounded-2xl bg-slate-900/80 border border-slate-800 p-6 backdrop-blur-sm transition-all duration-300 hover:border-[#25D366]/50 hover:bg-slate-900 hover:shadow-[0_10px_30px_rgba(37,211,102,0.12)] hover:-translate-y-1"
+                >
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#25D366]/15 text-[#25D366]">
+                      <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5">
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                      </svg>
+                    </div>
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
+                      {item.badge}
+                    </span>
+                  </div>
+                  <h3 className="font-bold text-lg text-white group-hover:text-[#25D366] transition-colors leading-snug mb-2">
+                    {item.title}
+                  </h3>
+                  <p className="text-sm text-slate-400 leading-relaxed">
+                    {item.desc}
+                  </p>
+                </div>
+              ))}
+            </div>
+
+            {/* Right side: WhatsApp Chat Simulator Mockup */}
+            <div className="lg:col-span-5">
+              <div className="rounded-3xl border border-slate-700 bg-slate-950 p-4 shadow-2xl relative overflow-hidden">
+                {/* Chat Header */}
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-800 px-2">
+                  <div className="relative">
+                    <img
+                      src="/favicon.webp"
+                      alt="Klynn"
+                      className="h-10 w-10 rounded-full object-cover border border-slate-700 bg-slate-900 p-0.5 shadow-sm"
+                    />
+                    <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-400 border-2 border-slate-950" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-white">
+                      Lavandería La Burbuja
+                    </div>
+                    <span className="text-[11px] text-emerald-400 font-medium">WhatsApp Business</span>
+                  </div>
+                </div>
+
+                {/* Chat Body */}
+                <div className="py-4 px-1 space-y-3.5 font-sans text-xs">
+                  <AnimatePresence mode="wait">
+                    {activeWaTab === "lista" ? (
+                      <motion.div
+                        key="tab-lista"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.25 }}
+                        className="space-y-3.5"
+                      >
+                        {/* 1. Outbound Auto-Notification from Klynn */}
+                        <div className="flex justify-end">
+                          <div className="bg-[#005c4b] text-slate-100 rounded-2xl rounded-tr-none p-4 max-w-[90%] shadow-md border border-[#007a63]/50">
+                            <p className="font-semibold text-white mb-2 text-sm leading-snug">
+                              ¡Hola Juan! Tu orden <span className="underline decoration-[#25D366]">KL-202605-0042</span> ya está <span className="bg-[#25D366]/20 text-[#25D366] px-1.5 py-0.5 rounded font-bold">¡LISTA!</span>
+                            </p>
+
+                            <div className="bg-black/20 rounded-lg p-2.5 my-2 space-y-1.5 text-[11px] text-slate-200 border border-white/5">
+                              <div className="flex justify-between items-center">
+                                <span className="text-slate-300 flex items-center gap-1.5"><Package className="h-3.5 w-3.5 text-emerald-400" /> Camisa M/L x2:</span>
+                                <span className="font-mono">RD$ 300.00</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-slate-300 flex items-center gap-1.5"><Scissors className="h-3.5 w-3.5 text-emerald-400" /> Pantalón vestir x1:</span>
+                                <span className="font-mono">RD$ 200.00</span>
+                              </div>
+                              <div className="flex justify-between items-center">
+                                <span className="text-slate-300 flex items-center gap-1.5"><Droplets className="h-3.5 w-3.5 text-emerald-400" /> Lavado 3.5 lb:</span>
+                                <span className="font-mono">RD$ 280.00</span>
+                              </div>
+                              <div className="border-t border-white/10 pt-1.5 flex justify-between font-bold text-white text-xs">
+                                <span>TOTAL ITBIS INCL.:</span>
+                                <span className="text-[#25D366]">RD$ 920.40</span>
+                              </div>
+                            </div>
+
+                            <div className="text-[11px] text-slate-300 space-y-1 mt-2">
+                              <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> Sucursal Naco · Av. Tiradentes #42</div>
+                              <div className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> Horario retiro: Lun-Sáb 8am - 7pm</div>
+                            </div>
+
+                            <div className="mt-2.5 pt-1.5 border-t border-white/10 flex items-center justify-end text-[10px]">
+                              <div className="flex items-center gap-1 text-[#25D366]">
+                                <span>10:31 AM</span>
+                                <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                                  <path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.41 11.93l-1.41 1.41 5.66 5.66 12-12-1.42-1.41zM.41 13.34l5.66 5.66 1.41-1.41-5.66-5.66-1.41 1.41z" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Customer Reply */}
+                        <div className="flex justify-start">
+                          <div className="bg-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 max-w-[85%] border border-slate-700/60 shadow-sm">
+                            <p className="text-sm font-normal">¡Muchas gracias! Estaré allá en 10 minutos a retirarla.</p>
+                            <span className="text-[10px] text-slate-400 text-right block mt-1">10:32 AM</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    ) : (
+                      <motion.div
+                        key="tab-recibo"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        transition={{ duration: 0.25 }}
+                        className="space-y-3.5"
+                      >
+                        {/* 1. Outbound Auto-Receipt / NCF Notification */}
+                        <div className="flex justify-end">
+                          <div className="bg-[#005c4b] text-slate-100 rounded-2xl rounded-tr-none p-3.5 max-w-[92%] shadow-md border border-[#007a63]/50">
+                            <div className="text-center font-bold text-xs text-[#25D366] tracking-wider uppercase mb-1.5 flex items-center justify-center gap-1.5">
+                              <FileText className="h-3.5 w-3.5" /> FACTURA PARA CONSUMIDOR FINAL
+                            </div>
+                            <div className="text-[11px] text-slate-200 space-y-1.5 font-mono bg-black/25 p-3 rounded-xl border border-white/5">
+                              <div className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> <strong>Lavandería La Burbuja</strong></div>
+                              <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" /> RNC: 131-12345-6</div>
+                              <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Av. Tiradentes #42, Naco</div>
+                              <div className="border-t border-white/10 my-1 pt-1.5 text-slate-300 space-y-1">
+                                <div className="flex items-center gap-1.5"><Receipt className="h-3.5 w-3.5 text-slate-400 shrink-0" /> ORDEN: <strong>KL-202605-0042</strong></div>
+                                <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" /> NCF: <strong>B0200000123</strong></div>
+                                <div className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Fecha: 02/05/2026 10:30 AM</div>
+                              </div>
+                              <div className="border-t border-white/10 my-1 pt-1.5 text-slate-300 space-y-1">
+                                <div className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-slate-400 shrink-0" /> CLIENTE: Juan Pérez</div>
+                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Tel: (809) 555-0142</div>
+                              </div>
+                              <div className="border-t border-white/10 my-1 pt-1.5 space-y-1">
+                                <div className="text-emerald-300 font-bold font-sans text-xs flex items-center gap-1.5 mb-1"><Package className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> DETALLE PRENDAS:</div>
+                                <div className="pl-2">• Camisa M/L x2: RD$ 300.00</div>
+                                <div className="pl-2">• Pantalón vestir x1: RD$ 200.00</div>
+                                <div className="pl-2">• Lavado/lb 3.5lb: RD$ 280.00</div>
+                              </div>
+                              <div className="border-t border-white/10 my-1 pt-1.5 font-bold space-y-0.5">
+                                <div>SUBTOTAL: RD$ 780.00</div>
+                                <div>ITBIS (18%): RD$ 140.40</div>
+                                <div className="text-white text-xs mt-0.5">TOTAL: <span className="text-[#25D366]">RD$ 920.40</span></div>
+                              </div>
+                              <div className="border-t border-white/10 my-1 pt-1.5 text-[10px] text-slate-300 font-sans space-y-1">
+                                <div className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Pago: EFECTIVO (Recibido: RD$ 1,000.00 | Vuelto: RD$ 79.60)</div>
+                                <div className="flex items-center gap-2">
+                                  <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-slate-400" /> Saldo: RD$ 0.00</span>
+                                  <span className="flex items-center gap-1 text-emerald-400 font-bold"><Check className="h-3 w-3 text-emerald-400" /> Estado: RECIBIDA</span>
+                                </div>
+                              </div>
+                            </div>
+
+                            <div className="mt-2 text-[10px] text-slate-300 text-center font-medium">
+                              ¡Gracias por su preferencia!
+                            </div>
+
+                            <div className="mt-2 pt-1 border-t border-white/10 flex items-center justify-end text-[10px]">
+                              <div className="flex items-center gap-1 text-[#25D366]">
+                                <span>10:30 AM</span>
+                                <svg className="h-3.5 w-3.5 fill-current" viewBox="0 0 24 24">
+                                  <path d="M18 7l-1.41-1.41-6.34 6.34 1.41 1.41L18 7zm4.24-1.41L11.66 16.17 7.41 11.93l-1.41 1.41 5.66 5.66 12-12-1.42-1.41zM.41 13.34l5.66 5.66 1.41-1.41-5.66-5.66-1.41 1.41z" />
+                                </svg>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* 2. Customer Reply */}
+                        <div className="flex justify-start">
+                          <div className="bg-slate-800 text-slate-200 rounded-2xl rounded-tl-none p-3.5 max-w-[85%] border border-slate-700/60 shadow-sm">
+                            <p className="text-sm font-normal">¡Excelente! Gracias por la confirmación y por el recibo digital.</p>
+                            <span className="text-[10px] text-slate-400 text-right block mt-1">10:31 AM</span>
+                          </div>
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+
+                {/* Interactive Tab Toggle Buttons */}
+                <div className="mt-3 pt-3 border-t border-slate-800 flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveWaTab("lista")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                      activeWaTab === "lista"
+                        ? "bg-[#25D366] text-slate-950 shadow-[0_0_15px_rgba(37,211,102,0.35)]"
+                        : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800"
+                    }`}
+                  >
+                    <Check className="h-3.5 w-3.5" /> Orden Lista
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveWaTab("recibo")}
+                    className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-xl text-xs font-bold transition-all ${
+                      activeWaTab === "recibo"
+                        ? "bg-[#25D366] text-slate-950 shadow-[0_0_15px_rgba(37,211,102,0.35)]"
+                        : "bg-slate-900 text-slate-400 hover:text-white hover:bg-slate-800"
+                    }`}
+                  >
+                    <Receipt className="h-3.5 w-3.5" /> Recibo Digital (NCF)
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
       {/* CÓMO FUNCIONA */}
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="mb-14 text-center">
@@ -647,6 +822,387 @@ function LandingPage() {
               </div>
             ))}
           </div>
+
+          {/* ─── Section · Klynn Desktop ─── */}
+          <div className="mt-12" id="desktop">
+            <div className="desktop-box">
+              <div className="desktop-grid">
+                <div>
+                  <p className="eyebrow" style={{ color: "var(--color-anil, #1B4B73)", opacity: 1 }}>
+                    <span className="eyebrow__dot" style={{ background: "var(--color-yellow, #F0B900)" }}></span> ¡NUEVO! VERSIÓN DESKTOP
+                  </p>
+                  <h2 className="section__title" id="desktop-title">
+                    Klynn <span style={{ color: "var(--color-anil, #1B4B73)" }}>Desktop</span>
+                  </h2>
+                  <p className="section__lede">
+                    Toda la potencia de Klynn instalada directamente en tu computadora Windows. Sin internet, sin suscripción mensual, con acceso ilimitado a tus datos.
+                  </p>
+                  <ul className="desktop-features">
+                    <li>
+                      <span className="desktop-features__icon">✓</span>
+                      <span><strong>Funciona 100% sin internet:</strong> Ideal para zonas con señal inestable o apagones.</span>
+                    </li>
+                    <li>
+                      <span className="desktop-features__icon">✓</span>
+                      <span><strong>Datos en tu equipo:</strong> Tu información se guarda localmente, tú la controlas.</span>
+                    </li>
+                    <li>
+                      <span className="desktop-features__icon">✓</span>
+                      <span><strong>Impresoras térmicas ESC/POS:</strong> 57mm y 80mm. Plug & play igual que la versión cloud.</span>
+                    </li>
+                    <li>
+                      <span className="desktop-features__icon">✓</span>
+                      <span><strong>Rendimiento ultra rápido:</strong> Sin latencia de red. Respuesta instantánea en cada acción.</span>
+                    </li>
+                  </ul>
+                  <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", marginTop: "1.5rem" }}>
+                    <Link to="/descargar" search={{ autostart: true }} className="btn btn--anil">
+                      Descargar gratis <span className="btn__arrow" aria-hidden="true">↓</span>
+                    </Link>
+                    <span style={{ fontFamily: "var(--font-label, monospace)", fontSize: "11px", color: "var(--color-muted, #64748b)" }}>
+                      Windows 10 / 11 · 174 MB
+                    </span>
+                  </div>
+                </div>
+                <div className="desktop-window">
+                  <div className="desktop-window__bar">
+                    <span className="desktop-window__dot desktop-window__dot--red"></span>
+                    <span className="desktop-window__dot desktop-window__dot--yellow"></span>
+                    <span className="desktop-window__dot desktop-window__dot--green"></span>
+                    <span className="desktop-window__title">Klynn Desktop v2.4</span>
+                  </div>
+                  <div className="desktop-window__body">
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "0.5rem 0", borderBottom: "1px solid var(--color-rule, #e2e8f0)" }}>
+                      <span style={{ fontWeight: 700, fontSize: "0.85rem" }}>Caja #1 Mostrador</span>
+                      <span style={{ background: "#16a34a", color: "#fff", fontSize: "10px", fontWeight: 700, padding: "2px 8px", borderRadius: "99px" }}>MODO OFFLINE</span>
+                    </div>
+                    <div style={{ fontFamily: "var(--font-mono, monospace)", fontSize: "0.75rem", color: "var(--color-ink-2, #334155)", display: "flex", flexDirection: "column", gap: "0.4rem" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4829</span><span>RD$ 450.00</span></div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4830</span><span>RD$ 1,200.00</span></div>
+                      <div style={{ display: "flex", justifyContent: "space-between" }}><span>ORDEN #4831</span><span>RD$ 380.00</span></div>
+                    </div>
+                    <div style={{ background: "rgba(27, 75, 115, 0.08)", padding: "0.6rem", borderRadius: "8px", fontSize: "0.75rem", fontWeight: 600, textAlign: "center", color: "var(--color-anil, #1B4B73)" }}>
+                      ✓ Sincronización automática pendiente (3 órdenes)
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MÓDULOS PREMIUM */}
+      <section id="modulos" className="border-y border-border bg-surface-elevated">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="mb-14 mx-auto max-w-2xl text-center">
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Módulos disponibles</div>
+            <h2 className="text-balance text-3xl md:text-4xl">Módulos que potencian tu lavandería.</h2>
+            <p className="mt-4 text-lg text-muted-foreground">
+              Cada módulo amplía las capacidades de Klynn según las necesidades de tu negocio. Actívalos desde tu plan y escala sin límites.
+            </p>
+          </div>
+
+          <div className="space-y-16">
+            {/* 1. Facturación Electrónica */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 font-display text-xl font-black shrink-0">1</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Facturación Electrónica</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  Cumple con las normativas fiscales de la DGII sin complicaciones. Genera comprobantes electrónicos (e-CF) directamente desde Klynn, sin necesidad de sistemas externos.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "Generación automática de NCF y e-CF (facturas de crédito fiscal, consumo, notas de crédito/débito)",
+                    "Envío directo a la DGII desde tu panel — sin intermediarios",
+                    "Historial completo de comprobantes para auditorías y reportes",
+                    "Compatible con impresoras térmicas 57mm y 80mm para impresión de facturas fiscales",
+                    "Panel de homologación integrado para completar el proceso DGII",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border bg-surface p-8 shadow-card">
+                <div className="flex items-center gap-3 mb-6">
+                  <div className="h-10 w-10 rounded-xl bg-emerald-500/10 flex items-center justify-center">
+                    <FileText className="h-5 w-5 text-emerald-600" />
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm">Factura Electrónica</div>
+                    <div className="text-[11px] text-muted-foreground">e-CF · Klynn Cloud</div>
+                  </div>
+                </div>
+                <div className="space-y-3 text-xs font-mono">
+                  <div className="flex justify-between border-b border-border/60 pb-2">
+                    <span className="text-muted-foreground">RNC Emisor</span>
+                    <span className="font-semibold">1-31-12345-6</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/60 pb-2">
+                    <span className="text-muted-foreground">NCF</span>
+                    <span className="font-semibold text-emerald-600">E310000000001</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/60 pb-2">
+                    <span className="text-muted-foreground">Tipo</span>
+                    <span className="font-semibold">Factura de Crédito Fiscal</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/60 pb-2">
+                    <span className="text-muted-foreground">Subtotal</span>
+                    <span className="font-semibold">RD$ 2,500.00</span>
+                  </div>
+                  <div className="flex justify-between border-b border-border/60 pb-2">
+                    <span className="text-muted-foreground">ITBIS (18%)</span>
+                    <span className="font-semibold">RD$ 450.00</span>
+                  </div>
+                  <div className="flex justify-between pt-1">
+                    <span className="font-bold text-foreground">Total</span>
+                    <span className="font-black text-emerald-600 text-sm">RD$ 2,950.00</span>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-xl bg-emerald-500/10 p-3 text-center text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                  ✓ Enviado a DGII · Aceptado
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 2. Multisucursal */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div className="md:order-2">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-500/10 text-blue-600 font-display text-xl font-black shrink-0">2</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Multisucursal</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  Gestiona todas tus sucursales desde un solo lugar. Alterna entre locales en segundos y mantén el control operativo de tu cadena de lavanderías.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "Conmutador rápido entre sucursales desde la barra superior sin necesidad de cerrar sesión",
+                    "Cada sucursal opera con su propia caja, clientes, catálogo y equipo de trabajo independientes",
+                    "Registro de nuevas sucursales vinculado automáticamente a la suscripción de tu plan principal",
+                    "Control de acceso y permisos por sucursal para que cada empleado vea solo su punto de venta",
+                    "Personalización de marca (logotipo y colores) independiente para cada local",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-blue-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="md:order-1 rounded-2xl border border-border bg-surface p-8 shadow-card">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-4">Panel multi-sucursal</div>
+                <div className="space-y-3">
+                  {[
+                    { name: "Sucursal Gazcue", orders: 142, revenue: "RD$ 78,400", status: "Abierta" },
+                    { name: "Sucursal Naco", orders: 89, revenue: "RD$ 52,100", status: "Abierta" },
+                    { name: "Sucursal Bella Vista", orders: 67, revenue: "RD$ 38,900", status: "Cerrada" },
+                  ].map((s) => (
+                    <div key={s.name} className="flex items-center justify-between rounded-xl bg-accent/30 p-3">
+                      <div>
+                        <div className="font-bold text-sm">{s.name}</div>
+                        <div className="text-[11px] text-muted-foreground">{s.orders} órdenes este mes</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-black text-sm text-blue-600">{s.revenue}</div>
+                        <div className={`text-[10px] font-bold ${s.status === "Abierta" ? "text-emerald-600" : "text-slate-400"}`}>
+                          {s.status === "Abierta" ? "● " : "○ "}{s.status}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-xl bg-blue-500/10 p-3 text-center text-[11px] font-bold text-blue-700 uppercase tracking-wider">
+                  3 sucursales · RD$ 169,400 consolidado
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 3. Envío a domicilio */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-500/10 text-orange-600 font-display text-xl font-black shrink-0">3</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Envío a domicilio</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  Gestión eficiente de pedidos para entrega a domicilio. Controla tus órdenes desde que están listas hasta que son entregadas en la puerta de tu cliente.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "Control de estados de entrega: Lista (Pendiente de envío), En camino y Entregada",
+                    "Asignación de repartidores por orden para llevar el control de quién entrega cada pedido",
+                    "Cobro de tarifa fija de delivery integrado directamente al total de la orden",
+                    "Contacto directo por teléfono o WhatsApp con el cliente para coordinar la entrega en un clic",
+                    "Barra de progreso de entregas del día y tiempo transcurrido por paquete",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-orange-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border bg-surface p-8 shadow-card">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Progreso de entregas hoy</div>
+                  <div className="text-xs font-bold text-orange-600">67% completado</div>
+                </div>
+                <div className="w-full bg-slate-100 dark:bg-slate-800 rounded-full h-2 mb-6 overflow-hidden">
+                  <div className="bg-orange-500 h-2 rounded-full w-[67%]" />
+                </div>
+                <div className="space-y-3">
+                  {[
+                    { driver: "Carlos M.", order: "#4832", address: "Av. Tiradentes #45", status: "En camino", color: "text-orange-600 bg-orange-50 border-orange-200" },
+                    { driver: "Miguel R.", order: "#4829", address: "Calle El Conde #102", status: "Entregada", color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+                    { driver: "Sin asignar", order: "#4835", address: "Av. Winston Churchill", status: "Lista", color: "text-blue-600 bg-blue-50 border-blue-200" },
+                  ].map((d) => (
+                    <div key={d.order} className="flex items-center justify-between rounded-xl border border-border bg-white dark:bg-slate-900 p-3 shadow-sm">
+                      <div className="flex items-center gap-3">
+                        <div className="h-8 w-8 rounded-full bg-orange-500/10 flex items-center justify-center">
+                          <Truck className="h-4 w-4 text-orange-600" />
+                        </div>
+                        <div>
+                          <div className="font-bold text-sm flex items-center gap-2">
+                            <span>{d.order}</span>
+                            <span className="text-xs font-normal text-muted-foreground">({d.driver})</span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate max-w-[160px]">{d.address}</div>
+                        </div>
+                      </div>
+                      <div className={`text-[10px] font-bold px-2 py-1 rounded border ${d.color}`}>{d.status}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-xl bg-orange-500/10 p-3 text-center text-[11px] font-bold text-orange-700 uppercase tracking-wider">
+                  2 entregadas · 1 en camino · 1 pendiente (Monto fijo RD$ 150)
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 4. Tablero de Procesos */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div className="md:order-2">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-500/10 text-violet-600 font-display text-xl font-black shrink-0">4</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Tablero de Procesos</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  Visualiza el flujo completo de trabajo en 3 columnas Kanban: Recibidas, En Proceso y Terminado. Mueve órdenes entre estados con un clic y mantén el control total de tu operación.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "3 columnas Kanban: RECIBIDAS (en recepción) → EN PROCESO (en producción) → TERMINADO (listas para entrega)",
+                    "Cambia el estado de cada orden con un clic — se actualiza al instante en todo el sistema",
+                    "Filtro de órdenes urgentes destacadas con marcador de prioridad",
+                    "Alerta de prendas sin retirar: configura los días de almacenamiento y notifica por WhatsApp",
+                    "Búsqueda rápida por número de orden, cliente o servicio desde el tablero",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-violet-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="md:order-1 rounded-2xl border border-border bg-surface p-6 shadow-card">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground mb-4">Tablero de Procesos · Vista Kanban</div>
+                <div className="grid grid-cols-3 gap-3">
+                  {/* RECIBIDAS */}
+                  <div className="space-y-2">
+                    <div className="rounded-lg bg-blue-600/85 text-white px-3 py-2 text-center">
+                      <div className="text-[10px] font-bold uppercase tracking-wider">Recibidas</div>
+                      <div className="text-lg font-black">14</div>
+                    </div>
+                    {[
+                      { id: "#4832", client: "María López", service: "Lavado y Sec.", urgent: true },
+                      { id: "#4835", client: "Juan Pérez", service: "Planchado", urgent: false },
+                      { id: "#4837", client: "Ana Díaz", service: "Lavado Completo", urgent: false },
+                    ].map((o) => (
+                      <div key={o.id} className={`rounded-lg border bg-white dark:bg-slate-900 p-2.5 text-[11px] shadow-sm ${o.urgent ? "border-red-300 ring-1 ring-red-200" : "border-border"}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-foreground">{o.id}</span>
+                          {o.urgent && <span className="text-[9px] font-bold text-red-600 bg-red-50 px-1.5 py-0.5 rounded">🔥 URGENTE</span>}
+                        </div>
+                        <div className="text-muted-foreground truncate">{o.client}</div>
+                        <div className="text-blue-600 font-semibold mt-0.5">{o.service}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* EN PROCESO */}
+                  <div className="space-y-2">
+                    <div className="rounded-lg bg-amber-500/85 text-white px-3 py-2 text-center">
+                      <div className="text-[10px] font-bold uppercase tracking-wider">En Proceso</div>
+                      <div className="text-lg font-black">8</div>
+                    </div>
+                    {[
+                      { id: "#4828", client: "Pedro Santos", service: "Lavado + Planch." },
+                      { id: "#4830", client: "Rosa Marte", service: "Tintorería" },
+                    ].map((o) => (
+                      <div key={o.id} className="rounded-lg border border-border bg-white dark:bg-slate-900 p-2.5 text-[11px] shadow-sm">
+                        <div className="font-bold text-foreground mb-1">{o.id}</div>
+                        <div className="text-muted-foreground truncate">{o.client}</div>
+                        <div className="text-amber-600 font-semibold mt-0.5">{o.service}</div>
+                      </div>
+                    ))}
+                  </div>
+                  {/* TERMINADO */}
+                  <div className="space-y-2">
+                    <div className="rounded-lg bg-emerald-600/85 text-white px-3 py-2 text-center">
+                      <div className="text-[10px] font-bold uppercase tracking-wider">Terminado</div>
+                      <div className="text-lg font-black">22</div>
+                    </div>
+                    {[
+                      { id: "#4825", client: "Luis García", service: "Lavado y Sec.", days: 2 },
+                      { id: "#4820", client: "Carmen Reyes", service: "Planchado", days: 5 },
+                    ].map((o) => (
+                      <div key={o.id} className="rounded-lg border border-border bg-white dark:bg-slate-900 p-2.5 text-[11px] shadow-sm">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-bold text-foreground">{o.id}</span>
+                          {o.days >= 5 && <span className="text-[9px] font-bold text-orange-600 bg-orange-50 px-1.5 py-0.5 rounded">⏳ {o.days}d</span>}
+                        </div>
+                        <div className="text-muted-foreground truncate">{o.client}</div>
+                        <div className="text-emerald-600 font-semibold mt-0.5">{o.service}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div className="mt-4 rounded-xl bg-violet-500/10 p-3 text-center text-[11px] font-bold text-violet-700 uppercase tracking-wider">
+                  44 órdenes activas · Recibidas 14 · Proceso 8 · Terminado 22
+                </div>
+              </div>
+            </motion.div>
+          </div>
         </div>
       </section>
 
@@ -679,7 +1235,7 @@ function LandingPage() {
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Planes en RD$</div>
             <h2 className="text-balance text-4xl md:text-5xl">Precios honestos, sin sorpresas.</h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground">
-              14 días de prueba gratis en cualquier plan. Cambia o cancela cuando quieras. Pagos en pesos dominicanos.
+              <strong className="font-bold text-slate-900 dark:text-white">14 días de prueba gratis</strong> en cualquier plan. Cambia o cancela cuando quieras. Pagos en pesos dominicanos.
             </p>
 
             {/* TOGGLE MENSUAL / ANUAL */}
@@ -687,7 +1243,7 @@ function LandingPage() {
               <span className={`text-sm font-bold transition-colors ${billingCycle === "monthly" ? "text-primary" : "text-muted-foreground"}`}>Pago Mensual</span>
               <button
                 onClick={() => setBillingCycle(billingCycle === "monthly" ? "yearly" : "monthly")}
-                className="relative h-7 w-12 rounded-full bg-slate-200 p-1 transition-colors hover:bg-slate-300"
+                className="relative h-7 w-12 rounded-full bg-slate-200 p-1 transition-colors hover:bg-slate-300 cursor-pointer"
               >
                 <motion.div
                   animate={{ x: billingCycle === "monthly" ? 0 : 20 }}
@@ -696,8 +1252,8 @@ function LandingPage() {
               </button>
               <div className="flex items-center gap-2">
                 <span className={`text-sm font-bold transition-colors ${billingCycle === "yearly" ? "text-primary" : "text-muted-foreground"}`}>Pago Anual</span>
-                <span className="rounded-full bg-success/10 px-2.5 py-0.5 text-[10px] font-bold text-success uppercase tracking-widest">
-                  -15% OFF
+                <span className="rounded-full bg-[#F0B900]/20 px-2.5 py-0.5 text-xs font-extrabold text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 shadow-xs uppercase tracking-wider flex items-center gap-1">
+                  🎁 2 MESES GRATIS
                 </span>
               </div>
             </div>
@@ -761,7 +1317,8 @@ function LandingPage() {
                           { key: "whatsapp", label: "Mensajería WhatsApp" },
                           { key: "facturacion_fiscal", label: "Facturación Electrónica" },
                           { key: "multisucursal", label: "Multisucursal" },
-                          { key: "logistica", label: "Logística" }
+                          { key: "logistica", label: "Envío a domicilio" },
+                          { key: "procesos", label: "Tablero de Procesos" },
                         ].map(({ key, label }) => {
                           const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                           return (

@@ -1,5 +1,6 @@
 /* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
 import { useState, useEffect, useMemo } from "react";
+import { Link } from "@tanstack/react-router";
 import {
   RefreshCw,
   CheckCircle2,
@@ -17,6 +18,8 @@ import {
   Receipt,
   User,
   Shield,
+  Settings,
+  Lock,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import {
@@ -24,15 +27,18 @@ import {
   getClientes,
   updateOrdenEstado,
   saveTenant,
+  isModuleEnabled,
   can,
   type Orden,
   type Cliente,
   type EstadoOrden,
 } from "@/lib/storage";
-import { notificarWhatsApp } from "@/lib/whatsapp";
+import { usePlans } from "@/hooks/use-queries";
+import { notificarWhatsApp, calcularDiasEnAlmacen } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -93,6 +99,10 @@ export function ProcesosPage() {
   const user = useRequireAuth();
   const tenantId = user?.tenant?.id;
 
+  const { data: plans = [] } = usePlans();
+  const activePlan = plans.find((p) => p.id === user?.tenant?.plan_id);
+  const hasProcesosModule = isModuleEnabled(user?.tenant || null, "procesos", activePlan);
+
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [loading, setLoading] = useState(true);
@@ -102,6 +112,40 @@ export function ProcesosPage() {
   const [processingId, setProcessingId] = useState<string | null>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [notaModalOrden, setNotaModalOrden] = useState<Orden | null>(null);
+  const [diasAlmacen, setDiasAlmacen] = useState<number>(
+    user?.tenant?.config?.dias_almacenamiento_sin_retirar || user?.tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5
+  );
+
+  useEffect(() => {
+    if (user?.tenant?.config) {
+      const cfgVal = user.tenant.config.dias_almacenamiento_sin_retirar || user.tenant.config.whatsapp?.dias_recordatorio_sin_retirar || 5;
+      setDiasAlmacen(cfgVal);
+    }
+  }, [user?.tenant?.config]);
+
+  const updateDiasAlmacen = async (val: number) => {
+    const nuevoVal = Math.max(1, val);
+    setDiasAlmacen(nuevoVal);
+    if (!user?.tenant) return;
+    try {
+      const updatedTenant = {
+        ...user.tenant,
+        config: {
+          ...(user.tenant.config || {}),
+          dias_almacenamiento_sin_retirar: nuevoVal,
+        },
+      };
+      await saveTenant(updatedTenant);
+      toast.success(`Días de almacenamiento actualizados a ${nuevoVal} días`);
+    } catch (err) {
+      console.error("Error guardando días de almacenamiento:", err);
+      toast.error("No se pudo guardar la configuración");
+    }
+  };
+
+  const ordenesAlmacenadasCount = useMemo(() => {
+    return ordenes.filter((o) => o.estado === "LISTA" && calcularDiasEnAlmacen(o.creado_en) >= diasAlmacen).length;
+  }, [ordenes, diasAlmacen]);
 
   const loadData = async () => {
     if (!tenantId) return;
@@ -402,6 +446,37 @@ export function ProcesosPage() {
     );
   }
 
+  if (!loading && !hasProcesosModule) {
+    return (
+      <div className="min-h-[70vh] bg-slate-50/50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
+        <div className="max-w-md w-full rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-xl space-y-5">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-50 dark:bg-amber-950/50 text-amber-600 dark:text-amber-400 border border-amber-200 dark:border-amber-900">
+            <Lock className="h-8 w-8" />
+          </div>
+          <div>
+            <h2 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white font-display">
+              Tablero de Procesos
+            </h2>
+            <p className="mt-2 text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              El módulo de <strong>Control de Producción por Etapas</strong> no está incluido en tu plan actual. Actualiza tu suscripción para desbloquear esta funcionalidad.
+            </p>
+          </div>
+          <div className="pt-2">
+            <Link
+              to="/t/$slug/configuracion"
+              search={{ tab: "plan" }}
+              params={{ slug: user?.tenant?.slug || "" }}
+            >
+              <Button className="w-full h-11 rounded-xl bg-primary hover:bg-primary/90 text-white font-extrabold text-sm shadow-md transition-all active:scale-95 cursor-pointer">
+                Ver planes y actualizar
+              </Button>
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div
       className={
@@ -465,6 +540,65 @@ export function ProcesosPage() {
               </div>
             </div>
           </div>
+
+          {/* PILL / CARD DE AJUSTE RÁPIDO DE PRENDAS SIN RETIRAR */}
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="flex items-center gap-2.5 rounded-2xl border border-amber-200 bg-amber-50/60 px-4 py-2 shadow-2xs dark:border-amber-900/50 dark:bg-amber-950/30 hover:bg-amber-100/60 dark:hover:bg-amber-950/50 transition-all cursor-pointer text-left shrink-0 active:scale-95"
+                title="Ajustar días de almacenamiento para prendas sin retirar"
+              >
+                <Clock className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <div className="text-left">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400 flex items-center gap-1">
+                    Sin Retirar
+                    <Settings className="h-2.5 w-2.5 opacity-70" />
+                  </div>
+                  <div className="text-xs font-extrabold text-amber-900 dark:text-amber-200">
+                    Más de {diasAlmacen} días
+                  </div>
+                </div>
+              </button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-4 rounded-2xl shadow-xl border border-amber-500/25 bg-white dark:bg-slate-900 space-y-3">
+              <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
+                <Clock className="h-4 w-4 text-amber-500" />
+                <span>Prendas sin retirar</span>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-snug">
+                Define el tiempo límite en días (estado LISTA) para considerar órdenes almacenadas sin retirar.
+              </p>
+              <div className="flex items-center gap-1.5 bg-amber-50/60 dark:bg-amber-950/40 p-2 rounded-xl border border-amber-500/20">
+                {[3, 5, 7, 14].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => updateDiasAlmacen(d)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      diasAlmacen === d
+                        ? "bg-amber-500 text-white shadow-xs"
+                        : "text-slate-600 dark:text-slate-400 hover:bg-white dark:hover:bg-slate-800"
+                    }`}
+                  >
+                    {d}d
+                  </button>
+                ))}
+                <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                <div className="flex items-center gap-1 bg-white dark:bg-slate-900 px-2 py-1 rounded-lg border border-slate-200 dark:border-slate-800">
+                  <Input
+                    className="h-6 w-10 text-xs font-black text-center p-0 border-0 bg-transparent focus-visible:ring-0"
+                    type="number"
+                    min={1}
+                    max={90}
+                    value={diasAlmacen}
+                    onChange={(e) => updateDiasAlmacen(Number(e.target.value))}
+                  />
+                  <span className="text-[10px] font-black text-amber-700 dark:text-amber-400 uppercase">días</span>
+                </div>
+              </div>
+            </PopoverContent>
+          </Popover>
 
           {/* BOTÓN PANTALLA COMPLETA EN COLOR PRIMARIO Y MENOR ALTURA */}
           <Button

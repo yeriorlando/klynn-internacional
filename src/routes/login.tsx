@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
   UserPlus, LayoutDashboard, ShieldCheck, Sparkles, CheckCircle2,
-  Wallet, Truck, Receipt, MessageSquare
+  Wallet, Truck, Receipt, MessageSquare, Layers
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -153,7 +153,7 @@ function LoginPage() {
 
         {/* Header superior del Panel */}
         <div className="relative z-10 flex items-center justify-between">
-          <Logo size="lg" iconColor="#F0B900" className="[&>span]:text-white font-display tracking-tight" />
+          <Logo size="lg" variant="white" className="font-display tracking-tight" />
         </div>
 
         {/* Bloque Central de Valor (Ajustado para un solo vistazo sin scroll) */}
@@ -196,12 +196,12 @@ function LoginPage() {
             </div>
 
             <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2.5 transition-all hover:bg-white/15 group">
-              <div className="h-8 w-8 rounded-lg bg-[#F0B900]/20 text-[#F0B900] flex items-center justify-center shrink-0 border border-[#F0B900]/30 group-hover:scale-105 transition-transform">
-                <Wallet className="h-4 w-4" />
+              <div className="h-8 w-8 rounded-lg bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0 border border-violet-500/30 group-hover:scale-105 transition-transform">
+                <Layers className="h-4 w-4" />
               </div>
               <div className="space-y-0.5 min-w-0">
-                <span className="text-xs font-bold text-white block truncate">Arqueos & Cuadres</span>
-                <span className="text-[10px] text-slate-300 block truncate">Control de caja en vivo</span>
+                <span className="text-xs font-bold text-white block truncate">Tablero de Procesos</span>
+                <span className="text-[10px] text-slate-300 block truncate">Control Kanban de ropa</span>
               </div>
             </div>
 
@@ -216,24 +216,18 @@ function LoginPage() {
             </div>
 
             <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2.5 transition-all hover:bg-white/15 group">
-              <div className="h-8 w-8 rounded-lg bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 border border-amber-500/30 group-hover:scale-105 transition-transform">
+              <div className="h-8 w-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0 border border-orange-500/30 group-hover:scale-105 transition-transform">
                 <Truck className="h-4 w-4" />
               </div>
               <div className="space-y-0.5 min-w-0">
-                <span className="text-xs font-bold text-white block truncate">Delivery & Rutas</span>
-                <span className="text-[10px] text-slate-300 block truncate">Monitoreo de choferes</span>
+                <span className="text-xs font-bold text-white block truncate">Envío a domicilio</span>
+                <span className="text-[10px] text-slate-300 block truncate">Gestión de entregas</span>
               </div>
             </div>
           </motion.div>
         </div>
 
-        {/* Sin elementos inferiores sobrantes para vista perfecta en 100vh */}
-        <div className="relative z-10 text-[11px] text-slate-400 flex items-center justify-between pt-2">
-          <span>Klynn Cloud OS</span>
-          <span className="flex items-center gap-1 text-slate-300">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-400" /> Cifrado SSL 256-bit
-          </span>
-        </div>
+
       </div>
 
       {/* PANEL DERECHO: Formulario de Autenticación Ajustado en 100vh */}
