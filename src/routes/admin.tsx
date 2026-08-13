@@ -45,6 +45,8 @@ import {
 
   type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal
 } from "@/lib/storage";
+import { supabase } from "@/lib/supabase";
+import { listAssociatedCompaniesPronesoft } from "@/lib/fiscal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -129,6 +131,33 @@ function AdminPage() {
   const [editingLicencia, setEditingLicencia] = useState<LicenciaLocal | null>(null);
   const [deleteLicencia, setDeleteLicencia] = useState<LicenciaLocal | null>(null);
 
+  const [pronesoftCompanies, setPronesoftCompanies] = useState<any[]>([]);
+  const [ecfConfigsMap, setEcfConfigsMap] = useState<Record<string, any>>({});
+  const [loadingPronesoft, setLoadingPronesoft] = useState(false);
+
+  async function loadPronesoftData() {
+    setLoadingPronesoft(true);
+    try {
+      const res = await listAssociatedCompaniesPronesoft();
+      const items = res?.data || (Array.isArray(res) ? res : []);
+      setPronesoftCompanies(items);
+
+      const { data: configs } = await supabase.from('ecf_config').select('*');
+      if (configs) {
+        const map: Record<string, any> = {};
+        for (const c of configs) {
+          if (c.rnc_emisor) map[c.rnc_emisor] = c;
+          if (c.pronesoft_tenant_id) map[c.pronesoft_tenant_id] = c;
+        }
+        setEcfConfigsMap(map);
+      }
+    } catch (err: any) {
+      console.warn("Aviso al cargar empresas de Pronesoft:", err.message);
+    } finally {
+      setLoadingPronesoft(false);
+    }
+  }
+
   useEffect(() => {
     async function load() {
       const [t, p, cfg, lics] = await Promise.all([getTenants(), getPlans(), getGlobalConfig(), getLicenciasLocales()]);
@@ -136,6 +165,7 @@ function AdminPage() {
       setPlans(p);
       setGlobalConfig(cfg);
       setLicencias(lics);
+      loadPronesoftData();
       const ordsMap: Record<string, { count: number; total: number }> = {};
       let grandTotal = 0;
       for (const tenant of t) {
@@ -225,6 +255,7 @@ function AdminPage() {
             <TabsTrigger value="tenants">Lavanderías</TabsTrigger>
             <TabsTrigger value="plans">Planes SaaS</TabsTrigger>
             <TabsTrigger value="licencias">Licencias Desktop</TabsTrigger>
+            <TabsTrigger value="fiscal-companies">Empresas Fiscales (Pronesoft)</TabsTrigger>
           </TabsList>
 
           <TabsContent value="tenants">
@@ -570,6 +601,94 @@ function AdminPage() {
                       </tr>
                     ))}
                     {licencias.length === 0 && <tr><td colSpan={6} className="py-12 text-center text-muted-foreground font-medium">No se encontraron licencias creadas</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="fiscal-companies">
+            <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="font-display text-xl font-bold flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-emerald-600" /> Empresas Fiscales Asociadas (Pronesoft / DGII)
+                </h2>
+                <p className="text-sm text-muted-foreground">
+                  Directorio maestro de lavanderías registradas como empresas emisoras e-CF en la API de Pronesoft.
+                </p>
+              </div>
+              <Button 
+                onClick={loadPronesoftData} 
+                disabled={loadingPronesoft}
+                variant="outline"
+                className="h-9 px-4 rounded-xl font-bold border-primary/20 text-primary hover:bg-primary/5 gap-1.5 shrink-0"
+              >
+                <RefreshCw className={`h-4 w-4 ${loadingPronesoft ? "animate-spin" : ""}`} /> 
+                {loadingPronesoft ? "Cargando..." : "Refrescar Pronesoft"}
+              </Button>
+            </div>
+
+            <Card className="overflow-hidden border-none shadow-card">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground border-b border-border">
+                    <tr>
+                      <th className="px-6 py-4 text-left font-bold">Empresa / Razón Social</th>
+                      <th className="px-6 py-4 text-center font-bold">RNC / Cédula</th>
+                      <th className="px-6 py-4 text-center font-bold">Pronesoft Tenant ID</th>
+                      <th className="px-6 py-4 text-center font-bold">Ambiente</th>
+                      <th className="px-6 py-4 text-center font-bold">Lavandería Klynn</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pronesoftCompanies.map((c: any) => {
+                      const rnc = c.rnc || c.taxId || c.identification || "";
+                      const tenantId = c.id || c.tenantId || c.pronesoft_tenant_id || "";
+                      const name = c.name || c.companyName || c.razon_social || "Lavandería Registrada";
+                      
+                      const matchedConfig = ecfConfigsMap[rnc] || ecfConfigsMap[tenantId];
+                      const matchedTenant = matchedConfig ? tenants.find(t => t.id === matchedConfig.tenant_id) : undefined;
+
+                      return (
+                        <tr key={tenantId || rnc} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                          <td className="px-6 py-4 font-bold text-foreground">
+                            <div className="flex items-center gap-2">
+                              <Building2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                              <span>{name}</span>
+                            </div>
+                          </td>
+                          <td className="px-6 py-4 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                            {rnc || "N/A"}
+                          </td>
+                          <td className="px-6 py-4 text-center font-mono text-xs text-muted-foreground">
+                            <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                              {tenantId || "Automático"}
+                            </span>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase">
+                              {matchedConfig?.ambiente === 'produccion' ? 'Producción' : 'Pruebas / SBX'}
+                            </Badge>
+                          </td>
+                          <td className="px-6 py-4 text-center">
+                            {matchedTenant ? (
+                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-bold">
+                                {matchedTenant.nombre}
+                              </Badge>
+                            ) : (
+                              <span className="text-xs text-muted-foreground italic">No vinculada</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                    {pronesoftCompanies.length === 0 && !loadingPronesoft && (
+                      <tr>
+                        <td colSpan={5} className="py-12 text-center text-muted-foreground font-medium">
+                          No se encontraron empresas asociadas en la API de Pronesoft.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>

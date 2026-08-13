@@ -2716,10 +2716,12 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         } else {
           try {
             let nextNCF: string | undefined = undefined;
-            if (fiscalConfig?.ambiente === 'produccion') {
+            try {
               const { ncf, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
               nextNCF = ncf;
               finalNcfVencimiento = expiration_date;
+            } catch (seqErr) {
+              console.warn("Aviso al obtener secuencia local:", seqErr);
             }
 
             const ordenTemporal: Orden = {

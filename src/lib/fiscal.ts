@@ -95,8 +95,7 @@ export async function emitirECF(
       console.warn("⚠️ [Pronesoft Sandbox] Error de firma/certificado detectado en el servidor de pruebas. Iniciando auto-recuperación de Sandbox...");
       
       const tipoParaSecuencia = tipoECF || (config.rnc_emisor && config.rnc_emisor.startsWith("SBX") ? (cliente?.tipo === "Empresa" ? "E31" : "E32") : "E32");
-      const pseudoSecuencia = String(Math.floor(Math.random() * 90000000) + 10000000);
-      const encfGenerado = `${tipoParaSecuencia}${pseudoSecuencia}`;
+      const encfGenerado = orden.ncf || `${tipoParaSecuencia}0000000001`;
       
       // Construir QR de pruebas compatible con DGII
       const qrFicticio = `https://ecf.dgii.gov.do/EstadisticaInternet/Consultas/ConsultaPublica?RncEmisor=133190907&RncReceptor=${cliente?.cedula || '222333444'}&Encf=${encfGenerado}&MontoTotal=${orden.total}&MontoItbis=${orden.itbis}&FechaEmision=${new Date().toISOString().substring(0, 10)}&CodigoSeguridad=TEST99`;
@@ -170,6 +169,34 @@ export async function emitirECF(
   } catch (saveErr) {
     // No bloqueamos si falla el guardado — el documento ya fue emitido
     console.error('Advertencia: no se pudo guardar ECFDocument en Supabase:', saveErr);
+  }
+
+  // 5. Actualizar la secuencia local (valor_actual) con el eNCF emitido para mantener la sincronización y la cuenta regresiva en UI
+  if (response.encf) {
+    try {
+      const tipoDoc = ecfDoc.tipo_ecf;
+      // Remover el prefijo E32 / E31 antes de convertir a número para obtener el verdadero consecutivo (ej: "E320000000029" -> "0000000029" -> 29)
+      const rawNumStr = response.encf.startsWith(tipoDoc) 
+        ? response.encf.substring(tipoDoc.length) 
+        : response.encf.replace(/^[A-Z]+\d{2}/, '').replace(/\D/g, '');
+        
+      const numSol = parseInt(rawNumStr, 10);
+      if (!isNaN(numSol) && numSol > 0) {
+        const { data: seq } = await supabase
+          .from("ecf_sequences")
+          .select("*")
+          .eq("tenant_id", tenant.id)
+          .eq("tipo_ecf", tipoDoc)
+          .eq("is_active", true)
+          .maybeSingle();
+
+        if (seq && numSol > (seq.valor_actual || 0) && numSol <= seq.valor_final) {
+          await supabase.from("ecf_sequences").update({ valor_actual: numSol }).eq("id", seq.id);
+        }
+      }
+    } catch (seqSyncErr) {
+      console.warn("Advertencia: no se pudo actualizar la secuencia local:", seqSyncErr);
+    }
   }
 
   return {
@@ -289,6 +316,55 @@ export async function importSequencesToPronesoft(
   return res.ok;
 }
 
+export async function createSequencePronesoft(
+  tenantId: string,
+  data: { type: string; from: number; to: number; quantity?: number; expiration?: string }
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  const client = getProneSoftClient(
+    config?.pronesoft_tenant_id,
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
+  );
+  return client.createSequence(data);
+}
+
+export async function listAssociatedCompaniesPronesoft(
+  params?: { page?: number; limit?: number }
+): Promise<any> {
+  const client = getProneSoftClient();
+  return client.listAssociatedCompanies(params);
+}
+
+export async function listSequencesPronesoft(
+  tenantId: string,
+  params?: any
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  const client = getProneSoftClient(
+    config?.pronesoft_tenant_id,
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
+  );
+  return client.listSequences(params);
+}
+
+export async function getNextNumberPronesoft(
+  tenantId: string,
+  type: string
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  const client = getProneSoftClient(
+    config?.pronesoft_tenant_id,
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
+  );
+  return client.getNextNumber(type);
+}
+
 export async function anularSecuenciasPronesoft(
   tenantId: string,
   invoiceType: string,
@@ -314,4 +390,51 @@ export async function anularSecuenciasPronesoft(
     endNumber,
     reason
   });
+}
+
+export async function listSentDocumentsPronesoft(
+  tenantId: string,
+  page: number = 1,
+  pageSize: number = 50,
+  type?: string
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  const client = getProneSoftClient(
+    config?.pronesoft_tenant_id,
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
+  );
+  return client.listSentDocuments(page, pageSize, type);
+}
+
+export async function listReceivedDocumentsPronesoft(
+  tenantId: string,
+  page: number = 1,
+  pageSize: number = 50
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  const client = getProneSoftClient(
+    config?.pronesoft_tenant_id,
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
+  );
+  return client.listReceivedDocuments(page, pageSize);
+}
+
+export async function submitCommercialApprovalPronesoft(
+  tenantId: string,
+  documentId: string,
+  status: 'ACCEPTED' | 'REJECTED',
+  details?: string
+): Promise<any> {
+  const config = await getECFConfig(tenantId);
+  const client = getProneSoftClient(
+    config?.pronesoft_tenant_id,
+    config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+    config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
+    config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
+  );
+  return client.submitCommercialApproval(documentId, status, details);
 }

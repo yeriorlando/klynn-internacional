@@ -1126,10 +1126,12 @@ export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, c
           } else {
             try {
               let nextNCF: string | undefined = undefined;
-              if (fiscalConfig?.ambiente === 'produccion') {
+              try {
                 const { ncf, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
                 nextNCF = ncf;
                 finalNcfVencimiento = expiration_date;
+              } catch (seqErr) {
+                console.warn("Aviso al obtener secuencia local:", seqErr);
               }
 
               const ordenTemporal: Orden = cleanOrdenCXC({

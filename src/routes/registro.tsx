@@ -16,8 +16,10 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   PLANS, formatRD, formatPhoneRD, isSlugAvailable, registerTenant,
   setActiveTenant, uid, PROVINCIAS_RD, NCF_TIPOS, DEFAULT_CONFIG, getGlobalConfig, getPlans,
+  updateECFConfig,
   type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan,
 } from "@/lib/storage";
+import { registerTenantInPronesoft } from "@/lib/fiscal";
 
 // Definimos IS_LOCAL_MODE como false para asegurar compatibilidad 100% cloud
 const IS_LOCAL_MODE = false;
@@ -43,6 +45,7 @@ const STEPS = [
 interface FormState {
   // empresa
   nombre: string;
+  rnc: string;
   telefono: string;
   provincia: string;
   // marca
@@ -66,6 +69,7 @@ interface FormState {
 
 const initial: FormState = {
   nombre: "",
+  rnc: "",
   telefono: "",
   provincia: "",
   slug: "",
@@ -224,6 +228,24 @@ function RegistroPage() {
 
     try {
       await registerTenant(tenant, admin);
+
+      // Si el usuario proporcionó su RNC, vinculamos fiscalmente la empresa en Pronesoft
+      const cleanRnc = form.rnc.replace(/\D/g, "");
+      if (cleanRnc) {
+        try {
+          await updateECFConfig(tenant.id, {
+            rnc_emisor: cleanRnc,
+            razon_social: form.nombre,
+            ambiente: 'pruebas',
+            usar_credenciales_propias: false,
+            is_active: true
+          });
+          await registerTenantInPronesoft(tenant.id);
+        } catch (proneErr: any) {
+          console.warn("Aviso al vincular empresa fiscal en Pronesoft:", proneErr?.message || proneErr);
+        }
+      }
+
       localStorage.setItem("klynn_tour_is_new_registration", "true");
       setActiveTenant(tenant.slug);
       setCreatedTenant(tenant);
@@ -295,12 +317,12 @@ function RegistroPage() {
     <div className="min-h-[112vh] bg-gradient-hero">
       <SeedBootstrap />
       <header className="flex flex-col items-center justify-center pt-5 pb-1 px-6 relative">
-        <Link to="/" className="flex flex-col items-center">
+        <div className="flex flex-col items-center">
           <Logo size="lg" />
           <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
             Tu lavandería, simplificada.
           </span>
-        </Link>
+        </div>
         <div className="absolute right-6 top-6 hidden text-sm md:block">
           <span className="text-muted-foreground">¿Ya tienes cuenta? </span>
           <Link to="/login" className="font-semibold text-primary hover:underline">Inicia sesión</Link>
@@ -380,8 +402,11 @@ function RegistroPage() {
                   <h1 className="mb-2 text-3xl font-bold">Cuéntanos de tu lavandería</h1>
                   <p className="mb-8 text-muted-foreground">Solo lo esencial. El resto lo configuras después.</p>
                   <div className="grid gap-5 md:grid-cols-2">
-                    <Field label="Nombre comercial *" error={errors.nombre} className="md:col-span-2">
+                    <Field label="Nombre comercial *" error={errors.nombre}>
                       <Input value={form.nombre} onChange={(e) => update("nombre", e.target.value)} placeholder="Lavandería La Burbuja" />
+                    </Field>
+                    <Field label="RNC / Cédula Fiscal (Opcional)" error={errors.rnc}>
+                      <Input value={form.rnc} onChange={(e) => update("rnc", e.target.value)} placeholder="Ej. 133-19090-7 o 001-1234567-8" />
                     </Field>
                     <Field label="Teléfono *" error={errors.telefono}>
                       <Input value={form.telefono} onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} placeholder="809-555-0142" />

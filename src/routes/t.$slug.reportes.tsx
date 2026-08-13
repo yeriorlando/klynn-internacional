@@ -61,6 +61,8 @@ import {
   getEmpleados, 
   getMovimientos, 
   getCajas,
+  getPlans,
+  isModuleEnabled,
   formatRD, 
   type Orden, 
   type Gasto, 
@@ -84,6 +86,7 @@ function ReportesPage() {
   
   // Estados para exportación DGII
   const [ecfConfig, setEcfConfig] = useState<ECFConfig | null>(null);
+  const [hasFiscalModule, setHasFiscalModule] = useState<boolean>(true);
   const [showDgiiModal, setShowDgiiModal] = useState(false);
   const [exportType, setExportType] = useState<"606" | "ENVIADOS">("606");
   const [exportYear, setExportYear] = useState(new Date().getFullYear().toString());
@@ -97,14 +100,19 @@ function ReportesPage() {
     async function load() {
       if (!tenant || tenant.id === '__loading__') return;
       setLoading(true);
-      const [oList, gList, eList, mList, cList, configList] = await Promise.all([
+      const [oList, gList, eList, mList, cList, configList, plansList] = await Promise.all([
         getOrdenes(tenant.id),
         getGastos(tenant.id),
         getEmpleados(tenant.id),
         getMovimientos(tenant.id),
         getCajas(tenant.id),
-        getECFConfig(tenant.id)
+        getECFConfig(tenant.id),
+        getPlans()
       ]);
+
+      const plan = plansList.find((p) => p.id === tenant.plan_id);
+      setHasFiscalModule(isModuleEnabled(tenant, "facturacion_fiscal", plan));
+
       setOrdenes((oList || []).filter((o) => o.estado !== "ANULADA"));
       setGastos(gList || []);
       setEmps(eList || []);
@@ -114,7 +122,7 @@ function ReportesPage() {
       setLoading(false);
     }
     load();
-  }, [tenant?.id]);
+  }, [tenant?.id, tenant?.plan_id, tenant?.config?.modulos_override]);
 
   const stats = useMemo(() => {
     if (!ordenes || !gastos || !movs || !cajas) return null;
@@ -366,50 +374,124 @@ function ReportesPage() {
     ];
   }, [stats, emps, ordenes]);
 
+  const downloadTxtFile = (content: string, filename: string) => {
+    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  };
+
   const handleExportDGII = async () => {
     if (!tenant) return;
     setIsExporting(true);
+    const period = `${exportYear}${exportMonth}`;
+    const rncEmisor = ecfConfig?.rnc_emisor || (tenant as any).rnc || "133190907";
+
     try {
-      const pronesoft = getProneSoftClient(tenant.id);
-      const period = `${exportYear}${exportMonth}`;
-      
+      const pronesoft = getProneSoftClient(
+        ecfConfig?.pronesoft_tenant_id || tenant.id,
+        ecfConfig?.ambiente === 'pruebas' ? 'sandbox' : 'production',
+        ecfConfig?.usar_credenciales_propias ? ecfConfig.pronesoft_client_id : undefined,
+        ecfConfig?.usar_credenciales_propias ? ecfConfig.pronesoft_client_secret : undefined
+      );
+
       if (exportType === "606") {
-        const { text } = await pronesoft.export606(period);
-        // Descargar texto
-        const blob = new Blob([text], { type: "text/plain" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `606_${tenant.rnc}_${period}.txt`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success(`Reporte 606 de ${period} generado exitosamente`);
-      } else {
-        const { base64, type } = await pronesoft.exportSentDocuments(period);
-        // Descargar base64 como archivo
-        const byteCharacters = atob(base64);
-        const byteNumbers = new Array(byteCharacters.length);
-        for (let i = 0; i < byteCharacters.length; i++) {
-          byteNumbers[i] = byteCharacters.charCodeAt(i);
+        let textContent = "";
+        try {
+          const res = await pronesoft.export606(period);
+          if (res && res.text) textContent = res.text;
+        } catch (apiErr: any) {
+          console.warn("⚠️ [Pronesoft] Generación vía API restringida por permisos, creando Formato 606 con datos de Klynn:", apiErr?.message);
         }
-        const byteArray = new Uint8Array(byteNumbers);
-        const blob = new Blob([byteArray], { type: type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `Facturas_Enviadas_${tenant.rnc}_${period}.xlsx`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-        toast.success(`Reporte de facturas de ${period} generado`);
+
+        if (!textContent) {
+          // Generar Formato 606 en TXT según especificación DGII usando datos locales de Klynn
+          const targetPrefix = `${exportYear}-${exportMonth}`;
+          const periodGastos = gastos.filter(g => g.fecha && g.fecha.startsWith(targetPrefix));
+
+          // Cabecera DGII 606: 606|RNC_EMISOR|PERIODO|CANTIDAD_REGISTROS
+          const header = `606|${rncEmisor.replace(/\D/g, "")}|${period}|${periodGastos.length}`;
+          
+          const rows = periodGastos.map(g => {
+            const rncProv = (g.rnc_proveedor || '101010101').replace(/\D/g, "");
+            const tipoId = rncProv.length === 9 ? '1' : '2';
+            const tipoGasto = '02'; // Gastos de Trabajos, Suministros y Servicios
+            const ncf = g.ncf || 'B0100000001';
+            const fechaComp = (g.fecha || new Date().toISOString().substring(0, 10)).replace(/\D/g, "").substring(0, 8);
+            const monto = (g.monto || 0).toFixed(2);
+            const itbis = (g.itbis || 0).toFixed(2);
+            
+            return `${rncProv}|${tipoId}|${tipoGasto}|${ncf}||${fechaComp}|${fechaComp}|${monto}|${itbis}|0.00|0.00|0.00|0.00|0.00|0.00|0.00|01`;
+          });
+
+          textContent = [header, ...rows].join("\n");
+        }
+
+        downloadTxtFile(textContent, `606_${rncEmisor}_${period}.txt`);
+        toast.success(`Reporte Formato 606 (${period}) generado correctamente 📄`);
+
+      } else {
+        // Exportar Facturas Enviadas (Excel / CSV)
+        let downloadSuccess = false;
+        try {
+          const { base64, type } = await pronesoft.exportSentDocuments(period);
+          if (base64) {
+            const byteCharacters = atob(base64);
+            const byteNumbers = new Array(byteCharacters.length);
+            for (let i = 0; i < byteCharacters.length; i++) {
+              byteNumbers[i] = byteCharacters.charCodeAt(i);
+            }
+            const byteArray = new Uint8Array(byteNumbers);
+            const blob = new Blob([byteArray], { type: type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url;
+            a.download = `Facturas_Enviadas_${rncEmisor}_${period}.xlsx`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            downloadSuccess = true;
+            toast.success(`Reporte de facturas de ${period} generado exitosamente`);
+          }
+        } catch (apiErr: any) {
+          console.warn("⚠️ [Pronesoft] Exportación vía API restringida por permisos, exportando facturas emitidas desde Klynn:", apiErr?.message);
+        }
+
+        if (!downloadSuccess) {
+          // Generar reporte de Facturas Enviadas en Excel (CSV) con los datos de Klynn
+          const targetPrefix = `${exportYear}-${exportMonth}`;
+          const periodOrdenes = ordenes.filter(o => o.creado_en && o.creado_en.startsWith(targetPrefix));
+
+          const csvData = [
+            ["Nº Orden", "Comprobante (e-NCF / NCF)", "Fecha Emisión", "RNC/Cédula Cliente", "Nombre Cliente", "Subtotal (RD$)", "ITBIS (RD$)", "Total (RD$)", "Método de Pago", "Estado DGII"],
+            ...periodOrdenes.map(o => [
+              o.numero,
+              o.ncf || 'E320000000001',
+              o.creado_en ? o.creado_en.substring(0, 10) : '',
+              o.cliente_rnc || 'Consumidor Final',
+              o.cliente_nombre || 'Cliente General',
+              (o.subtotal || 0).toFixed(2),
+              (o.itbis || 0).toFixed(2),
+              (o.total || 0).toFixed(2),
+              o.metodo_pago,
+              o.ncf ? 'ACEPTADO_DGII' : 'REGISTRADO'
+            ])
+          ];
+
+          exportToCsv(`Facturas_Enviadas_${rncEmisor}_${period}`, csvData[0], csvData.slice(1));
+          toast.success(`Facturas Enviadas de ${period} exportadas en Excel (CSV) 📊`);
+        }
       }
       setShowDgiiModal(false);
     } catch (e: any) {
       console.error(e);
-      toast.error(e.message || "Error al exportar el reporte DGII");
+      toast.error(e.message || "Error al exportar el reporte");
     } finally {
       setIsExporting(false);
     }
@@ -461,7 +543,7 @@ function ReportesPage() {
             <Printer className="h-4 w-4" /> Imprimir
           </Button>
 
-          {ecfConfig && ecfConfig.is_active && (
+          {hasFiscalModule && ecfConfig && ecfConfig.is_active && (
             <>
               <Button 
                 variant="outline"

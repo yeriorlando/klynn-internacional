@@ -38,6 +38,7 @@ import { Route as TSlugLogisticaRouteImport } from './routes/t.$slug.logistica'
 import { Route as TSlugLoginRouteImport } from './routes/t.$slug.login'
 import { Route as TSlugGastosRouteImport } from './routes/t.$slug.gastos'
 import { Route as TSlugFiscalHomologacionRouteImport } from './routes/t.$slug.fiscal-homologacion'
+import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
 import { Route as TSlugCxcRouteImport } from './routes/t.$slug.cxc'
 import { Route as TSlugConversationsRouteImport } from './routes/t.$slug.conversations'
 import { Route as TSlugConfiguracionRouteImport } from './routes/t.$slug.configuracion'
@@ -193,6 +194,11 @@ const TSlugFiscalHomologacionRoute = TSlugFiscalHomologacionRouteImport.update({
   path: '/fiscal-homologacion',
   getParentRoute: () => TSlugRoute,
 } as any)
+const TSlugFiscalRoute = TSlugFiscalRouteImport.update({
+  id: '/fiscal',
+  path: '/fiscal',
+  getParentRoute: () => TSlugRoute,
+} as any)
 const TSlugCxcRoute = TSlugCxcRouteImport.update({
   id: '/cxc',
   path: '/cxc',
@@ -250,6 +256,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/configuracion': typeof TSlugConfiguracionRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
+  '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
@@ -286,6 +293,7 @@ export interface FileRoutesByTo {
   '/t/$slug/configuracion': typeof TSlugConfiguracionRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
+  '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
@@ -324,6 +332,7 @@ export interface FileRoutesById {
   '/t/$slug/configuracion': typeof TSlugConfiguracionRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
+  '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
@@ -363,6 +372,7 @@ export interface FileRouteTypes {
     | '/t/$slug/configuracion'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
+    | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
     | '/t/$slug/gastos'
     | '/t/$slug/login'
@@ -399,6 +409,7 @@ export interface FileRouteTypes {
     | '/t/$slug/configuracion'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
+    | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
     | '/t/$slug/gastos'
     | '/t/$slug/login'
@@ -436,6 +447,7 @@ export interface FileRouteTypes {
     | '/t/$slug/configuracion'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
+    | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
     | '/t/$slug/gastos'
     | '/t/$slug/login'
@@ -675,6 +687,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugFiscalHomologacionRouteImport
       parentRoute: typeof TSlugRoute
     }
+    '/t/$slug/fiscal': {
+      id: '/t/$slug/fiscal'
+      path: '/fiscal'
+      fullPath: '/t/$slug/fiscal'
+      preLoaderRoute: typeof TSlugFiscalRouteImport
+      parentRoute: typeof TSlugRoute
+    }
     '/t/$slug/cxc': {
       id: '/t/$slug/cxc'
       path: '/cxc'
@@ -727,6 +746,7 @@ interface TSlugRouteChildren {
   TSlugConfiguracionRoute: typeof TSlugConfiguracionRoute
   TSlugConversationsRoute: typeof TSlugConversationsRoute
   TSlugCxcRoute: typeof TSlugCxcRoute
+  TSlugFiscalRoute: typeof TSlugFiscalRoute
   TSlugFiscalHomologacionRoute: typeof TSlugFiscalHomologacionRoute
   TSlugGastosRoute: typeof TSlugGastosRoute
   TSlugLoginRoute: typeof TSlugLoginRoute
@@ -746,6 +766,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugConfiguracionRoute: TSlugConfiguracionRoute,
   TSlugConversationsRoute: TSlugConversationsRoute,
   TSlugCxcRoute: TSlugCxcRoute,
+  TSlugFiscalRoute: TSlugFiscalRoute,
   TSlugFiscalHomologacionRoute: TSlugFiscalHomologacionRoute,
   TSlugGastosRoute: TSlugGastosRoute,
   TSlugLoginRoute: TSlugLoginRoute,

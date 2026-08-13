@@ -163,6 +163,10 @@ export class ProneSoftClient {
     return this.callProxy('register-company', data);
   }
 
+  async listAssociatedCompanies(params?: { page?: number; limit?: number }): Promise<any> {
+    return this.callProxy('list-associated-companies', params || {});
+  }
+
   async uploadCertificate(data: { certificate: string; password: string; rnc: string }): Promise<{ ok: boolean }> {
     return this.callProxy('upload-cert', data);
   }
@@ -170,12 +174,28 @@ export class ProneSoftClient {
     return this.callProxy('import-sequences', { file: fileBase64 });
   }
 
-  async voidSequences(data: { invoiceType: string, startNumber: string, endNumber: string, reason: string }): Promise<any> {
+  async listSequences(params?: { type?: string; page?: number; limit?: number }): Promise<any> {
+    return this.callProxy('list-sequences', params || {});
+  }
+
+  async createSequence(data: { type: string; from: number; to: number; quantity?: number; expiration?: string }): Promise<any> {
+    return this.callProxy('create-sequence', data);
+  }
+
+  async getNextNumber(type: string): Promise<any> {
+    return this.callProxy('get-next-number', { type });
+  }
+
+  async voidSequences(data: { sequenceId?: string; invoiceType: string; startNumber: string; endNumber: string; reason: string }): Promise<any> {
     return this.callProxy('void-sequences', data);
   }
 
   async getRNC(rnc: string): Promise<{ name: string; rnc: string; status: string }> {
     return this.callProxy('get-rnc', { rnc });
+  }
+
+  async listSentDocuments(page: number = 1, pageSize: number = 50, type?: string): Promise<any> {
+    return this.callProxy('list-sent-documents', { page, pageSize, type });
   }
 
   async listReceivedDocuments(page: number = 1, pageSize: number = 50): Promise<any> {

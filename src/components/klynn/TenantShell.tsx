@@ -139,6 +139,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
   { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
+  { to: `/t/${slug}/fiscal`, label: "Centro Fiscal e-CF", icon: Shield, permission: "configuracion" },
   {
     to: `/t/${slug}/configuracion`,
     label: "Configuración",
@@ -170,6 +171,7 @@ export function TenantShell() {
   const [hasLogistica, setHasLogistica] = useState<boolean>(true);
   const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(true);
   const [hasProcesos, setHasProcesos] = useState<boolean>(true);
+  const [hasFiscal, setHasFiscal] = useState<boolean>(true);
 
   // NOTIFICACIONES GENERALES
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -186,6 +188,7 @@ export function TenantShell() {
       setHasLogistica(isModuleEnabled(user.tenant, "logistica", plan));
       setHasWhatsApp(isModuleEnabled(user.tenant, "whatsapp", plan));
       setHasProcesos(isModuleEnabled(user.tenant, "procesos", plan));
+      setHasFiscal(isModuleEnabled(user.tenant, "facturacion_fiscal", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
@@ -345,6 +348,10 @@ export function TenantShell() {
       return;
     }
     if (pathname.includes("/logistica") && !hasLogistica) {
+      navigate({ to: `/t/${user.tenant.slug}` });
+      return;
+    }
+    if (pathname.includes("/fiscal") && !hasFiscal) {
       navigate({ to: `/t/${user.tenant.slug}` });
       return;
     }
@@ -854,6 +861,7 @@ export function TenantShell() {
           hasLogistica={hasLogistica}
           hasWhatsApp={hasWhatsApp}
           hasProcesos={hasProcesos}
+          hasFiscal={hasFiscal}
         />
       </aside>
 
@@ -877,6 +885,7 @@ export function TenantShell() {
               hasLogistica={hasLogistica}
               hasWhatsApp={hasWhatsApp}
               hasProcesos={hasProcesos}
+              hasFiscal={hasFiscal}
             />
           </aside>
         </div>
@@ -1243,6 +1252,7 @@ function SidebarContent({
   hasLogistica,
   hasWhatsApp,
   hasProcesos,
+  hasFiscal,
 }: {
   tenant: {
     id: string;
@@ -1263,6 +1273,7 @@ function SidebarContent({
   hasLogistica: boolean;
   hasWhatsApp: boolean;
   hasProcesos: boolean;
+  hasFiscal: boolean;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
@@ -1394,6 +1405,7 @@ function SidebarContent({
         title: "ANÁLISIS",
         items: [
           { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
+          { to: `/t/${slug}/fiscal`, label: "Centro Fiscal e-CF", icon: Shield, permission: "configuracion" },
         ],
       },
       {
@@ -1417,11 +1429,12 @@ function SidebarContent({
         if (!hasLogistica) items = items.filter((i) => i.permission !== "logistica");
         if (!hasWhatsApp) items = items.filter((i) => i.permission !== "conversations");
         if (!hasProcesos) items = items.filter((i) => i.permission !== "procesos");
+        if (!hasFiscal) items = items.filter((i) => !i.to.endsWith("/fiscal"));
         items = items.filter((i) => !i.permission || can(empleado, i.permission));
         return { ...cat, items };
       })
       .filter((cat) => cat.items.length > 0);
-  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos]);
+  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal]);
 
   return (
     <>

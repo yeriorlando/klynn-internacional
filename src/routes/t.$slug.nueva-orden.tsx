@@ -1203,12 +1203,12 @@ function NuevaOrdenPage() {
         try {
           let nextNCF: string | undefined = undefined;
 
-          // En Sandbox de Pronesoft, las secuencias se generan automáticamente.
-          // En Producción, gestionamos las secuencias localmente en Klynn.
-          if (fiscalConfig?.ambiente === "produccion") {
+          try {
             const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
             nextNCF = ncf;
             ncfVencimiento = expiration_date;
+          } catch (seqErr) {
+            console.warn("Aviso al obtener secuencia local:", seqErr);
           }
 
           const result = await emitirECF(

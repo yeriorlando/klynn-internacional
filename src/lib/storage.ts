@@ -2875,10 +2875,14 @@ export async function nextECFNumero(
   tenantId: string,
   tipo: string,
 ): Promise<{ ncf: string; expiration_date?: string }> {
+  const normalizedTipo = tipo.startsWith("E") || tipo.startsWith("B")
+    ? tipo
+    : `E${tipo}`;
+
   try {
     const { data, error } = await supabase.rpc("reservar_proximo_ncf", {
       p_tenant_id: tenantId,
-      p_tipo_ecf: tipo,
+      p_tipo_ecf: normalizedTipo,
     });
 
     if (!error && data && data.length > 0) {
@@ -2894,21 +2898,25 @@ export async function nextECFNumero(
     console.warn("Error calling RPC, using client fallback:", rpcErr);
   }
 
-  // Fallback de cliente atómico con padStart de 8 posiciones (11 caracteres totales de NCF)
+  // Fallback de cliente atómico
   const { data: seq, error } = await supabase
     .from("ecf_sequences")
     .select("*")
     .eq("tenant_id", tenantId)
-    .eq("tipo_ecf", tipo)
+    .eq("tipo_ecf", normalizedTipo)
     .eq("is_active", true)
-    .single();
+    .maybeSingle();
 
-  if (error || !seq) throw new Error(`No hay secuencia activa para ${tipo}`);
+  if (error || !seq) throw new Error(`No hay secuencia activa para ${normalizedTipo}`);
   if (seq.valor_actual >= seq.valor_final)
-    throw new Error(`Rango de secuencia agotado para ${tipo}`);
+    throw new Error(`Rango de secuencia agotado para ${normalizedTipo}`);
 
-  const proximo = seq.valor_actual + 1;
-  const encf = `${tipo}${String(proximo).padStart(8, "0")}`;
+  const current = seq.valor_actual || 0;
+  const initial = seq.valor_inicial || 1;
+  const proximo = current < initial ? initial : current + 1;
+  
+  const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
+  const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
 
   // Actualizamos el contador inmediatamente
   await supabase.from("ecf_sequences").update({ valor_actual: proximo }).eq("id", seq.id);

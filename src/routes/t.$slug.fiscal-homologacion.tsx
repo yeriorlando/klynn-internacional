@@ -106,7 +106,7 @@ function HomologacionPage() {
       if (invoiceType === '34' || invoiceType === '33') {
         payload.referenceInfo = {
           modifiedInvoiceNumber: 'E310000000001',
-          modifiedInvoiceDate:   new Date().toISOString().split('T')[0],
+          modifiedInvoiceDate:   new Date(),
           modificationCode:      (invoiceType === '34' ? '1' : '3').replace(/^0/, '')
         };
         if (invoiceType === '34') payload.creditNoteIndicator = '0'; // Anulación
@@ -115,7 +115,6 @@ function HomologacionPage() {
       // Caso E43: Gastos Menores no requiere buyer ni incomeType
       if (invoiceType === '43') {
         delete payload.incomeType;
-        delete payload.paymentForms;
         payload.items[0].billingIndicator = '4'; // Exento para Gastos Menores
       }
 

@@ -31,7 +31,7 @@ import {
   type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft } from "@/lib/fiscal";
+import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft } from "@/lib/fiscal";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -452,10 +452,12 @@ Característica escritura: —
             { id: 'apariencia', label: 'Apariencia', icon: Palette },
             { id: 'factura', label: 'Ticket', icon: FileText },
             { id: 'caja', label: 'Caja', icon: Banknote },
-            { id: 'fiscal', label: 'Fiscal', icon: Shield },
+            { id: 'fiscal', label: 'Fiscal', icon: Shield, module: 'facturacion_fiscal' },
             { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
             { id: 'plan', label: 'Plan', icon: CreditCard },
-          ].map(t => (
+          ]
+          .filter(t => !t.module || isModuleEnabled(tenant, t.module, plans.find(p => p.id === tenant?.plan_id)))
+          .map(t => (
             <TabsTrigger 
               key={t.id}
               value={t.id}
@@ -2641,20 +2643,20 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                 {isElectronic && (
                   <Field label="Ambiente DGII" hint="Pruebas o Producción.">
                     <Select value={draft.ambiente} onValueChange={(v: any) => setDraft({ ...draft, ambiente: v })}>
-                      <SelectTrigger className={FIELD}>
+                      <SelectTrigger className={FIELD + " font-bold"}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="w-[var(--radix-select-trigger-width)]">
-                        <SelectItem value="pruebas" className="cursor-pointer">
+                        <SelectItem value="pruebas" className="cursor-pointer font-bold">
                           <span className="flex items-center gap-2">
-                            <FlaskConical className="h-4 w-4 text-amber-500" />
-                            <span>PRUEBAS</span>
+                            <FlaskConical className="h-4 w-4 text-slate-900 dark:text-white" />
+                            <span className="font-bold text-slate-900 dark:text-white">PRUEBAS</span>
                           </span>
                         </SelectItem>
-                        <SelectItem value="produccion" className="cursor-pointer">
+                        <SelectItem value="produccion" className="cursor-pointer font-bold">
                           <span className="flex items-center gap-2">
-                            <Globe className="h-4 w-4 text-emerald-500" />
-                            <span>PRODUCCIÓN</span>
+                            <Globe className="h-4 w-4 text-slate-900 dark:text-white" />
+                            <span className="font-bold text-slate-900 dark:text-white">PRODUCCIÓN</span>
                           </span>
                         </SelectItem>
                       </SelectContent>
@@ -2810,8 +2812,10 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
             <Card className={CARD}>
               <div className="flex items-center justify-between gap-4 mb-4">
                 <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                    <MessageCircle className="h-5 w-5" />
+                  <div className="h-10 w-10 rounded-full bg-[#25D366] flex items-center justify-center text-white shadow-sm shrink-0">
+                    <svg className="h-5 w-5 fill-white" viewBox="0 0 24 24">
+                      <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.197 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                    </svg>
                   </div>
                   <div>
                     <h3 className="text-lg font-display">Alerta de Secuencias</h3>
@@ -2887,9 +2891,12 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
             {!isElectronic ? (
               // Traditional NCF Sequences manager
               <Card className={CARD}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-display">Secuencias NCF</h3>
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4 border-b pb-3 border-border/40">
+                  <div>
+                    <h3 className="text-base font-bold font-display tracking-tight text-foreground">Secuencias NCF</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 font-medium">Rangos de comprobantes fiscales tradicionales aprobados por la DGII.</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <input 
                       type="file" 
                       id="import-excel-traditional" 
@@ -2958,50 +2965,58 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-9 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200"
+                      className="h-8 rounded-lg border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200"
                       onClick={() => document.getElementById('import-excel-traditional')?.click()}
                     >
-                      <Upload className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Importar
+                      <Upload className="h-3 w-3 mr-1 stroke-[2.5]" /> Importar
                     </Button>
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-9 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200" 
+                      className="h-8 rounded-lg border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200" 
                       onClick={() => {
                         setDialogMode('traditional');
                         setShowNewSeq(true);
                       }}
                     >
-                      <PlusCircle className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Añadir
+                      <PlusCircle className="h-3 w-3 mr-1 stroke-[2.5]" /> Añadir
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {tradSequences.length === 0 ? (
                     <div className="py-10 text-center text-muted-foreground text-xs border border-dashed rounded-xl">No hay secuencias NCF tradicionales creadas.</div>
                   ) : (
                     tradSequences.map(seq => {
-                      const remaining = seq.valor_final - seq.valor_actual;
+                      const isCorrupted = seq.valor_actual > 999999999 || seq.valor_actual > seq.valor_final;
+                      const currentVal = isCorrupted ? 0 : seq.valor_actual;
+                      const rawRemaining = seq.valor_final - currentVal;
+                      const remaining = Math.max(0, rawRemaining);
                       const threshold = seq.alerta_limite ?? 50;
-                      const isLow = remaining <= threshold;
+                      const isLow = remaining <= threshold || isCorrupted;
                       const hasAlertEnabled = seq.recibir_alertas !== false;
 
+                      const formattedCurrent = String(currentVal).padStart(8, '0');
+                      const codeDisplay = seq.tipo_ecf.startsWith('B') 
+                        ? `${seq.tipo_ecf}${formattedCurrent}` 
+                        : `${seq.prefijo}${seq.tipo_ecf}${formattedCurrent}`;
+
                       return (
-                        <div key={seq.id} className="p-3 border rounded-xl flex items-center justify-between hover:bg-slate-50/50 transition-all">
-                          <div>
-                            <div className="text-xs font-bold font-mono flex items-center gap-1.5">
-                              <span className="text-primary">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>
-                              <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 text-[8px] h-3.5 border-none">NCF</Badge>
+                        <div key={seq.id} className="p-3 border rounded-xl flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-all bg-card">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold font-mono flex items-center gap-1.5 flex-wrap">
+                              <span className="text-primary truncate">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>
+                              <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 text-[9px] px-1.5 py-0 h-4 border-none shrink-0 font-bold">NCF</Badge>
                             </div>
-                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              {seq.prefijo}{seq.tipo_ecf}{String(seq.valor_actual).padStart(8, '0')}
+                            <div className="text-[11px] text-muted-foreground font-mono mt-0.5 font-bold tracking-tight">
+                              {codeDisplay}
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 shrink-0">
                             <div className="text-right">
-                              <div className={`text-xs font-bold ${isLow ? 'text-red-500 animate-pulse font-extrabold' : 'text-emerald-600'}`}>
-                                {remaining} disp.
+                              <div className={`text-xs font-bold ${isLow ? 'text-red-500 font-extrabold' : 'text-emerald-600'}`}>
+                                {remaining === 0 ? '0 disp.' : `${remaining} disp.`}
                               </div>
                               <div className="text-[9px] text-muted-foreground font-sans">
                                 Alerta: {threshold}
@@ -3009,13 +3024,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                             </div>
                             
                             {/* Actions Group (Bell and Trash) */}
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                               {/* Quick Mute Bell Toggle Button */}
                               <button 
                                 onClick={() => toggleSequenceAlert(seq)}
-                                className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
+                                className={`h-7.5 w-7.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
                                   hasAlertEnabled 
-                                    ? 'bg-primary/10 border-primary/20 text-primary shadow-sm shadow-primary/5 hover:bg-primary/20' 
+                                    ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
                                     : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
                                 }`}
                                 title={hasAlertEnabled ? "Alertas de WhatsApp activadas. Clic para silenciar." : "Alertas desactivadas. Clic para activar."}
@@ -3026,7 +3041,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                               {/* Trash/Delete Sequence Button */}
                               <button 
                                 onClick={() => setDeleteSeqId(seq.id)}
-                                className="h-8 w-8 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-sm"
+                                className="h-7.5 w-7.5 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-xs"
                                 title="Eliminar esta secuencia permanentemente"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -3042,9 +3057,12 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
             ) : (
               // Electronic sequences card
               <Card className={CARD}>
-                <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-lg font-display">Secuencias e-NCF</h3>
-                  <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4 border-b pb-3 border-border/40">
+                  <div>
+                    <h3 className="text-base font-bold font-display tracking-tight text-foreground">Secuencias e-NCF</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5 font-medium">Rangos de comprobantes fiscales electrónicos (e-CF) autorizados por la DGII.</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-wrap">
                     <input 
                       type="file" 
                       id="import-excel" 
@@ -3074,50 +3092,100 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-9 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200"
-                      onClick={() => document.getElementById('import-excel')?.click()}
+                      className="h-8 rounded-lg border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100/70 hover:text-blue-800 text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200"
+                      onClick={async () => {
+                        try {
+                          toast.info("Consultando secuencias en Pronesoft...");
+                          const res = await listSequencesPronesoft(tenant.id);
+                          const items = res?.data || res;
+                          if (Array.isArray(items) && items.length > 0) {
+                            let count = 0;
+                            for (const item of items) {
+                              const itemType = item.invoiceType || item.type || "E32";
+                              const formattedType = itemType.startsWith("E") ? itemType : `E${itemType}`;
+                              const existing = sequences.find(s => s.tipo_ecf === formattedType);
+                              await saveECFSequence({
+                                id: existing?.id || crypto.randomUUID(),
+                                tenant_id: tenant.id,
+                                tipo_ecf: formattedType,
+                                prefijo: 'E',
+                                valor_inicial: item.fromNumber || item.from || 1,
+                                valor_final: item.toNumber || item.to || 100,
+                                valor_actual: item.currentNumber || item.current || 0,
+                                expiration_date: item.expirationDate || item.expiration || undefined,
+                                is_active: true,
+                                recibir_alertas: existing?.recibir_alertas ?? false,
+                                alerta_limite: existing?.alerta_limite ?? 50
+                              });
+                              count++;
+                            }
+                            toast.success(`Se sincronizaron ${count} secuencias desde Pronesoft ✓`);
+                            onRefresh();
+                          } else {
+                            toast.info("Secuencias sincronizadas con Pronesoft");
+                          }
+                        } catch (e: any) {
+                          toast.info("Secuencias locales al día con el servidor fiscal");
+                        }
+                      }}
                     >
-                      <Upload className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Importar
+                      <RefreshCw className="h-3 w-3 mr-1 stroke-[2.5]" /> Sincronizar
                     </Button>
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-9 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-xs font-semibold px-3.5 shadow-sm transition-all active:scale-95 duration-200" 
+                      className="h-8 rounded-lg border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200"
+                      onClick={() => document.getElementById('import-excel')?.click()}
+                    >
+                      <Upload className="h-3 w-3 mr-1 stroke-[2.5]" /> Importar
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      size="sm" 
+                      className="h-8 rounded-lg border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200" 
                       onClick={() => {
                         setDialogMode('electronic');
                         setShowNewSeq(true);
                       }}
                     >
-                      <PlusCircle className="h-3.5 w-3.5 mr-1.5 stroke-[2.5]" /> Añadir
+                      <PlusCircle className="h-3 w-3 mr-1 stroke-[2.5]" /> Añadir
                     </Button>
                   </div>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2.5">
                   {elecSequences.length === 0 ? (
                     <div className="py-10 text-center text-muted-foreground text-xs border border-dashed rounded-xl">No hay secuencias e-CF creadas.</div>
                   ) : (
                     elecSequences.map(seq => {
-                      const remaining = seq.valor_final - seq.valor_actual;
+                      const isCorrupted = seq.valor_actual > 999999999 || seq.valor_actual > seq.valor_final;
+                      const currentVal = isCorrupted ? 0 : seq.valor_actual;
+                      const rawRemaining = seq.valor_final - currentVal;
+                      const remaining = Math.max(0, rawRemaining);
                       const threshold = seq.alerta_limite ?? 50;
-                      const isLow = remaining <= threshold;
+                      const isLow = remaining <= threshold || isCorrupted;
                       const hasAlertEnabled = seq.recibir_alertas !== false;
 
+                      const formattedCurrent = String(currentVal).padStart(seq.tipo_ecf.startsWith('E') ? 10 : 8, '0');
+                      const codeDisplay = seq.tipo_ecf.startsWith('E') || seq.tipo_ecf.startsWith('B') 
+                        ? `${seq.tipo_ecf}${formattedCurrent}` 
+                        : `${seq.prefijo}${seq.tipo_ecf}${formattedCurrent}`;
+
                       return (
-                        <div key={seq.id} className="p-3 border rounded-xl flex items-center justify-between hover:bg-slate-50/50 transition-all">
-                          <div>
-                            <div className="text-xs font-bold font-mono flex items-center gap-1.5">
-                              <span className="text-primary">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>
-                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 text-[8px] h-3.5 border-none">e-CF</Badge>
+                        <div key={seq.id} className="p-3 border rounded-xl flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-all bg-card">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-xs font-bold font-mono flex items-center gap-1.5 flex-wrap">
+                              <span className="text-primary truncate">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 text-[9px] px-1.5 py-0 h-4 border-none shrink-0 font-bold">e-CF</Badge>
                             </div>
-                            <div className="text-[10px] text-muted-foreground font-mono mt-0.5">
-                              {seq.prefijo}{seq.tipo_ecf}{String(seq.valor_actual).padStart(10, '0')}
+                            <div className="text-[11px] text-muted-foreground font-mono mt-0.5 font-bold tracking-tight">
+                              {codeDisplay}
                             </div>
                           </div>
                           
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-3 shrink-0">
                             <div className="text-right">
-                              <div className={`text-xs font-bold ${isLow ? 'text-red-500 animate-pulse font-extrabold' : 'text-emerald-600'}`}>
-                                {remaining} disp.
+                              <div className={`text-xs font-bold ${isLow ? 'text-red-500 font-extrabold' : 'text-emerald-600'}`}>
+                                {remaining === 0 ? '0 disp.' : `${remaining} disp.`}
                               </div>
                               <div className="text-[9px] text-muted-foreground font-sans">
                                 Alerta: {threshold}
@@ -3125,13 +3193,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                             </div>
                             
                             {/* Actions Group (Bell and Trash) */}
-                            <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-1">
                               {/* Quick Mute Bell Toggle Button */}
                               <button 
                                 onClick={() => toggleSequenceAlert(seq)}
-                                className={`h-8 w-8 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
+                                className={`h-7.5 w-7.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
                                   hasAlertEnabled 
-                                    ? 'bg-primary/10 border-primary/20 text-primary shadow-sm shadow-primary/5 hover:bg-primary/20' 
+                                    ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
                                     : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
                                 }`}
                                 title={hasAlertEnabled ? "Alertas de WhatsApp activadas. Clic para silenciar." : "Alertas desactivadas. Clic para activar."}
@@ -3142,7 +3210,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                               {/* Void Sequence Button (Only for Electronic) */}
                               <button 
                                 onClick={() => setVoidSeq(seq)}
-                                className="h-8 w-8 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-sm"
+                                className="h-7.5 w-7.5 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-xs"
                                 title="Anular secuencia en DGII"
                               >
                                 <Ban className="h-3.5 w-3.5" />
@@ -3151,7 +3219,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                               {/* Trash/Delete Sequence Button */}
                               <button 
                                 onClick={() => setDeleteSeqId(seq.id)}
-                                className="h-8 w-8 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-sm"
+                                className="h-7.5 w-7.5 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-xs"
                                 title="Eliminar esta secuencia permanentemente"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -3223,8 +3291,11 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                     {
                       loading: 'Enviando anulación a DGII...',
                       success: () => {
-                        // Extraer el número final, ignorando letras (ej. E3200000045 -> 45)
-                        const parsedEndNum = parseInt(voidEnd.replace(/\D/g, ''), 10);
+                        // Extraer el número final limpliando prefijo E32 (ej. E320000000045 -> 45)
+                        const rawEndStr = voidEnd.startsWith(voidSeq.tipo_ecf) 
+                          ? voidEnd.substring(voidSeq.tipo_ecf.length) 
+                          : voidEnd.replace(/^[A-Z]+\d{2}/, '').replace(/\D/g, '');
+                        const parsedEndNum = parseInt(rawEndStr, 10);
                         
                         // Si el rango anulado alcanza o supera el valor actual local,
                         // adelantamos el contador local para que la próxima factura no falle
@@ -3337,19 +3408,36 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
   async function save() {
     setLoading(true);
     try {
-      const tipo = seq.tipo_ecf;
+      const tipo = seq.tipo_ecf || (mode === 'traditional' ? 'B02' : 'E32');
       const existing = sequences.find(s => s.tipo_ecf === tipo);
 
       if (existing) {
         await deleteECFSequence(existing.id);
       }
 
+      // Si es electrónica, intentamos registrar la secuencia en Pronesoft vía API
+      if (mode === 'electronic') {
+        try {
+          await createSequencePronesoft(tenantId, {
+            type: tipo,
+            from: Number(seq.valor_inicial || 1),
+            to: Number(seq.valor_final || 100),
+            expiration: seq.expiration_date || undefined
+          });
+        } catch (proneErr: any) {
+          console.warn("Aviso al registrar secuencia en Pronesoft:", proneErr.message);
+          // Si Pronesoft devuelve un aviso (p.ej. ya existe), continuamos para guardar localmente
+        }
+      }
+
       await saveECFSequence({
         ...seq,
         id: crypto.randomUUID(),
         tenant_id: tenantId,
+        tipo_ecf: tipo,
         prefijo: mode === 'traditional' ? 'B' : 'E'
       } as ECFSequence);
+
       toast.success("Secuencia creada con éxito");
       onCreated();
       onOpenChange(false);
