@@ -1616,6 +1616,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             config={ecfConfig} 
             sequences={ecfSequences}
             onRefresh={() => { queryClient.invalidateQueries({ queryKey: ['ecf-config', tenantId] }); queryClient.invalidateQueries({ queryKey: ['ecf-sequences', tenantId] }); }}
+            onTenantUpdate={(updated) => setTenant(updated)}
             enabled={!!hasFiscal}
             onTabChange={setActiveTab}
           />
@@ -2348,13 +2349,14 @@ function SuccessModal({ open, onOpenChange, planName }: { open: boolean; onOpenC
   );
 }
 
-function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange }: { 
+function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange, onTenantUpdate }: { 
   tenant: Tenant; 
   config?: ECFConfig | null; 
   sequences: ECFSequence[]; 
   onRefresh: () => void;
   enabled: boolean;
   onTabChange: (tab: string) => void;
+  onTenantUpdate?: (t: Tenant) => void;
 }) {
   const [loading, setLoading] = useState(false);
   const [showNewSeq, setShowNewSeq] = useState(false);
@@ -2370,6 +2372,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
   // Local state for instant and responsive tab switching
   const isCurrentlyElectronic = config ? !!config.is_active : (cfg.modo_facturacion === "electronica");
   const [isElectronic, setLocalIsElectronic] = useState(isCurrentlyElectronic);
+  const isTouchedByUserRef = useRef(false);
 
   // Estados para anulación de secuencias e-NCF
   const [voidSeq, setVoidSeq] = useState<ECFSequence | null>(null);
@@ -2440,28 +2443,18 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
     }
   }
 
-  // Keep state synchronized when parent query finishes loading config
+  // Keep state synchronized when parent query finishes loading config (only if user hasn't toggled manually)
   useEffect(() => {
-    if (config) {
-      const active = Boolean(config.is_active || tenant.config?.modo_facturacion === "electronica");
-      setDraft((d) => ({
-        ...d,
-        ...config,
-        rnc_emisor: config.rnc_emisor || d.rnc_emisor || tenant.rnc || "",
-        razon_social: config.razon_social || d.razon_social || tenant.nombre || "",
-        is_active: active,
-      }));
-      setLocalIsElectronic(active);
-    } else if (tenant) {
-      const tenantIsElec = tenant.config?.modo_facturacion === "electronica";
-      setLocalIsElectronic(tenantIsElec);
-      setDraft((prev) => ({
-        ...prev,
-        rnc_emisor: prev.rnc_emisor || tenant.rnc || "",
-        razon_social: prev.razon_social || tenant.nombre || "",
-        is_active: tenantIsElec,
-      }));
-    }
+    if (isTouchedByUserRef.current) return;
+    const active = config ? Boolean(config.is_active) : Boolean(tenant.config?.modo_facturacion === "electronica");
+    setDraft((d) => ({
+      ...d,
+      ...(config || {}),
+      rnc_emisor: config?.rnc_emisor || d.rnc_emisor || tenant.rnc || "",
+      razon_social: config?.razon_social || d.razon_social || tenant.nombre || "",
+      is_active: active,
+    }));
+    setLocalIsElectronic(active);
   }, [config?.id, config?.updated_at, config?.is_active, tenant.config?.modo_facturacion]);
 
   async function saveECF(overrideActive?: boolean) {
@@ -2495,28 +2488,19 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
       // 1. Guardar la config electrónica en base de datos
       await saveECFConfig(configPayload);
 
-      // 2. Si es electrónico y no está usando credenciales propias (Modalidad 1), auto-registrar en Pronesoft
+      // 2. Si es electrónico y no está usando credenciales propias (Modalidad 1), auto-registrar en Pronesoft silenciosamente
       let pTenantId = draft.pronesoft_tenant_id || config?.pronesoft_tenant_id;
       if (activeValue && !draft.usar_credenciales_propias && (!pTenantId || pTenantId === 'sandbox-tenant')) {
         try {
-          toast.info("Registrando negocio en el servidor de certificación...");
           pTenantId = await registerTenantInPronesoft(tenant.id, configPayload);
         } catch (pronesoftErr: any) {
           console.warn("Aviso en registro Pronesoft:", pronesoftErr);
-          const rawMsg = pronesoftErr?.message || "";
-          if (rawMsg.includes("contribuyente comercial") || rawMsg.includes("400")) {
-            toast.warning("Para vincular la empresa en la nube de Pronesoft se requiere un RNC registrado como contribuyente comercial ante la DGII. Tu configuración fue guardada.", { duration: 7000 });
-          } else {
-            toast.warning(`Pronesoft: ${rawMsg}. Configuración guardada.`, { duration: 6000 });
-          }
         }
       }
 
       // 3. Si hay un certificado nuevo para subir (Solo en producción, Sandbox no lo requiere)
       if (activeValue && draft.ambiente === 'produccion' && draft.certificate_data && draft.certificate_password) {
-        toast.info("Sincronizando certificado digital...");
-        await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, draft.certificate_password);
-        // Limpiar la data del certificado del estado (ya se subió)
+        await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, draft.certificate_password, configPayload);
         setDraft(d => ({ ...d, certificate_data: undefined }));
       }
 
@@ -2527,7 +2511,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
         config: {
           ...cfg,
           modo_facturacion: activeValue ? "electronica" : "tradicional",
-          ncf_facturacion_activa: true,
+          ncf_facturacion_activa: activeValue ? true : false,
         },
       } as Tenant;
       await saveTenant(nextTenant);
@@ -2544,7 +2528,11 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
       await queryClient.invalidateQueries({ queryKey: ["tenant", tenant.id] });
       await queryClient.invalidateQueries({ queryKey: ["tenant", tenant.slug] });
 
-      toast.success("Datos fiscales guardados correctamente");
+      if (onTenantUpdate) {
+        onTenantUpdate(nextTenant);
+      }
+      isTouchedByUserRef.current = false;
+      toast.success(`Modo ${activeValue ? "Facturación Electrónica (e-CF)" : "Comprobantes Tradicionales (NCF)"} guardado correctamente`);
       onRefresh();
     } catch (err: any) {
       toast.error("Error al guardar: " + err.message);
@@ -2705,9 +2693,9 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
               <button 
                 type="button"
                 onClick={() => {
+                  isTouchedByUserRef.current = true;
                   setLocalIsElectronic(false);
                   setDraft(d => ({ ...d, is_active: false }));
-                  saveECF(false);
                 }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isElectronic ? "bg-primary text-white" : "hover:bg-slate-50"}`}
               >
@@ -2716,9 +2704,9 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
               <button 
                 type="button"
                 onClick={() => {
+                  isTouchedByUserRef.current = true;
                   setLocalIsElectronic(true);
                   setDraft(d => ({ ...d, is_active: true }));
-                  saveECF(true);
                 }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isElectronic ? "bg-primary text-white" : "hover:bg-slate-50"}`}
               >

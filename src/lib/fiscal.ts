@@ -387,15 +387,13 @@ export async function registerTenantInPronesoft(
 export async function uploadCertificateToPronesoft(
   tenantId: string, 
   base64: string, 
-  password: string
+  password: string,
+  passedConfig?: ECFConfig
 ): Promise<boolean> {
-  const config = await getECFConfig(tenantId);
+  const config = passedConfig || (await getECFConfig(tenantId));
   if (!config) {
-    throw new Error("Configuración fiscal no encontrada");
-  }
-
-  if (!isECFReady(config)) {
-    throw new Error("Primero debes activar el módulo fiscal y completar tus credenciales");
+    console.warn("Configuración fiscal no encontrada para certificado");
+    return false;
   }
 
   const proneSoftEnv2 = config.ambiente === 'pruebas' ? 'sandbox' : config.ambiente === 'produccion' ? 'production' : undefined;
@@ -405,13 +403,19 @@ export async function uploadCertificateToPronesoft(
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
   );
-  const res = await client.uploadCertificate({
-    certificate: base64,
-    password: password,
-    rnc: config.rnc_emisor
-  });
 
-  return res.ok;
+  try {
+    const res = await client.uploadCertificate({
+      certificate: base64,
+      password: password,
+      rnc: config.rnc_emisor
+    });
+    return res.ok;
+  } catch (err: any) {
+    console.warn("Aviso al sincronizar certificado con Pronesoft:", err?.message || err);
+    // Devolvemos false pero no rompemos la persistencia de datos del usuario
+    return false;
+  }
 }
 
 export async function importSequencesToPronesoft(

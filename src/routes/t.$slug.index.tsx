@@ -69,6 +69,7 @@ import {
   useMovimientos,
   useEmpleados,
   useECFConfig,
+  useECFSequences,
 } from "@/hooks/use-queries";
 import { TenantShell } from "@/components/klynn/TenantShell";
 import {
