@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useMemo, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase";
-import { playNotificationSoundDebounced } from "@/lib/notificationSound";
+import { playNotificationSoundDebounced, playOrderDeliveredSoundDebounced } from "@/lib/notificationSound";
 import {
   LayoutDashboard,
   Wallet,
@@ -302,7 +302,42 @@ export function TenantShell() {
               tipo: "WARNING",
               leida: readVirtuals.includes(vId),
               link: `/ordenes?view=${o.numero}`,
-              created_at: new Date().toISOString(),
+              created_at: o.creado_en || o.fecha_entrega || new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
+            });
+          }
+        }
+      }
+
+      // Órdenes entregadas recientemente (últimas 48h) con prioridad en la campanita
+      const deliveredOrders = orders.filter((o) => o.estado === "ENTREGADA");
+      for (const o of deliveredOrders) {
+        const dateToUse = o.pod_fecha || o.creado_en || new Date().toISOString();
+        const diffHours = (Date.now() - new Date(dateToUse).getTime()) / (1000 * 60 * 60);
+        if (diffHours <= 48) {
+          const vId = `virtual-entregada-${o.id}`;
+          if (!deletedVirtuals.includes(vId)) {
+            const clientName = clientMap.get(o.cliente_id) || "Cliente";
+            const cleanNum = (o.numero || "").replace(/^#/, "");
+            
+            let receptorTxt = "";
+            if (o.pod_receptor) {
+              if (o.pod_receptor.toLowerCase().startsWith("titular")) {
+                receptorTxt = " (Titular)";
+              } else {
+                receptorTxt = ` • Recibió: **${o.pod_receptor}**`;
+              }
+            }
+            const saldoInfo = o.saldo > 0 ? ` • Debe: **${formatRD(o.saldo)}**` : " • Pagado";
+
+            virtualNotifs.push({
+              id: vId,
+              tenant_id: tenantId,
+              titulo: `Orden #${cleanNum} Entregada`,
+              mensaje: `Cliente: **${clientName}**${receptorTxt}${saldoInfo}`,
+              tipo: "SUCCESS",
+              leida: readVirtuals.includes(vId),
+              link: `/logistica`,
+              created_at: dateToUse,
             });
           }
         }
@@ -317,6 +352,65 @@ export function TenantShell() {
 
     loadNotificaciones();
 
+    const isRepartidorUser = user?.empleado?.rol === "REPARTIDOR";
+
+    const formatNotificationText = (text: string): React.ReactNode => {
+      if (!text) return "";
+      const parts = text.split(/(#KL-[a-zA-Z0-9-]+|\*\*.*?\*\*)/g);
+      return (
+        <span className="inline">
+          {parts.map((part, i) => {
+            if (!part) return null;
+            if (part.startsWith("#KL-")) {
+              return (
+                <span
+                  key={i}
+                  className="mx-0.5 inline-block rounded-md border border-primary/15 bg-primary/10 px-1 py-px font-mono text-[10px] font-black text-primary"
+                >
+                  {part.replace("#", "")}
+                </span>
+              );
+            }
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return (
+                <strong key={i} className="font-extrabold text-slate-900 dark:text-white">
+                  {part.slice(2, -2)}
+                </strong>
+              );
+            }
+            return <span key={i}>{part}</span>;
+          })}
+        </span>
+      );
+    };
+
+    const handleIncomingNotif = (row: any) => {
+      if (!row) return;
+      const titulo = (row.titulo || "").toLowerCase();
+      const isDelivery =
+        titulo.includes("entregad") ||
+        titulo.includes("repartidor") ||
+        titulo.includes("delivery") ||
+        row.tipo === "SUCCESS";
+
+      if (isDelivery) {
+        // La alerta de entrega y sonido solo suena para Admin, Supervisor y Vendedor (NO al Repartidor)
+        if (!isRepartidorUser) {
+          playOrderDeliveredSoundDebounced();
+          toast.success(row.titulo || "¡Orden Entregada! 🛵", {
+            description: formatNotificationText(row.mensaje),
+          });
+        }
+      } else {
+        playNotificationSoundDebounced();
+        toast.info(row.titulo || "Nueva notificación", {
+          description: formatNotificationText(row.mensaje),
+        });
+      }
+      loadNotificaciones();
+    };
+
+    // 1. Supabase Postgres Realtime changes en notificaciones
     const channel = supabase
       .channel("notificaciones-shell")
       .on(
@@ -326,7 +420,40 @@ export function TenantShell() {
           const row = (payload.new || payload.old) as any;
           if (row && row.tenant_id === tenantId) {
             if (payload.eventType === "INSERT") {
-              playNotificationSoundDebounced();
+              handleIncomingNotif(row);
+            } else {
+              loadNotificaciones();
+            }
+          }
+        },
+      )
+      .subscribe();
+
+    // 2. Supabase Postgres Realtime changes directo en la tabla ORDENES
+    const ordersChannel = supabase
+      .channel("ordenes-realtime-shell")
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "ordenes" },
+        (payload) => {
+          const newOrder = payload.new as Orden;
+          const oldOrder = payload.old as Partial<Orden>;
+          if (newOrder && newOrder.tenant_id === tenantId) {
+            if (newOrder.estado === "ENTREGADA" && oldOrder?.estado !== "ENTREGADA") {
+              const cleanNum = (newOrder.numero || "").replace(/^#/, "");
+              let receptorTxt = " (Titular)";
+              if (newOrder.pod_receptor) {
+                if (!newOrder.pod_receptor.toLowerCase().startsWith("titular")) {
+                  receptorTxt = ` • Recibió: **${newOrder.pod_receptor}**`;
+                }
+              }
+              const saldoInfo = newOrder.saldo > 0 ? ` • Debe: **${formatRD(newOrder.saldo)}**` : " • Pagado";
+
+              handleIncomingNotif({
+                titulo: `Orden #${cleanNum} Entregada`,
+                mensaje: `Cliente: **${newOrder.cliente_nombre || "Cliente"}**${receptorTxt}${saldoInfo}`,
+                tipo: "SUCCESS",
+              });
             }
             loadNotificaciones();
           }
@@ -334,10 +461,34 @@ export function TenantShell() {
       )
       .subscribe();
 
+    // 3. Supabase Realtime Broadcast (Garantizado entre diferentes PCs y móviles)
+    const broadcastChannel = supabase
+      .channel(`tenant_events_${tenantId}`)
+      .on("broadcast", { event: "nueva_notificacion" }, (payload) => {
+        if (payload && payload.payload) {
+          handleIncomingNotif(payload.payload);
+        }
+      })
+      .subscribe();
+
+    // 4. Browser BroadcastChannel (Garantizado entre pestañas del mismo navegador)
+    let browserBc: BroadcastChannel | null = null;
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      browserBc = new BroadcastChannel(`klynn_tenant_${tenantId}`);
+      browserBc.onmessage = (event) => {
+        if (event.data?.type === "NUEVA_NOTIFICACION" && event.data.notificacion) {
+          handleIncomingNotif(event.data.notificacion);
+        }
+      };
+    }
+
     return () => {
       supabase.removeChannel(channel);
+      supabase.removeChannel(ordersChannel);
+      supabase.removeChannel(broadcastChannel);
+      if (browserBc) browserBc.close();
     };
-  }, [tenantId]);
+  }, [tenantId, user?.empleado?.rol]);
 
   // Protección de rutas — DEBE estar antes del return condicional
   useEffect(() => {
@@ -1043,21 +1194,35 @@ export function TenantShell() {
                     const cleanTitle = n.titulo.replace(emojiRegex, "").trim();
                     const cleanMessage = n.mensaje.replace(emojiRegex, "").trim();
 
-                    const getIcon = () => {
+                    const getCardStyle = () => {
                       const t = (cleanTitle + " " + cleanMessage).toLowerCase();
                       if (
-                        t.includes("entrega") ||
-                        t.includes("domicilio") ||
-                        t.includes("envío") ||
-                        t.includes("delivery") ||
+                        t.includes("entregad") ||
+                        t.includes("repartidor") ||
+                        t.includes("delivery")
+                      ) {
+                        return {
+                          card: isUnread
+                            ? "bg-emerald-50/80 dark:bg-emerald-950/35 border-emerald-200/80 dark:border-emerald-800/50 hover:bg-emerald-100/70"
+                            : "bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-100/60 dark:border-emerald-900/30 hover:bg-emerald-50/60",
+                          iconBg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300 ring-1 ring-emerald-200/60",
+                          dot: "bg-emerald-500",
+                          Icon: Truck,
+                        };
+                      }
+                      if (
+                        t.includes("entrega para") ||
                         t.includes("orden") ||
                         t.includes("prenda")
                       ) {
-                        return (
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20">
-                            <Shirt className="h-[18px] w-[18px]" strokeWidth={2} />
-                          </span>
-                        );
+                        return {
+                          card: isUnread
+                            ? "bg-indigo-50/75 dark:bg-indigo-950/35 border-indigo-200/75 dark:border-indigo-800/50 hover:bg-indigo-100/70"
+                            : "bg-indigo-50/30 dark:bg-indigo-950/15 border-indigo-100/60 dark:border-indigo-900/30 hover:bg-indigo-50/60",
+                          iconBg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 ring-1 ring-indigo-200/60",
+                          dot: "bg-indigo-500",
+                          Icon: Shirt,
+                        };
                       }
                       if (
                         t.includes("urgente") ||
@@ -1065,11 +1230,14 @@ export function TenantShell() {
                         t.includes("advertencia") ||
                         t.includes("error")
                       ) {
-                        return (
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-rose-50 text-rose-600 ring-1 ring-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-900/60">
-                            <AlertTriangle className="h-[18px] w-[18px]" strokeWidth={2} />
-                          </span>
-                        );
+                        return {
+                          card: isUnread
+                            ? "bg-rose-50/80 dark:bg-rose-950/35 border-rose-200/80 dark:border-rose-800/50 hover:bg-rose-100/70"
+                            : "bg-rose-50/30 dark:bg-rose-950/15 border-rose-100/60 dark:border-rose-900/30 hover:bg-rose-50/60",
+                          iconBg: "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300 ring-1 ring-rose-200/60",
+                          dot: "bg-rose-500",
+                          Icon: AlertTriangle,
+                        };
                       }
                       if (
                         t.includes("caja") ||
@@ -1078,30 +1246,37 @@ export function TenantShell() {
                         t.includes("cobro") ||
                         t.includes("venta")
                       ) {
-                        return (
-                          <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-emerald-50 text-emerald-600 ring-1 ring-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-900/60">
-                            <Wallet className="h-[18px] w-[18px]" strokeWidth={2} />
-                          </span>
-                        );
+                        return {
+                          card: isUnread
+                            ? "bg-amber-50/80 dark:bg-amber-950/35 border-amber-200/80 dark:border-amber-800/50 hover:bg-amber-100/70"
+                            : "bg-amber-50/30 dark:bg-amber-950/15 border-amber-100/60 dark:border-amber-900/30 hover:bg-amber-50/60",
+                          iconBg: "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 ring-1 ring-amber-200/60",
+                          dot: "bg-amber-500",
+                          Icon: Wallet,
+                        };
                       }
-                      return (
-                        <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-slate-100 text-slate-600 ring-1 ring-slate-200/70 dark:bg-slate-800 dark:text-slate-400 dark:ring-slate-700">
-                          <Bell className="h-[18px] w-[18px]" strokeWidth={2} />
-                        </span>
-                      );
+                      return {
+                        card: isUnread
+                          ? "bg-slate-50/90 dark:bg-slate-900/60 border-slate-200 dark:border-slate-800 hover:bg-slate-100/80"
+                          : "bg-white dark:bg-slate-950 border-slate-100 dark:border-slate-900 hover:bg-slate-50",
+                        iconBg: "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 ring-1 ring-slate-200/60",
+                        dot: "bg-slate-400",
+                        Icon: Bell,
+                      };
                     };
+
+                    const style = getCardStyle();
+                    const IconComponent = style.Icon;
 
                     return (
                       <DropdownMenuItem
                         key={n.id}
                         onSelect={() => onNotificacionClick(n)}
-                        className={`group relative cursor-pointer select-none items-start gap-3 rounded-xl border px-3 py-3 outline-none transition-all ${
-                          isUnread
-                            ? "border-primary/10 bg-primary/[0.045] focus:border-primary/20 focus:bg-primary/[0.08] dark:bg-primary/[0.08] dark:focus:bg-primary/[0.13]"
-                            : "border-transparent focus:border-slate-200 focus:bg-slate-50 dark:focus:border-slate-800 dark:focus:bg-slate-900"
-                        }`}
+                        className={`group relative cursor-pointer select-none items-start gap-3 rounded-xl border px-3 py-3 outline-none transition-all ${style.card}`}
                       >
-                        {getIcon()}
+                        <span className={`grid h-10 w-10 shrink-0 place-items-center rounded-xl ${style.iconBg}`}>
+                          <IconComponent className="h-[18px] w-[18px]" strokeWidth={2} />
+                        </span>
                         <div className="min-w-0 flex-1">
                           <div className="flex items-start justify-between gap-2">
                             <span
@@ -1114,13 +1289,14 @@ export function TenantShell() {
                                 className="relative mt-1.5 flex h-2 w-2 shrink-0"
                                 aria-label="Sin leer"
                               >
-                                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary opacity-45" />
-                                <span className="relative inline-flex h-2 w-2 rounded-full bg-primary ring-2 ring-white dark:ring-slate-950" />
+                                <span className={`absolute inline-flex h-full w-full animate-ping rounded-full ${style.dot} opacity-45`} />
+                                <span className={`relative inline-flex h-2 w-2 rounded-full ${style.dot} ring-2 ring-white dark:ring-slate-950`} />
                               </span>
                             )}
                           </div>
                           <div className="mt-0.5 text-xs leading-[18px] text-slate-500 dark:text-slate-400">
-                            {cleanMessage.split(/(#KL-[a-zA-Z0-9-]+)/).map((part, i) => {
+                            {cleanMessage.split(/(#KL-[a-zA-Z0-9-]+|\*\*.*?\*\*)/g).map((part, i) => {
+                              if (!part) return null;
                               if (part.startsWith("#KL-")) {
                                 return (
                                   <span
@@ -1131,64 +1307,46 @@ export function TenantShell() {
                                   </span>
                                 );
                               }
-
-                              const formatTextSegment = (text: string): React.ReactNode => {
-                                const clientMatch = text.match(
-                                  /(.*?\bdel cliente\s+)(.*?)(?=\s+(?:debe|ha|se|creada|registrada)\b|\.|$)(.*)/i,
-                                );
-                                if (clientMatch) {
-                                  const [_, before, clientName, after] = clientMatch;
-
-                                  const formatTimeOnly = (t: string) => {
-                                    const timeRegex =
-                                      /(\d{1,2}:\d{2}\s*(?:[ap]\.\s*[mr]\.|[ap]m))/i;
-                                    return t.split(timeRegex).map((subpart, j) => {
-                                      if (timeRegex.test(subpart)) {
-                                        return (
-                                          <strong
-                                            key={j}
-                                            className="font-extrabold text-slate-800 dark:text-slate-200"
-                                          >
-                                            {subpart}
-                                          </strong>
-                                        );
-                                      }
-                                      return subpart;
-                                    });
-                                  };
-
-                                  return (
-                                    <>
-                                      {formatTimeOnly(before)}
-                                      <strong className="font-extrabold text-slate-800 dark:text-slate-200">
-                                        {clientName}
-                                      </strong>
-                                      {formatTimeOnly(after)}
-                                    </>
-                                  );
-                                }
-
-                                const timeRegex = /(\d{1,2}:\d{2}\s*(?:[ap]\.\s*[mr]\.|[ap]m))/i;
+                              if (part.startsWith("**") && part.endsWith("**")) {
                                 return (
-                                  <>
-                                    {text.split(timeRegex).map((subpart, j) => {
-                                      if (timeRegex.test(subpart)) {
-                                        return (
-                                          <strong
-                                            key={j}
-                                            className="font-extrabold text-slate-800 dark:text-slate-200"
-                                          >
-                                            {subpart}
-                                          </strong>
-                                        );
-                                      }
-                                      return subpart;
-                                    })}
-                                  </>
+                                  <strong
+                                    key={i}
+                                    className="font-extrabold text-slate-900 dark:text-slate-100"
+                                  >
+                                    {part.slice(2, -2)}
+                                  </strong>
                                 );
-                              };
+                              }
 
-                              return <span key={i}>{formatTextSegment(part)}</span>;
+                              const subParts = part.split(/(Recibió:\s*[^.\)]+|del cliente\s+[^.\s]+(?:\s+[^.\s]+)?|Cliente:\s*[^.\s]+(?:\s+[^.\s]+)?)/i);
+                              return (
+                                <span key={i}>
+                                  {subParts.map((sub, j) => {
+                                    if (/^Recibió:/i.test(sub)) {
+                                      return (
+                                        <span key={j}>
+                                          Recibió: <strong className="font-extrabold text-slate-900 dark:text-slate-100">{sub.replace(/^Recibió:\s*/i, "")}</strong>
+                                        </span>
+                                      );
+                                    }
+                                    if (/^del cliente/i.test(sub)) {
+                                      return (
+                                        <span key={j}>
+                                          del cliente <strong className="font-extrabold text-slate-900 dark:text-slate-100">{sub.replace(/^del cliente\s*/i, "")}</strong>
+                                        </span>
+                                      );
+                                    }
+                                    if (/^Cliente:/i.test(sub)) {
+                                      return (
+                                        <span key={j}>
+                                          Cliente: <strong className="font-extrabold text-slate-900 dark:text-slate-100">{sub.replace(/^Cliente:\s*/i, "")}</strong>
+                                        </span>
+                                      );
+                                    }
+                                    return sub;
+                                  })}
+                                </span>
+                              );
                             })}
                           </div>
                           <div className="mt-2 flex items-center justify-between gap-2">

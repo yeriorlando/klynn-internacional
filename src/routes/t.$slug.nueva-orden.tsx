@@ -78,6 +78,7 @@ import { DatePicker } from "@/components/ui/date-picker";
 import { Calendar } from "@/components/ui/calendar";
 import { es } from "date-fns/locale";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { AddressAutocomplete, type AddressData } from "@/components/klynn/logistica/AddressAutocomplete";
 import {
   getClientes,
   getOrdenes,
@@ -243,7 +244,7 @@ function NuevaOrdenPage() {
   const [showDeliveryPOS, setShowDeliveryPOS] = useState(false);
   const [showDiscountPOS, setShowDiscountPOS] = useState(false);
   const [servicioDomicilio, setServicioDomicilio] = useState(false);
-  const [direccionDomicilio, setDireccionDomicilio] = useState("");
+  const [direccionData, setDireccionData] = useState<AddressData>({ direccion: "" });
   const [costoDomicilio, setCostoDomicilio] = useState<number>(0);
 
   const [tipoECF, setTipoECF] = useState<string>("E32");
@@ -300,7 +301,14 @@ function NuevaOrdenPage() {
   // 1. Setea la dirección únicamente cuando cambia el cliente seleccionado realmente, pero mantiene el envío desactivado por defecto
   useEffect(() => {
     if (cliente) {
-      setDireccionDomicilio(cliente.direccion || "");
+      setDireccionData({
+        direccion: cliente.direccion || "",
+        sector: cliente.sector || "",
+        edificio_apto: cliente.edificio_apto || "",
+        referencia: cliente.referencia || "",
+        lat: cliente.lat,
+        lng: cliente.lng,
+      });
     }
   }, [cliente?.id]);
 
@@ -444,7 +452,7 @@ function NuevaOrdenPage() {
     setReferencia("");
     setShowRefInput(false);
     setServicioDomicilio(false);
-    setDireccionDomicilio("");
+    setDireccionData({ direccion: "" });
     setCostoDomicilio(0);
     setCreada(null);
     setShowTicket(false);
@@ -1186,6 +1194,11 @@ function NuevaOrdenPage() {
         ncf_vencimiento: ncfVencimiento,
         entrega_domicilio: servicioDomicilio || undefined,
         costo_envio: servicioDomicilio && costoEnvio > 0 ? costoEnvio : undefined,
+        direccion_entrega: servicioDomicilio && direccionData.direccion ? direccionData.direccion : undefined,
+        sector_entrega: servicioDomicilio && direccionData.sector ? direccionData.sector : undefined,
+        referencia_entrega: servicioDomicilio && direccionData.referencia ? direccionData.referencia : undefined,
+        lat_entrega: servicioDomicilio ? direccionData.lat : undefined,
+        lng_entrega: servicioDomicilio ? direccionData.lng : undefined,
         pago_referencia:
           (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia
             ? referencia
@@ -1273,10 +1286,18 @@ function NuevaOrdenPage() {
       if (
         targetCliente &&
         servicioDomicilio &&
-        direccionDomicilio.trim() &&
-        direccionDomicilio !== targetCliente.direccion
+        direccionData.direccion.trim() &&
+        direccionData.direccion !== targetCliente.direccion
       ) {
-        await saveCliente({ ...targetCliente, direccion: direccionDomicilio.trim() });
+        await saveCliente({
+          ...targetCliente,
+          direccion: direccionData.direccion.trim(),
+          sector: direccionData.sector || targetCliente.sector,
+          edificio_apto: direccionData.edificio_apto || targetCliente.edificio_apto,
+          referencia: direccionData.referencia || targetCliente.referencia,
+          lat: direccionData.lat || targetCliente.lat,
+          lng: direccionData.lng || targetCliente.lng,
+        });
       }
 
       if (targetCliente) {
@@ -1547,10 +1568,18 @@ function NuevaOrdenPage() {
                     cliente.nombre === "Consumidor" && cliente.apellido === "Final";
                   if (
                     !isGenericClient &&
-                    direccionDomicilio.trim() &&
-                    direccionDomicilio.trim() !== cliente.direccion
+                    direccionData.direccion.trim() &&
+                    direccionData.direccion.trim() !== cliente.direccion
                   ) {
-                    const updatedCliente = { ...cliente, direccion: direccionDomicilio.trim() };
+                    const updatedCliente = {
+                      ...cliente,
+                      direccion: direccionData.direccion.trim(),
+                      sector: direccionData.sector || cliente.sector,
+                      edificio_apto: direccionData.edificio_apto || cliente.edificio_apto,
+                      referencia: direccionData.referencia || cliente.referencia,
+                      lat: direccionData.lat || cliente.lat,
+                      lng: direccionData.lng || cliente.lng,
+                    };
                     setCliente(updatedCliente);
                     saveCliente(updatedCliente).then(() => {
                       queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
@@ -1560,8 +1589,8 @@ function NuevaOrdenPage() {
               }}
               enabled={servicioDomicilio}
               setEnabled={setServicioDomicilio}
-              address={direccionDomicilio}
-              setAddress={setDireccionDomicilio}
+              addressData={direccionData}
+              setAddressData={setDireccionData}
               cost={costoDomicilio}
               setCost={setCostoDomicilio}
             />
@@ -3300,37 +3329,15 @@ function NuevaOrdenPage() {
                               animate={{ opacity: 1, height: "auto" }}
                               className="space-y-3 pl-12 pt-2 border-t border-dashed"
                             >
-                              <Field label="Dirección de entrega">
-                                <Input
-                                  value={direccionDomicilio}
-                                  onChange={(e) => setDireccionDomicilio(e.target.value)}
-                                  onBlur={() => {
-                                    if (cliente) {
-                                      const isGenericClient =
-                                        cliente.nombre === "Consumidor" &&
-                                        cliente.apellido === "Final";
-                                      if (
-                                        !isGenericClient &&
-                                        direccionDomicilio.trim() &&
-                                        direccionDomicilio.trim() !== cliente.direccion
-                                      ) {
-                                        const updatedCliente = {
-                                          ...cliente,
-                                          direccion: direccionDomicilio.trim(),
-                                        };
-                                        setCliente(updatedCliente);
-                                        saveCliente(updatedCliente).then(() => {
-                                          queryClient.invalidateQueries({
-                                            queryKey: ["clientes", tenantId],
-                                          });
-                                        });
-                                      }
-                                    }
-                                  }}
-                                  placeholder="Calle, No., Sector..."
-                                  className="bg-background"
+                              <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 p-3">
+                                <AddressAutocomplete
+                                  value={direccionData}
+                                  onChange={setDireccionData}
+                                  label="Dirección de entrega"
+                                  required
+                                  showDetails
                                 />
-                              </Field>
+                              </div>
                               <p className="mt-1 text-[10px] text-muted-foreground">
                                 Se guardará en la ficha del cliente si es nueva.
                               </p>
@@ -4936,8 +4943,8 @@ function DeliveryPOSDialog({
   onOpenChange,
   enabled,
   setEnabled,
-  address,
-  setAddress,
+  addressData,
+  setAddressData,
   cost,
   setCost,
 }: {
@@ -4945,74 +4952,239 @@ function DeliveryPOSDialog({
   onOpenChange: (o: boolean) => void;
   enabled: boolean;
   setEnabled: (e: boolean) => void;
-  address: string;
-  setAddress: (a: string) => void;
+  addressData: AddressData;
+  setAddressData: (a: AddressData) => void;
   cost: number;
   setCost: (c: number) => void;
 }) {
+  const [step, setStep] = useState<1 | 2>(1);
+
+  useEffect(() => {
+    if (open) {
+      setStep(1);
+    }
+  }, [open]);
+
+  const handleNextStep = () => {
+    setStep(2);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[400px] rounded-3xl p-6">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-display font-bold flex items-center gap-2">
-            <Truck className="h-6 w-6 text-primary" />
-            Envío a Domicilio
-          </DialogTitle>
-          <DialogDescription className="sr-only">
-            Configura la dirección de entrega para esta orden.
-          </DialogDescription>
-        </DialogHeader>
-        <div className="space-y-6 py-4">
-          <div className="flex items-center justify-between p-4 rounded-2xl bg-accent/5 border border-primary/10">
-            <div className="space-y-0.5">
-              <Label className="text-base font-bold">Habilitar Envío</Label>
-              <p className="text-xs text-muted-foreground">¿Esta orden requiere delivery?</p>
+      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+        {/* STEPPER HEADER */}
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-2 relative border-b border-slate-100 dark:border-slate-800/60">
+          <div className="flex items-center justify-between mb-3 pr-10">
+            <div className="flex items-center gap-2.5">
+              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
+                <Truck className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <DialogTitle className="text-base font-display font-bold text-foreground">
+                  Envío a Domicilio
+                </DialogTitle>
+                <p className="text-xs text-muted-foreground">
+                  {step === 1
+                    ? "Paso 1: Dirección y geolocalización"
+                    : "Paso 2: Detalles del inmueble y tarifa"}
+                </p>
+              </div>
             </div>
-            <Switch checked={enabled} onCheckedChange={setEnabled} />
+
+            <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-2.5 py-1 rounded-xl border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+              <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                {enabled ? "Envío Activo" : "Sin Envío"}
+              </span>
+              <Switch checked={enabled} onCheckedChange={setEnabled} className="scale-75 origin-right" />
+            </div>
           </div>
 
-          {enabled && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              className="space-y-4"
+          {/* Stepper Buttons (Centered Pills) */}
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 1
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
             >
-              <div className="space-y-2">
-                <Label className="font-bold text-sm">Dirección de Entrega</Label>
+              <span
+                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                  step === 1
+                    ? "bg-white/25 text-white"
+                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
+                1
+              </span>
+              <span>Dirección y Ubicación</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNextStep}
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                step === 2
+                  ? "bg-primary text-white shadow-md font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span
+                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                  step === 2
+                    ? "bg-white/25 text-white"
+                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
+                2
+              </span>
+              <span>Detalles y Tarifa</span>
+            </button>
+          </div>
+        </div>
+
+        {/* DIALOG BODY */}
+        <div className="px-4 sm:px-5 py-4">
+          {step === 1 ? (
+            /* STEP 1: DIRECCIÓN Y UBICACIÓN */
+            <div className="space-y-3.5 animate-in fade-in slide-in-from-left-3 duration-200">
+              <AddressAutocomplete
+                value={addressData}
+                onChange={(addr) => {
+                  setAddressData(addr);
+                  if (!enabled) setEnabled(true);
+                }}
+                label="Buscar Dirección (API)"
+                required
+                showDetails={false}
+              />
+
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                  Punto de Referencia (Para el Repartidor)
+                </Label>
                 <Input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Calle, No., Sector..."
-                  className="h-12 rounded-xl bg-card border-primary/20 focus-visible:ring-primary/30"
-                  autoFocus
+                  value={addressData.referencia || ""}
+                  onChange={(e) => setAddressData({ ...addressData, referencia: e.target.value })}
+                  placeholder="Ej. Portón negro frente al parque, tocar timbre 4B..."
+                  className="h-9.5 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                 />
               </div>
-              <div className="space-y-2">
-                <Label className="font-bold text-sm">Costo de Envío (RD$)</Label>
+
+              {/* Step 1 Footer */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  className="rounded-xl h-8.5 px-4 text-xs font-medium"
+                >
+                  Cancelar
+                </Button>
+                <Button
+                  type="button"
+                  onClick={handleNextStep}
+                  className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                >
+                  Siguiente: Detalles <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+            </div>
+          ) : (
+            /* STEP 2: DETALLES DEL INMUEBLE Y TARIFA */
+            <div className="space-y-3.5 animate-in fade-in slide-in-from-right-3 duration-200">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    Edificio / Apto / Nivel
+                  </Label>
+                  <div className="relative">
+                    <Building className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                    <Input
+                      value={addressData.edificio_apto || ""}
+                      onChange={(e) => setAddressData({ ...addressData, edificio_apto: e.target.value })}
+                      placeholder="Torre / Apto 4B"
+                      className="h-9 pl-8 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">
+                    Sector / Barrio
+                  </Label>
+                  <Input
+                    value={addressData.sector || ""}
+                    onChange={(e) => setAddressData({ ...addressData, sector: e.target.value })}
+                    placeholder="Ej. Piantini"
+                    className="h-9 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                  />
+                </div>
+              </div>
+
+              {/* Delivery Cost with Quick Amount Chips */}
+              <div className="space-y-2 rounded-2xl bg-slate-50/70 dark:bg-slate-900/40 p-3 border border-slate-100 dark:border-slate-800">
+                <div className="flex items-center justify-between">
+                  <Label className="font-bold text-xs text-slate-800 dark:text-slate-200">
+                    Costo de Envío (RD$)
+                  </Label>
+                  <span className="text-[10px] text-slate-400">Se sumará al total</span>
+                </div>
+
                 <div className="relative">
-                  <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-muted-foreground/50">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-muted-foreground/60 text-xs">
                     RD$
                   </span>
                   <PriceInput
                     value={cost}
                     onChange={setCost}
                     placeholder="0.00"
-                    className="h-12 rounded-xl bg-card border-primary/20 focus-visible:ring-primary/30 pl-12"
+                    className="h-9 rounded-xl bg-white dark:bg-slate-900 border-primary/20 pl-11 text-xs font-bold"
                   />
                 </div>
-                <p className="text-[10px] text-muted-foreground">Se sumará al total de la orden.</p>
+
+                {/* Quick Fee Chips */}
+                <div className="flex items-center gap-1.5 pt-0.5">
+                  {[0, 100, 150, 200, 250].map((amount) => (
+                    <button
+                      key={amount}
+                      type="button"
+                      onClick={() => setCost(amount)}
+                      className={`flex-1 rounded-lg py-1 text-[10px] font-bold border transition-colors ${
+                        cost === amount
+                          ? "bg-primary text-white border-primary"
+                          : "bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:bg-slate-100"
+                      }`}
+                    >
+                      {amount === 0 ? "Gratis" : `${amount}`}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </motion.div>
+
+              {/* Step 2 Footer */}
+              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(1)}
+                  className="rounded-xl h-8.5 px-4 text-xs font-medium gap-1"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Atrás
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => onOpenChange(false)}
+                  className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                >
+                  <Check className="h-3.5 w-3.5" /> Confirmar Entrega
+                </Button>
+              </div>
+            </div>
           )}
         </div>
-        <DialogFooter>
-          <Button
-            onClick={() => onOpenChange(false)}
-            className="w-full h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none"
-          >
-            Confirmar
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

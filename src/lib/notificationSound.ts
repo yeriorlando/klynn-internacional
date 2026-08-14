@@ -41,3 +41,30 @@ export function playNotificationSoundDebounced(cooldownMs = 2000) {
         playNotificationSound();
     }
 }
+
+/**
+ * Play the custom order delivered audio chime (/orden_entregada.mp3) from public folder.
+ */
+export function playOrderDeliveredSound() {
+    try {
+        const audio = new Audio("/orden_entregada.mp3");
+        audio.volume = 0.75;
+        const playPromise = audio.play();
+        if (playPromise !== undefined) {
+            playPromise.catch((error) => {
+                console.warn("Autoplay de audio prevenido por el navegador hasta interacción del usuario:", error);
+            });
+        }
+    } catch (e) {
+        console.warn("Could not play order delivered sound:", e);
+    }
+}
+
+let lastDeliveredPlayed = 0;
+export function playOrderDeliveredSoundDebounced(cooldownMs = 2000) {
+    const now = Date.now();
+    if (now - lastDeliveredPlayed > cooldownMs) {
+        lastDeliveredPlayed = now;
+        playOrderDeliveredSound();
+    }
+}

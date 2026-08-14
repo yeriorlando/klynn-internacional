@@ -17,6 +17,7 @@ import {
   formatRD,
   formatDateTimeRD,
   saveOrden,
+  crearNotificacion,
   type Orden,
   type Gasto,
   type Cliente,
@@ -225,6 +226,18 @@ function DashboardPage() {
               if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
             },
           );
+        }
+
+        if (estado === "ENTREGADA") {
+          const cleanNum = (o.numero || "").replace(/^#/, "");
+          crearNotificacion({
+            tenant_id: tenantId,
+            titulo: `🛵 Orden #${cleanNum} Entregada`,
+            mensaje: `Orden entregada a ${cli?.nombre || "Cliente"}. Saldo: ${o.saldo > 0 ? formatRD(o.saldo) : "Pagado 100%"}`,
+            tipo: "SUCCESS",
+            leida: false,
+            link: `/t/${tenant.slug}/logistica`,
+          });
         }
       }
     } catch (err: any) {

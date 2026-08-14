@@ -20,23 +20,36 @@ import {
   Timer,
   ChevronRight,
   User as UserIcon,
-  Shirt,
   Calendar,
   Route as RouteIcon,
-  Map,
+  Map as MapIcon,
+  LayoutGrid,
+  Printer,
+  Compass,
+  DollarSign,
+  AlertTriangle,
+  FileText,
+  UserCheck,
+  Building,
+  Sparkles,
+  MessageSquare,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { 
-  getOrdenes, getClientes, saveOrden, formatRD, formatDateRD, 
-  type Orden, type Cliente, type EstadoOrden 
+  getOrdenes, getClientes, getEmpleados, saveOrden, formatRD, formatDateRD, 
+  type Orden, type Cliente, type Empleado, type EstadoOrden 
 } from "@/lib/storage";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { Progress } from "@/components/ui/progress";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ProofOfDeliveryDialog } from "@/components/klynn/logistica/ProofOfDeliveryDialog";
+import { IncidenciaDialog } from "@/components/klynn/logistica/IncidenciaDialog";
+import { LogisticsMap } from "@/components/klynn/logistica/LogisticsMap";
+import { DeliveryManifestPrint } from "@/components/klynn/logistica/DeliveryManifestPrint";
+import { useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/t/$slug/logistica")({
   component: LogisticaPage,
@@ -44,17 +57,24 @@ export const Route = createFileRoute("/t/$slug/logistica")({
 
 function LogisticaPage() {
   const user = useRequireAuth();
+  const queryClient = useQueryClient();
+  
   const [ordenesRaw, setOrdenesRaw] = useState<Orden[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [filter, setFilter] = useState<EstadoOrden | "TODAS">("TODAS");
+  const [filterStatus, setFilterStatus] = useState<EstadoOrden | "TODAS">("TODAS");
+  const [filterRepartidor, setFilterRepartidor] = useState<string>("TODOS");
+  const [filterSector, setFilterSector] = useState<string>("TODOS");
+  
+  // Modales
   const [detailId, setDetailId] = useState<string | null>(null);
-  const [routeOpen, setRouteOpen] = useState(false);
+  const [podOrder, setPodOrder] = useState<Orden | null>(null);
+  const [incidenciaOrder, setIncidenciaOrder] = useState<Orden | null>(null);
+  const [showManifest, setShowManifest] = useState(false);
   const [refresh, setRefresh] = useState(0);
   const [now, setNow] = useState(new Date());
-
-  const tenant = user?.tenant;
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
@@ -63,212 +83,353 @@ function LogisticaPage() {
 
   useEffect(() => {
     async function load() {
-      if (!tenant || tenant.id === '__loading__') return;
+      const tId = user?.tenant?.id;
+      if (!tId || tId === '__loading__') return;
       setLoading(true);
-      const [oList, cList] = await Promise.all([
-        getOrdenes(tenant.id),
-        getClientes(tenant.id)
+      const [oList, cList, eList] = await Promise.all([
+        getOrdenes(tId),
+        getClientes(tId),
+        getEmpleados(tId),
       ]);
-      // Solo nos interesan órdenes que requieren entrega (LISTA, EN_CAMINO) o que ya fueron ENTREGADAS hoy
       setOrdenesRaw(oList);
       setClientes(cList);
+      setEmpleados(eList);
       setLoading(false);
     }
     load();
-  }, [tenant?.id, refresh]);
+  }, [user?.tenant?.id, refresh]);
 
-  const stats = useMemo(() => {
-    const hoy = new Date().toISOString().split('T')[0];
-    return {
-      pendientes: ordenesRaw.filter(o => o.estado === "LISTA").length,
-      enCamino: ordenesRaw.filter(o => o.estado === "EN_CAMINO").length,
-      entregadasHoy: ordenesRaw.filter(o => o.estado === "ENTREGADA").length,
-      total: ordenesRaw.filter(o => ["LISTA", "EN_CAMINO", "ENTREGADA"].includes(o.estado)).length,
-    };
-  }, [ordenesRaw]);
+  // Rol del usuario actual
+  const isRepartidor = user?.empleado?.rol === "REPARTIDOR";
+  const currentEmpleadoId = user?.empleado?.id;
 
-  const progress = stats.total ? Math.round((stats.entregadasHoy / stats.total) * 100) : 0;
+  // Lista de Repartidores
+  const repartidores = useMemo(() => {
+    return empleados.filter(e => e.activo && (e.rol === "REPARTIDOR" || e.rol === "ADMIN" || e.rol === "SUPERVISOR"));
+  }, [empleados]);
 
-  const filtered = useMemo(() => {
-    return ordenesRaw.filter((o) => {
-      // Filtrar por estados relevantes para logística
-      if (!["LISTA", "EN_CAMINO", "ENTREGADA"].includes(o.estado)) return false;
-
-      const matchStatus = filter === "TODAS" ? true : o.estado === filter;
-      const q = query.trim().toLowerCase();
+  // Solo órdenes que son de delivery (entrega_domicilio === true o con dirección asignada)
+  const deliveryOrders = useMemo(() => {
+    return ordenesRaw.filter(o => {
+      if (o.estado === "ANULADA") return false;
       const cli = clientes.find(c => c.id === o.cliente_id);
-      const matchQuery = !q || 
-        o.numero.toLowerCase().includes(q) || 
-        cli?.nombre.toLowerCase().includes(q) || 
-        cli?.direccion?.toLowerCase().includes(q);
-      
-      return matchStatus && matchQuery;
-    }).sort((a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
-  }, [ordenesRaw, filter, query, clientes]);
+      const isDelivery = o.entrega_domicilio || (o.costo_envio && o.costo_envio > 0) || !!cli?.direccion || !!o.repartidor_id;
+      if (!isDelivery) return false;
 
+      // El REPARTIDOR solo puede ver las órdenes que le han sido asignadas a él
+      if (isRepartidor) {
+        return o.repartidor_id === currentEmpleadoId;
+      }
+      return true;
+    });
+  }, [ordenesRaw, clientes, isRepartidor, currentEmpleadoId]);
+
+  // Lista de sectores únicos para el filtro
+  const sectoresDisponibles = useMemo(() => {
+    const set = new Set<string>();
+    deliveryOrders.forEach(o => {
+      const cli = clientes.find(c => c.id === o.cliente_id);
+      const s = o.sector_entrega || cli?.sector;
+      if (s) set.add(s);
+    });
+    return Array.from(set);
+  }, [deliveryOrders, clientes]);
+
+  // KPIs de resumen
+  const stats = useMemo(() => {
+    const list = deliveryOrders;
+    return {
+      pendientes: list.filter(o => o.estado === "LISTA").length,
+      enCamino: list.filter(o => o.estado === "EN_CAMINO").length,
+      entregadas: list.filter(o => o.estado === "ENTREGADA").length,
+      incidencias: list.filter(o => o.estado === "INCIDENCIA").length,
+      total: list.length,
+      saldoPorCobrar: list.filter(o => ["LISTA", "EN_CAMINO", "INCIDENCIA"].includes(o.estado)).reduce((s, o) => s + (o.saldo || 0), 0),
+    };
+  }, [deliveryOrders]);
+
+  // Órdenes filtradas para mostrar en tarjetas / mapa
+  const filteredOrders = useMemo(() => {
+    return deliveryOrders.filter((o) => {
+      const cli = clientes.find(c => c.id === o.cliente_id);
+      
+      // Filtro de Estado
+      if (filterStatus !== "TODAS" && o.estado !== filterStatus) return false;
+
+      // Filtro de Repartidor
+      if (filterRepartidor === "SIN_ASIGNAR" && o.repartidor_id) return false;
+      if (filterRepartidor !== "TODOS" && filterRepartidor !== "SIN_ASIGNAR" && o.repartidor_id !== filterRepartidor) return false;
+
+      // Filtro de Sector
+      const sector = o.sector_entrega || cli?.sector;
+      if (filterSector !== "TODOS" && sector !== filterSector) return false;
+
+      // Filtro de búsqueda
+      const q = query.trim().toLowerCase();
+      if (!q) return true;
+      return (
+        o.numero.toLowerCase().includes(q) ||
+        cli?.nombre.toLowerCase().includes(q) ||
+        cli?.telefono.includes(q) ||
+        cli?.direccion?.toLowerCase().includes(q) ||
+        sector?.toLowerCase().includes(q)
+      );
+    }).sort((a, b) => new Date(b.creado_en).getTime() - new Date(a.creado_en).getTime());
+  }, [deliveryOrders, filterStatus, filterRepartidor, filterSector, query, clientes]);
+
+  // Actualizar estado de orden
   const updateStatus = async (id: string, nextStatus: EstadoOrden) => {
     const o = ordenesRaw.find(x => x.id === id);
     if (!o) return;
     try {
-      const next = { ...o, estado: nextStatus };
+      const next: Orden = { ...o, estado: nextStatus };
       await saveOrden(next);
       setRefresh(r => r + 1);
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenant?.id] });
       
-      const msg = nextStatus === "EN_CAMINO" ? "Orden en camino 🛵" : "Orden entregada ✅";
+      const msg = nextStatus === "EN_CAMINO" ? "¡Orden en camino hacia el cliente! 🛵" : "Estado actualizado ✅";
       toast.success(msg);
 
-      // Notificar por WhatsApp
+      // Notificar por WhatsApp al cliente que su orden va en camino
       const cli = clientes.find(c => c.id === o.cliente_id);
-      if (cli && tenant) {
+      if (cli && tenant && nextStatus === "EN_CAMINO") {
         const { notificarWhatsApp } = await import("@/lib/whatsapp");
-        const action = nextStatus === "EN_CAMINO" ? "en_camino" : "entregada";
-        await notificarWhatsApp(tenant, cli, next, action as any);
+        const res = await notificarWhatsApp(tenant, cli, next, "en_camino");
+        if (res.ok) {
+          toast.success("Cliente notificado por WhatsApp 💬");
+        } else if (cli.telefono && isRepartidor) {
+          // Si no tiene bot API de WhatsApp configurado, abrir chat directo de WhatsApp 1-tap para avisar al cliente
+          const rawPhone = cli.telefono.replace(/\D/g, "");
+          const waPhone = rawPhone.length === 10 ? `1${rawPhone}` : rawPhone;
+          const cleanNum = (o.numero || "").replace(/^#/, "");
+          const text = encodeURIComponent(`🛵 *¡Hola ${cli.nombre}!* Te informamos que tu orden *${cleanNum}* de *${tenant.nombre}* ya va en camino hacia tu dirección con nuestro repartidor. ¡Nos vemos en breve!`);
+          window.open(`https://wa.me/${waPhone}?text=${text}`, "_blank");
+        }
       }
     } catch (err) {
       toast.error("Error al actualizar estado");
     }
   };
 
+  // Asignar Repartidor a Orden
+  const handleAssignDriver = async (orderId: string, repartidorId: string) => {
+    const o = ordenesRaw.find(x => x.id === orderId);
+    if (!o) return;
+    try {
+      const repId = repartidorId === "NONE" ? undefined : repartidorId;
+      const next: Orden = { ...o, repartidor_id: repId };
+      await saveOrden(next);
+      setRefresh(r => r + 1);
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenant?.id] });
+      toast.success("Repartidor asignado con éxito 🛵");
+    } catch (err) {
+      toast.error("Error al asignar repartidor");
+    }
+  };
+
   const selectedOrder = useMemo(() => ordenesRaw.find(o => o.id === detailId), [ordenesRaw, detailId]);
   const selectedClient = useMemo(() => clientes.find(c => c.id === selectedOrder?.cliente_id), [clientes, selectedOrder]);
+  const selectedDriver = useMemo(() => empleados.find(e => e.id === selectedOrder?.repartidor_id), [empleados, selectedOrder]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || !user.tenant || user.tenant.id === '__loading__') return null;
+  const tenant = user.tenant;
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-20">
-      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Hero Section */}
-        <section className="mb-6 relative overflow-hidden rounded-[2rem] border border-slate-100 bg-white p-6 shadow-sm">
-          {/* Subtle background element */}
-          <div className="absolute right-0 top-0 h-full w-1/2 bg-gradient-to-l from-indigo-50/50 to-transparent pointer-events-none" />
+    <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 pb-20">
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
+        
+        {/* Header Hero Section */}
+        <section className="relative overflow-hidden rounded-[2.25rem] border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm">
+          <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-primary/5 via-primary/5 to-transparent pointer-events-none" />
           
           <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            
-            {/* Left Column (Text) */}
-            <div className="flex-1 space-y-3 max-w-lg">
-              <button 
-                onClick={() => setRouteOpen(true)}
-                className="inline-flex w-fit items-center gap-1.5 rounded-full bg-primary px-3 py-1.5 text-[9px] font-bold uppercase tracking-widest text-white shadow-sm transition-all hover:bg-primary/90 active:scale-95 cursor-pointer"
-              >
-                <Navigation className="h-3 w-3" /> Ver ruta del día
-              </button>
+            <div className="flex-1 space-y-2.5 max-w-xl">
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
+                  <Truck className="h-3.5 w-3.5" /> {isRepartidor ? "Mi Ruta de Entregas" : "Centro de Despacho & Delivery"}
+                </span>
+                {stats.incidencias > 0 && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-950/50 px-2.5 py-0.5 text-[10px] font-bold text-rose-600 border border-rose-200 dark:border-rose-900 animate-pulse">
+                    <AlertTriangle className="h-3 w-3" /> {stats.incidencias} Incidencias
+                  </span>
+                )}
+              </div>
               
-              <h1 className="text-3xl font-display font-bold tracking-tight text-slate-900 leading-snug">
-                Hola {user.empleado.nombre.split(' ')[0]}, tienes <span className="text-primary">{stats.pendientes + stats.enCamino}</span> entregas activas
+              <h1 className="text-3xl sm:text-4xl font-display font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+                {isRepartidor ? "Mis Entregas Asignadas" : "Gestión de Rutas y Envíos a Domicilio"}
               </h1>
               
-              <p className="text-xs text-slate-500 leading-relaxed max-w-md">
-                Gestiona tus rutas, marca envíos <span className="font-semibold text-primary">en camino</span> y confirma entregas. El cliente recibirá notificaciones automáticas.
+              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+                {isRepartidor
+                  ? `Hola ${user.empleado.nombre || "Chofer"}, aquí tienes tus órdenes asignadas para entregar hoy. Navega con Waze o Google Maps y registra cobros con firma digital en pantalla.`
+                  : "Asigna repartidores, navega con Waze / Google Maps, confirma entregas con firma digital y asienta cobros en ruta automáticamente."}
               </p>
             </div>
             
-            {/* Right Column (Floating Progress Card & Button) */}
-            <div className="w-full lg:w-[340px] flex flex-col gap-3 relative shrink-0">
-              <div className="rounded-[1.25rem] border border-slate-100 bg-white p-5 shadow-xl shadow-slate-200/50">
-                <div className="flex items-center justify-between text-[9px] font-black uppercase tracking-widest text-primary mb-2.5">
-                  <span>Progreso del día</span>
-                  <span className="text-slate-600">{stats.entregadasHoy}/{stats.total} · {progress}%</span>
-                </div>
-                
-                <div className="h-2 w-full overflow-hidden rounded-full bg-slate-100">
-                  <div 
-                    className="h-full rounded-full bg-[#3B66F5] transition-all duration-1000" 
-                    style={{ width: `${progress}%` }} 
-                  />
-                </div>
-
-                {progress === 100 && stats.total > 0 && (
-                  <div className="mt-2.5 flex justify-center animate-in fade-in slide-in-from-bottom-2 duration-500">
-                    <p className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-wider text-emerald-600 border border-emerald-100 shadow-sm">
-                      🌟 Has hecho un muy buen trabajo
-                    </p>
-                  </div>
-                )}
-                
-                <div className="mt-4 flex items-center justify-between gap-3 border-t border-slate-50 pt-4">
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-primary">
-                      <Timer className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-medium text-slate-500">Hora actual</p>
-                      <p className="text-xs font-bold text-slate-900">{now.toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}</p>
-                    </div>
-                  </div>
-                  
-                  <div className="h-6 w-px bg-slate-100" />
-                  
-                  <div className="flex items-center gap-2.5">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-primary">
-                      <Calendar className="h-3.5 w-3.5" />
-                    </div>
-                    <div>
-                      <p className="text-[9px] font-medium text-slate-500">Hoy es</p>
-                      <p className="text-xs font-bold text-slate-900">{new Date().toLocaleDateString('es-DO', { weekday: 'short', day: 'numeric' })}</p>
-                    </div>
-                  </div>
-                </div>
+            {/* Action Buttons: Hoja de Ruta para Cajeras/Admins */}
+            {!isRepartidor && (
+              <div className="flex flex-wrap items-center gap-3 shrink-0">
+                <Button
+                  onClick={() => setShowManifest(true)}
+                  variant="outline"
+                  className="h-11 rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-extrabold shadow-sm gap-2"
+                >
+                  <Printer className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                  <span>Imprimir Hoja de Ruta</span>
+                </Button>
               </div>
-            </div>
-            
+            )}
           </div>
         </section>
 
-        {/* Stats Grid */}
-        <section className="mb-8 grid grid-cols-2 gap-4 lg:grid-cols-4">
-          <StatCard label="Pendientes" value={stats.pendientes} icon={<Clock />} color="amber" />
-          <StatCard label="En camino" value={stats.enCamino} icon={<Truck />} color="sky" />
-          <StatCard label="Entregadas hoy" value={stats.entregadasHoy} icon={<PackageCheck />} color="emerald" />
-          <StatCard label="Total ruta" value={stats.total} icon={<TrendingUp />} color="indigo" />
+        {/* KPIs Grid */}
+        <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+          <StatCard
+            label={isRepartidor ? "Por Salir" : "Por Despachar"}
+            value={stats.pendientes}
+            icon={<Clock className="h-5 w-5" />}
+            color="amber"
+            active={filterStatus === "LISTA"}
+            onClick={() => setFilterStatus(filterStatus === "LISTA" ? "TODAS" : "LISTA")}
+          />
+          <StatCard
+            label="En Ruta Activa"
+            value={stats.enCamino}
+            icon={<Truck className="h-5 w-5" />}
+            color="sky"
+            active={filterStatus === "EN_CAMINO"}
+            onClick={() => setFilterStatus(filterStatus === "EN_CAMINO" ? "TODAS" : "EN_CAMINO")}
+          />
+          <StatCard
+            label="Entregadas Hoy"
+            value={stats.entregadas}
+            icon={<PackageCheck className="h-5 w-5" />}
+            color="emerald"
+            active={filterStatus === "ENTREGADA"}
+            onClick={() => setFilterStatus(filterStatus === "ENTREGADA" ? "TODAS" : "ENTREGADA")}
+          />
+          <StatCard
+            label="Incidencias"
+            value={stats.incidencias}
+            icon={<AlertTriangle className="h-5 w-5" />}
+            color="rose"
+            active={filterStatus === "INCIDENCIA"}
+            onClick={() => setFilterStatus(filterStatus === "INCIDENCIA" ? "TODAS" : "INCIDENCIA")}
+          />
+          <div className="col-span-2 sm:col-span-1 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
+                {isRepartidor ? "Cobro a Liquidar" : "Por Cobrar en Ruta"}
+              </span>
+              <div className="h-8 w-8 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950 flex items-center justify-center">
+                <DollarSign className="h-4 w-4" />
+              </div>
+            </div>
+            <div className="text-xl font-display font-black text-emerald-600 mt-2">
+              {formatRD(stats.saldoPorCobrar)}
+            </div>
+          </div>
         </section>
 
-        {/* Toolbar */}
-        <section className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:max-w-md">
+        {/* Toolbar & Filters */}
+        <section className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+          {/* Search Input */}
+          <div className="relative w-full lg:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por cliente, orden o dirección..."
-              className="h-12 w-full rounded-2xl border-slate-200 bg-white pl-10 pr-4 text-sm shadow-sm transition-all focus:ring-2 focus:ring-primary/20"
+              placeholder="Buscar cliente, teléfono, orden o dirección..."
+              className="h-10 w-full rounded-2xl border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950 pl-9 text-xs"
             />
           </div>
 
-          <div className="flex items-center gap-2 overflow-x-auto pb-2 sm:pb-0 no-scrollbar">
-            <Filter className="h-4 w-4 shrink-0 text-slate-400 mr-2" />
-            {(["TODAS", "LISTA", "EN_CAMINO", "ENTREGADA"] as const).map((opt) => (
-              <button
-                key={opt}
-                onClick={() => setFilter(opt)}
-                className={`shrink-0 rounded-full px-4 py-2 text-xs font-bold uppercase tracking-wider transition-all ${
-                  filter === opt
-                    ? "bg-slate-900 text-white shadow-md scale-105"
-                    : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
-                }`}
+          {/* Selectors Filter */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Repartidor Filter (Solo para Cajera / Admin) */}
+            {!isRepartidor && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-slate-400">Repartidor:</span>
+                <Select value={filterRepartidor} onValueChange={setFilterRepartidor}>
+                  <SelectTrigger className="h-9 rounded-xl text-xs w-44 min-w-[170px] bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                    <SelectValue placeholder="Todos" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="TODOS">Todos los Repartidores</SelectItem>
+                    <SelectItem value="SIN_ASIGNAR">⚠️ Sin Asignar</SelectItem>
+                    {repartidores.map(r => (
+                      <SelectItem key={r.id} value={r.id}>{r.nombre}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Sector Filter */}
+            {sectoresDisponibles.length > 0 && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-black uppercase text-slate-400">Sector:</span>
+                <Select value={filterSector} onValueChange={setFilterSector}>
+                  <SelectTrigger className="h-9 rounded-xl text-xs w-48 min-w-[185px] bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                    <SelectValue placeholder="Todos los Sectores" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="TODOS">Todos los Sectores</SelectItem>
+                    {sectoresDisponibles.map(s => (
+                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            {/* Clear Filters */}
+            {(filterStatus !== "TODAS" || filterRepartidor !== "TODOS" || filterSector !== "TODOS" || query) && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  setFilterStatus("TODAS");
+                  setFilterRepartidor("TODOS");
+                  setFilterSector("TODOS");
+                  setQuery("");
+                }}
+                className="h-9 rounded-xl text-xs font-bold text-slate-500 hover:text-slate-900 px-2.5"
               >
-                {opt === "TODAS" ? "Todas" : opt.replace('_', ' ')}
-              </button>
-            ))}
+                <X className="h-3.5 w-3.5 mr-1" /> Limpiar
+              </Button>
+            )}
           </div>
         </section>
 
-        {/* Orders Grid */}
-        <section className="grid gap-6 lg:grid-cols-2">
-          {filtered.length === 0 ? (
-            <Card className="col-span-full flex flex-col items-center justify-center rounded-[2rem] border-dashed border-slate-300 py-20 text-center bg-white/50">
-              <div className="h-16 w-16 rounded-full bg-slate-100 flex items-center justify-center mb-4">
-                <Bike className="h-8 w-8 text-slate-400" />
+        {/* Entregas Grid */}
+        <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredOrders.length === 0 ? (
+            <Card className="col-span-full flex flex-col items-center justify-center rounded-[2.5rem] border-2 border-dashed border-slate-200 dark:border-slate-800 py-20 text-center bg-white/40 dark:bg-slate-900/40">
+              <div className="h-16 w-16 rounded-3xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mb-4 text-slate-400">
+                <Bike className="h-8 w-8" />
               </div>
-              <h3 className="text-lg font-bold text-slate-700">No hay entregas pendientes</h3>
-              <p className="text-sm text-slate-500">Todo listo por ahora o ajusta los filtros.</p>
+              <h3 className="text-base font-bold text-slate-800 dark:text-slate-200">
+                {isRepartidor ? "No tienes entregas asignadas" : "No hay entregas en este filtro"}
+              </h3>
+              <p className="text-xs text-slate-500 max-w-sm mt-1">
+                {isRepartidor
+                  ? "En este momento no tienes pedidos asignados a tu ruta. La cajera o administración te asignará órdenes cuando estén listas."
+                  : "Las órdenes marcadas con entrega a domicilio aparecerán automáticamente en este centro de despacho."}
+              </p>
             </Card>
           ) : (
-            filtered.map((o) => (
+            filteredOrders.map((o) => (
               <DeliveryCard
                 key={o.id}
                 orden={o}
                 cliente={clientes.find(c => c.id === o.cliente_id)}
+                repartidores={repartidores}
+                canAssignDriver={!isRepartidor}
+                isRepartidor={isRepartidor}
+                onAssignDriver={(repId) => handleAssignDriver(o.id, repId)}
                 onUpdateStatus={updateStatus}
+                onOpenPOD={() => setPodOrder(o)}
+                onOpenIncidencia={() => setIncidenciaOrder(o)}
                 onClick={() => setDetailId(o.id)}
               />
             ))
@@ -276,235 +437,231 @@ function LogisticaPage() {
         </section>
       </main>
 
-      {/* Route Modal */}
-      <Dialog open={routeOpen} onOpenChange={(o) => !o && setRouteOpen(false)}>
-        <DialogContent className="max-w-lg rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl bg-white">
-          <div className="flex flex-col max-h-[85vh]">
-            {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100">
-                  <RouteIcon className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold tracking-tight text-slate-900">Ruta del día</h2>
-                  <p className="text-[10px] text-slate-500">
-                    {ordenesRaw.filter(o => ["LISTA", "EN_CAMINO"].includes(o.estado)).length} paradas · orden sugerido
-                  </p>
-                </div>
-              </div>
-            </div>
+      {/* Proof of Delivery Modal */}
+      {podOrder && (
+        <ProofOfDeliveryDialog
+          open={!!podOrder}
+          onOpenChange={(isOpen) => !isOpen && setPodOrder(null)}
+          orden={podOrder}
+          cliente={clientes.find(c => c.id === podOrder.cliente_id)}
+          tenant={tenant}
+          onDelivered={() => {
+            setRefresh(r => r + 1);
+            setPodOrder(null);
+          }}
+        />
+      )}
 
-            {/* Stats Summary */}
-            <div className="border-b border-slate-100 p-6 bg-gradient-to-br from-slate-50 via-white to-indigo-50/30 text-center relative overflow-hidden">
-              <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-primary/5 blur-3xl" />
-              <div className="absolute -left-6 -bottom-6 h-24 w-24 rounded-full bg-indigo-500/5 blur-3xl" />
-              
-              <div className="relative z-10">
-                <p className="text-[10px] font-black uppercase tracking-[0.25em] text-primary/70 mb-2">Resumen de Entrega</p>
-                <div className="flex items-center justify-center gap-4">
-                  <div className="h-[1px] w-10 bg-gradient-to-r from-transparent to-slate-200" />
-                  <p className="text-5xl font-black text-slate-950 tracking-tighter">
-                    {ordenesRaw.filter(o => ["LISTA", "EN_CAMINO"].includes(o.estado)).length}
-                  </p>
-                  <div className="h-[1px] w-10 bg-gradient-to-l from-transparent to-slate-200" />
-                </div>
-                <p className="text-[11px] font-bold text-slate-400 mt-2">Paradas totales en ruta</p>
-              </div>
-            </div>
+      {/* Incidencia Modal */}
+      {incidenciaOrder && (
+        <IncidenciaDialog
+          open={!!incidenciaOrder}
+          onOpenChange={(isOpen) => !isOpen && setIncidenciaOrder(null)}
+          orden={incidenciaOrder}
+          cliente={clientes.find(c => c.id === incidenciaOrder.cliente_id)}
+          tenant={tenant}
+          onSaved={() => {
+            setRefresh(r => r + 1);
+            setIncidenciaOrder(null);
+          }}
+        />
+      )}
 
-            {/* Stops List */}
-            <ScrollArea className="flex-1 px-4 py-6">
-              <div className="relative space-y-3 border-l-2 border-dashed border-slate-300 pl-7 ml-3.5 pt-2">
-                {ordenesRaw
-                  .filter(o => ["LISTA", "EN_CAMINO"].includes(o.estado))
-                  .map((o, i) => {
-                    const cli = clientes.find(c => c.id === o.cliente_id);
-                    return (
-                      <div key={o.id} className="relative">
-                        <div className="absolute -left-[41px] top-0 flex h-7 w-7 items-center justify-center rounded-full bg-white text-[10px] font-bold text-slate-500 ring-2 ring-slate-400 shadow-sm">
-                          {i + 1}
-                        </div>
-                        <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-sm transition-all hover:border-primary/20">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <p className="text-xs font-bold text-slate-900 truncate">{cli?.nombre || "Sin nombre"}</p>
-                              <p className="text-[10px] text-slate-500 mt-0.5 truncate">{cli?.direccion || "Sin dirección"}</p>
-                              <div className="flex items-center gap-2.5 mt-2.5 text-[9px] font-bold text-slate-400">
-                                <span className="flex items-center gap-1">
-                                  <Clock className="h-2.5 w-2.5" /> {new Date(o.creado_en).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
-                                </span>
-                                <span className="flex items-center gap-1 text-emerald-600 uppercase tracking-widest">
-                                  <CheckCircle2 className="h-2.5 w-2.5" /> Pagado
-                                </span>
-                              </div>
-                            </div>
-                            <Badge className={`text-[8px] font-black uppercase tracking-tighter px-1.5 py-0 border shadow-none shrink-0 ${
-                              o.estado === "LISTA" ? "bg-amber-50 text-amber-600 border-amber-100" : "bg-sky-50 text-sky-600 border-sky-100"
-                            }`}>
-                              {o.estado === "LISTA" ? "Pendiente" : "En camino"}
-                            </Badge>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </ScrollArea>
+      {/* Delivery Manifest Print */}
+      {showManifest && (
+        <DeliveryManifestPrint
+          tenant={tenant}
+          ordenes={filteredOrders}
+          clientes={clientes}
+          repartidor={repartidores.find(r => r.id === filterRepartidor)}
+          onClose={() => setShowManifest(false)}
+        />
+      )}
 
-            {/* Footer */}
-            <div className="flex items-center justify-end border-t border-slate-100 bg-white px-4 py-3">
-              <Button 
-                variant="outline" 
-                onClick={() => setRouteOpen(false)} 
-                className="rounded-xl h-9 px-5 border-slate-200 font-bold text-xs text-slate-600 hover:bg-slate-50"
-              >
-                Cerrar
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Detail Modal */}
+      {/* Order Detail Modal */}
       <Dialog open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}>
-        <DialogContent className="max-w-lg rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl bg-white">
+        <DialogContent className="max-w-lg rounded-[2.25rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950">
           {selectedOrder && (
-            <div className="flex flex-col">
+            <div className="flex flex-col max-h-[85vh]">
               {/* Header */}
-              <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
+              <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-5 bg-slate-50/50 dark:bg-slate-900/30">
                 <div>
-                  <div className="flex items-center gap-2 mb-2">
-                    <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[10px] font-bold text-slate-500 uppercase tracking-wider">
-                      <Package className="h-3 w-3" />
-                      {selectedOrder.numero}
+                  <div className="flex items-center gap-2 mb-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-md bg-slate-200/70 dark:bg-slate-800 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                      <Package className="h-3 w-3" /> {(selectedOrder.numero || "").replace(/^#/, "")}
                     </span>
-                    <Badge className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 border-none shadow-sm ${
-                      selectedOrder.estado === "LISTA" ? "bg-amber-50 text-amber-700" :
-                      selectedOrder.estado === "EN_CAMINO" ? "bg-sky-50 text-sky-700" :
-                      "bg-emerald-50 text-emerald-700"
-                    }`}>
-                      <span className={`mr-1.5 h-1.5 w-1.5 rounded-full ${
-                        selectedOrder.estado === "LISTA" ? "bg-amber-500" :
-                        selectedOrder.estado === "EN_CAMINO" ? "bg-sky-500" :
-                        "bg-emerald-500"
-                      }`} />
-                      {selectedOrder.estado === "LISTA" ? "Pendiente" : 
-                       selectedOrder.estado === "EN_CAMINO" ? "En camino" : "Entregado"}
-                    </Badge>
+                    {selectedOrder.es_urgente && (
+                      <Badge className="bg-rose-500 text-white text-[10px] font-bold uppercase tracking-wider">
+                        ⚡ Express
+                      </Badge>
+                    )}
                   </div>
-                  <h2 className="text-2xl font-display font-bold text-slate-900">{selectedClient?.nombre || "Sin nombre"}</h2>
+                  <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                    {selectedClient?.nombre || "Cliente"}
+                  </h2>
                 </div>
-
               </div>
 
               {/* Body */}
-              <div className="space-y-6 px-6 py-6 overflow-y-auto max-h-[70vh]">
-                {/* Info Grid */}
+              <div className="space-y-5 px-6 py-5 overflow-y-auto">
+                {/* Status and Financial Banner */}
                 <div className="grid grid-cols-2 gap-3">
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-emerald-700 mb-1">Estado de pago</p>
-                    <div className="flex items-center gap-2 text-base font-bold text-emerald-900">
-                      <CheckCircle2 className="h-4 w-4" /> Pagado
-                    </div>
+                  <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-3.5">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400">Total Orden</span>
+                    <p className="text-lg font-black text-primary mt-0.5">{formatRD(selectedOrder.total)}</p>
                   </div>
-                  <div className="rounded-2xl border border-slate-100 bg-slate-50/50 p-4">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-1">Prendas</p>
-                    <div className="text-xl font-black text-slate-900">
-                      {selectedOrder.items.reduce((acc, it) => acc + it.cantidad, 0)}
-                    </div>
+                  <div className={`rounded-2xl border p-3.5 ${
+                    selectedOrder.saldo > 0 
+                      ? "border-rose-100 bg-rose-50/60 dark:bg-rose-950/20 text-rose-900 dark:text-rose-200" 
+                      : "border-emerald-100 bg-emerald-50/60 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-200"
+                  }`}>
+                    <span className="text-[10px] font-black uppercase tracking-wider opacity-70">
+                      {selectedOrder.saldo > 0 ? "Saldo por Cobrar" : "Estado de Pago"}
+                    </span>
+                    <p className="text-lg font-black mt-0.5">
+                      {selectedOrder.saldo > 0 ? formatRD(selectedOrder.saldo) : "Pagado ✅"}
+                    </p>
                   </div>
                 </div>
 
-                {/* Details List */}
-                <div className="space-y-4">
+                {/* Delivery Address & GPS Info */}
+                <div className="rounded-2xl border border-slate-200/70 dark:border-slate-800 p-4 space-y-3 bg-white dark:bg-slate-900">
                   <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
+                    <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
                       <MapPin className="h-4 w-4" />
                     </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{selectedClient?.direccion || "Entrega en local"}</p>
-                      <p className="text-xs text-slate-400">Dirección de entrega</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-bold text-slate-900 dark:text-slate-100">
+                        {selectedClient?.direccion || selectedOrder.direccion_entrega || "Sin dirección especificada"}
+                      </p>
+                      {(selectedClient?.sector || selectedOrder.sector_entrega) && (
+                        <Badge variant="outline" className="mt-1 text-[9px] font-bold text-primary border-primary/20">
+                          Sector: {selectedClient?.sector || selectedOrder.sector_entrega}
+                        </Badge>
+                      )}
+                      {(selectedClient?.referencia || selectedOrder.referencia_entrega) && (
+                        <p className="text-[11px] text-slate-500 mt-1 italic">
+                          Ref: {selectedClient?.referencia || selectedOrder.referencia_entrega}
+                        </p>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
-                      <Clock className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">Recibida: {formatDateRD(selectedOrder.creado_en)}</p>
-                      <p className="text-xs text-slate-400">Horario de registro</p>
-                    </div>
-                  </div>
-                  <div className="flex items-start gap-3">
-                    <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center text-slate-400 shrink-0">
-                      <Phone className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-bold text-slate-800">{selectedClient?.telefono}</p>
-                      <p className="text-xs text-slate-400">Contacto del cliente</p>
-                    </div>
+
+                  {/* Navigation 1-Tap Links */}
+                  <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8.5 rounded-xl text-xs font-bold text-sky-600 hover:bg-sky-50 border-sky-200 gap-1.5"
+                      asChild
+                    >
+                      <a
+                        href={selectedClient?.lat && selectedClient?.lng
+                          ? `https://waze.com/ul?ll=${selectedClient.lat},${selectedClient.lng}&navigate=yes`
+                          : `https://waze.com/ul?q=${encodeURIComponent(selectedClient?.direccion || "")}`
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Compass className="h-3.5 w-3.5" /> Abrir en Waze
+                      </a>
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8.5 rounded-xl text-xs font-bold text-emerald-600 hover:bg-emerald-50 border-emerald-200 gap-1.5"
+                      asChild
+                    >
+                      <a
+                        href={selectedClient?.lat && selectedClient?.lng
+                          ? `https://www.google.com/maps/dir/?api=1&destination=${selectedClient.lat},${selectedClient.lng}`
+                          : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(selectedClient?.direccion || "")}`
+                        }
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        <Navigation className="h-3.5 w-3.5" /> Google Maps
+                      </a>
+                    </Button>
                   </div>
                 </div>
 
-                {/* Action Buttons Grid */}
-                <div className="grid grid-cols-2 gap-3">
-                  <Button 
-                    className="h-9 px-1 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 font-bold text-sm shadow-sm transition-all active:scale-95"
-                    asChild
-                  >
-                    <a href={`https://wa.me/${selectedClient?.telefono?.replace(/\D/g, '')}?text=${encodeURIComponent(`Hola ${selectedClient?.nombre?.split(' ')[0] || ''}, te contacto de ${user.tenant?.nombre || "la lavandería"} respecto a tu orden ${selectedOrder.numero}. `)}`} target="_blank">
-                      <Phone className="mr-2 h-4 w-4" /> WhatsApp
-                    </a>
-                  </Button>
-                  <Button 
-                    className="h-9 px-1 rounded-xl bg-rose-600 text-white hover:bg-rose-700 font-bold text-sm shadow-sm transition-all active:scale-95"
-                    onClick={() => toast("Incidencia reportada", { description: "Se ha notificado al local." })}
-                  >
-                    <AlertCircle className="mr-2 h-4 w-4" /> Incidencia
-                  </Button>
+                {/* Driver Assignment & Contact */}
+                <div className={`grid ${isRepartidor ? "grid-cols-1" : "grid-cols-2"} gap-3`}>
+                  {!isRepartidor && (
+                    <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3.5">
+                      <span className="text-[10px] font-black uppercase text-slate-400">Repartidor Asignado</span>
+                      <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">
+                        {selectedDriver ? selectedDriver.nombre : "Sin asignar"}
+                      </p>
+                    </div>
+                  )}
+                  <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 p-3.5">
+                    <span className="text-[10px] font-black uppercase text-slate-400">Teléfono de Contacto</span>
+                    <p className="text-xs font-bold text-slate-800 dark:text-slate-200 mt-1">
+                      {selectedClient?.telefono || "—"}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Proof of Delivery Details (if already delivered) */}
+                {selectedOrder.estado === "ENTREGADA" && (selectedOrder.pod_receptor || selectedOrder.pod_foto || selectedOrder.pod_firma) && (
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 dark:bg-emerald-950/20 p-4 space-y-3">
+                    <p className="text-xs font-black uppercase text-emerald-800 dark:text-emerald-300 flex items-center gap-1.5">
+                      <CheckCircle2 className="h-4 w-4 text-emerald-600" /> Comprobante de Entrega Digital
+                    </p>
+                    {selectedOrder.pod_receptor && (
+                      <p className="text-xs text-slate-700 dark:text-slate-300">
+                        <strong>Recibido por:</strong> {selectedOrder.pod_receptor}
+                      </p>
+                    )}
+                    {selectedOrder.pod_fecha && (
+                      <p className="text-[11px] text-slate-500">
+                        Fecha: {new Date(selectedOrder.pod_fecha).toLocaleString("es-DO")}
+                      </p>
+                    )}
+                    <div className="grid grid-cols-2 gap-2 pt-1">
+                      {selectedOrder.pod_foto && (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 h-24">
+                          <img src={selectedOrder.pod_foto} alt="Foto entrega" className="w-full h-full object-cover" />
+                        </div>
+                      )}
+                      {selectedOrder.pod_firma && (
+                        <div className="rounded-xl overflow-hidden border border-slate-200 bg-white p-1 h-24 flex items-center justify-center">
+                          <img src={selectedOrder.pod_firma} alt="Firma cliente" className="max-h-full object-contain" />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Footer */}
-              <div className="flex items-center justify-between border-t border-slate-100 bg-slate-50/50 px-6 py-5">
-                <Button 
-                  variant="ghost" 
+              {/* Footer Actions */}
+              <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 px-6 py-4">
+                <Button
+                  variant="outline"
                   size="sm"
-                  disabled={selectedOrder.estado === "LISTA"}
-                  onClick={() => { updateStatus(selectedOrder.id, "LISTA"); setDetailId(null); }}
-                  className="text-rose-500 hover:text-rose-700 hover:bg-rose-50 font-bold text-xs tracking-widest disabled:opacity-30 disabled:hover:bg-transparent"
+                  onClick={() => setDetailId(null)}
+                  className="rounded-xl text-xs font-bold"
                 >
-                  <Undo2 className="mr-2 h-4 w-4" /> Revertir
+                  Cerrar
                 </Button>
 
-                {selectedOrder.estado !== "ENTREGADA" && (
-                  <Button 
+                <div className="flex items-center gap-2">
+                  <Button
                     size="sm"
-                    className={`h-10 px-4 rounded-xl font-bold text-xs tracking-wide shadow-lg transition-all active:scale-95 ${
-                      selectedOrder.estado === "LISTA" ? "bg-primary text-white" : "bg-emerald-600 text-white"
-                    }`}
-                    onClick={() => { 
-                      updateStatus(selectedOrder.id, selectedOrder.estado === "LISTA" ? "EN_CAMINO" : "ENTREGADA"); 
-                      setDetailId(null); 
-                    }}
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1"
+                    asChild
                   >
-                    {selectedOrder.estado === "LISTA" ? (
-                      <>
-                        <Truck className="mr-2 h-4 w-4" /> Marcar En Camino
-                      </>
-                    ) : (
-                      <>
-                        <CheckCircle2 className="mr-2 h-4 w-4" /> Confirmar Entrega
-                      </>
-                    )}
+                    <a
+                      href={`https://wa.me/${selectedClient?.telefono?.replace(/\D/g, "")}?text=${encodeURIComponent(`Hola ${selectedClient?.nombre || ""}, te contactamos de ${tenant.nombre} respecto a tu entrega #${selectedOrder.numero}.`)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      <Phone className="h-3.5 w-3.5" /> WhatsApp
+                    </a>
                   </Button>
-                )}
-                {selectedOrder.estado === "ENTREGADA" && (
-                  <div className="flex items-center gap-2 text-emerald-600 font-bold text-xs uppercase tracking-widest">
-                    <CheckCircle2 className="h-4 w-4" /> Entregado
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           )}
@@ -514,162 +671,327 @@ function LogisticaPage() {
   );
 }
 
-function StatCard({ label, value, icon, color }: { label: string; value: number; icon: React.ReactNode; color: 'amber' | 'sky' | 'emerald' | 'indigo' }) {
+function StatCard({
+  label,
+  value,
+  icon,
+  color,
+  active,
+  onClick,
+}: {
+  label: string;
+  value: number;
+  icon: React.ReactNode;
+  color: "amber" | "sky" | "emerald" | "rose";
+  active?: boolean;
+  onClick?: () => void;
+}) {
   const colors = {
-    amber: "bg-amber-50 text-amber-600 border-amber-100",
-    sky: "bg-sky-50 text-sky-600 border-sky-100",
-    emerald: "bg-emerald-50 text-emerald-600 border-emerald-100",
-    indigo: "bg-indigo-50 text-indigo-600 border-indigo-100",
+    amber: "bg-amber-50 text-amber-600 border-amber-200/80 dark:bg-amber-950/40 dark:text-amber-400",
+    sky: "bg-sky-50 text-sky-600 border-sky-200/80 dark:bg-sky-950/40 dark:text-sky-400",
+    emerald: "bg-emerald-50 text-emerald-600 border-emerald-200/80 dark:bg-emerald-950/40 dark:text-emerald-400",
+    rose: "bg-rose-50 text-rose-600 border-rose-200/80 dark:bg-rose-950/40 dark:text-rose-400",
   };
+
   return (
-    <Card className="p-5 rounded-3xl border-slate-200 shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5">
-      <div className="flex items-center justify-between mb-3">
-        <span className="text-[10px] font-black uppercase tracking-widest text-slate-500">{label}</span>
-        <div className={`h-10 w-10 rounded-2xl flex items-center justify-center border ${colors[color]}`}>
+    <Card
+      onClick={onClick}
+      className={`p-4 rounded-3xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
+        active
+          ? "ring-2 ring-primary border-primary bg-primary/5"
+          : "border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900"
+      }`}
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</span>
+        <div className={`h-8 w-8 rounded-xl flex items-center justify-center border ${colors[color]}`}>
           {icon}
         </div>
       </div>
-      <div className="text-3xl font-display font-black text-slate-900">{value}</div>
+      <div className="text-2xl font-display font-black text-slate-900 dark:text-white">{value}</div>
     </Card>
   );
 }
 
-function DeliveryCard({ 
-  orden, 
-  cliente, 
-  onUpdateStatus, 
-  onClick 
-}: { 
-  orden: Orden; 
-  cliente?: Cliente; 
-  onUpdateStatus: (id: string, s: EstadoOrden) => void; 
-  onClick: () => void; 
+function DeliveryCard({
+  orden,
+  cliente,
+  repartidores,
+  canAssignDriver = true,
+  isRepartidor = false,
+  onAssignDriver,
+  onUpdateStatus,
+  onOpenPOD,
+  onOpenIncidencia,
+  onClick,
+}: {
+  orden: Orden;
+  cliente?: Cliente;
+  repartidores: Empleado[];
+  canAssignDriver?: boolean;
+  isRepartidor?: boolean;
+  onAssignDriver: (driverId: string) => void;
+  onUpdateStatus: (id: string, s: EstadoOrden) => void;
+  onOpenPOD: () => void;
+  onOpenIncidencia: () => void;
+  onClick: () => void;
 }) {
-  const statusMeta: Record<string, { label: string; dot: string; chip: string; border: string }> = {
-    LISTA: {
-      label: "Pendiente",
-      dot: "bg-amber-500",
-      chip: "bg-amber-50 text-amber-700 ring-1 ring-amber-200",
-      border: "border-l-amber-400",
+  const totalPrendas = orden.items?.reduce((acc, it) => acc + it.cantidad, 0) || 0;
+  const sector = orden.sector_entrega || cliente?.sector;
+  const edificioApto = orden.edificio_apto_entrega || cliente?.edificio_apto;
+  const referencia = orden.referencia_entrega || cliente?.referencia;
+  const lat = orden.lat_entrega || cliente?.lat;
+  const lng = orden.lng_entrega || cliente?.lng;
+  const direccion = orden.direccion_entrega || cliente?.direccion || "Entrega en local";
+
+  const statusMeta: Record<string, { label: string; chip: string }> = {
+    LISTA: { 
+      label: isRepartidor ? "Por Entregar" : "Por Despachar", 
+      chip: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300" 
     },
-    EN_CAMINO: {
-      label: "En camino",
-      dot: "bg-sky-500",
-      chip: "bg-sky-50 text-sky-700 ring-1 ring-sky-200",
-      border: "border-l-sky-500",
-    },
-    ENTREGADA: {
-      label: "Entregado",
-      dot: "bg-emerald-500",
-      chip: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
-      border: "border-l-emerald-500",
-    },
+    EN_CAMINO: { label: "En Ruta", chip: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300" },
+    ENTREGADA: { label: "Entregada", chip: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/50 dark:text-emerald-300" },
+    INCIDENCIA: { label: "Incidencia", chip: "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/50 dark:text-rose-300" },
   };
 
   const meta = statusMeta[orden.estado] || statusMeta.LISTA;
-  const nextLabel =
-    orden.estado === "LISTA"
-      ? "Marcar en camino"
-      : orden.estado === "EN_CAMINO"
-        ? "Confirmar entrega"
-        : "Entregado";
 
-  const totalPrendas = orden.items.reduce((acc, it) => acc + it.cantidad, 0);
+  // Clean phone number for WhatsApp
+  const rawPhone = (cliente?.telefono || "").replace(/\D/g, "");
+  const waPhone = rawPhone.length === 10 ? `1${rawPhone}` : rawPhone;
 
   return (
     <article
       onClick={onClick}
-      className={`group relative cursor-pointer rounded-[2rem] border border-slate-300 bg-white p-5 shadow-sm transition hover:shadow-md hover:border-primary/20`}
+      className="group relative cursor-pointer rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs transition-all hover:shadow-lg hover:border-primary/40 flex flex-col justify-between gap-3.5"
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="inline-flex items-center gap-1.5 rounded-md bg-slate-100 px-2 py-0.5 font-mono text-xs font-medium text-slate-700">
-              <Package className="h-3 w-3" />
-              {orden.numero}
+      <div className="space-y-3">
+        {/* ROW 1: ORDER NUMBER & TOTAL PRICE (CENTERED) */}
+        <div className="flex flex-col items-center justify-center text-center border-b border-slate-100 dark:border-slate-800/80 pb-3 pt-0.5 space-y-1">
+          <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/90 px-3 py-1 font-mono text-xs font-extrabold text-slate-800 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/60">
+            <Package className="h-3.5 w-3.5 text-primary shrink-0" />
+            <span>{(orden.numero || "").replace(/^#/, "")}</span>
+          </span>
+
+          <div className="flex items-baseline justify-center gap-2 mt-0.5">
+            <p className="text-xl font-display font-black text-slate-900 dark:text-white tracking-tight">
+              {formatRD(orden.total)}
+            </p>
+            <span className="text-[11px] font-bold text-slate-400">
+              • {totalPrendas} prenda{totalPrendas !== 1 ? "s" : ""}
             </span>
-            <span
-              className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wider ${meta.chip}`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${meta.dot}`} />
-              {meta.label}
+          </div>
+        </div>
+
+        {/* ROW 2: STATUS PILLS & PAYMENT BADGE */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${meta.chip}`}>
+            {meta.label}
+          </span>
+          
+          {orden.es_urgente && (
+            <span className="inline-flex items-center rounded-full bg-rose-500 text-white px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider shadow-2xs">
+              ⚡ Express
             </span>
-            {orden.es_urgente && (
-              <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-rose-700 ring-1 ring-rose-200">
-                ⚡ Express
+          )}
+
+          <div className="ml-auto">
+            {orden.saldo > 0 ? (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
+                <AlertCircle className="h-3 w-3" /> Debe {formatRD(orden.saldo)}
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">
+                <CheckCircle2 className="h-3 w-3" /> Pagado
               </span>
             )}
           </div>
-          <h3 className="mt-2 truncate text-base font-semibold text-slate-900 group-hover:text-primary transition-colors">
-            {cliente?.nombre || "Sin nombre"}
-          </h3>
         </div>
 
-        <div className="text-right">
-          <p className="text-lg font-bold text-primary">
-            {formatRD(orden.total)}
-          </p>
-          <p className="text-xs font-black uppercase tracking-wider text-primary/70">
-            {totalPrendas} prenda{totalPrendas !== 1 ? "s" : ""}
-          </p>
-        </div>
-      </div>
+        {/* ROW 3: CUSTOMER & DESTINATION CARD */}
+        <div className="rounded-2xl bg-slate-50/70 dark:bg-slate-950/60 p-3 border border-slate-100 dark:border-slate-800/80 space-y-2.5">
+          {/* Customer Name & Quick Contacts */}
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="h-7 w-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                {cliente?.nombre ? cliente.nombre.charAt(0).toUpperCase() : "C"}
+              </div>
+              <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors">
+                {cliente?.nombre || "Sin nombre"}
+              </h3>
+            </div>
 
-      <div className="mt-4 grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-        <div className="flex items-start gap-2 text-slate-600">
-          <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-slate-400" />
-          <div className="min-w-0">
-            <p className="truncate text-slate-800 font-medium">{cliente?.direccion || "Entrega en local"}</p>
-            <p className="text-xs font-bold text-slate-600">{cliente?.telefono}</p>
+            {cliente?.telefono && (
+              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                <a
+                  href={`tel:${cliente.telefono}`}
+                  title={`Llamar a ${cliente.telefono}`}
+                  className="h-6.5 w-6.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 hover:text-primary flex items-center justify-center transition shadow-2xs"
+                >
+                  <Phone className="h-3 w-3" />
+                </a>
+                <a
+                  href={`https://wa.me/${waPhone}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  title="WhatsApp"
+                  className="h-6.5 w-6.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 flex items-center justify-center transition shadow-2xs"
+                >
+                  <MessageSquare className="h-3 w-3" />
+                </a>
+              </div>
+            )}
+          </div>
+
+          {/* Address Line */}
+          <div className="flex items-start gap-1.5 text-xs text-slate-600 dark:text-slate-400">
+            <MapPin className="h-3.5 w-3.5 text-primary shrink-0 mt-0.5" />
+            <div className="min-w-0 flex-1">
+              <p className="font-medium text-slate-800 dark:text-slate-200 line-clamp-2 text-xs leading-snug">
+                {direccion}
+              </p>
+              
+              {/* Extra tags: sector, building, reference */}
+              {(sector || edificioApto || referencia) && (
+                <div className="flex flex-wrap items-center gap-1 mt-1.5">
+                  {sector && (
+                    <span className="inline-flex items-center rounded-md bg-primary/10 text-primary px-1.5 py-0.5 text-[9px] font-bold">
+                      📍 {sector}
+                    </span>
+                  )}
+                  {edificioApto && (
+                    <span className="inline-flex items-center rounded-md bg-slate-200/70 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-1.5 py-0.5 text-[9px] font-medium">
+                      🏢 {edificioApto}
+                    </span>
+                  )}
+                  {referencia && (
+                    <span className="inline-flex items-center rounded-md bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 px-1.5 py-0.5 text-[9px] font-medium italic truncate max-w-full">
+                      Ref: {referencia}
+                    </span>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-2 text-slate-600">
-          <Clock className="h-4 w-4 text-slate-400" />
-          <span className="text-slate-800 font-medium"><span className="font-bold">Recibida:</span> {formatDateRD(orden.creado_en)}</span>
-        </div>
+
+        {/* ROW 4: REPARTIDOR ASIGNADO (Solo visible para Cajera / Administrador) */}
+        {canAssignDriver && (
+          <div className="space-y-1" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between text-[10px] font-bold text-slate-400">
+              <span className="flex items-center gap-1">
+                <UserCheck className="h-3 w-3 text-primary" /> Repartidor Asignado:
+              </span>
+            </div>
+            <Select
+              value={orden.repartidor_id || "NONE"}
+              onValueChange={(val) => onAssignDriver(val)}
+            >
+              <SelectTrigger className="h-8 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800">
+                <SelectValue placeholder="Asignar repartidor..." />
+              </SelectTrigger>
+              <SelectContent className="rounded-xl">
+                <SelectItem value="NONE" className="text-slate-400 text-xs">⚠️ Sin Asignar</SelectItem>
+                {repartidores.map(r => (
+                  <SelectItem key={r.id} value={r.id} className="text-xs">{r.nombre}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
-        <button
-          onClick={(e) => {
-            e.stopPropagation();
-            window.location.href = `tel:${cliente?.telefono}`;
-          }}
-          className="inline-flex h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 text-sm font-medium text-slate-700 transition hover:bg-slate-50 active:scale-95"
-        >
-          <Phone className="mr-2 h-4 w-4" />
-          Llamar
-        </button>
+      {/* ROW 5: ACTIONS GRID (Clean, structured, never overflows or breaks) */}
+      <div className="pt-2.5 border-t border-slate-100 dark:border-slate-800 space-y-2" onClick={(e) => e.stopPropagation()}>
+        {/* GPS Navigation 2-col button grid */}
+        <div className="grid grid-cols-2 gap-2">
+          <a
+            href={lat && lng ? `https://waze.com/ul?ll=${lat},${lng}&navigate=yes` : `https://waze.com/ul?q=${encodeURIComponent(direccion)}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Navegar con Waze"
+            className="h-8 flex items-center justify-center rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 hover:bg-sky-100 border border-sky-200/60 dark:border-sky-800/60 text-xs font-bold transition active:scale-95 gap-1.5"
+          >
+            <Compass className="h-3.5 w-3.5" /> Waze
+          </a>
 
+          <a
+            href={lat && lng ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(direccion)}`}
+            target="_blank"
+            rel="noreferrer"
+            title="Navegar con Google Maps"
+            className="h-8 flex items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-800/60 text-xs font-bold transition active:scale-95 gap-1.5"
+          >
+            <Navigation className="h-3.5 w-3.5" /> Maps
+          </a>
+        </div>
 
-        <div className="ml-auto">
-          {orden.estado === "ENTREGADA" ? (
-            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-50 px-3 py-2 text-sm font-medium text-emerald-700 ring-1 ring-emerald-200">
-              <CheckCircle2 className="h-4 w-4" />
-              Entregado
-            </span>
-          ) : (
+        {/* Primary Delivery Action */}
+        <div className="flex items-center gap-1.5">
+          {orden.estado !== "ENTREGADA" && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onUpdateStatus(orden.id, orden.estado === "LISTA" ? "EN_CAMINO" : "ENTREGADA");
-              }}
-              className={`inline-flex items-center justify-center rounded-lg px-3.5 py-2 text-sm font-bold tracking-wide text-white shadow-sm transition active:scale-95 ${
-                orden.estado === "LISTA"
-                  ? "bg-sky-600 hover:bg-sky-700 shadow-sky-200"
-                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
-              }`}
+              type="button"
+              onClick={onOpenIncidencia}
+              title="Reportar Incidencia"
+              className="h-8.5 w-8.5 rounded-xl border border-rose-200/80 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition active:scale-95 shrink-0 shadow-2xs"
             >
-              {orden.estado === "LISTA" ? (
-                <>
-                  <Truck className="mr-2 h-4 w-4" /> Marcar En Camino
-                </>
-              ) : (
-                <>
-                  <CheckCircle2 className="mr-2 h-4 w-4" /> Confirmar Entrega
-                </>
-              )}
+              <AlertTriangle className="h-3.5 w-3.5" />
             </button>
+          )}
+
+          {orden.estado === "LISTA" && (
+            isRepartidor ? (
+              <Button
+                size="sm"
+                onClick={() => onUpdateStatus(orden.id, "EN_CAMINO")}
+                className="flex-1 h-8.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm gap-1.5 transition-all active:scale-95"
+              >
+                <Bike className="h-3.5 w-3.5" /> <span>¡Voy en Camino!</span>
+              </Button>
+            ) : !orden.repartidor_id ? (
+              <div className="flex-1 h-8.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70 text-xs font-bold flex items-center justify-center gap-1.5">
+                <span>⚠️ Asigna un repartidor arriba</span>
+              </div>
+            ) : (
+              <div className="flex-1 h-8.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 text-xs font-bold flex items-center justify-center gap-1.5">
+                <Clock className="h-3.5 w-3.5 text-amber-500" />
+                <span>Esperando salida del repartidor</span>
+              </div>
+            )
+          )}
+
+          {orden.estado === "EN_CAMINO" && (
+            isRepartidor ? (
+              <Button
+                size="sm"
+                onClick={onOpenPOD}
+                className="flex-1 h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm gap-1.5 transition-all active:scale-95"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" /> Entregar y Cobrar
+              </Button>
+            ) : (
+              <div className="flex-1 h-8.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800/70 text-xs font-bold flex items-center justify-center gap-1.5">
+                <Truck className="h-3.5 w-3.5 text-sky-500 animate-pulse" />
+                <span>En ruta hacia el cliente</span>
+              </div>
+            )
+          )}
+
+          {orden.estado === "INCIDENCIA" && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onOpenIncidencia}
+              className="flex-1 h-8.5 rounded-xl text-xs font-bold text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800"
+            >
+              Ver Incidencia
+            </Button>
+          )}
+
+          {orden.estado === "ENTREGADA" && (
+            <div className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/70 dark:border-emerald-800/70">
+              <CheckCircle2 className="h-3.5 w-3.5" /> Entregada con Éxito
+            </div>
           )}
         </div>
       </div>

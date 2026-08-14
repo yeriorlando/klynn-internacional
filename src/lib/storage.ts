@@ -175,6 +175,11 @@ export interface Cliente {
   telefono: string;
   email?: string;
   direccion?: string;
+  sector?: string;
+  edificio_apto?: string;
+  referencia?: string;
+  lat?: number;
+  lng?: number;
   cedula?: string;
   notas?: string;
   tipo: "Consumidor Final" | "Empresa";
@@ -189,7 +194,8 @@ export type EstadoOrden =
   | "EN_CAMINO"
   | "ENTREGADA"
   | "PAGADA"
-  | "ANULADA";
+  | "ANULADA"
+  | "INCIDENCIA";
 export type MetodoPago =
   | "EFECTIVO"
   | "TARJETA"
@@ -245,6 +251,18 @@ export interface Orden {
   entrega_domicilio?: boolean;
   costo_envio?: number;
   repartidor_id?: string;
+  direccion_entrega?: string;
+  sector_entrega?: string;
+  referencia_entrega?: string;
+  lat_entrega?: number;
+  lng_entrega?: number;
+  pod_foto?: string;
+  pod_firma?: string;
+  pod_receptor?: string;
+  pod_fecha?: string;
+  incidencia_motivo?: string;
+  incidencia_notas?: string;
+  incidencia_fecha?: string;
   // Metadatos e-CF para el ticket
   ecf_qr?: string;
   ecf_security_code?: string;
@@ -3077,4 +3095,62 @@ export async function marcarTodasNotificacionesLeidas(tenantId: string): Promise
     .update({ leida: true })
     .eq("tenant_id", tenantId)
     .eq("leida", false);
+}
+
+export async function crearNotificacion(notif: {
+  tenant_id: string;
+  titulo: string;
+  mensaje: string;
+  tipo?: string;
+  leida?: boolean;
+  link?: string | null;
+}): Promise<void> {
+  const newNotif = {
+    id: uid("notif"),
+    tenant_id: notif.tenant_id,
+    titulo: notif.titulo,
+    mensaje: notif.mensaje,
+    tipo: notif.tipo || "INFO",
+    leida: notif.leida || false,
+    link: notif.link || null,
+    created_at: new Date().toISOString(),
+  };
+
+  // 1. Guardar en Base de Datos Supabase
+  try {
+    await supabase.from("notificaciones").insert(newNotif);
+  } catch (e) {
+    console.warn("Error guardando notificación en DB:", e);
+  }
+
+  // 2. Transmisión entre pestañas del mismo navegador (Instantáneo con cero latencia)
+  try {
+    if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+      const bc = new BroadcastChannel(`klynn_tenant_${notif.tenant_id}`);
+      bc.postMessage({ type: "NUEVA_NOTIFICACION", notificacion: newNotif });
+      bc.close();
+    }
+  } catch (e) {
+    console.warn("BroadcastChannel error:", e);
+  }
+
+  // 3. Supabase Realtime Broadcast (Transmisión instantánea entre diferentes dispositivos / teléfonos / PCs)
+  try {
+    const channel = supabase.channel(`tenant_events_${notif.tenant_id}`);
+    channel.subscribe((status) => {
+      if (status === "SUBSCRIBED") {
+        channel.send({
+          type: "broadcast",
+          event: "nueva_notificacion",
+          payload: newNotif,
+        }).then(() => {
+          setTimeout(() => {
+            supabase.removeChannel(channel);
+          }, 1000);
+        });
+      }
+    });
+  } catch (e) {
+    console.warn("Supabase Realtime Broadcast error:", e);
+  }
 }
