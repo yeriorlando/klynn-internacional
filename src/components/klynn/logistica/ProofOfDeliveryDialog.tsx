@@ -178,21 +178,21 @@ export function ProofOfDeliveryDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950 flex flex-col max-h-[90vh]">
+      <DialogContent className="w-[96vw] max-w-lg rounded-3xl sm:rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950 flex flex-col max-h-[92vh]">
         {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400">
+        <DialogHeader className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/50 dark:text-emerald-400 shrink-0">
               <CheckCircle2 className="h-5 w-5" />
             </div>
-            <div>
-              <DialogTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <DialogTitle className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                 <span>Comprobante de Entrega</span>
-                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400">
+                <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300">
                   #{orden.numero}
                 </span>
               </DialogTitle>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
                 {cliente?.nombre || "Cliente"} · {totalPrendas} prenda{totalPrendas !== 1 ? "s" : ""}
               </p>
             </div>
@@ -200,10 +200,10 @@ export function ProofOfDeliveryDialog({
         </DialogHeader>
 
         {/* Form Body */}
-        <div className="px-6 py-4 space-y-5 overflow-y-auto flex-1">
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 space-y-4 overflow-y-auto flex-1">
           {/* Items Summary Badge */}
-          <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-3.5">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 mb-2">
+          <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 p-3">
+            <div className="flex items-center justify-between text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5">
               <span className="flex items-center gap-1.5">
                 <Package className="h-3.5 w-3.5 text-primary" /> Detalle de Prendas
               </span>
@@ -214,15 +214,15 @@ export function ProofOfDeliveryDialog({
             <div className="text-xs text-slate-600 dark:text-slate-400 space-y-1">
               {orden.items?.map((it, idx) => (
                 <div key={idx} className="flex justify-between">
-                  <span>{it.descripcion}</span>
-                  <span className="font-bold">x{it.cantidad}</span>
+                  <span className="truncate pr-2">{it.descripcion}</span>
+                  <span className="font-bold shrink-0">x{it.cantidad}</span>
                 </div>
               ))}
             </div>
           </div>
 
           {/* Receiver Info */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <Label className="text-xs font-bold text-slate-800 dark:text-slate-200">
               ¿Quién recibe la ropa? <span className="text-rose-500">*</span>
             </Label>
@@ -260,7 +260,7 @@ export function ProofOfDeliveryDialog({
                       : receptorTipo === "Familiar"
                         ? "Nombre del familiar..."
                         : receptorTipo === "Personal"
-                          ? "Nombre del personal / doméstico..."
+                          ? "Nombre del personal..."
                           : "Nombre de quien recibe..."
                 }
                 className="h-10 text-xs rounded-xl col-span-2"
@@ -271,11 +271,11 @@ export function ProofOfDeliveryDialog({
 
           {/* Pending Balance / Cash on Delivery */}
           {saldoPendiente > 0 && (
-            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 p-4 space-y-3">
+            <div className="rounded-2xl border-2 border-amber-200 bg-amber-50/60 dark:bg-amber-950/20 dark:border-amber-900 p-3.5 space-y-2.5">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-black uppercase tracking-wider text-amber-800 dark:text-amber-400 flex items-center gap-1.5">
-                    <DollarSign className="h-4 w-4" /> Cobro Pendiente en Ruta
+                    <DollarSign className="h-4 w-4" /> Cobro en Ruta
                   </p>
                   <p className="text-[11px] text-amber-700 dark:text-amber-300">
                     Saldo restante: <strong className="text-sm font-black">{formatRD(saldoPendiente)}</strong>
@@ -318,13 +318,13 @@ export function ProofOfDeliveryDialog({
         </div>
 
         {/* Footer */}
-        <DialogFooter className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between sm:justify-between">
+        <DialogFooter className="px-4 sm:px-6 py-3 sm:py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 flex flex-col-reverse sm:flex-row gap-2 items-stretch sm:items-center sm:justify-between">
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
             disabled={isSubmitting}
-            className="rounded-xl h-10 px-4 text-xs font-bold border-slate-200 dark:border-slate-800"
+            className="rounded-xl h-10 px-4 text-xs font-bold border-slate-200 dark:border-slate-800 w-full sm:w-auto"
           >
             Cancelar
           </Button>
@@ -333,7 +333,7 @@ export function ProofOfDeliveryDialog({
             type="button"
             onClick={handleConfirmDelivery}
             disabled={isSubmitting}
-            className="rounded-xl h-10 px-6 bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs shadow-lg shadow-emerald-600/20 transition-all active:scale-95"
+            className="rounded-xl h-11 sm:h-10 px-6 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs sm:text-sm shadow-lg shadow-emerald-600/20 transition-all active:scale-95 w-full sm:w-auto cursor-pointer"
           >
             {isSubmitting ? (
               <>

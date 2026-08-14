@@ -106,21 +106,21 @@ export function IncidenciaDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-md rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950">
+      <DialogContent className="w-[96vw] max-w-md rounded-3xl sm:rounded-[2rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950">
         {/* Header */}
-        <DialogHeader className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 bg-rose-50/40 dark:bg-rose-950/20 flex flex-row items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400">
+        <DialogHeader className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-slate-100 dark:border-slate-800 bg-rose-50/40 dark:bg-rose-950/20 flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="flex h-9 w-9 sm:h-10 sm:w-10 items-center justify-center rounded-2xl bg-rose-100 text-rose-600 dark:bg-rose-900/50 dark:text-rose-400 shrink-0">
               <AlertTriangle className="h-5 w-5" />
             </div>
-            <div>
-              <DialogTitle className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
+            <div className="min-w-0">
+              <DialogTitle className="text-sm sm:text-base font-bold text-slate-900 dark:text-white flex items-center gap-1.5 flex-wrap">
                 <span>Reportar Incidencia</span>
                 <span className="font-mono text-xs font-semibold px-2 py-0.5 rounded-lg bg-rose-100 dark:bg-rose-900/50 text-rose-700 dark:text-rose-300">
                   #{orden.numero}
                 </span>
               </DialogTitle>
-              <p className="text-xs text-slate-500 mt-0.5">
+              <p className="text-xs text-slate-500 mt-0.5 truncate">
                 Cliente: {cliente?.nombre || "Sin nombre"}
               </p>
             </div>
@@ -128,8 +128,8 @@ export function IncidenciaDialog({
         </DialogHeader>
 
         {/* Body */}
-        <div className="p-6 space-y-4">
-          <div className="space-y-2">
+        <div className="p-4 sm:p-6 space-y-4">
+          <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Motivo del Inconveniente <span className="text-rose-500">*</span>
             </Label>
@@ -147,7 +147,7 @@ export function IncidenciaDialog({
             </Select>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Reprogramar Próxima Entrega (Opcional)
             </Label>
@@ -162,7 +162,7 @@ export function IncidenciaDialog({
             </div>
           </div>
 
-          <div className="space-y-2">
+          <div className="space-y-1.5">
             <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
               Detalles / Comentario del Repartidor
             </Label>
@@ -176,14 +176,14 @@ export function IncidenciaDialog({
         </div>
 
         {/* Footer */}
-        <DialogFooter className="px-6 py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex items-center justify-between sm:justify-between">
+        <DialogFooter className="px-4 sm:px-6 py-3.5 sm:py-4 border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 flex flex-col-reverse sm:flex-row gap-2 items-stretch sm:items-center sm:justify-between">
           {orden.estado === "INCIDENCIA" ? (
             <Button
               type="button"
               variant="outline"
               onClick={handleResolverIncidencia}
               disabled={isSubmitting}
-              className="rounded-xl h-10 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200"
+              className="rounded-xl h-10 text-xs font-bold text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50 border-emerald-200 w-full sm:w-auto"
             >
               <Undo2 className="mr-1.5 h-4 w-4" /> Reintentar Despacho
             </Button>
@@ -193,7 +193,7 @@ export function IncidenciaDialog({
               variant="outline"
               onClick={() => onOpenChange(false)}
               disabled={isSubmitting}
-              className="rounded-xl h-10 px-4 text-xs font-bold"
+              className="rounded-xl h-10 px-4 text-xs font-bold w-full sm:w-auto"
             >
               Cancelar
             </Button>
@@ -203,7 +203,7 @@ export function IncidenciaDialog({
             type="button"
             onClick={handleSubmit}
             disabled={isSubmitting}
-            className="rounded-xl h-10 px-5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-600/20"
+            className="rounded-xl h-11 sm:h-10 px-5 bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shadow-lg shadow-rose-600/20 w-full sm:w-auto cursor-pointer"
           >
             {isSubmitting ? (
               <>

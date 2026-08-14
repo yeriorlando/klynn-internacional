@@ -243,11 +243,11 @@ function LogisticaPage() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         
         {/* Header Hero Section */}
-        <section className="relative overflow-hidden rounded-[2.25rem] border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-6 sm:p-8 shadow-sm">
+        <section className="relative overflow-hidden rounded-3xl sm:rounded-[2.25rem] border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-8 shadow-sm">
           <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-primary/5 via-primary/5 to-transparent pointer-events-none" />
           
-          <div className="relative z-10 flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex-1 space-y-2.5 max-w-xl">
+          <div className="relative z-10 flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex-1 space-y-2 max-w-xl">
               <div className="flex items-center gap-2">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
                   <Truck className="h-3.5 w-3.5" /> {isRepartidor ? "Mi Ruta de Entregas" : "Centro de Despacho & Delivery"}
@@ -259,7 +259,7 @@ function LogisticaPage() {
                 )}
               </div>
               
-              <h1 className="text-3xl sm:text-4xl font-display font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+              <h1 className="text-2xl sm:text-4xl font-display font-black tracking-tight text-slate-900 dark:text-white leading-tight">
                 {isRepartidor ? "Mis Entregas Asignadas" : "Gestión de Rutas y Envíos a Domicilio"}
               </h1>
               
@@ -276,7 +276,7 @@ function LogisticaPage() {
                 <Button
                   onClick={() => setShowManifest(true)}
                   variant="outline"
-                  className="h-11 rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-extrabold shadow-sm gap-2"
+                  className="h-10 sm:h-11 rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-extrabold shadow-sm gap-2"
                 >
                   <Printer className="h-4 w-4 text-slate-600 dark:text-slate-400" />
                   <span>Imprimir Hoja de Ruta</span>
@@ -287,11 +287,11 @@ function LogisticaPage() {
         </section>
 
         {/* KPIs Grid */}
-        <section className="grid grid-cols-2 gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
+        <section className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
           <StatCard
             label={isRepartidor ? "Por Salir" : "Por Despachar"}
             value={stats.pendientes}
-            icon={<Clock className="h-5 w-5" />}
+            icon={<Clock className="h-4 w-4 sm:h-5 sm:w-5" />}
             color="amber"
             active={filterStatus === "LISTA"}
             onClick={() => setFilterStatus(filterStatus === "LISTA" ? "TODAS" : "LISTA")}
@@ -299,7 +299,7 @@ function LogisticaPage() {
           <StatCard
             label="En Ruta Activa"
             value={stats.enCamino}
-            icon={<Truck className="h-5 w-5" />}
+            icon={<Truck className="h-4 w-4 sm:h-5 sm:w-5" />}
             color="sky"
             active={filterStatus === "EN_CAMINO"}
             onClick={() => setFilterStatus(filterStatus === "EN_CAMINO" ? "TODAS" : "EN_CAMINO")}
@@ -307,7 +307,7 @@ function LogisticaPage() {
           <StatCard
             label="Entregadas Hoy"
             value={stats.entregadas}
-            icon={<PackageCheck className="h-5 w-5" />}
+            icon={<PackageCheck className="h-4 w-4 sm:h-5 sm:w-5" />}
             color="emerald"
             active={filterStatus === "ENTREGADA"}
             onClick={() => setFilterStatus(filterStatus === "ENTREGADA" ? "TODAS" : "ENTREGADA")}
@@ -315,28 +315,28 @@ function LogisticaPage() {
           <StatCard
             label="Incidencias"
             value={stats.incidencias}
-            icon={<AlertTriangle className="h-5 w-5" />}
+            icon={<AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5" />}
             color="rose"
             active={filterStatus === "INCIDENCIA"}
             onClick={() => setFilterStatus(filterStatus === "INCIDENCIA" ? "TODAS" : "INCIDENCIA")}
           />
-          <div className="col-span-2 sm:col-span-1 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between">
+          <div className="col-span-2 sm:col-span-1 p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
                 {isRepartidor ? "Cobro a Liquidar" : "Por Cobrar en Ruta"}
               </span>
-              <div className="h-8 w-8 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950 flex items-center justify-center">
-                <DollarSign className="h-4 w-4" />
+              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950 flex items-center justify-center">
+                <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
               </div>
             </div>
-            <div className="text-xl font-display font-black text-emerald-600 mt-2">
+            <div className="text-lg sm:text-xl font-display font-black text-emerald-600 mt-1 sm:mt-2">
               {formatRD(stats.saldoPorCobrar)}
             </div>
           </div>
         </section>
 
         {/* Toolbar & Filters */}
-        <section className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-white dark:bg-slate-900 p-4 rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
+        <section className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between bg-white dark:bg-slate-900 p-3.5 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-sm">
           {/* Search Input */}
           <div className="relative w-full lg:max-w-xs">
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -484,11 +484,11 @@ function LogisticaPage() {
 
       {/* Order Detail Modal */}
       <Dialog open={!!detailId} onOpenChange={(o) => !o && setDetailId(null)}>
-        <DialogContent className="max-w-lg rounded-[2.25rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950">
+        <DialogContent className="w-[96vw] max-w-lg rounded-3xl sm:rounded-[2.25rem] p-0 overflow-hidden border-none shadow-2xl bg-white dark:bg-slate-950">
           {selectedOrder && (
-            <div className="flex flex-col max-h-[85vh]">
+            <div className="flex flex-col max-h-[88vh]">
               {/* Header */}
-              <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 px-6 py-5 bg-slate-50/50 dark:bg-slate-900/30">
+              <div className="flex items-start justify-between border-b border-slate-100 dark:border-slate-800 px-4 sm:px-6 py-4 sm:py-5 bg-slate-50/70 dark:bg-slate-900/40">
                 <div>
                   <div className="flex items-center gap-2 mb-1.5">
                     <span className="inline-flex items-center gap-1 rounded-md bg-slate-200/70 dark:bg-slate-800 px-2 py-0.5 font-mono text-[11px] font-bold text-slate-700 dark:text-slate-300">
@@ -500,14 +500,14 @@ function LogisticaPage() {
                       </Badge>
                     )}
                   </div>
-                  <h2 className="text-xl font-display font-black text-slate-900 dark:text-white">
+                  <h2 className="text-lg sm:text-xl font-display font-black text-slate-900 dark:text-white">
                     {selectedClient?.nombre || "Cliente"}
                   </h2>
                 </div>
               </div>
 
               {/* Body */}
-              <div className="space-y-5 px-6 py-5 overflow-y-auto">
+              <div className="space-y-4 px-4 sm:px-6 py-4 sm:py-5 overflow-y-auto">
                 {/* Status and Financial Banner */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="rounded-2xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 p-3.5">
@@ -700,19 +700,19 @@ function StatCard({
   return (
     <Card
       onClick={onClick}
-      className={`p-4 rounded-3xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
+      className={`p-3 sm:p-4 rounded-2xl sm:rounded-3xl border transition-all cursor-pointer hover:shadow-md hover:-translate-y-0.5 ${
         active
           ? "ring-2 ring-primary border-primary bg-primary/5"
           : "border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900"
       }`}
     >
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-1.5 sm:mb-2">
         <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">{label}</span>
-        <div className={`h-8 w-8 rounded-xl flex items-center justify-center border ${colors[color]}`}>
+        <div className={`h-7 w-7 sm:h-8 sm:w-8 rounded-xl flex items-center justify-center border ${colors[color]}`}>
           {icon}
         </div>
       </div>
-      <div className="text-2xl font-display font-black text-slate-900 dark:text-white">{value}</div>
+      <div className="text-xl sm:text-2xl font-display font-black text-slate-900 dark:text-white">{value}</div>
     </Card>
   );
 }
@@ -777,11 +777,11 @@ function DeliveryCard({
   return (
     <article
       onClick={onClick}
-      className="group relative cursor-pointer rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs transition-all hover:shadow-lg hover:border-primary/40 flex flex-col justify-between gap-3.5"
+      className="group relative cursor-pointer rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-5 shadow-xs transition-all hover:shadow-lg hover:border-primary/40 flex flex-col justify-between gap-3 sm:gap-3.5"
     >
-      <div className="space-y-3">
+      <div className="space-y-2.5 sm:space-y-3">
         {/* ROW 1: ORDER NUMBER & TOTAL PRICE (CENTERED) */}
-        <div className="flex flex-col items-center justify-center text-center border-b border-slate-100 dark:border-slate-800/80 pb-3 pt-0.5 space-y-1">
+        <div className="flex flex-col items-center justify-center text-center border-b border-slate-100 dark:border-slate-800/80 pb-2.5 sm:pb-3 pt-0.5 space-y-1">
           <span className="inline-flex items-center gap-1.5 rounded-xl bg-slate-100/80 dark:bg-slate-800/90 px-3 py-1 font-mono text-xs font-extrabold text-slate-800 dark:text-slate-200 border border-slate-200/60 dark:border-slate-700/60">
             <Package className="h-3.5 w-3.5 text-primary shrink-0" />
             <span>{(orden.numero || "").replace(/^#/, "")}</span>
@@ -799,7 +799,7 @@ function DeliveryCard({
 
         {/* ROW 2: STATUS PILLS & PAYMENT BADGE */}
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-black uppercase tracking-wider border ${meta.chip}`}>
+          <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[10px] font-black uppercase tracking-wider border ${meta.chip}`}>
             {meta.label}
           </span>
           
@@ -827,7 +827,7 @@ function DeliveryCard({
           {/* Customer Name & Quick Contacts */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 min-w-0">
-              <div className="h-7 w-7 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+              <div className="h-7.5 w-7.5 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
                 {cliente?.nombre ? cliente.nombre.charAt(0).toUpperCase() : "C"}
               </div>
               <h3 className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white truncate group-hover:text-primary transition-colors">
@@ -836,22 +836,22 @@ function DeliveryCard({
             </div>
 
             {cliente?.telefono && (
-              <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center gap-1.5 shrink-0" onClick={(e) => e.stopPropagation()}>
                 <a
                   href={`tel:${cliente.telefono}`}
                   title={`Llamar a ${cliente.telefono}`}
-                  className="h-6.5 w-6.5 rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-600 hover:text-primary flex items-center justify-center transition shadow-2xs"
+                  className="h-8 w-8 sm:h-7 sm:w-7 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:text-primary flex items-center justify-center transition shadow-2xs active:scale-95"
                 >
-                  <Phone className="h-3 w-3" />
+                  <Phone className="h-3.5 w-3.5" />
                 </a>
                 <a
                   href={`https://wa.me/${waPhone}`}
                   target="_blank"
                   rel="noreferrer"
                   title="WhatsApp"
-                  className="h-6.5 w-6.5 rounded-lg bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 flex items-center justify-center transition shadow-2xs"
+                  className="h-8 w-8 sm:h-7 sm:w-7 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 flex items-center justify-center transition shadow-2xs active:scale-95"
                 >
-                  <MessageSquare className="h-3 w-3" />
+                  <MessageSquare className="h-3.5 w-3.5" />
                 </a>
               </div>
             )}
@@ -901,7 +901,7 @@ function DeliveryCard({
               value={orden.repartidor_id || "NONE"}
               onValueChange={(val) => onAssignDriver(val)}
             >
-              <SelectTrigger className="h-8 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800">
+              <SelectTrigger className="h-8.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800">
                 <SelectValue placeholder="Asignar repartidor..." />
               </SelectTrigger>
               <SelectContent className="rounded-xl">
@@ -924,7 +924,7 @@ function DeliveryCard({
             target="_blank"
             rel="noreferrer"
             title="Navegar con Waze"
-            className="h-8 flex items-center justify-center rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 hover:bg-sky-100 border border-sky-200/60 dark:border-sky-800/60 text-xs font-bold transition active:scale-95 gap-1.5"
+            className="h-9 sm:h-8 flex items-center justify-center rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-700 dark:text-sky-300 hover:bg-sky-100 border border-sky-200/60 dark:border-sky-800/60 text-xs font-bold transition active:scale-95 gap-1.5"
           >
             <Compass className="h-3.5 w-3.5" /> Waze
           </a>
@@ -934,7 +934,7 @@ function DeliveryCard({
             target="_blank"
             rel="noreferrer"
             title="Navegar con Google Maps"
-            className="h-8 flex items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-800/60 text-xs font-bold transition active:scale-95 gap-1.5"
+            className="h-9 sm:h-8 flex items-center justify-center rounded-xl bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 border border-emerald-200/60 dark:border-emerald-800/60 text-xs font-bold transition active:scale-95 gap-1.5"
           >
             <Navigation className="h-3.5 w-3.5" /> Maps
           </a>
@@ -947,9 +947,9 @@ function DeliveryCard({
               type="button"
               onClick={onOpenIncidencia}
               title="Reportar Incidencia"
-              className="h-8.5 w-8.5 rounded-xl border border-rose-200/80 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition active:scale-95 shrink-0 shadow-2xs"
+              className="h-10 w-10 sm:h-8.5 sm:w-8.5 rounded-xl border border-rose-200/80 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 flex items-center justify-center transition active:scale-95 shrink-0 shadow-2xs cursor-pointer"
             >
-              <AlertTriangle className="h-3.5 w-3.5" />
+              <AlertTriangle className="h-4 w-4 sm:h-3.5 sm:w-3.5" />
             </button>
           )}
 
@@ -958,16 +958,16 @@ function DeliveryCard({
               <Button
                 size="sm"
                 onClick={() => onUpdateStatus(orden.id, "EN_CAMINO")}
-                className="flex-1 h-8.5 rounded-xl bg-sky-600 hover:bg-sky-700 text-white font-bold text-xs shadow-sm gap-1.5 transition-all active:scale-95"
+                className="flex-1 h-10 sm:h-8.5 rounded-xl bg-sky-600 hover:bg-sky-700 active:bg-sky-800 text-white font-bold text-xs sm:text-sm shadow-sm gap-1.5 transition-all active:scale-95 cursor-pointer"
               >
-                <Bike className="h-3.5 w-3.5" /> <span>¡Voy en Camino!</span>
+                <Bike className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> <span>¡Voy en Camino!</span>
               </Button>
             ) : !orden.repartidor_id ? (
-              <div className="flex-1 h-8.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70 text-xs font-bold flex items-center justify-center gap-1.5">
+              <div className="flex-1 h-10 sm:h-8.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200/70 dark:border-amber-800/70 text-xs font-bold flex items-center justify-center gap-1.5">
                 <span>⚠️ Asigna un repartidor arriba</span>
               </div>
             ) : (
-              <div className="flex-1 h-8.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 text-xs font-bold flex items-center justify-center gap-1.5">
+              <div className="flex-1 h-10 sm:h-8.5 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200/60 dark:border-slate-700 text-xs font-bold flex items-center justify-center gap-1.5">
                 <Clock className="h-3.5 w-3.5 text-amber-500" />
                 <span>Esperando salida del repartidor</span>
               </div>
@@ -979,12 +979,12 @@ function DeliveryCard({
               <Button
                 size="sm"
                 onClick={onOpenPOD}
-                className="flex-1 h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm gap-1.5 transition-all active:scale-95"
+                className="flex-1 h-10 sm:h-8.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-black text-xs sm:text-sm shadow-sm gap-1.5 transition-all active:scale-95 cursor-pointer"
               >
-                <CheckCircle2 className="h-3.5 w-3.5" /> Entregar y Cobrar
+                <CheckCircle2 className="h-4 w-4 sm:h-3.5 sm:w-3.5" /> Entregar y Cobrar
               </Button>
             ) : (
-              <div className="flex-1 h-8.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800/70 text-xs font-bold flex items-center justify-center gap-1.5">
+              <div className="flex-1 h-10 sm:h-8.5 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-700 dark:text-sky-300 border border-sky-200/70 dark:border-sky-800/70 text-xs font-bold flex items-center justify-center gap-1.5">
                 <Truck className="h-3.5 w-3.5 text-sky-500 animate-pulse" />
                 <span>En ruta hacia el cliente</span>
               </div>
@@ -996,14 +996,14 @@ function DeliveryCard({
               size="sm"
               variant="outline"
               onClick={onOpenIncidencia}
-              className="flex-1 h-8.5 rounded-xl text-xs font-bold text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800"
+              className="flex-1 h-10 sm:h-8.5 rounded-xl text-xs font-bold text-rose-600 border-rose-200 hover:bg-rose-50 dark:border-rose-800"
             >
               Ver Incidencia
             </Button>
           )}
 
           {orden.estado === "ENTREGADA" && (
-            <div className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/70 dark:border-emerald-800/70">
+            <div className="w-full flex items-center justify-center gap-1.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/50 py-2 sm:py-1.5 text-xs font-bold text-emerald-600 dark:text-emerald-400 border border-emerald-200/70 dark:border-emerald-800/70">
               <CheckCircle2 className="h-3.5 w-3.5" /> Entregada con Éxito
             </div>
           )}

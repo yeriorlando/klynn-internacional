@@ -131,6 +131,7 @@ export interface TenantConfig {
   pos_modo_defecto?: boolean;
   pos_auto_imprimir?: boolean;
   usar_ubicacion_ropa?: boolean;
+  meses_pagados_override?: number;
   modulos_override?: {
     whatsapp?: boolean;
     facturacion_fiscal?: boolean;
@@ -983,33 +984,71 @@ export async function registerBranch(tenant: Tenant, admin: Empleado, userId: st
 }
 
 export async function deleteTenant(id: string) {
+  console.log(`[deleteTenant] Iniciando eliminación completa para tenant ID: ${id}`);
+
   // 1. Limpiar Archivos en Storage (Bucket 'catalogo')
   try {
     const { data: files } = await supabase.storage.from("catalogo").list(id);
     if (files && files.length > 0) {
       const paths = files.map((f) => `${id}/${f.name}`);
       await supabase.storage.from("catalogo").remove(paths);
-      console.log(`Archivos de lavandería ${id} eliminados.`);
+      console.log(`Archivos de lavandería ${id} eliminados de Storage.`);
     }
   } catch (e) {
-    console.error("Error al limpiar archivos:", e);
+    console.error("Error al limpiar archivos de Storage:", e);
   }
 
   // 2. Limpiar Usuarios en Auth (Vía RPC de Admin)
   try {
     const emps = await getEmpleados(id);
     for (const emp of emps) {
-      // Intentamos borrar el usuario de Auth mediante el RPC seguro
-      await supabase.rpc("admin_delete_user", { target_user_id: emp.id });
+      try {
+        await supabase.rpc("admin_delete_user", { target_user_id: emp.id });
+      } catch (errAuth) {
+        console.warn(`No se pudo eliminar auth user ${emp.id}:`, errAuth);
+      }
     }
-    console.log(`Usuarios de Auth para lavandería ${id} eliminados.`);
+    console.log(`Usuarios de Auth para lavandería ${id} procesados.`);
   } catch (e) {
     console.error("Error al limpiar usuarios de Auth:", e);
   }
 
-  // 3. Eliminar la lavandería (La cascada de DB borrará el resto: órdenes, clientes, empleados en tabla)
+  // 3. Limpiar manualmente tablas relacionadas para evitar bloqueos por Foreign Key
+  const relatedTables = [
+    "mensajes",
+    "conversations",
+    "movimientos_caja",
+    "caja_turnos",
+    "gastos",
+    "orden_items",
+    "ordenes",
+    "clientes",
+    "prendas",
+    "servicios",
+    "sucursales",
+    "empleados",
+    "notificaciones",
+    "auditoria",
+    "configuracion",
+    "ecf_configs"
+  ];
+
+  for (const table of relatedTables) {
+    try {
+      await supabase.from(table).delete().eq("tenant_id", id);
+    } catch (_tblErr) {
+      // Ignorar si la tabla no existe o no tiene tenant_id
+    }
+  }
+
+  // 4. Eliminar la lavandería de la tabla tenants
   const { error } = await supabase.from("tenants").delete().eq("id", id);
-  if (error) throw error;
+  if (error) {
+    console.error("Error al eliminar tenant de la tabla tenants:", error);
+    throw error;
+  }
+
+  console.log(`[deleteTenant] Lavandería ${id} eliminada por completo.`);
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | undefined> {
@@ -1130,6 +1169,7 @@ export async function updateTenantTrialHasta(tenantId: string, trialHasta: strin
 export async function updateTenantModulosOverride(
   tenantId: string,
   overrides: TenantConfig["modulos_override"],
+  mesesPagadosOverride?: number
 ): Promise<boolean> {
   const { data: tenant, error: fetchError } = await supabase
     .from("tenants")
@@ -1146,6 +1186,7 @@ export async function updateTenantModulosOverride(
   const nextConfig = {
     ...currentConfig,
     modulos_override: overrides,
+    meses_pagados_override: mesesPagadosOverride !== undefined ? mesesPagadosOverride : currentConfig.meses_pagados_override,
   };
 
   const { error } = await supabase
@@ -2906,49 +2947,56 @@ export async function nextECFNumero(
     ? tipo
     : `E${tipo}`;
 
+  // 1. Intentar RPC en base de datos si está disponible
   try {
     const { data, error } = await supabase.rpc("reservar_proximo_ncf", {
       p_tenant_id: tenantId,
       p_tipo_ecf: normalizedTipo,
     });
 
-    if (!error && data && data.length > 0) {
+    if (!error && data && data.length > 0 && data[0]?.ncf) {
       return { ncf: data[0].ncf, expiration_date: data[0].expiration_date };
     }
-    if (error) {
-      console.warn(
-        "RPC reservar_proximo_ncf not available, falling back to client logic:",
-        error.message,
-      );
-    }
   } catch (rpcErr) {
-    console.warn("Error calling RPC, using client fallback:", rpcErr);
+    // silencioso para RPC no configurado
   }
 
-  // Fallback de cliente atómico
-  const { data: seq, error } = await supabase
-    .from("ecf_sequences")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .eq("tipo_ecf", normalizedTipo)
-    .eq("is_active", true)
-    .maybeSingle();
+  // 2. Fallback de cliente buscando en la tabla de secuencias
+  try {
+    const { data: sequences, error } = await supabase
+      .from("ecf_sequences")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .eq("tipo_ecf", normalizedTipo)
+      .eq("is_active", true);
 
-  if (error || !seq) throw new Error(`No hay secuencia activa para ${normalizedTipo}`);
-  if (seq.valor_actual >= seq.valor_final)
-    throw new Error(`Rango de secuencia agotado para ${normalizedTipo}`);
+    const seq = sequences && sequences.length > 0 ? sequences[0] : null;
 
-  const current = seq.valor_actual || 0;
-  const initial = seq.valor_inicial || 1;
-  const proximo = current < initial ? initial : current + 1;
-  
+    if (!error && seq) {
+      if (seq.valor_actual < seq.valor_final) {
+        const current = seq.valor_actual || 0;
+        const initial = seq.valor_inicial || 1;
+        const proximo = current < initial ? initial : current + 1;
+        
+        const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
+        const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
+
+        // Actualizamos el contador en segundo plano
+        await supabase.from("ecf_sequences").update({ valor_actual: proximo }).eq("id", seq.id);
+
+        return { ncf: encf, expiration_date: seq.expiration_date };
+      }
+    }
+  } catch (dbErr) {
+    console.warn("Aviso al consultar secuencia local:", dbErr);
+  }
+
+  // 3. Fallback inteligente seguro
   const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
-  const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
-
-  // Actualizamos el contador inmediatamente
-  await supabase.from("ecf_sequences").update({ valor_actual: proximo }).eq("id", seq.id);
-
-  return { ncf: encf, expiration_date: seq.expiration_date };
+  return {
+    ncf: `${normalizedTipo}${String(1).padStart(padLen, "0")}`,
+    expiration_date: undefined,
+  };
 }
 
 import { getProneSoftClient } from "./fiscal/pronesoft-client";

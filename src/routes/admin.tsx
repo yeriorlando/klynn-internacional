@@ -3,7 +3,8 @@ import { useState, useEffect } from "react";
 import {
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil,
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
-  CreditCard, Calendar
+  CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
+  AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -14,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -74,15 +76,36 @@ export const Route = createFileRoute("/admin")({
 });
 
 function PlanBadge({ id }: { id: PlanId }) {
-  const configs: Record<PlanId, { label: string; className: string }> = {
-    basico: { label: "Básico", className: "bg-blue-50 text-blue-700 border-blue-200" },
-    pro: { label: "Pro", className: "bg-indigo-50 text-indigo-700 border-indigo-200" },
-    enterprise: { label: "Enterprise", className: "bg-amber-50 text-amber-700 border-amber-200" },
+  const configs: Record<PlanId, { label: string; icon: any; className: string; iconColor: string }> = {
+    basico: { 
+      label: "Básico", 
+      icon: Zap, 
+      className: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800",
+      iconColor: "text-sky-500 dark:text-sky-400"
+    },
+    pro: { 
+      label: "Pro", 
+      icon: Crown, 
+      className: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800",
+      iconColor: "text-purple-600 dark:text-purple-400"
+    },
+    enterprise: { 
+      label: "Enterprise", 
+      icon: Rocket, 
+      className: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700",
+      iconColor: "text-amber-600 dark:text-amber-400"
+    },
   };
-  const config = configs[id] || { label: id, className: "" };
+  const config = configs[id] || { label: id, icon: Zap, className: "bg-muted/60 text-foreground border-border", iconColor: "text-muted-foreground" };
+  const Icon = config.icon;
+
   return (
-    <Badge variant="outline" className={`px-3 py-0.5 rounded-full uppercase text-[10px] font-bold tracking-widest ${config.className}`}>
-      {config.label}
+    <Badge 
+      variant="outline" 
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full uppercase text-[10px] font-extrabold tracking-wider shadow-2xs ${config.className}`}
+    >
+      <Icon className={`h-3 w-3 shrink-0 ${config.iconColor}`} />
+      <span>{config.label}</span>
     </Badge>
   );
 }
@@ -103,6 +126,12 @@ function AdminPage() {
 
   const [tick, setTick] = useState(0);
   const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
+  const [isDeletingBatch, setIsDeletingBatch] = useState(false);
+  const [openBatchDeleteDialog, setOpenBatchDeleteDialog] = useState(false);
+  const [tenantToDelete, setTenantToDelete] = useState<Tenant | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [totalOrdenes, setTotalOrdenes] = useState(0);
   const [ordenesByTenant, setOrdenesByTenant] = useState<Record<string, { count: number; total: number }>>({});
@@ -119,6 +148,7 @@ function AdminPage() {
   const [newStatus, setNewStatus] = useState<any>("ACTIVO");
   const [newMaxSucursales, setNewMaxSucursales] = useState<number>(1);
   const [newDaysLimit, setNewDaysLimit] = useState<number>(30);
+  const [newMesesPagados, setNewMesesPagados] = useState<number>(1);
 
   const [modOverrideWa, setModOverrideWa] = useState(false);
   const [modOverrideFiscal, setModOverrideFiscal] = useState(false);
@@ -135,24 +165,62 @@ function AdminPage() {
   const [ecfConfigsMap, setEcfConfigsMap] = useState<Record<string, any>>({});
   const [loadingPronesoft, setLoadingPronesoft] = useState(false);
 
+  const isTenantAbandoned = (t: Tenant) => {
+    const ords = ordenesByTenant[t.id]?.count || 0;
+    const daysRemaining = t.trial_hasta
+      ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+      : 0;
+    return ords === 0 || (t.estado === "TRIAL" && daysRemaining === 0 && (ordenesByTenant[t.id]?.total || 0) === 0);
+  };
+
+  const abandonedTenants = tenants.filter(isTenantAbandoned);
+
+  const filteredTenants = tenants.filter((t) => {
+    const q = searchQuery.toLowerCase().trim();
+    const matchesQuery = !q || 
+      t.nombre.toLowerCase().includes(q) || 
+      t.email?.toLowerCase().includes(q) || 
+      t.telefono?.toLowerCase().includes(q) ||
+      t.slug.toLowerCase().includes(q) ||
+      (t.rnc && t.rnc.toLowerCase().includes(q));
+    
+    const matchesStatus = statusFilter === "all" || 
+      (statusFilter === "ACTIVO" && t.estado === "ACTIVO") ||
+      (statusFilter === "TRIAL" && t.estado === "TRIAL") ||
+      (statusFilter === "SUSPENDIDO" && t.estado === "SUSPENDIDO") ||
+      (statusFilter === "INACTIVO" && isTenantAbandoned(t));
+
+    return matchesQuery && matchesStatus;
+  });
+
+  async function handleBatchDelete() {
+    if (selectedTenantIds.length === 0) return;
+    setIsDeletingBatch(true);
+    try {
+      for (const id of selectedTenantIds) {
+        await deleteTenant(id);
+      }
+      toast.success(`${selectedTenantIds.length} lavanderías eliminadas correctamente.`);
+      setSelectedTenantIds([]);
+      setTick((t) => t + 1);
+      setOpenBatchDeleteDialog(false);
+    } catch (e: any) {
+      toast.error("Error al eliminar lavanderías: " + e.message);
+    } finally {
+      setIsDeletingBatch(false);
+    }
+  }
+
   async function loadPronesoftData() {
     setLoadingPronesoft(true);
     try {
-      const res = await listAssociatedCompaniesPronesoft();
-      const items = res?.data || (Array.isArray(res) ? res : []);
-      setPronesoftCompanies(items);
-
-      const { data: configs } = await supabase.from('ecf_config').select('*');
-      if (configs) {
-        const map: Record<string, any> = {};
-        for (const c of configs) {
-          if (c.rnc_emisor) map[c.rnc_emisor] = c;
-          if (c.pronesoft_tenant_id) map[c.pronesoft_tenant_id] = c;
-        }
-        setEcfConfigsMap(map);
-      }
+      const res = await listAssociatedCompaniesPronesoft(undefined, 'production');
+      console.log("[Pronesoft API] Empresas asociadas recibidas:", res);
+      const apiItems: any[] = res?.data || (Array.isArray(res) ? res : []);
+      setPronesoftCompanies(apiItems);
     } catch (err: any) {
       console.warn("Aviso al cargar empresas de Pronesoft:", err.message);
+      toast.error("Error al consultar Pronesoft: " + err.message);
     } finally {
       setLoadingPronesoft(false);
     }
@@ -165,7 +233,7 @@ function AdminPage() {
       setPlans(p);
       setGlobalConfig(cfg);
       setLicencias(lics);
-      loadPronesoftData();
+      loadPronesoftData(t);
       const ordsMap: Record<string, { count: number; total: number }> = {};
       let grandTotal = 0;
       for (const tenant of t) {
@@ -181,7 +249,104 @@ function AdminPage() {
     load();
   }, [tick]);
 
-  const ingresos = tenants.reduce((s, t) => s + (plans.find((p) => p.id === t.plan_id)?.precio_mensual || 0), 0);
+  const isDemoTenant = (t: Tenant) => 
+    t.slug === 'reynita' || 
+    t.slug === 'demo' || 
+    t.email?.toLowerCase().includes('demo@klynn') || 
+    t.nombre?.toLowerCase().includes('reynita');
+
+  function getTenantSaaSStats(t: Tenant, plansList: Plan[]) {
+    const plan = plansList.find((p) => p.id === t.plan_id);
+    const monthlyPrice = plan?.precio_mensual || 0;
+    const isDemo = isDemoTenant(t);
+
+    if (t.estado !== "ACTIVO" || isDemo) {
+      return {
+        mrr: 0,
+        months: 0,
+        totalEarned: 0,
+        planPrice: monthlyPrice,
+        isDemo
+      };
+    }
+
+    const mrr = monthlyPrice;
+    const startDateStr = t.plan_fecha_inicio || t.creado_en;
+    let months = 1;
+
+    // Cálculo automático de mensualidades cobradas
+    if (t.nombre.toLowerCase().includes("mr lavanderia") || t.email?.toLowerCase().includes("mrgroup")) {
+      const now = new Date();
+      const isCyclePassed = now.getDate() >= 25;
+      months = isCyclePassed ? 3 : 2;
+    } else if (startDateStr) {
+      const start = new Date(startDateStr);
+      const now = new Date();
+      const diffYears = now.getFullYear() - start.getFullYear();
+      const diffMonths = now.getMonth() - start.getMonth();
+      const totalMonthDiff = (diffYears * 12) + diffMonths;
+      months = Math.max(1, 1 + totalMonthDiff);
+    }
+
+    return {
+      mrr,
+      months,
+      totalEarned: months * monthlyPrice,
+      planPrice: monthlyPrice,
+      isDemo: false
+    };
+  }
+
+  const activeTenants = tenants.filter((t) => t.estado === "ACTIVO" && !isDemoTenant(t));
+  const trialTenants = tenants.filter((t) => t.estado === "TRIAL");
+
+  // MRR Estimado: Solo lavanderías con suscripción ACTIVA reales (excluye demos)
+  const mrrEstimado = activeTenants.reduce((s, t) => {
+    const stats = getTenantSaaSStats(t, plans);
+    return s + stats.mrr;
+  }, 0);
+
+  // Ganancias Totales SaaS acumuladas a lo largo del tiempo
+  const totalSaaSGenerado = activeTenants.reduce((s, t) => {
+    const stats = getTenantSaaSStats(t, plans);
+    return s + stats.totalEarned;
+  }, 0);
+
+  // Total facturado por todas las lavanderías en la plataforma
+  const totalFacturadoPlataforma = Object.values(ordenesByTenant).reduce((s, o) => s + (o.total || 0), 0);
+
+  function openEditTenant(t: Tenant) {
+    setEditingTenant(t);
+    setNewEmail(t.email);
+    setNewPassword("");
+    setSelectedPlanId(t.plan_id);
+    setNewStatus(t.estado);
+    setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
+
+    const daysRemaining = t.trial_hasta
+      ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+      : 0;
+    setNewDaysLimit(daysRemaining || 30);
+
+    const pOfTenant = plans.find(pl => pl.id === t.plan_id);
+    setModOverrideWa(t.config?.modulos_override?.whatsapp !== undefined
+      ? t.config.modulos_override.whatsapp
+      : !!pOfTenant?.modulos.whatsapp);
+    setModOverrideFiscal(t.config?.modulos_override?.facturacion_fiscal !== undefined
+      ? t.config.modulos_override.facturacion_fiscal
+      : !!pOfTenant?.modulos.facturacion_fiscal);
+    setModOverrideMultisucursal(t.config?.modulos_override?.multisucursal !== undefined
+      ? t.config.modulos_override.multisucursal
+      : !!pOfTenant?.modulos.multisucursal);
+    setModOverrideLogistica(t.config?.modulos_override?.logistica !== undefined
+      ? t.config.modulos_override.logistica
+      : !!pOfTenant?.modulos.logistica);
+    setModOverrideProcesos(t.config?.modulos_override?.procesos !== undefined
+      ? t.config.modulos_override.procesos
+      : (pOfTenant?.modulos.procesos !== undefined ? !!pOfTenant.modulos.procesos : true));
+
+    setOpenEditModal(true);
+  }
 
   async function handleUpdateAdmin() {
     if (!editingTenant) return;
@@ -195,13 +360,16 @@ function AdminPage() {
       await updateTenantTrialHasta(editingTenant.id, trialHasta);
 
       // Guardar anulaciones de módulos
-      await updateTenantModulosOverride(editingTenant.id, {
-        whatsapp: modOverrideWa,
-        facturacion_fiscal: modOverrideFiscal,
-        multisucursal: modOverrideMultisucursal,
-        logistica: modOverrideLogistica,
-        procesos: modOverrideProcesos,
-      });
+      await updateTenantModulosOverride(
+        editingTenant.id,
+        {
+          whatsapp: modOverrideWa,
+          facturacion_fiscal: modOverrideFiscal,
+          multisucursal: modOverrideMultisucursal,
+          logistica: modOverrideLogistica,
+          procesos: modOverrideProcesos,
+        }
+      );
 
       toast.success("Información de lavandería actualizada");
       setOpenEditModal(false);
@@ -221,188 +389,788 @@ function AdminPage() {
     <div className="min-h-screen bg-background">
       <SeedBootstrap />
       <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-3">
             <Logo />
             <Badge variant="outline" className="border-gold/40 bg-gold/10"><Shield className="mr-1 h-3 w-3" /> Super Admin</Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              size="sm"
-              variant="destructive"
+          <div className="flex items-center gap-3">
+            {user?.empleado?.email && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/60 text-xs font-medium text-muted-foreground">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="truncate max-w-[180px]">{user.empleado.email}</span>
+              </div>
+            )}
+            <button
               onClick={handleLogout}
-              className="h-9 px-4 rounded-lg font-bold shadow-md hover:opacity-90 transition-all"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-95 shadow-sm transition-all duration-150 cursor-pointer"
             >
-              <LogOut className="mr-2 h-4 w-4" /> Cerrar sesión
-            </Button>
+              <LogOut className="h-3.5 w-3.5 text-white" />
+              <span>Cerrar sesión</span>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-6xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <h1 className="font-display text-4xl">Panel central Klynn</h1>
         <p className="mt-1 text-muted-foreground">Administra todas las lavanderías y los planes SaaS.</p>
 
-        <div className="mt-6 grid gap-4 md:grid-cols-4">
-          <KPI t="Lavanderías" v={String(tenants.length)} icon={Building2} />
-          <KPI t="Activas" v={String(tenants.filter((t) => t.estado !== "CANCELADO").length)} icon={Users} />
-          <KPI t="MRR estimado" v={formatRD(ingresos)} icon={TrendingUp} accent />
-          <KPI t="Órdenes totales" v={String(totalOrdenes)} icon={Package} />
+        <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <KPI 
+            title="MRR Estimado" 
+            value={formatRD(mrrEstimado)} 
+            sub={`${activeTenants.length} ${activeTenants.length === 1 ? 'lavandería activa' : 'lavanderías activas'}`} 
+            icon={TrendingUp} 
+            variant="primary" 
+          />
+          <KPI 
+            title="Ganancias SaaS" 
+            value={formatRD(totalSaaSGenerado)} 
+            sub="Cobrado acumulado" 
+            icon={CreditCard} 
+            variant="emerald" 
+          />
+          <KPI 
+            title="Lavanderías" 
+            value={`${activeTenants.length} / ${tenants.length}`} 
+            sub={`${activeTenants.length} Activas • ${trialTenants.length} Pruebas`} 
+            icon={Building2} 
+            variant="amber" 
+          />
+          <KPI 
+            title="Órdenes Totales" 
+            value={totalOrdenes.toLocaleString("es-DO")} 
+            sub={
+              <span>
+                Facturación: <strong className="font-black text-indigo-950 dark:text-indigo-100">{formatRD(totalFacturadoPlataforma)}</strong>
+              </span>
+            } 
+            icon={Package} 
+            variant="indigo" 
+          />
         </div>
 
-        <Tabs defaultValue="tenants" className="mt-8">
-          <TabsList>
-            <TabsTrigger value="tenants">Lavanderías</TabsTrigger>
-            <TabsTrigger value="plans">Planes SaaS</TabsTrigger>
-            <TabsTrigger value="licencias">Licencias Desktop</TabsTrigger>
-            <TabsTrigger value="fiscal-companies">Empresas Fiscales (Pronesoft)</TabsTrigger>
+        <Tabs defaultValue="tenants" className="mt-6 sm:mt-8">
+          <TabsList className="flex items-center gap-2 sm:gap-3 bg-transparent p-0 border-none h-auto w-full justify-start overflow-x-auto pb-1.5 sm:pb-0 scrollbar-none flex-nowrap sm:flex-wrap">
+            <TabsTrigger 
+              value="tenants"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Building2 className="h-4 w-4 shrink-0" />
+              <span>Lavanderías</span>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="plans"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Layers className="h-4 w-4 shrink-0" />
+              <span>Planes SaaS</span>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="licencias"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Laptop className="h-4 w-4 shrink-0" />
+              <span>Licencias Desktop</span>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="fiscal-companies"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <ShieldCheck className="h-4 w-4 shrink-0" />
+              <span>Empresas Fiscales (Pronesoft)</span>
+            </TabsTrigger>
           </TabsList>
 
-          <TabsContent value="tenants">
-            <Card className="overflow-hidden border-none shadow-card">
-              <div className="border-b border-border p-4"><h2 className="font-display text-xl">Lavanderías registradas</h2></div>
+          <TabsContent value="tenants" className="space-y-4 mt-6">
+            {/* Barra superior de herramientas y filtros */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/50 shadow-xs">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por nombre, correo, RNC o slug..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-10 h-10 rounded-xl bg-background border-border/80 text-sm focus-visible:ring-primary/20"
+                />
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-xl p-1 shrink-0 overflow-x-auto">
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("all")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "all" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Todas ({tenants.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("ACTIVO")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "ACTIVO" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Activas ({tenants.filter(t => t.estado === "ACTIVO").length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter("TRIAL")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "TRIAL" ? "bg-amber-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                  >
+                    Pruebas ({tenants.filter(t => t.estado === "TRIAL").length})
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {selectedTenantIds.length > 0 && (() => {
+              const singleTenant = selectedTenantIds.length === 1 ? tenants.find(t => t.id === selectedTenantIds[0]) : null;
+
+              return (
+                <div className="flex flex-col md:flex-row items-center justify-between gap-3 p-3.5 sm:px-5 rounded-2xl bg-gradient-to-r from-blue-100/95 via-sky-50 to-indigo-100/95 dark:from-slate-850 dark:via-blue-950/70 dark:to-slate-900 border-2 border-blue-300 dark:border-blue-700/80 shadow-md animate-in fade-in slide-in-from-top-2">
+                  <div className="flex items-center gap-3">
+                    <span className="h-3 w-3 rounded-full bg-blue-600 dark:bg-blue-400 animate-pulse shrink-0 ring-4 ring-blue-500/20" />
+                    <span className="text-sm font-bold text-slate-900 dark:text-slate-100">
+                      {singleTenant ? (
+                        <span>Lavandería seleccionada: <strong className="text-blue-700 dark:text-blue-300 font-black">{singleTenant.nombre}</strong></span>
+                      ) : (
+                        <span><strong className="text-blue-700 dark:text-blue-300">{selectedTenantIds.length}</strong> lavanderías seleccionadas</span>
+                      )}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <Button 
+                      size="sm" 
+                      onClick={() => setSelectedTenantIds([])}
+                      className="h-8.5 px-3.5 rounded-xl font-bold text-xs bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-300 dark:border-slate-600 shadow-2xs gap-1.5 cursor-pointer transition-all"
+                    >
+                      <X className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                      <span>Desmarcar</span>
+                    </Button>
+
+                    {singleTenant && (
+                      <>
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            setSession({ empleado_id: 'admin', tenant_id: singleTenant.id, iniciado_en: new Date().toISOString() });
+                            setActiveTenant(singleTenant.slug);
+                            toast.success(`Entrando a ${singleTenant.nombre}...`);
+                            setTimeout(() => window.location.assign(`/t/${singleTenant.slug}`), 500);
+                          }}
+                          className="h-8.5 px-3.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-500/80 shadow-xs gap-1.5 cursor-pointer transition-all"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span>Visitar lavandería</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          onClick={() => openEditTenant(singleTenant)}
+                          className="h-8.5 px-3.5 rounded-xl border border-blue-300 dark:border-blue-700 bg-blue-100/90 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 hover:bg-blue-200/90 dark:hover:bg-blue-900/60 font-bold text-xs gap-1.5 shadow-2xs cursor-pointer transition-all"
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          <span>Editar configuración</span>
+                        </Button>
+                      </>
+                    )}
+
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      onClick={() => {
+                        if (singleTenant) {
+                          setTenantToDelete(singleTenant);
+                        } else {
+                          setOpenBatchDeleteDialog(true);
+                        }
+                      }}
+                      className="h-8.5 px-3.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs gap-1.5 shadow-xs cursor-pointer"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{singleTenant ? 'Eliminar lavandería' : `Eliminar Selección (${selectedTenantIds.length})`}</span>
+                    </Button>
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* VISTA ESCRITORIO (Tabla completa) */}
+            <Card className="hidden md:block overflow-hidden border border-border/60 shadow-card rounded-2xl bg-surface">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
-                  <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground">
+                  <thead className="relative z-10 text-[11px] uppercase tracking-wider font-black shadow-[0_4px_12px_-2px_rgba(0,0,0,0.06)] border-b border-border/80">
                     <tr>
-                      <th className="px-6 py-4 text-left font-bold">Marca</th>
-                      <th className="px-6 py-4 text-center font-bold">Plan</th>
-                      <th className="px-6 py-4 text-center font-bold">Estado</th>
-                      <th className="px-6 py-4 text-center font-bold">Órdenes</th>
-                      <th className="px-6 py-4 text-right font-bold">Ingresos</th>
-                      <th className="px-6 py-4 text-center font-bold">Acciones</th>
+                      <th className="px-4 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                        Lavandería / Marca
+                      </th>
+                      <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-blue-50 via-blue-100/90 to-blue-200/60 dark:from-blue-950/70 dark:via-blue-950/90 dark:to-blue-900/60 text-blue-950 dark:text-blue-200 border-x border-blue-200/50 dark:border-blue-800/40">
+                        Plan SaaS
+                      </th>
+                      <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-emerald-50 via-emerald-100/90 to-emerald-200/60 dark:from-emerald-950/70 dark:via-emerald-950/90 dark:to-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-r border-emerald-200/50 dark:border-emerald-800/40">
+                        Estado
+                      </th>
+                      <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-purple-50 via-purple-100/90 to-purple-200/60 dark:from-purple-950/70 dark:via-purple-950/90 dark:to-purple-900/60 text-purple-950 dark:text-purple-200 border-r border-purple-200/50 dark:border-purple-800/40">
+                        Módulos Habilitados
+                      </th>
+                      <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-cyan-50 via-cyan-100/90 to-cyan-200/60 dark:from-cyan-950/70 dark:via-cyan-950/90 dark:to-cyan-900/60 text-cyan-950 dark:text-cyan-200 border-r border-cyan-200/50 dark:border-cyan-800/40">
+                        Órdenes
+                      </th>
+                      <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-amber-50 via-amber-100/90 to-amber-200/60 dark:from-amber-950/70 dark:via-amber-950/90 dark:to-amber-900/60 text-amber-950 dark:text-amber-200 border-r border-amber-200/50 dark:border-amber-800/40">
+                        Facturación
+                      </th>
+                      <th className="px-4 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                        Acciones
+                      </th>
                     </tr>
                   </thead>
-                  <tbody>
-                    {tenants.map((t) => {
-                      const tenantOrds = ordenesByTenant[t.id] || { count: 0, total: 0 };
-                      return (
-                        <tr key={t.id} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                          <td className="px-6 py-4">
-                            <div className="flex items-center gap-3">
-                              <div
-                                className="h-9 w-9 rounded-xl overflow-hidden flex items-center justify-center border border-slate-100 shadow-sm shrink-0 bg-white"
-                                style={{
-                                  background: t.logo_url ? "white" : `linear-gradient(135deg, ${t.color_primario}, ${t.color_secundario})`
-                                }}
-                              >
+                  <tbody className="divide-y divide-border/40">
+                    {filteredTenants.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                          <Building2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+                          <p className="text-base font-semibold text-foreground">No se encontraron lavanderías</p>
+                          <p className="text-xs text-muted-foreground mt-1">Prueba a cambiar el filtro de búsqueda o el estado.</p>
+                        </td>
+                      </tr>
+                    ) : (
+                      filteredTenants.map((t) => {
+                        const tenantOrds = ordenesByTenant[t.id] || { count: 0, total: 0 };
+                        const planOfTenant = plans.find(p => p.id === t.plan_id);
+                        const saasStats = getTenantSaaSStats(t, plans);
+                        
+                        const hasWa = t.config?.modulos_override?.whatsapp !== undefined 
+                          ? t.config.modulos_override.whatsapp 
+                          : !!planOfTenant?.modulos.whatsapp;
+                        const hasFiscal = t.config?.modulos_override?.facturacion_fiscal !== undefined 
+                          ? t.config.modulos_override.facturacion_fiscal 
+                          : !!planOfTenant?.modulos.facturacion_fiscal;
+                        const hasSucursales = t.config?.modulos_override?.multisucursal !== undefined 
+                          ? t.config.modulos_override.multisucursal 
+                          : ((t.max_sucursales || 1) > 1 || !!planOfTenant?.modulos.multisucursal);
+                        const hasLogistica = t.config?.modulos_override?.logistica !== undefined 
+                          ? t.config.modulos_override.logistica 
+                          : !!planOfTenant?.modulos.logistica;
+                        const hasProcesos = t.config?.modulos_override?.procesos !== undefined 
+                          ? t.config.modulos_override.procesos 
+                          : (planOfTenant?.modulos.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
+
+                        const daysRemaining = t.trial_hasta
+                          ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+                          : 0;
+                        
+                        const isSelected = selectedTenantIds.includes(t.id);
+
+                        return (
+                          <tr 
+                            key={t.id} 
+                            onClick={() => {
+                              setSelectedTenantIds(selectedTenantIds.includes(t.id) ? [] : [t.id]);
+                            }}
+                            className={`cursor-pointer transition-all duration-150 group border-b border-border/40 ${
+                              isSelected 
+                                ? 'bg-primary/[0.08] dark:bg-primary/[0.18] ring-1 ring-inset ring-primary/30 shadow-xs' 
+                                : 'hover:bg-muted/30'
+                            }`}
+                          >
+                            <td className="px-4 py-3.5">
+                              <div className="flex items-center gap-3">
                                 {t.logo_url ? (
-                                  <img src={t.logo_url} alt="Logo" className="h-full w-full object-cover" />
+                                  <img
+                                    src={t.logo_url}
+                                    alt={t.nombre}
+                                    className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs ring-2 ring-primary/10"
+                                  />
                                 ) : (
-                                  <span className="text-[10px] font-bold text-white uppercase">{t.nombre.charAt(0)}</span>
+                                  <div
+                                    className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10"
+                                    style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                                  >
+                                    {t.nombre.charAt(0).toUpperCase()}
+                                  </div>
                                 )}
+                                <div className="min-w-0">
+                                  <div className="font-bold text-foreground text-sm tracking-tight hover:text-primary transition-colors flex items-center gap-1.5">
+                                    <span className="truncate">{t.nombre}</span>
+                                    {isSelected && (
+                                      <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />
+                                    )}
+                                  </div>
+                                  <div className="text-[11px] text-muted-foreground mt-0.5 space-y-0.5">
+                                    <div className="truncate">
+                                      <span className="font-medium text-foreground/80">Correo:</span> {t.email || "Sin correo"}
+                                    </div>
+                                    <div className="truncate">
+                                      <span className="font-medium text-foreground/80">Teléfono:</span> {t.telefono || "Sin teléfono"}
+                                    </div>
+                                    <div className="flex items-center gap-1.5 pt-0.5">
+                                      <span className="font-medium text-foreground/80">RNC:</span>
+                                      {t.rnc ? (
+                                        <Badge className="bg-primary hover:bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0 rounded-md border-none shadow-2xs">
+                                          {t.rnc}
+                                        </Badge>
+                                      ) : (
+                                        <span className="italic text-muted-foreground/60 text-[10.5px]">Sin RNC</span>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
-                              <div>
-                                <div className="font-bold text-foreground">{t.nombre}</div>
-                                <div className="text-xs text-muted-foreground/80">{t.email}</div>
+                            </td>
+
+                            <td className="px-3 py-3 text-center whitespace-nowrap bg-blue-500/[0.015] border-r border-border/20">
+                              {t.plan_id === 'basico' && (
+                                <Badge className="bg-sky-50 text-sky-700 hover:bg-sky-50 border-sky-200 text-[10.5px] font-black uppercase px-2.5 py-0.5 rounded-full gap-1 shadow-2xs">
+                                  <Zap className="h-3 w-3 text-sky-600" /> Básico
+                                </Badge>
+                              )}
+                              {t.plan_id === 'pro' && (
+                                <Badge className="bg-purple-50 text-purple-700 hover:bg-purple-50 border-purple-200 text-[10.5px] font-black uppercase px-2.5 py-0.5 rounded-full gap-1 shadow-2xs">
+                                  <Crown className="h-3 w-3 text-purple-600" /> Pro
+                                </Badge>
+                              )}
+                              {t.plan_id === 'enterprise' && (
+                                <Badge className="bg-amber-50 text-amber-800 hover:bg-amber-50 border-amber-300 text-[10.5px] font-black uppercase px-2.5 py-0.5 rounded-full gap-1 shadow-2xs">
+                                  <Rocket className="h-3 w-3 text-amber-600" /> Enterprise
+                                </Badge>
+                              )}
+                              {t.plan_id !== 'basico' && t.plan_id !== 'pro' && t.plan_id !== 'enterprise' && (
+                                <Badge variant="outline" className="text-[10px] font-bold uppercase">{t.plan_id}</Badge>
+                              )}
+                            </td>
+
+                            <td className="px-3 py-3 text-center whitespace-nowrap bg-emerald-500/[0.015] border-r border-border/20">
+                              {t.estado === "ACTIVO" ? (
+                                <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
+                                </Badge>
+                              ) : t.estado === "TRIAL" ? (
+                                <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                                  <Clock className="h-3 w-3 text-amber-600" /> Prueba ({daysRemaining}d)
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                                  <AlertCircle className="h-3 w-3 text-rose-600" /> Suspendido
+                                </Badge>
+                              )}
+                            </td>
+
+                            <td className="px-3 py-3 text-center whitespace-nowrap bg-purple-500/[0.015] border-r border-border/20">
+                              <div className="flex items-center justify-center gap-1">
+                                <span
+                                  title={hasWa ? "WhatsApp Cloud: Habilitado" : "WhatsApp: Inactivo"}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    hasWa
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <MessageSquare className="h-3.5 w-3.5" />
+                                </span>
+                                <span
+                                  title={hasFiscal ? "Facturación Fiscal (e-CF): Habilitada" : "Facturación Fiscal: Inactiva"}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    hasFiscal
+                                      ? "bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <FileText className="h-3.5 w-3.5" />
+                                </span>
+                                <span
+                                  title={hasSucursales ? "Sucursales Múltiples: Habilitadas" : "Sucursales: Inactivas"}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    hasSucursales
+                                      ? "bg-purple-50 text-purple-700 border border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Building2 className="h-3.5 w-3.5" />
+                                </span>
+                                <span
+                                  title={hasLogistica ? "Logística y Repartidores: Habilitada" : "Logística: Inactiva"}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    hasLogistica
+                                      ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Truck className="h-3.5 w-3.5" />
+                                </span>
+                                <span
+                                  title={hasProcesos ? "Control de Producción/Procesos: Habilitado" : "Procesos: Inactivo"}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    hasProcesos
+                                      ? "bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Layers className="h-3.5 w-3.5" />
+                                </span>
                               </div>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <PlanBadge id={t.plan_id} />
-                          </td>
-                          <td className="px-6 py-4 text-center"><Badge variant="outline" className="bg-background">{t.estado === "TRIAL" ? "Prueba" : t.estado}</Badge></td>
-                          <td className="px-6 py-4 text-center font-medium">{tenantOrds.count}</td>
-                          <td className="px-6 py-4 text-right font-bold text-primary">{formatRD(tenantOrds.total)}</td>
-                          <td className="px-6 py-4 text-center">
-                            <div className="flex justify-center">
-                              <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                  <Button size="icon" variant="ghost" className="h-8 w-8 rounded-lg hover:bg-accent">
-                                    <MoreHorizontal className="h-4 w-4" />
-                                  </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end" className="w-52 rounded-xl shadow-elegant border border-border/50 p-1">
-                                  <DropdownMenuLabel className="text-[10px] uppercase tracking-widest text-muted-foreground px-2 py-1.5 font-bold">Gestión de Sucursal</DropdownMenuLabel>
-                                  <DropdownMenuItem
-                                    className="rounded-lg gap-2 cursor-pointer py-2"
-                                    onClick={() => {
-                                      // Admin accede directo — no necesita ser empleado
-                                      setSession({ empleado_id: 'admin', tenant_id: t.id, iniciado_en: new Date().toISOString() });
-                                      setActiveTenant(t.slug);
-                                      toast.success(`Entrando a ${t.nombre}...`);
-                                      setTimeout(() => window.location.assign(`/t/${t.slug}`), 500);
-                                    }}
-                                  >
-                                    <ExternalLink className="h-4 w-4 text-primary" /> Visitar lavandería
-                                  </DropdownMenuItem>
-                                  <DropdownMenuItem
-                                    className="rounded-lg gap-2 cursor-pointer py-2"
-                                    onClick={() => {
-                                      setEditingTenant(t);
-                                      setNewEmail(t.email);
-                                      setNewPassword("");
-                                      setSelectedPlanId(t.plan_id);
-                                      setNewStatus(t.estado);
-                                      setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
+                            </td>
 
-                                      const daysRemaining = t.trial_hasta
-                                        ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
-                                        : 0;
-                                      setNewDaysLimit(daysRemaining || 30);
+                            <td className="px-3 py-3 text-center whitespace-nowrap bg-cyan-500/[0.015] border-r border-border/20">
+                              <span className="font-bold text-foreground bg-muted/70 px-2.5 py-0.5 rounded-md border border-border/50 text-xs">
+                                {tenantOrds.count}
+                              </span>
+                            </td>
 
-                                      // Inicializar interruptores de módulos
-                                      const pOfTenant = plans.find(pl => pl.id === t.plan_id);
-                                      setModOverrideWa(t.config?.modulos_override?.whatsapp !== undefined
-                                        ? t.config.modulos_override.whatsapp
-                                        : !!pOfTenant?.modulos.whatsapp);
-                                      setModOverrideFiscal(t.config?.modulos_override?.facturacion_fiscal !== undefined
-                                        ? t.config.modulos_override.facturacion_fiscal
-                                        : !!pOfTenant?.modulos.facturacion_fiscal);
-                                      setModOverrideMultisucursal(t.config?.modulos_override?.multisucursal !== undefined
-                                        ? t.config.modulos_override.multisucursal
-                                        : !!pOfTenant?.modulos.multisucursal);
-                                      setModOverrideLogistica(t.config?.modulos_override?.logistica !== undefined
-                                        ? t.config.modulos_override.logistica
-                                        : !!pOfTenant?.modulos.logistica);
-                                      setModOverrideProcesos(t.config?.modulos_override?.procesos !== undefined
-                                        ? t.config.modulos_override.procesos
-                                        : (pOfTenant?.modulos.procesos !== undefined ? !!pOfTenant.modulos.procesos : true));
+                            <td className="px-3 py-3 text-center whitespace-nowrap bg-amber-500/[0.015] border-r border-border/20">
+                              <div className="font-bold text-foreground text-sm tracking-tight" title="Total procesado en órdenes por esta lavandería">
+                                {formatRD(tenantOrds.total)}
+                              </div>
+                              {saasStats.isDemo ? (
+                                <div className="mt-1 inline-flex items-center px-2 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[10px] font-bold border border-slate-200 dark:border-slate-700 shadow-2xs">
+                                  Demo Propia (RD$0)
+                                </div>
+                              ) : t.estado === "ACTIVO" && saasStats.totalEarned > 0 ? (
+                                <div 
+                                  className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-[10.5px] font-bold border border-emerald-200/70 dark:border-emerald-800 shadow-2xs" 
+                                  title={`Plan SaaS: ${saasStats.months} ${saasStats.months === 1 ? 'mes cobrado' : 'meses cobrados'} (${formatRD(saasStats.planPrice)}/mes)`}
+                                >
+                                  <span>SaaS: {formatRD(saasStats.totalEarned)}</span>
+                                  <span className="text-[9.5px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">({saasStats.months}m)</span>
+                                </div>
+                              ) : (
+                                <div className="mt-1 text-[10px] text-muted-foreground/60 font-medium italic">
+                                  Prueba (RD$0)
+                                </div>
+                              )}
+                            </td>
 
-                                      setOpenEditModal(true);
-                                    }}
-                                  >
-                                    <Pencil className="h-4 w-4 text-primary" /> Editar lavandería
-                                  </DropdownMenuItem>
+                            <td className="px-4 py-3 text-center whitespace-nowrap">
+                              <div className="flex items-center justify-center gap-1.5" onClick={(e) => e.stopPropagation()}>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-7.5 px-2.5 rounded-lg gap-1 font-bold text-xs bg-background hover:bg-primary hover:text-white border-border/80 shadow-2xs transition-all cursor-pointer"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setSession({ empleado_id: 'admin', tenant_id: t.id, iniciado_en: new Date().toISOString() });
+                                    setActiveTenant(t.slug);
+                                    toast.success(`Entrando a ${t.nombre}...`);
+                                    setTimeout(() => window.location.assign(`/t/${t.slug}`), 500);
+                                  }}
+                                  title="Entrar a la sucursal"
+                                >
+                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  <span>Entrar</span>
+                                </Button>
 
-                                  <DropdownMenuSeparator className="bg-border/50 my-1" />
+                                <DropdownMenu>
+                                  <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                                    <Button size="icon" variant="ghost" className="h-7.5 w-7.5 rounded-lg hover:bg-muted cursor-pointer">
+                                      <MoreHorizontal className="h-4 w-4" />
+                                    </Button>
+                                  </DropdownMenuTrigger>
+                                  <DropdownMenuContent align="end" className="w-56 rounded-2xl shadow-2xl border border-border/80 p-0 overflow-hidden bg-surface">
+                                    <div className="bg-gradient-to-r from-slate-100 via-slate-200/80 to-slate-100 dark:from-slate-800 dark:via-slate-850 dark:to-slate-850 border-b border-border/70 px-3.5 py-2 flex items-center justify-between">
+                                      <span className="text-[10px] font-black uppercase tracking-wider text-slate-700 dark:text-slate-200">Opciones de Lavandería</span>
+                                    </div>
+                                    <div className="p-1.5 space-y-1">
+                                      <DropdownMenuItem
+                                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-foreground hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
+                                        onClick={() => openEditTenant(t)}
+                                      >
+                                        <div className="h-6 w-6 rounded-lg bg-blue-100 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0 shadow-2xs">
+                                          <Pencil className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span>Editar configuración</span>
+                                      </DropdownMenuItem>
 
-                                  <AlertDialog>
-                                    <AlertDialogTrigger asChild>
-                                      <button className="relative flex w-full cursor-default select-none items-center rounded-lg gap-2 px-2 py-2 text-sm outline-none transition-colors hover:bg-destructive/10 hover:text-destructive text-destructive font-medium">
-                                        <Trash2 className="h-4 w-4" /> Eliminar lavandería
-                                      </button>
-                                    </AlertDialogTrigger>
-                                    <AlertDialogContent className="rounded-2xl border-none shadow-card">
-                                      <AlertDialogHeader>
-                                        <AlertDialogTitle>¿Estás completamente seguro?</AlertDialogTitle>
-                                        <AlertDialogDescription>
-                                          Esta acción eliminará permanentemente la lavandería <strong>{t.nombre}</strong> y todos sus datos asociados.
-                                        </AlertDialogDescription>
-                                      </AlertDialogHeader>
-                                      <AlertDialogFooter>
-                                        <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                                        <AlertDialogAction
-                                          onClick={async () => { await deleteTenant(t.id); setTick((r) => r + 1); toast.success("Lavandería eliminada"); }}
-                                          className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl"
-                                        >
-                                          Eliminar
-                                        </AlertDialogAction>
-                                      </AlertDialogFooter>
-                                    </AlertDialogContent>
-                                  </AlertDialog>
-                                </DropdownMenuContent>
-                              </DropdownMenu>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {tenants.length === 0 && <tr><td colSpan={6} className="py-12 text-center text-muted-foreground font-medium">No se encontraron lavanderías registradas</td></tr>}
+                                      <div className="border-t border-border/50 my-1" />
+
+                                      <DropdownMenuItem
+                                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 hover:text-rose-700 transition-all cursor-pointer w-full text-left"
+                                        onClick={() => setTenantToDelete(t)}
+                                      >
+                                        <div className="h-6 w-6 rounded-lg bg-rose-100 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center shrink-0 shadow-2xs">
+                                          <Trash2 className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span>Eliminar lavandería</span>
+                                      </DropdownMenuItem>
+                                    </div>
+                                  </DropdownMenuContent>
+                                </DropdownMenu>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
             </Card>
+
+            {/* VISTA MÓVIL (Tarjetas estilizadas y táctiles) */}
+            <div className="block md:hidden space-y-3">
+              {filteredTenants.length === 0 ? (
+                <Card className="p-8 text-center bg-surface border border-border/60 rounded-2xl">
+                  <Building2 className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
+                  <p className="text-sm font-semibold text-foreground">No se encontraron lavanderías</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Prueba a cambiar el filtro o la búsqueda.</p>
+                </Card>
+              ) : (
+                filteredTenants.map((t) => {
+                  const tenantOrds = ordenesByTenant[t.id] || { count: 0, total: 0 };
+                  const planOfTenant = plans.find(p => p.id === t.plan_id);
+                  const saasStats = getTenantSaaSStats(t, plans);
+                  
+                  const hasWa = t.config?.modulos_override?.whatsapp !== undefined ? t.config.modulos_override.whatsapp : !!planOfTenant?.modulos.whatsapp;
+                  const hasFiscal = t.config?.modulos_override?.facturacion_fiscal !== undefined ? t.config.modulos_override.facturacion_fiscal : !!planOfTenant?.modulos.facturacion_fiscal;
+                  const hasSucursales = t.config?.modulos_override?.multisucursal !== undefined ? t.config.modulos_override.multisucursal : ((t.max_sucursales || 1) > 1 || !!planOfTenant?.modulos.multisucursal);
+                  const hasLogistica = t.config?.modulos_override?.logistica !== undefined ? t.config.modulos_override.logistica : !!planOfTenant?.modulos.logistica;
+                  const hasProcesos = t.config?.modulos_override?.procesos !== undefined ? t.config.modulos_override.procesos : (planOfTenant?.modulos.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
+
+                  const daysRemaining = t.trial_hasta
+                    ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+                    : 0;
+                  
+                  const isSelected = selectedTenantIds.includes(t.id);
+
+                  return (
+                    <Card
+                      key={t.id}
+                      onClick={() => setSelectedTenantIds(selectedTenantIds.includes(t.id) ? [] : [t.id])}
+                      className={`p-4 rounded-2xl border transition-all cursor-pointer ${
+                        isSelected 
+                          ? 'bg-primary/[0.08] dark:bg-primary/[0.18] border-primary/40 ring-2 ring-primary/30 shadow-md' 
+                          : 'bg-surface border-border/70 hover:border-primary/30 shadow-xs'
+                      }`}
+                    >
+                      {/* Cabecera: Logo + Info Principal + Estado */}
+                      <div className="flex items-start gap-3">
+                        {t.logo_url ? (
+                          <img
+                            src={t.logo_url}
+                            alt={t.nombre}
+                            className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs ring-2 ring-primary/10"
+                          />
+                        ) : (
+                          <div
+                            className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10"
+                            style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                          >
+                            {t.nombre.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between gap-1.5">
+                            <h3 className="font-bold text-foreground text-sm tracking-tight truncate flex items-center gap-1.5">
+                              <span>{t.nombre}</span>
+                              {isSelected && <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />}
+                            </h3>
+                            {t.estado === "ACTIVO" ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                                Activo
+                              </Badge>
+                            ) : t.estado === "TRIAL" ? (
+                              <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                                Prueba ({daysRemaining}d)
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                                Suspendido
+                              </Badge>
+                            )}
+                          </div>
+
+                          <div className="text-[11px] text-muted-foreground mt-0.5 space-y-0.5">
+                            <div className="truncate"><span className="font-medium text-foreground/80">Correo:</span> {t.email || "Sin correo"}</div>
+                            <div className="truncate"><span className="font-medium text-foreground/80">Teléfono:</span> {t.telefono || "Sin teléfono"}</div>
+                            {t.rnc && (
+                              <div className="flex items-center gap-1 pt-0.5">
+                                <span className="font-medium text-foreground/80">RNC:</span>
+                                <Badge className="bg-primary text-primary-foreground text-[9.5px] font-bold px-1.5 py-0 rounded-md border-none">{t.rnc}</Badge>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Métricas y Plan */}
+                      <div className="mt-3 pt-2.5 border-t border-border/50 grid grid-cols-2 gap-2 text-xs">
+                        <div className="bg-blue-500/[0.04] p-2.5 rounded-xl border border-blue-500/10">
+                          <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400 block mb-1">Plan & Módulos</span>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            {t.plan_id === 'basico' && <Badge className="bg-sky-50 text-sky-700 border-sky-200 text-[10px] font-black uppercase px-2 py-0"><Zap className="h-2.5 w-2.5 mr-0.5" /> Básico</Badge>}
+                            {t.plan_id === 'pro' && <Badge className="bg-purple-50 text-purple-700 border-purple-200 text-[10px] font-black uppercase px-2 py-0"><Crown className="h-2.5 w-2.5 mr-0.5" /> Pro</Badge>}
+                            {t.plan_id === 'enterprise' && <Badge className="bg-amber-50 text-amber-800 border-amber-300 text-[10px] font-black uppercase px-2 py-0"><Rocket className="h-2.5 w-2.5 mr-0.5" /> Enterprise</Badge>}
+                            {t.plan_id !== 'basico' && t.plan_id !== 'pro' && t.plan_id !== 'enterprise' && <Badge variant="outline" className="text-[9.5px] font-bold">{t.plan_id}</Badge>}
+                          </div>
+                          <div className="flex items-center gap-1 mt-1.5">
+                            <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`}><MessageSquare className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' : 'text-muted-foreground/30 opacity-40'}`}><FileText className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Layers className="h-3 w-3" /></span>
+                          </div>
+                        </div>
+
+                        <div className="bg-amber-500/[0.04] p-2.5 rounded-xl border border-amber-500/10 flex flex-col justify-between">
+                          <div>
+                            <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 block mb-0.5">Facturación</span>
+                            <div className="font-bold text-foreground text-xs">{formatRD(tenantOrds.total)} ({tenantOrds.count} ord)</div>
+                          </div>
+                          <div className="mt-1">
+                            {saasStats.isDemo ? (
+                              <span className="inline-block text-[9.5px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">Demo (RD$0)</span>
+                            ) : t.estado === "ACTIVO" && saasStats.totalEarned > 0 ? (
+                              <span className="inline-block text-[9.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">SaaS: {formatRD(saasStats.totalEarned)} ({saasStats.months}m)</span>
+                            ) : (
+                              <span className="text-[9.5px] text-muted-foreground/60 italic">Prueba (RD$0)</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Botones de acción móvil */}
+                      <div className="mt-3 pt-2.5 flex items-center justify-between gap-2" onClick={(e) => e.stopPropagation()}>
+                        <Button
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSession({ empleado_id: 'admin', tenant_id: t.id, iniciado_en: new Date().toISOString() });
+                            setActiveTenant(t.slug);
+                            toast.success(`Entrando a ${t.nombre}...`);
+                            setTimeout(() => window.location.assign(`/t/${t.slug}`), 500);
+                          }}
+                          className="flex-1 h-8 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-2xs cursor-pointer"
+                        >
+                          <ExternalLink className="h-3.5 w-3.5" />
+                          <span>Entrar</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditTenant(t);
+                          }}
+                          className="h-8 px-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold text-xs gap-1 cursor-pointer shadow-2xs"
+                        >
+                          <Pencil className="h-3.5 w-3.5" />
+                          <span>Editar</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setTenantToDelete(t);
+                          }}
+                          className="h-8 w-8 p-0 rounded-xl text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 cursor-pointer shrink-0"
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </Card>
+                  );
+                })
+              )}
+            </div>
+
+            <AlertDialog open={!!tenantToDelete} onOpenChange={(open) => !open && setTenantToDelete(null)}>
+              <AlertDialogContent className="rounded-2xl border border-border/80 shadow-2xl max-w-md">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-rose-600 flex items-center gap-2 text-lg">
+                    <Trash2 className="h-5 w-5" />
+                    ¿Eliminar {tenantToDelete?.nombre}?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3 pt-2 text-sm">
+                    <p>
+                      Esta acción eliminará <strong>permanentemente</strong> la lavandería <span className="font-bold text-foreground">{tenantToDelete?.nombre}</span> y todos sus datos en Supabase (clientes, órdenes, configuración, usuarios de acceso y archivos).
+                    </p>
+                    <div className="p-2.5 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900/60 text-xs text-rose-700 dark:text-rose-300 font-medium">
+                      ⚠️ Esta operación no se puede deshacer.
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="mt-4">
+                  <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={async (e) => {
+                      e.preventDefault();
+                      if (!tenantToDelete) return;
+                      try {
+                        toast.loading(`Eliminando ${tenantToDelete.nombre}...`, { id: "delete-tenant" });
+                        await deleteTenant(tenantToDelete.id);
+                        setTick((r) => r + 1);
+                        toast.success(`Lavandería ${tenantToDelete.nombre} eliminada correctamente.`, { id: "delete-tenant" });
+                      } catch (err: any) {
+                        toast.error(`Error al eliminar: ${err.message}`, { id: "delete-tenant" });
+                      } finally {
+                        setTenantToDelete(null);
+                      }
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl font-bold gap-1.5 cursor-pointer"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Sí, Eliminar Definitivamente</span>
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+
+            {/* Modal de confirmación para eliminación masiva */}
+            <AlertDialog open={openBatchDeleteDialog} onOpenChange={setOpenBatchDeleteDialog}>
+              <AlertDialogContent className="rounded-2xl border border-border/80 shadow-2xl max-w-lg">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-rose-600 flex items-center gap-2 text-lg">
+                    <Trash2 className="h-5 w-5" />
+                    ¿Eliminar {selectedTenantIds.length} lavanderías de la base de datos?
+                  </AlertDialogTitle>
+                  <AlertDialogDescription className="space-y-3 pt-2 text-sm">
+                    <p>
+                      Estás a punto de eliminar definitivamente <strong>{selectedTenantIds.length} lavanderías</strong>. Esta acción borrará permanentemente sus clientes, órdenes, configuración, usuarios de acceso y archivos en la nube.
+                    </p>
+                    <div className="max-h-48 overflow-y-auto rounded-xl border border-border/60 bg-muted/40 p-2.5 space-y-1.5">
+                      {tenants.filter(t => selectedTenantIds.includes(t.id)).map(t => {
+                        const ords = ordenesByTenant[t.id]?.count || 0;
+                        return (
+                          <div key={t.id} className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-surface border border-border/40">
+                            <span className="font-bold text-foreground truncate max-w-[200px]">{t.nombre}</span>
+                            <span className="text-muted-foreground text-[11px]">{ords} órdenes • {t.email || "Sin correo"}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="mt-4">
+                  <AlertDialogCancel disabled={isDeletingBatch} className="rounded-xl">Cancelar</AlertDialogCancel>
+                  <AlertDialogAction
+                    disabled={isDeletingBatch}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleBatchDelete();
+                    }}
+                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90 rounded-xl font-bold gap-1.5"
+                  >
+                    {isDeletingBatch ? (
+                      <>
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                        <span>Eliminando...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="h-4 w-4" />
+                        <span>Confirmar y Eliminar ({selectedTenantIds.length})</span>
+                      </>
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </TabsContent>
 
           <TabsContent value="plans">
@@ -647,7 +1415,11 @@ function AdminPage() {
                       const name = c.name || c.companyName || c.razon_social || "Lavandería Registrada";
                       
                       const matchedConfig = ecfConfigsMap[rnc] || ecfConfigsMap[tenantId];
-                      const matchedTenant = matchedConfig ? tenants.find(t => t.id === matchedConfig.tenant_id) : undefined;
+                      const matchedTenant = matchedConfig 
+                        ? tenants.find(t => t.id === matchedConfig.tenant_id) 
+                        : tenants.find(t => t.rnc === rnc || (rnc && t.rnc?.replace(/\D/g, '') === rnc.replace(/\D/g, '')));
+
+                      const isProd = c.ambiente === 'produccion' || matchedConfig?.ambiente === 'produccion';
 
                       return (
                         <tr key={tenantId || rnc} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
@@ -667,7 +1439,7 @@ function AdminPage() {
                           </td>
                           <td className="px-6 py-4 text-center">
                             <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase">
-                              {matchedConfig?.ambiente === 'produccion' ? 'Producción' : 'Pruebas / SBX'}
+                              {isProd ? 'Producción' : 'Pruebas / SBX'}
                             </Badge>
                           </td>
                           <td className="px-6 py-4 text-center">
@@ -709,7 +1481,7 @@ function AdminPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-3.5 py-2">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-3 py-1">
             {/* Correo Administrativo */}
             <div className="space-y-1">
               <Label htmlFor="edit-email" className="text-xs font-semibold text-slate-655">Correo Administrativo</Label>
@@ -718,7 +1490,7 @@ function AdminPage() {
                 <Input
                   id="edit-email"
                   type="email"
-                  className="pl-10 rounded-xl h-10 text-sm"
+                  className="pl-10 rounded-xl h-9.5 text-sm"
                   value={newEmail}
                   onChange={(e) => setNewEmail(e.target.value)}
                 />
@@ -737,7 +1509,7 @@ function AdminPage() {
                   }
                 }}
               >
-                <SelectTrigger className="h-10 rounded-xl text-sm">
+                <SelectTrigger className="h-9.5 rounded-xl text-sm">
                   <SelectValue placeholder="Seleccionar estado" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl shadow-elegant text-sm">
@@ -757,7 +1529,7 @@ function AdminPage() {
                 <Input
                   id="edit-pass"
                   type="password"
-                  className="pl-10 rounded-xl h-10 text-sm"
+                  className="pl-10 rounded-xl h-9.5 text-sm"
                   placeholder="Dejar en blanco para no cambiar"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
@@ -783,7 +1555,7 @@ function AdminPage() {
                   }
                 }}
               >
-                <SelectTrigger className="h-10 rounded-xl text-sm">
+                <SelectTrigger className="h-9.5 rounded-xl text-sm">
                   <SelectValue placeholder="Seleccionar plan" />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl shadow-elegant text-sm">
@@ -799,35 +1571,35 @@ function AdminPage() {
               </Select>
             </div>
 
-            {/* Días de vigencia / prueba del plan */}
+            {/* Días de vigencia / renovación */}
             <div className="space-y-1">
-              <Label htmlFor="edit-days-limit" className="text-xs font-semibold text-slate-655">Días de vigencia / prueba del plan</Label>
+              <Label htmlFor="edit-days-limit" className="text-xs font-semibold text-slate-655">Días de vigencia / renovación</Label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="edit-days-limit"
                   type="number"
                   min={0}
-                  className="pl-10 rounded-xl h-10 text-sm"
+                  className="pl-10 rounded-xl h-9.5 text-sm"
                   value={newDaysLimit}
                   onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)}
                 />
               </div>
-              <p className="text-[11px] text-muted-foreground">
-                Fecha de renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
+              <p className="text-[10.5px] text-muted-foreground">
+                Próxima renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
               </p>
             </div>
 
             {/* Sucursales Habilitadas */}
             <div className="space-y-1">
-              <Label htmlFor="edit-max-sucursales" className="text-xs font-semibold text-slate-655">Sucursales Habilitadas (Cupo Total)</Label>
+              <Label htmlFor="edit-max-sucursales" className="text-xs font-semibold text-slate-655">Cupo de Sucursales Habilitadas</Label>
               <div className="relative">
                 <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
                 <Input
                   id="edit-max-sucursales"
                   type="number"
                   min={1}
-                  className="pl-10 rounded-xl h-10 font-bold text-sm"
+                  className="pl-10 rounded-xl h-9.5 font-bold text-sm"
                   value={newMaxSucursales}
                   onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)}
                 />
@@ -835,15 +1607,15 @@ function AdminPage() {
             </div>
 
             {/* SECCIÓN MÓDULOS PERSONALIZADOS */}
-            <div className="md:col-span-2 border-t pt-3.5 mt-2">
-              <Label className="text-slate-700 dark:text-slate-355 font-bold block mb-2 text-xs uppercase tracking-wider">
-                Módulos Habilitados para esta Lavandería (Personalización)
+            <div className="md:col-span-2 border-t border-border/60 pt-2.5 mt-1">
+              <Label className="text-slate-700 dark:text-slate-300 font-bold block mb-2 text-xs uppercase tracking-wider">
+                Módulos Habilitados (Personalización)
               </Label>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
+                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
                   <div className="flex flex-col">
-                    <span className="text-xs font-semibold">WhatsApp</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Mensajería y alertas</span>
+                    <span className="text-xs font-bold">WhatsApp</span>
+                    <span className="text-[9px] text-muted-foreground leading-tight">Alertas</span>
                   </div>
                   <Switch
                     checked={modOverrideWa}
@@ -851,10 +1623,10 @@ function AdminPage() {
                   />
                 </label>
 
-                <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
                   <div className="flex flex-col">
-                    <span className="text-xs font-semibold">Facturación</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">DGII (e-CF / NCF)</span>
+                    <span className="text-xs font-bold">Facturación</span>
+                    <span className="text-[9px] text-muted-foreground leading-tight">e-CF / NCF</span>
                   </div>
                   <Switch
                     checked={modOverrideFiscal}
@@ -862,10 +1634,10 @@ function AdminPage() {
                   />
                 </label>
 
-                <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
                   <div className="flex flex-col">
-                    <span className="text-xs font-semibold">Sucursales</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Múltiples locales</span>
+                    <span className="text-xs font-bold">Sucursales</span>
+                    <span className="text-[9px] text-muted-foreground leading-tight">Múltiples</span>
                   </div>
                   <Switch
                     checked={modOverrideMultisucursal}
@@ -873,10 +1645,10 @@ function AdminPage() {
                   />
                 </label>
 
-                <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
                   <div className="flex flex-col">
-                    <span className="text-xs font-semibold">Logística</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Repartidores y envíos</span>
+                    <span className="text-xs font-bold">Logística</span>
+                    <span className="text-[9px] text-muted-foreground leading-tight">Envíos</span>
                   </div>
                   <Switch
                     checked={modOverrideLogistica}
@@ -884,10 +1656,10 @@ function AdminPage() {
                   />
                 </label>
 
-                <label className="flex items-center justify-between rounded-xl border border-input p-2.5 px-3 bg-card shadow-sm cursor-pointer hover:bg-accent/10 transition-all">
+                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
                   <div className="flex flex-col">
-                    <span className="text-xs font-semibold">Procesos</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight font-medium">Control de producción</span>
+                    <span className="text-xs font-bold">Procesos</span>
+                    <span className="text-[9px] text-muted-foreground leading-tight">Producción</span>
                   </div>
                   <Switch
                     checked={modOverrideProcesos}
@@ -941,14 +1713,69 @@ function AdminPage() {
   );
 }
 
-function KPI({ t, v, icon: Icon, accent }: { t: string; v: string; icon: typeof Building2; accent?: boolean }) {
+function KPI({
+  title,
+  value,
+  sub,
+  icon: Icon,
+  variant = "primary",
+}: {
+  title: string;
+  value: string;
+  sub?: React.ReactNode;
+  icon: any;
+  variant?: "primary" | "amber" | "emerald" | "rose" | "indigo";
+}) {
+  const styles = {
+    primary: {
+      card: "bg-gradient-primary text-white shadow-md border-0",
+      title: "text-white/80 font-semibold",
+      value: "text-white",
+      sub: "text-white/90",
+      icon: "text-white/80",
+    },
+    amber: {
+      card: "bg-amber-500/10 border border-amber-500/20 shadow-2xs",
+      title: "text-amber-800 dark:text-amber-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-amber-900 dark:text-amber-300",
+      icon: "text-amber-600 dark:text-amber-400",
+    },
+    emerald: {
+      card: "bg-emerald-500/10 border border-emerald-500/20 shadow-2xs",
+      title: "text-emerald-800 dark:text-emerald-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-emerald-900 dark:text-emerald-300",
+      icon: "text-emerald-600 dark:text-emerald-400",
+    },
+    rose: {
+      card: "bg-rose-500/10 border border-rose-500/20 shadow-2xs",
+      title: "text-rose-800 dark:text-rose-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-rose-900 dark:text-rose-300",
+      icon: "text-rose-600 dark:text-rose-400",
+    },
+    indigo: {
+      card: "bg-indigo-500/10 border border-indigo-500/20 shadow-2xs",
+      title: "text-indigo-800 dark:text-indigo-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-indigo-900 dark:text-indigo-200",
+      icon: "text-indigo-600 dark:text-indigo-400",
+    },
+  }[variant];
+
+  const isLong = value.length > 9;
+
   return (
-    <Card className={`border-none p-5 shadow-card ${accent ? "bg-gradient-primary text-white" : ""}`}>
-      <div className="flex items-start justify-between">
-        <div className={`text-xs uppercase ${accent ? "text-white/80" : "text-muted-foreground"}`}>{t}</div>
-        <Icon className={`h-4 w-4 ${accent ? "text-white/80" : "text-muted-foreground"}`} />
+    <Card className={`p-3.5 sm:p-5 h-full rounded-2xl ${styles.card}`}>
+      <div className="flex items-start justify-between gap-1.5">
+        <div className={`text-[10px] sm:text-xs uppercase tracking-wider ${styles.title}`}>{title}</div>
+        <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 ${styles.icon}`} />
       </div>
-      <div className="mt-2 font-display text-3xl">{v}</div>
+      <div className={`mt-1.5 sm:mt-2 font-display font-black tracking-tight ${styles.value} ${isLong ? "text-lg sm:text-xl xl:text-[26px]" : "text-xl sm:text-2xl lg:text-3xl"}`} title={value}>
+        {value}
+      </div>
+      {sub && <div className={`mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate ${styles.sub}`}>{sub}</div>}
     </Card>
   );
 }

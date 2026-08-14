@@ -2379,6 +2379,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   const [voidStart, setVoidStart] = useState("");
   const [voidEnd, setVoidEnd] = useState("");
   const [voidReason, setVoidReason] = useState("");
+  const [certFileName, setCertFileName] = useState<string>("");
 
   const queryClient = useQueryClient();
 
@@ -2477,6 +2478,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
       
       const configPayload: ECFConfig = {
         ...draft,
+        usar_credenciales_propias: false,
         is_active: activeValue,
         rnc_emisor: cleanRNC,
         id: config?.id || crypto.randomUUID(),
@@ -2550,12 +2552,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   async function testConnection() {
     setLoading(true);
     try {
-      const proneSoftEnv = config?.ambiente === 'pruebas' ? 'sandbox' : config?.ambiente === 'produccion' ? 'production' : undefined;
+      const activeAmbiente = draft.ambiente || config?.ambiente || 'pruebas';
+      const proneSoftEnv = activeAmbiente === 'pruebas' ? 'sandbox' : 'production';
       const client = getProneSoftClient(
-        config?.pronesoft_tenant_id, 
+        draft.pronesoft_tenant_id || config?.pronesoft_tenant_id, 
         proneSoftEnv,
-        draft.usar_credenciales_propias ? draft.pronesoft_client_id : undefined,
-        draft.usar_credenciales_propias ? draft.pronesoft_client_secret : undefined
+        draft.usar_credenciales_propias ? draft.pronesoft_client_id?.trim() : undefined,
+        draft.usar_credenciales_propias ? draft.pronesoft_client_secret?.trim() : undefined
       );
       const res = await client.testConnection();
       if (res.ok) {
@@ -2782,59 +2785,6 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   </Field>
                 )}
 
-                {isElectronic && (
-                  <div className="space-y-4 pt-4 pb-2 border-y">
-                    <div className="flex items-center justify-between">
-                      <div className="space-y-0.5">
-                        <div className="text-sm font-bold flex items-center gap-1.5 text-foreground">
-                          <Key className="h-4 w-4 text-primary" /> Usar credenciales propias (Pronesoft)
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          Activa esta opción si tienes tu propia cuenta en Pronesoft.
-                        </div>
-                      </div>
-                      <Switch 
-                        checked={!!draft.usar_credenciales_propias} 
-                        onCheckedChange={(v) => setDraft({ ...draft, usar_credenciales_propias: v })} 
-                      />
-                    </div>
-                    
-                    {draft.usar_credenciales_propias && (
-                      <div className="space-y-4 pt-2">
-                        <Field label="Client ID (Pronesoft)">
-                          <Input 
-                            type="password"
-                            className={FIELD} 
-                            value={draft.pronesoft_client_id || ""} 
-                            onChange={(e) => setDraft({ ...draft, pronesoft_client_id: e.target.value })} 
-                            placeholder="app_live_..."
-                          />
-                        </Field>
-                        <Field label="Client Secret (Pronesoft)">
-                          <Input 
-                            type="password"
-                            className={FIELD} 
-                            value={draft.pronesoft_client_secret || ""} 
-                            onChange={(e) => setDraft({ ...draft, pronesoft_client_secret: e.target.value })} 
-                            placeholder="sk_live_..."
-                          />
-                        </Field>
-                        <Field label="Tenant ID (Opcional - solo para sucursales)" hint="Si tu cuenta en Pronesoft maneja múltiples sucursales asociadas, pega el ID aquí. Si es tu cuenta directa principal, déjalo en blanco.">
-                          <Input 
-                            className={FIELD} 
-                            value={draft.pronesoft_tenant_id || ""} 
-                            onChange={(e) => setDraft({ ...draft, pronesoft_tenant_id: e.target.value })} 
-                            placeholder="Opcional (Ej: 550e8400-...)"
-                          />
-                        </Field>
-                        <p className="text-[10px] text-muted-foreground leading-tight">
-                          Estas credenciales se guardan de forma segura en tu tenant de Klynn. Tu cuenta se autenticará directamente con Pronesoft sin requerir intermediarios.
-                        </p>
-                      </div>
-                    )}
-                  </div>
-                )}
-
                 {/* Mostrar RNC en Ticket Switch */}
                 <div className="flex items-center justify-between p-3 border rounded-xl bg-accent/5">
                   <div className="space-y-0.5">
@@ -2890,32 +2840,36 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     {draft.certificate_data || config?.certificate_data ? (
                       <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
                         <div className="flex items-center gap-3 text-emerald-700 font-bold mb-1">
-                          <CheckCircle2 className="h-5 w-5" /> Cargado y Listo
+                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                          <span>Cargado y Listo</span>
                         </div>
-                        <p className="text-[10px] text-emerald-600">Certificado P12 adjunto.</p>
+                        <p className="text-xs text-emerald-800 font-medium">
+                          {certFileName ? `Archivo: ${certFileName}` : "Certificado P12 digital adjunto y activo."}
+                        </p>
                       </div>
                     ) : (
                       <div className="p-4 rounded-xl border border-dashed border-amber-200 bg-amber-50 text-center">
-                        <p className="text-xs text-amber-700">Pendiente de subir certificado.</p>
+                        <p className="text-xs text-amber-700 font-medium">Pendiente de subir certificado.</p>
                       </div>
                     )}
                     <Field label="Contraseña del .p12">
-                      <Input type="password" className={FIELD} value={draft.certificate_password || ""} onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} />
+                      <Input type="password" className={FIELD} value={draft.certificate_password || ""} onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} placeholder="Contraseña de tu clave privada" />
                     </Field>
                     <input type="file" id="cert-upload" className="hidden" accept=".p12,.pfx" onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
+                        setCertFileName(file.name);
                         const reader = new FileReader();
                         reader.onload = (ev) => {
                           const base64 = ev.target?.result?.toString().split(',')[1];
                           setDraft({ ...draft, certificate_data: base64 });
-                          toast.success("Certificado listo");
+                          toast.success(`Certificado ${file.name} cargado correctamente ✅`, { id: "cert-upload-toast" });
                         };
                         reader.readAsDataURL(file);
                       }
                     }} />
-                    <Button variant="outline" className="w-full h-11 rounded-xl" onClick={() => document.getElementById('cert-upload')?.click()}>
-                      <Upload className="mr-2 h-4 w-4" /> Subir Archivo
+                    <Button variant="outline" className="w-full h-11 rounded-xl font-bold" onClick={() => document.getElementById('cert-upload')?.click()}>
+                      <Upload className="mr-2 h-4 w-4" /> {draft.certificate_data ? "Reemplazar Certificado (.p12)" : "Subir Archivo (.p12)"}
                     </Button>
                   </div>
                 )}
