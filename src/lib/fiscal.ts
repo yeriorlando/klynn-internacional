@@ -26,7 +26,7 @@ import { getProneSoftClient, type ECFSubmitResponse } from './fiscal/pronesoft-c
 import { ordenToECFPayload } from './fiscal/orden-to-ecf';
 import { getECFConfig, getECFDocuments, saveECFDocument, updateECFConfig } from './storage';
 import { supabase } from '@/lib/supabase';
-import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument } from './storage';
+import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig } from './storage';
 import { toast } from 'sonner';
 
 // ─── Función principal: Emitir un eCF para una orden ─────────────────────────
@@ -212,6 +212,81 @@ export async function emitirECF(
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
+export interface DGIIContribuyente {
+  rnc: string;
+  name: string;
+  commercialName?: string;
+  status?: string;
+  regime?: string;
+  activity?: string;
+}
+
+/**
+ * Consulta la información oficial de un RNC/Cédula en el servicio DGII de Pronesoft.
+ */
+export async function consultarRNC(rncInput: string, ambiente?: 'pruebas' | 'produccion'): Promise<DGIIContribuyente | null> {
+  const raw = (rncInput || "").trim().toUpperCase();
+  if (raw.startsWith("SBX") || ambiente === "pruebas" || raw === "987654321") {
+    if (raw.includes("987654321") || raw === "987654321" || raw === "SBX987654321") {
+      return { rnc: "SBX987654321", name: "PRONESOFT SANDBOX TEST SRL" };
+    }
+    if (raw.includes("133190907") || raw === "133190907" || raw === "SBX133190907") {
+      return { rnc: "SBX133190907", name: "EMPRESA PRINCIPAL SANDBOX" };
+    }
+    if (raw.includes("111222333") || raw === "111222333" || raw === "SBX111222333") {
+      return { rnc: "SBX111222333", name: "CLIENTE COMPRADOR SANDBOX" };
+    }
+    return { rnc: raw.startsWith("SBX") ? raw : `SBX${raw}`, name: "EMPRESA PRUEBA SANDBOX" };
+  }
+
+  let cleanRnc = raw.replace(/\D/g, "");
+
+  if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) {
+    return null;
+  }
+
+  try {
+    // 1. Intento directo al microservicio público de Pronesoft
+    const res = await fetch(`https://dgii-rnc.pronesoft.com/get/${cleanRnc}`);
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.name) {
+        return data as DGIIContribuyente;
+      }
+    }
+  } catch {
+    // Si falla directo (ej: CORS en localhost), pasamos silenciosamente al proxy
+  }
+
+  try {
+    // 2. Fallback vía Edge function pronesoft-proxy
+    const { data, error } = await supabase.functions.invoke('pronesoft-proxy', {
+      body: { action: 'get-rnc', payload: { rnc: cleanRnc } }
+    });
+    if (!error && data && data.name) {
+      return data as DGIIContribuyente;
+    }
+  } catch (proxyErr) {
+    console.warn("Aviso en consulta RNC vía proxy:", proxyErr);
+  }
+
+  return null;
+}
+
+/**
+ * Evalúa si la configuración fiscal está lista para emitir o comunicarse con Pronesoft.
+ * 
+ * - Modalidad 1 (Cuenta Maestra Klynn): Requiere is_active y pronesoft_tenant_id.
+ * - Modalidad 2 (Credenciales Propias): Requiere is_active y que existan client_id y client_secret.
+ */
+export function isECFReady(config: ECFConfig | null | undefined): boolean {
+  if (!config || !config.is_active) return false;
+  if (config.usar_credenciales_propias) {
+    return Boolean(config.pronesoft_client_id?.trim() && config.pronesoft_client_secret?.trim());
+  }
+  return Boolean(config.pronesoft_tenant_id);
+}
+
 function mapStatus(
   status:      ECFSubmitResponse['status'],
   legalStatus?: ECFSubmitResponse['legalStatus']
@@ -224,18 +299,40 @@ function mapStatus(
 }
 
 /**
- * Registra automáticamente un negocio de Klynn en Pronesoft.
+ * Registra automáticamente un negocio de Klynn en Pronesoft como empresa asociada.
  * 
- * 1. Crea la 'Associated Company' en Pronesoft.
+ * 1. Crea la 'Associated Company' en Pronesoft bajo la cuenta de Klynn.
  * 2. Guarda el x-tenant-id resultante en la configuración local.
  */
-export async function registerTenantInPronesoft(tenantId: string): Promise<string> {
+export async function registerTenantInPronesoft(
+  tenantId: string,
+  explicitConfig?: Partial<ECFConfig>
+): Promise<string> {
   // 1. Obtener datos del negocio y config actual
-  const config = await getECFConfig(tenantId);
-  if (!config) throw new Error("Configuración fiscal no inicializada");
+  let config = await getECFConfig(tenantId);
+  if (!config && explicitConfig) {
+    config = explicitConfig as ECFConfig;
+  }
+  if (!config) {
+    const { data: tData } = await supabase.from('tenants').select('nombre, rnc').eq('id', tenantId).single();
+    config = {
+      id: crypto.randomUUID(),
+      tenant_id: tenantId,
+      rnc_emisor: tData?.rnc || "",
+      razon_social: tData?.nombre || "Lavandería",
+      ambiente: "pruebas",
+      is_active: true,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    } as ECFConfig;
+  }
 
-  // Buscamos el nombre del tenant para tener un fallback si razon_social está vacío
-  const { data: tenantData } = await supabase.from('tenants').select('nombre').eq('id', tenantId).single();
+  // Si usa credenciales propias, no requiere registrar empresa asociada bajo la cuenta de Klynn
+  if (config.usar_credenciales_propias) {
+    return config.pronesoft_tenant_id || "";
+  }
+
+  const { data: tenantData } = await supabase.from('tenants').select('nombre, rnc, telefono, direccion').eq('id', tenantId).single();
 
   const proneSoftEnv = config.ambiente === 'pruebas' ? 'sandbox' : config.ambiente === 'produccion' ? 'production' : undefined;
   const client = getProneSoftClient(
@@ -246,23 +343,35 @@ export async function registerTenantInPronesoft(tenantId: string): Promise<strin
   );
 
   const companyName = config.razon_social || tenantData?.nombre || "Lavanderia Klynn";
+  let rncToRegister = (config.rnc_emisor || tenantData?.rnc || "SBX987654321").trim().toUpperCase();
+
+  // En sandbox, asegurar el prefijo SBX requerido por Pronesoft
+  if (proneSoftEnv === 'sandbox') {
+    if (!rncToRegister.startsWith('SBX')) {
+      const digitsOnly = rncToRegister.replace(/\D/g, '') || '987654321';
+      rncToRegister = `SBX${digitsOnly}`;
+    }
+  }
 
   // 2. Registrar en Pronesoft (Tanto en Sandbox como en Producción)
   try {
     let pronesoftTenantId = "";
 
     const res = await client.createAssociatedCompany({
-      rnc: config.rnc_emisor,
+      rnc: rncToRegister,
       name: companyName
     });
 
-    if (!res.id) throw new Error("Pronesoft no devolvió un ID de empresa");
-    pronesoftTenantId = res.id;
+    const tenantResultId = res?.id || res?.businessId || (typeof res === 'string' ? res : '');
+    if (!tenantResultId) throw new Error("Pronesoft no devolvió un ID de empresa");
+    pronesoftTenantId = tenantResultId;
 
     // 3. Actualizar configuración en Supabase
     await updateECFConfig(tenantId, {
       pronesoft_tenant_id: pronesoftTenantId,
-      is_active: true
+      is_active: true,
+      rnc_emisor: rncToRegister,
+      razon_social: companyName
     });
 
     return pronesoftTenantId;
@@ -281,13 +390,17 @@ export async function uploadCertificateToPronesoft(
   password: string
 ): Promise<boolean> {
   const config = await getECFConfig(tenantId);
-  if (!config?.pronesoft_tenant_id) {
-    throw new Error("Primero debes activar el módulo fiscal");
+  if (!config) {
+    throw new Error("Configuración fiscal no encontrada");
+  }
+
+  if (!isECFReady(config)) {
+    throw new Error("Primero debes activar el módulo fiscal y completar tus credenciales");
   }
 
   const proneSoftEnv2 = config.ambiente === 'pruebas' ? 'sandbox' : config.ambiente === 'produccion' ? 'production' : undefined;
   const client = getProneSoftClient(
-    config.pronesoft_tenant_id, 
+    config.pronesoft_tenant_id || undefined, 
     proneSoftEnv2,
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
@@ -307,7 +420,7 @@ export async function importSequencesToPronesoft(
 ): Promise<boolean> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    config?.pronesoft_tenant_id || undefined,
     config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
@@ -322,7 +435,7 @@ export async function createSequencePronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    config?.pronesoft_tenant_id || undefined,
     config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
@@ -343,7 +456,7 @@ export async function listSequencesPronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    config?.pronesoft_tenant_id || undefined,
     config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
@@ -357,7 +470,7 @@ export async function getNextNumberPronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    config?.pronesoft_tenant_id || undefined,
     config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined
@@ -373,12 +486,12 @@ export async function anularSecuenciasPronesoft(
   reason: string
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
-  if (!config?.pronesoft_tenant_id) {
-    throw new Error("El módulo fiscal no está activo");
+  if (!config || !isECFReady(config)) {
+    throw new Error("El módulo fiscal no está activo o configurado");
   }
 
   const client = getProneSoftClient(
-    config.pronesoft_tenant_id,
+    config.pronesoft_tenant_id || undefined,
     config.ambiente === 'pruebas' ? 'sandbox' : 'production',
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined

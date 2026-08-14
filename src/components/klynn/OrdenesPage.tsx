@@ -21,7 +21,7 @@ import {
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
   updateOrdenEstado, can
 } from "@/lib/storage";
-import { emitirECF, getECFConfig } from "@/lib/fiscal";
+import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
 import { toast } from "sonner";
 import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock } from "lucide-react";
 import { supabase } from "@/lib/supabase";
@@ -383,12 +383,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       if (anular.tipo_ecf && anular.ncf) {
         try {
           const cfg = await getECFConfig(tenant.id);
-          if (cfg?.is_active && cfg.pronesoft_tenant_id) {
+          if (isECFReady(cfg)) {
             const cliente = clientes.find(c => c.id === anular.cliente_id) || null;
             const res = await emitirECF(
               anular,
               cliente,
-              cfg.pronesoft_tenant_id,
+              cfg?.pronesoft_tenant_id || undefined,
               cfg,
               tenant,
               "E34", // Tipo: Nota de Crédito
@@ -477,14 +477,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       if (isECF) {
         try {
           const cfg = await getECFConfig(tenant.id);
-          if (cfg?.is_active && cfg.pronesoft_tenant_id) {
+          if (isECFReady(cfg)) {
             const cliente = clientes.find(c => c.id === debito.cliente_id) || null;
             // Clonamos la orden para ajustar el total de la ND
             const ordenND = { ...debito, total: montoDebito, subtotal: montoDebito, itbis: 0 };
             const res = await emitirECF(
               ordenND,
               cliente,
-              cfg.pronesoft_tenant_id,
+              cfg?.pronesoft_tenant_id || undefined,
               cfg,
               tenant,
               "E33", // Nota de Débito
@@ -555,14 +555,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       if (isECF) {
         try {
           const cfg = await getECFConfig(tenant.id);
-          if (cfg?.is_active && cfg.pronesoft_tenant_id) {
+          if (isECFReady(cfg)) {
             const cliente = clientes.find(c => c.id === credito.cliente_id) || null;
             // Clonamos la orden para ajustar el total de la NC
             const ordenNC = { ...credito, total: montoCredito, subtotal: montoCredito, itbis: 0 };
             const res = await emitirECF(
               ordenNC,
               cliente,
-              cfg.pronesoft_tenant_id,
+              cfg?.pronesoft_tenant_id || undefined,
               cfg,
               tenant,
               "E34", // Nota de Crédito

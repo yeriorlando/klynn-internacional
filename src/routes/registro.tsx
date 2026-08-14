@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import {
   ArrowLeft, ArrowRight, Check, Building2, Palette, Package, UserCircle2, PartyPopper,
   AlertCircle, Search, MapPin, Upload, Image as ImageIcon, Receipt, MessageCircle, Sparkles,
-  Eye, EyeOff, Cloud, Loader2, Droplet,
+  Eye, EyeOff, Cloud, Loader2, Droplet, Landmark, ShieldCheck, Trash2,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -16,10 +16,11 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   PLANS, formatRD, formatPhoneRD, isSlugAvailable, registerTenant,
   setActiveTenant, uid, PROVINCIAS_RD, NCF_TIPOS, DEFAULT_CONFIG, getGlobalConfig, getPlans,
-  updateECFConfig,
-  type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan,
+  updateECFConfig, saveECFConfig,
+  type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan, type ECFConfig,
 } from "@/lib/storage";
-import { registerTenantInPronesoft } from "@/lib/fiscal";
+import { registerTenantInPronesoft, consultarRNC } from "@/lib/fiscal";
+import { toast } from "sonner";
 
 // Definimos IS_LOCAL_MODE como false para asegurar compatibilidad 100% cloud
 const IS_LOCAL_MODE = false;
@@ -45,6 +46,7 @@ const STEPS = [
 interface FormState {
   // empresa
   nombre: string;
+  razon_social: string;
   rnc: string;
   telefono: string;
   provincia: string;
@@ -69,6 +71,7 @@ interface FormState {
 
 const initial: FormState = {
   nombre: "",
+  razon_social: "",
   rnc: "",
   telefono: "",
   provincia: "",
@@ -125,6 +128,40 @@ function RegistroPage() {
       update("logo_url", compressed);
     } catch {
       alert("Error al procesar la imagen");
+    }
+  }
+
+  const [loadingRNC, setLoadingRNC] = useState(false);
+  const lastSearchedRNCRef = useRef<string>("");
+
+  async function handleSearchRNC(rncValue?: string, force = false) {
+    const val = rncValue !== undefined ? rncValue : form.rnc;
+    const cleanRnc = val.replace(/\D/g, "");
+    if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) return;
+
+    if (!force && lastSearchedRNCRef.current === cleanRnc) return;
+    lastSearchedRNCRef.current = cleanRnc;
+
+    setLoadingRNC(true);
+    try {
+      const contribuyente = await consultarRNC(cleanRnc);
+      if (contribuyente && contribuyente.name) {
+        const suggestedName = contribuyente.commercialName || contribuyente.name;
+        setForm((f) => ({
+          ...f,
+          rnc: contribuyente.rnc || cleanRnc,
+          razon_social: contribuyente.name,
+          nombre: f.nombre.trim() && f.nombre !== "Lavandería La Burbuja" ? f.nombre : suggestedName,
+          slug: !f.slugTouched ? slugify(suggestedName) : f.slug,
+        }));
+        toast.success(`Contribuyente DGII: ${contribuyente.name} ✅`, { id: "dgii-rnc-toast" });
+      } else {
+        toast.error("No se encontró el contribuyente en DGII", { id: "dgii-rnc-toast" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingRNC(false);
     }
   }
 
@@ -193,10 +230,12 @@ function RegistroPage() {
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
     };
+    const cleanRnc = form.rnc.replace(/\D/g, "");
     const tenant: Tenant = {
       id: uid("ten"),
       nombre: form.nombre,
       slug: form.slug,
+      rnc: cleanRnc || undefined,
       telefono: form.telefono,
       direccion: "",
       provincia: form.provincia,
@@ -229,21 +268,22 @@ function RegistroPage() {
     try {
       await registerTenant(tenant, admin);
 
-      // Si el usuario proporcionó su RNC, vinculamos fiscalmente la empresa en Pronesoft
-      const cleanRnc = form.rnc.replace(/\D/g, "");
-      if (cleanRnc) {
-        try {
-          await updateECFConfig(tenant.id, {
-            rnc_emisor: cleanRnc,
-            razon_social: form.nombre,
-            ambiente: 'pruebas',
-            usar_credenciales_propias: false,
-            is_active: true
-          });
-          await registerTenantInPronesoft(tenant.id);
-        } catch (proneErr: any) {
-          console.warn("Aviso al vincular empresa fiscal en Pronesoft:", proneErr?.message || proneErr);
-        }
+      // Guardar configuración inicial fiscal (ecf_config) vinculada al tenant
+      try {
+        await saveECFConfig({
+          id: crypto.randomUUID(),
+          tenant_id: tenant.id,
+          rnc_emisor: cleanRnc || "",
+          razon_social: form.razon_social || form.nombre,
+          nombre_comercial: form.nombre,
+          ambiente: "pruebas",
+          usar_credenciales_propias: false,
+          is_active: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        } as ECFConfig);
+      } catch (ecfInitErr) {
+        console.warn("Aviso al inicializar ecf_config:", ecfInitErr);
       }
 
       localStorage.setItem("klynn_tour_is_new_registration", "true");
@@ -329,32 +369,32 @@ function RegistroPage() {
         </div>
       </header>
 
-      <main className="container mx-auto pb-16 pt-3">
-        <div className="mx-auto mb-5 max-w-2xl px-4">
-          <div className="flex items-center gap-2 rounded-full border border-border bg-white/50 p-1.5 shadow-sm">
+      <main className="container mx-auto pb-12 pt-2">
+        <div className="mx-auto mb-4 max-w-2xl px-2">
+          <div className="flex items-center gap-1.5 rounded-full border border-border bg-white/50 p-1 shadow-sm">
             {filteredSteps.map((s) => {
               const done = step > s.id;
               const current = step === s.id;
               return (
-                <div key={s.id} className={`relative flex transition-all duration-700 ${current ? "flex-[2]" : "flex-1"}`}>
+                <div key={s.id} className={`relative flex transition-all duration-500 ${current ? "flex-[2]" : "flex-1"}`}>
                   <motion.div
                     animate={{
                       backgroundColor: done ? "var(--success)" : current ? "var(--primary)" : "transparent",
                     }}
-                    className={`flex h-11 w-full items-center gap-2 overflow-hidden rounded-full px-4 transition-all duration-500 ${
+                    className={`flex h-9 w-full items-center gap-1.5 overflow-hidden rounded-full px-3 transition-all duration-300 ${
                       done || current ? "text-white" : "text-slate-400"
                     } ${!done && !current ? "hover:bg-white/50" : ""}`}
                   >
-                    <div className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold transition-colors ${
+                    <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
                       done || current ? "bg-white/20" : "bg-slate-200 text-slate-500"
                     }`}>
-                      {done ? <Check className="h-4 w-4" /> : s.id}
+                      {done ? <Check className="h-3 w-3" /> : s.id}
                     </div>
                     {(current || done) && (
                       <motion.span
                         initial={{ opacity: 0, width: 0 }}
                         animate={{ opacity: 1, width: "auto" }}
-                        className="overflow-hidden whitespace-nowrap text-[11px] font-bold uppercase tracking-widest"
+                        className="overflow-hidden whitespace-nowrap text-[10px] font-bold uppercase tracking-wider"
                       >
                         {s.label}
                       </motion.span>
@@ -366,21 +406,21 @@ function RegistroPage() {
           </div>
         </div>
 
-        <div className="mx-auto max-w-2xl rounded-3xl border border-border bg-surface p-6 shadow-elegant md:p-10">
+        <div className="mx-auto max-w-2xl rounded-2xl border border-border/80 bg-surface p-5 shadow-sm sm:p-6 md:p-8">
           {isProvisioning ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center py-8 text-center">
               <motion.div
                 animate={{ rotate: 360 }}
                 transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                className="mb-8 rounded-full border-4 border-primary/20 border-t-primary p-4"
+                className="mb-6 rounded-full border-4 border-primary/20 border-t-primary p-3"
               >
-                <Droplet className="h-12 w-12 text-primary" fill="currentColor" />
+                <Droplet className="h-10 w-10 text-primary" fill="currentColor" />
               </motion.div>
-              <h2 className="text-2xl font-bold">Creando tu espacio</h2>
-              <p className="mt-2 text-muted-foreground italic">
+              <h2 className="text-xl font-bold">Creando tu espacio</h2>
+              <p className="mt-1 text-xs text-muted-foreground italic">
                 {provisioningSteps[provisioningStep]}
               </p>
-              <div className="mt-8 h-1.5 w-64 overflow-hidden rounded-full bg-slate-100">
+              <div className="mt-6 h-1.5 w-56 overflow-hidden rounded-full bg-slate-100">
                 <motion.div
                   className="h-full bg-primary"
                   initial={{ width: "0%" }}
@@ -392,29 +432,84 @@ function RegistroPage() {
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
-                initial={{ opacity: 0, x: 24 }}
+                initial={{ opacity: 0, x: 16 }}
                 animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -24 }}
-                transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                exit={{ opacity: 0, x: -16 }}
+                transition={{ duration: 0.25, ease: "easeInOut" }}
               >
               {step === 1 && (
                 <>
-                  <h1 className="mb-2 text-3xl font-bold">Cuéntanos de tu lavandería</h1>
-                  <p className="mb-8 text-muted-foreground">Solo lo esencial. El resto lo configuras después.</p>
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <Field label="Nombre comercial *" error={errors.nombre}>
-                      <Input value={form.nombre} onChange={(e) => update("nombre", e.target.value)} placeholder="Lavandería La Burbuja" />
-                    </Field>
-                    <Field label="RNC / Cédula Fiscal (Opcional)" error={errors.rnc}>
-                      <Input value={form.rnc} onChange={(e) => update("rnc", e.target.value)} placeholder="Ej. 133-19090-7 o 001-1234567-8" />
-                    </Field>
-                    <Field label="Teléfono *" error={errors.telefono}>
-                      <Input value={form.telefono} onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} placeholder="809-555-0142" />
+                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Cuéntanos de tu lavandería</h1>
+                  <p className="mb-4 text-xs text-muted-foreground">Solo lo esencial. El resto lo configuras después.</p>
+
+                  {/* Asistente Inteligente DGII Banner Compacto */}
+                  <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.02] px-3.5 py-2.5 transition-all">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                          <Landmark className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-800 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                            <span className="whitespace-nowrap">¿Eres contribuyente ante DGII?</span>
+                            <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shrink-0 whitespace-nowrap">
+                              Consultar ante DGII
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-muted-foreground">
+                            Escribe tu RNC o Cédula para autocompletar el nombre oficial.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="relative flex items-center shrink-0 w-full sm:w-48">
+                        <Input 
+                          value={form.rnc} 
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            update("rnc", val);
+                            const clean = val.replace(/\D/g, "");
+                            if (clean.length === 9 || clean.length === 11) {
+                              handleSearchRNC(clean);
+                            }
+                          }} 
+                          onBlur={() => handleSearchRNC()}
+                          placeholder="Ej: 133-19090-7" 
+                          className="h-8 text-xs pr-7 bg-white border-primary/25 focus-visible:ring-primary/20 shadow-none rounded-lg"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleSearchRNC(undefined, true)}
+                          disabled={loadingRNC}
+                          className="absolute right-1.5 text-muted-foreground hover:text-primary transition-colors p-0.5"
+                          title="Buscar en DGII"
+                        >
+                          {loadingRNC ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : <Search className="h-3.5 w-3.5 text-primary" />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="sm:col-span-2">
+                      <Field label="Nombre comercial de tu lavandería *" error={errors.nombre}>
+                        <Input 
+                          value={form.nombre} 
+                          onChange={(e) => {
+                            update("nombre", e.target.value);
+                            if (!form.slugTouched) update("slug", slugify(e.target.value));
+                          }} 
+                          placeholder="Ej. Lavandería La Burbuja o Dinnca Comercial" 
+                          className="h-9 text-xs sm:text-sm"
+                        />
+                      </Field>
+                    </div>
+                    <Field label="Teléfono / WhatsApp *" error={errors.telefono}>
+                      <Input value={form.telefono} onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} placeholder="809-555-0142" className="h-9 text-xs sm:text-sm" />
                     </Field>
                     <Field label="Provincia *" error={errors.provincia}>
-                      <button type="button" onClick={() => setProvOpen(true)} className="flex h-11 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-sm shadow-sm hover:bg-accent/30 transition-all">
+                      <button type="button" onClick={() => setProvOpen(true)} className="flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-xs sm:text-sm shadow-sm hover:bg-accent/30 transition-all">
                         <span className={form.provincia ? "text-foreground font-medium" : "text-muted-foreground"}>{form.provincia || "Selecciona tu provincia..."}</span>
-                        <MapPin className="h-4 w-4 text-muted-foreground" />
+                        <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
                       </button>
                     </Field>
                   </div>
@@ -423,47 +518,51 @@ function RegistroPage() {
 
               {step === 2 && (
                 <>
-                  <h1 className="mb-2 text-3xl font-bold">Personaliza tu marca</h1>
-                  <p className="mb-8 text-muted-foreground">Define la identidad de tu lavandería.</p>
-                  <div className="grid gap-6">
-                    {/* Branding Preview al inicio */}
-                    <div className="rounded-3xl border border-border/80 bg-slate-50/50 p-6 md:p-8 backdrop-blur-sm relative overflow-hidden text-center shadow-inner">
-                      <div className="absolute -left-10 -top-10 h-32 w-32 rounded-full bg-primary/5 blur-[30px] pointer-events-none" />
-                      <div className="mb-4 text-center text-xs font-semibold uppercase tracking-wider text-muted-foreground/80">Vista previa de tu marca</div>
-                      <div className="flex flex-col items-center gap-4">
+                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Personaliza tu marca</h1>
+                  <p className="mb-4 text-xs text-muted-foreground">Define la identidad visual de tu lavandería.</p>
+                  
+                  <div className="space-y-3">
+                    {/* Branding Preview Compacto y Equilibrado */}
+                    <div className="rounded-xl border border-border/80 bg-slate-50/70 p-3 sm:p-3.5 text-center relative overflow-hidden shadow-inner">
+                      <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
                         <div
-                          className="relative h-32 w-32 shrink-0 overflow-hidden rounded-full border-[4px] border-white shadow-elegant transition-all duration-500 bg-white"
+                          className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm transition-all duration-300 bg-white"
                           style={{ borderColor: form.color_primario }}
                         >
                           {form.logo_url ? (
                             <img src={form.logo_url} alt="logo" className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center bg-slate-50">
-                               <Building2 className="h-14 w-14 text-slate-300" />
+                              <Building2 className="h-7 w-7 text-slate-300" />
                             </div>
                           )}
                         </div>
-                        <div className="text-center">
-                          <div className="text-3xl font-display font-bold tracking-tight mb-2" style={{ color: form.color_primario }}>{form.nombre || "Tu Lavandería"}</div>
+                        <div className="text-center sm:text-left min-w-0">
+                          <div 
+                            className="text-lg font-display font-bold tracking-tight truncate max-w-[300px]" 
+                            style={{ color: form.color_primario }}
+                          >
+                            {form.nombre || "Tu Lavandería"}
+                          </div>
                           
-                          {/* El botón de subir logo justo debajo del nombre de la lavandería con su icono */}
-                          <div className="flex items-center justify-center gap-2 mt-3">
+                          <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1.5">
                             <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                             <button
                               type="button"
                               onClick={() => logoInputRef.current?.click()}
-                              className="h-9 px-4 rounded-full bg-white hover:bg-slate-50 text-xs font-bold text-slate-700 border border-slate-200 shadow-sm flex items-center gap-1.5 transition-all hover:scale-105 active:scale-95"
+                              className="h-6 px-2.5 rounded-full bg-white hover:bg-slate-50 text-[11px] font-semibold text-slate-700 border border-slate-200 shadow-none flex items-center gap-1 transition-all active:scale-95"
                             >
-                              <Upload className="h-3.5 w-3.5 text-slate-500" /> {form.logo_url ? "Cambiar logotipo" : "Subir logotipo"}
+                              <Upload className="h-3 w-3 text-slate-500" /> {form.logo_url ? "Cambiar logo" : "Subir logo"}
                             </button>
                             {form.logo_url && (
                               <button
                                 type="button"
                                 onClick={() => update("logo_url", "")}
-                                className="h-9 w-9 rounded-full bg-destructive/10 hover:bg-destructive text-destructive hover:text-white flex items-center justify-center transition-all hover:scale-105 active:scale-95 text-sm font-bold animate-fade-in"
+                                className="h-6 px-2 rounded-full bg-red-50 hover:bg-red-100 text-destructive border border-red-200/60 flex items-center gap-1 transition-all active:scale-95 text-[11px] font-medium"
                                 title="Quitar logotipo"
                               >
-                                ×
+                                <Trash2 className="h-3 w-3" />
+                                <span>Quitar</span>
                               </button>
                             )}
                           </div>
@@ -471,10 +570,7 @@ function RegistroPage() {
                       </div>
                     </div>
 
-
-
-                    <div className="flex flex-col items-center justify-center gap-6 mt-4">
-                      {/* Selector de color centrado */}
+                    <div className="pt-0.5">
                       <ColorField label="Color principal de tu marca" value={form.color_primario} onChange={(v) => update("color_primario", v)} />
                     </div>
                   </div>
@@ -483,9 +579,9 @@ function RegistroPage() {
 
               {step === 3 && (
                 <>
-                  <h1 className="mb-2 text-3xl font-bold">Elige tu plan</h1>
-                  <p className="mb-8 text-muted-foreground">{globalConfig.trialDays} días gratis. Sin tarjeta de crédito.</p>
-                  <div className="grid gap-4">
+                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Elige tu plan</h1>
+                  <p className="mb-4 text-xs text-muted-foreground">{globalConfig.trialDays} días gratis. Sin tarjeta de crédito.</p>
+                  <div className="grid gap-2">
                     {plans.map((p) => {
                       const sel = form.plan_id === p.id;
                       return (
@@ -493,29 +589,33 @@ function RegistroPage() {
                           key={p.id}
                           type="button"
                           onClick={() => update("plan_id", p.id)}
-                          className={`text-left rounded-2xl border-2 p-5 transition-all duration-300 ${sel ? "border-primary bg-primary/5 shadow-sm" : "border-slate-100 bg-white hover:border-slate-200"}`}
+                          className={`text-left rounded-xl border p-3 transition-all duration-200 ${
+                            sel ? "border-primary bg-primary/[0.03] shadow-sm" : "border-slate-200 bg-white hover:border-slate-300"
+                          }`}
                         >
-                          <div className="flex items-center justify-between gap-4">
-                            <div className="flex-1">
-                              <div className="flex items-center gap-2">
-                                <span className="text-xl font-bold text-slate-900">{p.nombre}</span>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-sm font-bold text-slate-900">{p.nombre}</span>
                                 {p.id === "pro" && (
-                                  <span className="rounded-md bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600 uppercase tracking-tighter">
+                                  <span className="rounded bg-orange-100 px-1.5 py-0.2 text-[9px] font-bold text-orange-600 uppercase tracking-tight">
                                     Popular
                                   </span>
                                 )}
                               </div>
-                              <div className="mt-1 text-sm text-slate-500">
+                              <div className="text-xs text-slate-500 truncate mt-0.5">
                                 {p.limite_empleados} empleados · {p.limite_ordenes_mes ? `${p.limite_ordenes_mes} órdenes/mes` : "órdenes ilimitadas"}
                               </div>
                             </div>
-                            <div className="flex items-center gap-8">
+                            <div className="flex items-center gap-3 shrink-0">
                               <div className="text-right">
-                                <div className="text-2xl font-bold text-slate-900">{formatRD(p.precio_mensual).replace("DOP", "RD$")}</div>
-                                <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">/mes</div>
+                                <span className="text-base font-bold text-slate-900">{formatRD(p.precio_mensual).replace("DOP", "RD$")}</span>
+                                <span className="text-[10px] text-slate-400"> /mes</span>
                               </div>
-                              <div className={`flex h-8 w-8 items-center justify-center rounded-full border-2 transition-all ${sel ? "border-primary bg-primary text-white shadow-[0_0_0_4px_rgba(15,76,129,0.1)]" : "border-slate-200 bg-white"}`}>
-                                {sel && <Check className="h-5 w-5" strokeWidth={3} />}
+                              <div className={`flex h-5 w-5 items-center justify-center rounded-full border transition-all ${
+                                sel ? "border-primary bg-primary text-white" : "border-slate-300 bg-white"
+                              }`}>
+                                {sel && <Check className="h-3 w-3" strokeWidth={3} />}
                               </div>
                             </div>
                           </div>
@@ -528,29 +628,29 @@ function RegistroPage() {
 
               {step === 4 && (
                 <>
-                  <h1 className="mb-2 text-3xl font-bold">Crea tu usuario administración</h1>
-                  <p className="mb-8 text-muted-foreground">Tendrás acceso total al panel de tu lavandería.</p>
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <Field label="Nombre completo *" error={errors.admin_nombre} className="md:col-span-2">
-                      <Input value={form.admin_nombre} onChange={(e) => update("admin_nombre", e.target.value)} placeholder="María González" />
+                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Crea tu usuario administrador</h1>
+                  <p className="mb-4 text-xs text-muted-foreground">Tendrás acceso total al panel de tu lavandería.</p>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="Nombre completo *" error={errors.admin_nombre} className="sm:col-span-2">
+                      <Input value={form.admin_nombre} onChange={(e) => update("admin_nombre", e.target.value)} placeholder="María González" className="h-9 text-xs sm:text-sm" />
                     </Field>
-                    <Field label="Email *" error={errors.admin_email} className="md:col-span-2">
-                      <Input type="email" value={form.admin_email} onChange={(e) => update("admin_email", e.target.value)} placeholder="admin@tulavanderia.do" />
+                    <Field label="Email *" error={errors.admin_email} className="sm:col-span-2">
+                      <Input type="email" value={form.admin_email} onChange={(e) => update("admin_email", e.target.value)} placeholder="admin@tulavanderia.do" className="h-9 text-xs sm:text-sm" />
                     </Field>
                     <Field label="Contraseña *" error={errors.admin_password}>
                       <div className="relative">
-                        <Input type={showPass ? "text" : "password"} value={form.admin_password} onChange={(e) => update("admin_password", e.target.value)} placeholder="••••••••" className="pr-10" />
-                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          {showPass ? <EyeOff size={18} /> : <Eye size={18} />}
+                        <Input type={showPass ? "text" : "password"} value={form.admin_password} onChange={(e) => update("admin_password", e.target.value)} placeholder="••••••••" className="h-9 pr-9 text-xs sm:text-sm" />
+                        <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
+                          {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                         </button>
                       </div>
                       <PasswordStrengthIndicator password={form.admin_password} />
                     </Field>
                     <Field label="Confirmar *" error={errors.admin_password_confirm}>
                       <div className="relative">
-                        <Input type={showConfirm ? "text" : "password"} value={form.admin_password_confirm} onChange={(e) => update("admin_password_confirm", e.target.value)} placeholder="••••••••" className="pr-10" />
-                        <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600">
-                          {showConfirm ? <EyeOff size={18} /> : <Eye size={18} />}
+                        <Input type={showConfirm ? "text" : "password"} value={form.admin_password_confirm} onChange={(e) => update("admin_password_confirm", e.target.value)} placeholder="••••••••" className="h-9 pr-9 text-xs sm:text-sm" />
+                        <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
+                          {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                         </button>
                       </div>
                     </Field>
@@ -572,21 +672,21 @@ function RegistroPage() {
         )}
 
           {step < 5 && (
-            <div className="mt-10 flex items-center justify-between border-t border-border pt-8">
+            <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
               <Button 
                 variant="outline" 
                 onClick={prev} 
                 disabled={step === 1}
-                className="h-9 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-bold"
+                className="h-8 px-3.5 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
               >
-                <ArrowLeft className="mr-1 h-4 w-4" /> Atrás
+                <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Atrás
               </Button>
               <Button 
                 onClick={next} 
                 size="sm"
-                className="bg-primary text-white shadow-glow hover:opacity-95 font-bold h-9 px-6"
+                className="bg-primary text-white shadow-sm hover:opacity-95 font-bold h-8 px-5 text-xs"
               >
-                {step === 4 ? "Crear lavandería" : "Continuar"} <ArrowRight className="ml-1 h-4 w-4" />
+                {step === 4 ? "Crear lavandería" : "Continuar"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
               </Button>
             </div>
           )}
@@ -610,35 +710,35 @@ function SuccessCard({ tenant, adminNombre, adminEmail, globalConfig, onEnter }:
     : (PLANS.find((p) => p.id === tenant.plan_id)?.nombre || tenant.plan_id);
 
   return (
-    <div className="text-center">
+    <div className="text-center py-2">
       <motion.div
         initial={{ scale: 0.5, opacity: 0 }}
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: "spring", stiffness: 260, damping: 20 }}
-        className="relative mx-auto mb-4 h-28 w-28"
+        className="relative mx-auto mb-3 h-16 w-16"
       >
         <div className="relative flex h-full w-full items-center justify-center overflow-hidden rounded-full border border-slate-100 bg-white shadow-sm">
            {tenant.logo_url ? (
              <img src={tenant.logo_url} alt="Logo" className="h-full w-full object-cover" />
            ) : (
-             <PartyPopper className="h-12 w-12 text-primary" />
+             <PartyPopper className="h-8 w-8 text-primary" />
            )}
         </div>
       </motion.div>
 
       <motion.div
-        initial={{ y: 20, opacity: 0 }}
+        initial={{ y: 15, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
-        transition={{ delay: 0.2 }}
+        transition={{ delay: 0.15 }}
       >
-        <h1 className="mb-1 text-3xl font-bold tracking-tight">¡Bienvenido, {adminNombre.split(" ")[0]}!</h1>
-        <p className="mb-5 text-sm text-muted-foreground text-balance">Tu lavandería <strong className="text-foreground">{tenant.nombre}</strong> ya está lista.</p>
+        <h1 className="mb-0.5 text-2xl font-bold tracking-tight">¡Bienvenido, {adminNombre.split(" ")[0]}!</h1>
+        <p className="mb-3.5 text-xs text-muted-foreground">Tu lavandería <strong className="text-foreground">{tenant.nombre}</strong> ya está lista.</p>
 
-        <div className="mx-auto mb-6 max-w-sm overflow-hidden rounded-xl border border-border bg-white text-left">
-          <div className="flex items-center justify-between border-b border-border px-4 py-3">
-            <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-primary/60" />
-              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
+        <div className="mx-auto mb-4 max-w-sm overflow-hidden rounded-xl border border-border bg-white text-left shadow-xs">
+          <div className="flex items-center justify-between border-b border-border px-3.5 py-2">
+            <div className="flex items-center gap-1.5">
+              <Building2 className="h-3.5 w-3.5 text-primary/60" />
+              <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
             </div>
             <div className="font-mono text-xs font-semibold">
               {IS_LOCAL_MODE ? `localhost:8080/t/${tenant.slug}` : `klynn.com.do/t/${tenant.slug}`}
@@ -646,26 +746,26 @@ function SuccessCard({ tenant, adminNombre, adminEmail, globalConfig, onEnter }:
           </div>
           
           <div className="grid grid-cols-2 divide-x divide-border border-b border-border">
-            <div className="px-4 py-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Plan</div>
-              <div className="mt-0.5 font-bold text-lg">{planNombre}</div>
+            <div className="px-3.5 py-2">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Plan</div>
+              <div className="mt-0.5 font-bold text-sm">{planNombre}</div>
             </div>
-            <div className="px-4 py-3">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Licencia</div>
-              <div className="mt-0.5 font-bold text-lg text-success">
+            <div className="px-3.5 py-2">
+              <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Licencia</div>
+              <div className="mt-0.5 font-bold text-sm text-success">
                 {IS_LOCAL_MODE ? "Activación Local" : `${globalConfig.trialDays} Días`}
               </div>
             </div>
           </div>
 
-          <div className="px-4 py-3 bg-slate-50/30">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Email Admin</div>
-            <div className="mt-0.5 font-mono text-xs font-semibold uppercase">{adminEmail}</div>
+          <div className="px-3.5 py-2 bg-slate-50/30">
+            <div className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Email Admin</div>
+            <div className="mt-0.5 font-mono text-xs font-semibold">{adminEmail}</div>
           </div>
         </div>
 
-        <Button size="lg" className="h-11 w-full max-w-xs rounded-xl bg-primary text-white hover:bg-primary/90 transition-all" onClick={onEnter}>
-          <Sparkles className="mr-2 h-4 w-4" /> Entrar a mi lavandería <ArrowRight className="ml-1 h-4 w-4" />
+        <Button className="h-9 px-6 rounded-xl bg-primary text-white shadow-sm hover:opacity-95 font-bold text-xs" onClick={onEnter}>
+          <Sparkles className="mr-1.5 h-3.5 w-3.5" /> Entrar a mi lavandería <ArrowRight className="ml-1 h-3.5 w-3.5" />
         </Button>
       </motion.div>
     </div>
@@ -816,9 +916,9 @@ function LogoUploader({ label, value, onChange }: { label: string; value: string
 function Field({ label, error, className = "", children }: { label: string; error?: string; className?: string; children: React.ReactNode }) {
   return (
     <div className={className}>
-      <Label className="mb-1.5 block text-sm font-medium">{label}</Label>
+      <Label className="mb-1 block text-xs font-semibold text-slate-700">{label}</Label>
       {children}
-      {error && <div className="mt-1.5 flex items-center gap-1 text-xs text-destructive"><AlertCircle className="h-3 w-3" />{error}</div>}
+      {error && <div className="mt-1 flex items-center gap-1 text-[11px] text-destructive"><AlertCircle className="h-3 w-3" />{error}</div>}
     </div>
   );
 }
@@ -836,9 +936,9 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
 
   return (
     <div className="flex flex-col items-center justify-center text-center w-full">
-      <Label className="mb-3 block text-xs font-bold text-slate-500 uppercase tracking-widest">{label}</Label>
+      <Label className="mb-1.5 block text-[11px] font-bold text-slate-500 uppercase tracking-wider">{label}</Label>
       
-      <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-slate-50/80 border border-slate-200/50 rounded-full shadow-inner w-full max-w-[340px] mx-auto">
+      <div className="flex flex-wrap items-center justify-center gap-1.5 p-1.5 bg-slate-50/80 border border-slate-200/50 rounded-full shadow-inner w-full max-w-[320px] mx-auto">
         {presets.map((p) => {
           const isSelected = value.toLowerCase() === p.hex.toLowerCase();
           return (
@@ -846,13 +946,13 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
               key={p.hex}
               type="button"
               onClick={() => onChange(p.hex)}
-              className="relative h-8 w-8 rounded-full transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center shadow-sm"
+              className="relative h-7 w-7 rounded-full transition-all duration-200 hover:scale-110 active:scale-95 flex items-center justify-center shadow-sm"
               style={{ backgroundColor: p.hex }}
               title={p.name}
             >
               {isSelected && (
-                <div className="h-3 w-3 rounded-full bg-white flex items-center justify-center shadow-sm">
-                  <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.hex }} />
+                <div className="h-2.5 w-2.5 rounded-full bg-white flex items-center justify-center shadow-sm">
+                  <div className="h-1 w-1 rounded-full" style={{ backgroundColor: p.hex }} />
                 </div>
               )}
             </button>
@@ -860,7 +960,7 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
         })}
 
         {/* Custom Color Selector (Color Wheel Palette) */}
-        <div className="relative h-8 w-8 rounded-full border border-slate-250 bg-white hover:bg-slate-100 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-110 group active:scale-95">
+        <div className="relative h-7 w-7 rounded-full border border-slate-200 bg-white hover:bg-slate-100 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-110 group active:scale-95">
           <input
             type="color"
             value={value}
@@ -868,12 +968,12 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
             className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             title="Seleccionar otro color"
           />
-          <Palette className="h-3.5 w-3.5 text-slate-500 group-hover:text-primary transition-colors" />
+          <Palette className="h-3 w-3 text-slate-500 group-hover:text-primary transition-colors" />
         </div>
       </div>
-      <div className="mt-4 flex items-center justify-center">
-        <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] font-semibold text-slate-500">
-          CÓDIGO HEX: <span className="uppercase text-slate-700">{value}</span>
+      <div className="mt-2 flex items-center justify-center">
+        <div className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-2.5 py-0.5 font-mono text-[10px] font-semibold text-slate-600">
+          HEX: <span className="uppercase font-bold text-slate-800">{value}</span>
         </div>
       </div>
     </div>

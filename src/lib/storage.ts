@@ -94,6 +94,7 @@ export interface Tenant {
 }
 
 export interface TenantConfig {
+  modo_facturacion?: "electronica" | "tradicional";
   itbis_incluido: boolean;
   itbis_porcentaje: number;
   formato_ticket: "57mm" | "80mm";
@@ -2853,7 +2854,13 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
 }
 
 export async function saveECFConfig(config: ECFConfig) {
-  const { error } = await supabase.from("ecf_config").upsert(config);
+  const existing = await getECFConfig(config.tenant_id);
+  const payload = {
+    ...config,
+    id: existing?.id || config.id || crypto.randomUUID(),
+    updated_at: new Date().toISOString(),
+  };
+  const { error } = await supabase.from("ecf_config").upsert(payload);
   if (error) throw error;
 }
 

@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { compressImage } from "@/lib/compressImage";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Card } from "@/components/ui/card";
@@ -31,7 +31,7 @@ import {
   type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft } from "@/lib/fiscal";
+import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC } from "@/lib/fiscal";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -43,7 +43,7 @@ import {
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar, Clock,
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, Zap, Laptop, Wrench,
-  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban
+  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search
 } from "lucide-react";
 import {
   connectBluetoothDevice,
@@ -2368,7 +2368,8 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
   useEffect(() => { setAlertPhone(cfg.alerta_ncf_telefono || ""); }, [cfg.alerta_ncf_telefono]);
   
   // Local state for instant and responsive tab switching
-  const [isElectronic, setLocalIsElectronic] = useState(!!config?.is_active);
+  const isCurrentlyElectronic = config ? !!config.is_active : (cfg.modo_facturacion === "electronica");
+  const [isElectronic, setLocalIsElectronic] = useState(isCurrentlyElectronic);
 
   // Estados para anulación de secuencias e-NCF
   const [voidSeq, setVoidSeq] = useState<ECFSequence | null>(null);
@@ -2378,34 +2379,110 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
 
   const queryClient = useQueryClient();
 
-  const [draft, setDraft] = useState<Partial<ECFConfig>>(config || {
+  const [draft, setDraft] = useState<Partial<ECFConfig>>(() => config ? {
+    ...config,
+    rnc_emisor: config.rnc_emisor || tenant.rnc || "",
+    razon_social: config.razon_social || tenant.nombre || "",
+    is_active: config.is_active ?? isCurrentlyElectronic,
+  } : {
     tenant_id: tenant.id,
     rnc_emisor: tenant.rnc || "",
     razon_social: tenant.nombre,
     ambiente: "pruebas",
-    is_active: false
+    is_active: isCurrentlyElectronic,
   });
+
+  const [loadingRNC, setLoadingRNC] = useState(false);
+  const lastSearchedRNCRef = useRef<string>("");
+
+  async function handleSearchRNC(rncVal?: string, force = false) {
+    const target = rncVal !== undefined ? rncVal : draft.rnc_emisor;
+    const raw = (target || "").trim().toUpperCase();
+    if (!raw) return;
+
+    // Si estamos en ambiente de pruebas o el RNC empieza con SBX:
+    if (draft.ambiente === 'pruebas' || raw.startsWith('SBX')) {
+      const sandboxContrib = await consultarRNC(raw, 'pruebas');
+      if (sandboxContrib) {
+        setDraft((prev) => ({
+          ...prev,
+          rnc_emisor: sandboxContrib.rnc,
+          razon_social: prev.razon_social || sandboxContrib.name,
+        }));
+        toast.success(`Modo Pruebas Sandbox: ${sandboxContrib.rnc} (${sandboxContrib.name})`, { id: "dgii-config-toast" });
+        return;
+      }
+    }
+
+    let clean = raw.replace(/\D/g, "");
+    if (!clean || (clean.length !== 9 && clean.length !== 11)) return;
+
+    if (!force && lastSearchedRNCRef.current === clean) return;
+    lastSearchedRNCRef.current = clean;
+
+    setLoadingRNC(true);
+    try {
+      const contrib = await consultarRNC(clean, 'produccion');
+      if (contrib && contrib.name) {
+        setDraft((prev) => ({
+          ...prev,
+          rnc_emisor: contrib.rnc || clean,
+          razon_social: contrib.name,
+        }));
+        toast.success(`Contribuyente DGII: ${contrib.name} ✅`, { id: "dgii-config-toast" });
+      } else {
+        toast.error("No se encontró el contribuyente en DGII", { id: "dgii-config-toast" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingRNC(false);
+    }
+  }
 
   // Keep state synchronized when parent query finishes loading config
   useEffect(() => {
     if (config) {
-      setDraft(config);
-      setLocalIsElectronic(!!config.is_active);
+      const active = Boolean(config.is_active || tenant.config?.modo_facturacion === "electronica");
+      setDraft((d) => ({
+        ...d,
+        ...config,
+        rnc_emisor: config.rnc_emisor || d.rnc_emisor || tenant.rnc || "",
+        razon_social: config.razon_social || d.razon_social || tenant.nombre || "",
+        is_active: active,
+      }));
+      setLocalIsElectronic(active);
+    } else if (tenant) {
+      const tenantIsElec = tenant.config?.modo_facturacion === "electronica";
+      setLocalIsElectronic(tenantIsElec);
+      setDraft((prev) => ({
+        ...prev,
+        rnc_emisor: prev.rnc_emisor || tenant.rnc || "",
+        razon_social: prev.razon_social || tenant.nombre || "",
+        is_active: tenantIsElec,
+      }));
     }
-  }, [config]);
+  }, [config?.id, config?.updated_at, config?.is_active, tenant.config?.modo_facturacion]);
 
   async function saveECF(overrideActive?: boolean) {
     setLoading(true);
+    const activeValue = overrideActive !== undefined ? overrideActive : isElectronic;
+    setLocalIsElectronic(activeValue);
+    setDraft(d => ({ ...d, is_active: activeValue }));
+
     try {
-      const activeValue = overrideActive !== undefined ? overrideActive : !!draft.is_active;
-      // Si empieza con SBX, no limpiamos las letras. Si no, limpiamos solo guiones.
-      const isSandboxRNC = draft.rnc_emisor?.toUpperCase().startsWith('SBX');
-      const cleanRNC = isSandboxRNC 
-        ? draft.rnc_emisor?.toUpperCase() 
-        : (draft.rnc_emisor ? draft.rnc_emisor.replace(/\D/g, '') : '');
+      // En pruebas, asegurar el formato SBX para el mock sandbox de Pronesoft
+      let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').trim().toUpperCase();
+      if (draft.ambiente === 'pruebas') {
+        if (!cleanRNC.startsWith('SBX')) {
+          const digits = cleanRNC.replace(/\D/g, '') || '987654321';
+          cleanRNC = `SBX${digits}`;
+        }
+      } else {
+        cleanRNC = cleanRNC.replace(/\D/g, '');
+      }
       
-      // 1. Guardar la config electrónica
-      await saveECFConfig({
+      const configPayload: ECFConfig = {
         ...draft,
         is_active: activeValue,
         rnc_emisor: cleanRNC,
@@ -2413,14 +2490,26 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
         tenant_id: tenant.id,
         updated_at: new Date().toISOString(),
         created_at: config?.created_at || new Date().toISOString(),
-      } as ECFConfig);
+      } as ECFConfig;
 
-      // 2. Si es electrónico y no tiene ID de Pronesoft (o tiene el temporal de sandbox), registrar
+      // 1. Guardar la config electrónica en base de datos
+      await saveECFConfig(configPayload);
+
+      // 2. Si es electrónico y no está usando credenciales propias (Modalidad 1), auto-registrar en Pronesoft
       let pTenantId = draft.pronesoft_tenant_id || config?.pronesoft_tenant_id;
-      // Solo auto-registramos si NO tiene tenant-id Y NO está usando credenciales propias (o las está usando pero lo dejó vacío)
-      if (activeValue && (!pTenantId || pTenantId === 'sandbox-tenant')) {
-        toast.info("Registrando negocio en el servidor de certificación...");
-        pTenantId = await registerTenantInPronesoft(tenant.id);
+      if (activeValue && !draft.usar_credenciales_propias && (!pTenantId || pTenantId === 'sandbox-tenant')) {
+        try {
+          toast.info("Registrando negocio en el servidor de certificación...");
+          pTenantId = await registerTenantInPronesoft(tenant.id, configPayload);
+        } catch (pronesoftErr: any) {
+          console.warn("Aviso en registro Pronesoft:", pronesoftErr);
+          const rawMsg = pronesoftErr?.message || "";
+          if (rawMsg.includes("contribuyente comercial") || rawMsg.includes("400")) {
+            toast.warning("Para vincular la empresa en la nube de Pronesoft se requiere un RNC registrado como contribuyente comercial ante la DGII. Tu configuración fue guardada.", { duration: 7000 });
+          } else {
+            toast.warning(`Pronesoft: ${rawMsg}. Configuración guardada.`, { duration: 6000 });
+          }
+        }
       }
 
       // 3. Si hay un certificado nuevo para subir (Solo en producción, Sandbox no lo requiere)
@@ -2431,15 +2520,37 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
         setDraft(d => ({ ...d, certificate_data: undefined }));
       }
 
-      // 4. IMPORTANTÍSIMO: Guardar también el RNC en el tenant base para que los tickets lo usen
-      await saveTenant({ ...tenant, rnc: cleanRNC } as Tenant);
+      // 4. IMPORTANTÍSIMO: Guardar también el RNC y el modo fiscal en el tenant
+      const nextTenant = {
+        ...tenant,
+        rnc: cleanRNC,
+        config: {
+          ...cfg,
+          modo_facturacion: activeValue ? "electronica" : "tradicional",
+          ncf_facturacion_activa: true,
+        },
+      } as Tenant;
+      await saveTenant(nextTenant);
 
-      toast.success("Datos fiscales guardados y sincronizados correctamente");
+      // 5. Inmediatamente actualizar el cache en memoria de React Query
+      queryClient.setQueryData(["ecf-config", tenant.id], configPayload);
+      queryClient.setQueryData(["ecf_config", tenant.id], configPayload);
+      queryClient.setQueryData(["tenant", tenant.id], nextTenant);
+      queryClient.setQueryData(["tenant", tenant.slug], nextTenant);
+
+      // 6. Invalidar consultas
+      await queryClient.invalidateQueries({ queryKey: ["ecf-config", tenant.id] });
+      await queryClient.invalidateQueries({ queryKey: ["ecf_config", tenant.id] });
+      await queryClient.invalidateQueries({ queryKey: ["tenant", tenant.id] });
+      await queryClient.invalidateQueries({ queryKey: ["tenant", tenant.slug] });
+
+      toast.success("Datos fiscales guardados correctamente");
       onRefresh();
     } catch (err: any) {
-      toast.error("Error: " + err.message);
+      toast.error("Error al guardar: " + err.message);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function updateCfg(c: Partial<TenantConfig>) {
@@ -2592,22 +2703,22 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
             
             <div className="flex p-1 bg-white rounded-xl border shadow-sm">
               <button 
-                onClick={async () => {
+                type="button"
+                onClick={() => {
                   setLocalIsElectronic(false);
                   setDraft(d => ({ ...d, is_active: false }));
-                  await updateCfg({ ncf_facturacion_activa: true });
-                  await saveECF(false);
+                  saveECF(false);
                 }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isElectronic ? "bg-primary text-white" : "hover:bg-slate-50"}`}
               >
                 TRADICIONAL (NCF)
               </button>
               <button 
-                onClick={async () => {
+                type="button"
+                onClick={() => {
                   setLocalIsElectronic(true);
                   setDraft(d => ({ ...d, is_active: true }));
-                  await updateCfg({ ncf_facturacion_activa: true });
-                  await saveECF(true);
+                  saveECF(true);
                 }}
                 className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isElectronic ? "bg-primary text-white" : "hover:bg-slate-50"}`}
               >
@@ -2624,18 +2735,37 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
             <Card className={CARD}>
               <h3 className="text-lg font-display mb-4">Datos del Contribuyente</h3>
               <div className="space-y-4">
-                <Field label="RNC / Cédula">
-                  <Input 
-                    className={FIELD} 
-                    value={draft.rnc_emisor} 
-                    onChange={(e) => setDraft({ ...draft, rnc_emisor: e.target.value.toUpperCase() })} 
-                    placeholder="Ej: SBX123456 o 402-..."
-                  />
+                <Field label="RNC / Cédula" hint="Ingresa tu RNC para consultar y auto-completar los datos">
+                  <div className="relative flex items-center">
+                    <Input 
+                      className={FIELD + " pr-10"} 
+                      value={draft.rnc_emisor || ""} 
+                      onChange={(e) => {
+                        const val = e.target.value.toUpperCase();
+                        setDraft({ ...draft, rnc_emisor: val });
+                        const clean = val.replace(/\D/g, "");
+                        if (clean.length === 9 || clean.length === 11) {
+                          handleSearchRNC(clean);
+                        }
+                      }} 
+                      onBlur={() => handleSearchRNC()}
+                      placeholder="Ej: 133190907 o 402-..."
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleSearchRNC()}
+                      disabled={loadingRNC}
+                      className="absolute right-2.5 text-muted-foreground hover:text-primary transition-colors p-1 rounded-md"
+                      title="Buscar en DGII"
+                    >
+                      {loadingRNC ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Search className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </Field>
                 <Field label="Nombre o Razón Social">
                   <Input 
                     className={FIELD} 
-                    value={draft.razon_social} 
+                    value={draft.razon_social || ""} 
                     onChange={(e) => setDraft({ ...draft, razon_social: e.target.value })} 
                   />
                 </Field>
@@ -2701,16 +2831,16 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                             placeholder="sk_live_..."
                           />
                         </Field>
-                        <Field label="Tenant ID (Opcional si ya existe)" hint="Si ya registraste tu empresa en Pronesoft, pega su ID aquí.">
+                        <Field label="Tenant ID (Opcional - solo para sucursales)" hint="Si tu cuenta en Pronesoft maneja múltiples sucursales asociadas, pega el ID aquí. Si es tu cuenta directa principal, déjalo en blanco.">
                           <Input 
                             className={FIELD} 
                             value={draft.pronesoft_tenant_id || ""} 
                             onChange={(e) => setDraft({ ...draft, pronesoft_tenant_id: e.target.value })} 
-                            placeholder="Ej: 550e8400-e29b-41d4-a716-446655440000"
+                            placeholder="Opcional (Ej: 550e8400-...)"
                           />
                         </Field>
                         <p className="text-[10px] text-muted-foreground leading-tight">
-                          Estas credenciales se guardan de forma segura en tu tenant de Klynn. Puedes encontrarlas en tu panel de Pronesoft. Si dejas el Tenant ID vacío, Klynn registrará tu empresa automáticamente.
+                          Estas credenciales se guardan de forma segura en tu tenant de Klynn. Tu cuenta se autenticará directamente con Pronesoft sin requerir intermediarios.
                         </p>
                       </div>
                     )}
@@ -2726,7 +2856,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange 
                   <Switch checked={cfg.ticket_mostrar_rnc} onCheckedChange={(v) => updateCfg({ ticket_mostrar_rnc: v })} />
                 </div>
                 
-                <Button className="w-full h-11 rounded-xl font-bold font-display" onClick={() => saveECF()} disabled={loading}>
+                <Button className="w-full h-11 rounded-xl font-bold font-display" onClick={() => saveECF(isElectronic)} disabled={loading}>
                   {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Guardar Datos Fiscales
                 </Button>

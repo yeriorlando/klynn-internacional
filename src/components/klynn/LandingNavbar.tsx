@@ -167,11 +167,11 @@ export function LandingNavbar() {
             </a>
             <Link to="/login" className="hidden sm:block">
               <Button
-                variant="ghost"
+                variant="outline"
                 size="sm"
-                className="rounded-full text-slate-700 hover:text-[#1B4B73] gap-1.5 font-semibold"
+                className="rounded-full bg-[#EAF2FF] hover:bg-[#D9E8FF] text-[#1B4B73] hover:text-[#133857] border-[#1B4B73]/20 hover:border-[#1B4B73]/40 gap-1.5 font-bold text-xs h-9 px-4 shadow-2xs transition-all hover:scale-[1.02] active:scale-[0.98]"
               >
-                <Lock className="h-3.5 w-3.5 text-slate-500" />
+                <Lock className="h-3.5 w-3.5 text-[#1B4B73]" />
                 <span>Iniciar sesión</span>
               </Button>
             </Link>
@@ -303,8 +303,8 @@ export function LandingNavbar() {
                   </Button>
                 </Link>
                 <Link to="/login" onClick={() => setMobileOpen(false)} className="block">
-                  <Button variant="outline" className="h-11 w-full gap-2 rounded-xl font-bold border-slate-200 bg-white text-slate-800 hover:bg-slate-50 text-sm">
-                    <Lock className="h-3.5 w-3.5 text-slate-600" />
+                  <Button variant="outline" className="h-11 w-full gap-2 rounded-xl font-bold border-[#1B4B73]/20 bg-[#EAF2FF]/60 text-[#1B4B73] hover:bg-[#EAF2FF] text-sm">
+                    <Lock className="h-3.5 w-3.5 text-[#1B4B73]" />
                     Iniciar sesión
                   </Button>
                 </Link>

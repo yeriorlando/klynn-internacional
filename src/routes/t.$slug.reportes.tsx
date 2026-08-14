@@ -394,7 +394,7 @@ function ReportesPage() {
 
     try {
       const pronesoft = getProneSoftClient(
-        ecfConfig?.pronesoft_tenant_id || tenant.id,
+        ecfConfig?.pronesoft_tenant_id || undefined,
         ecfConfig?.ambiente === 'pruebas' ? 'sandbox' : 'production',
         ecfConfig?.usar_credenciales_propias ? ecfConfig.pronesoft_client_id : undefined,
         ecfConfig?.usar_credenciales_propias ? ecfConfig.pronesoft_client_secret : undefined

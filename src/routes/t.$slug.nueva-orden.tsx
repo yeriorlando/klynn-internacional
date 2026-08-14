@@ -153,9 +153,10 @@ function NuevaOrdenPage() {
   const queryClient = useQueryClient();
   const { data: plansData } = usePlans();
   const plans = plansData || [];
-  const tenantId = user?.tenant.id ?? "";
+  const tenant = user?.tenant;
+  const tenantId = tenant?.id ?? "";
 
-  const cfg = user?.tenant.config || DEFAULT_CONFIG;
+  const cfg = tenant?.config || DEFAULT_CONFIG;
   const enableServicios = cfg.pos_habilitar_servicios !== false;
   const enablePrendas = cfg.pos_habilitar_prendas !== false;
 
@@ -261,7 +262,18 @@ function NuevaOrdenPage() {
   const { data: fiscalConfigData } = useECFConfig(tenantId);
   const { data: ecfSequences } = useECFSequences(tenantId);
 
-  const isElectronic = fiscalConfigData?.is_active || false;
+  const isElectronic = Boolean(
+    fiscalConfigData?.is_active || 
+    tenant.config?.modo_facturacion === "electronica"
+  );
+
+  useEffect(() => {
+    if (isElectronic) {
+      setTipoECF((prev) => (prev && prev.startsWith("E") ? prev : "E32"));
+    } else {
+      setTipoECF((prev) => (prev && prev.startsWith("B") ? prev : "B02"));
+    }
+  }, [isElectronic]);
 
   // Calcular secuencias activas según el modo (electrónico o tradicional)
   const activeSequences = (ecfSequences || []).filter(
@@ -861,7 +873,7 @@ function NuevaOrdenPage() {
   }, [isPosMode]);
 
   if (!user || user.tenant.id === "__loading__") return null;
-  const { tenant, empleado } = user;
+  const { empleado } = user;
 
   const filtrados = clientes.filter(
     (c) =>
@@ -1119,7 +1131,13 @@ function NuevaOrdenPage() {
       now.setHours(now.getHours() + horasAdd);
       deliveryDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
 
-      const isElectronic = !!fiscalConfig?.is_active;
+      // Consultar config fiscal fresca en el momento exacto de crear la orden
+      const freshFiscalConfig = await getECFConfig(tenant.id);
+      const isElectronic = Boolean(
+        freshFiscalConfig?.is_active || 
+        tenant.config?.modo_facturacion === "electronica" || 
+        fiscalConfigData?.is_active
+      );
       const activeTipo = isElectronic
         ? tipoECF.startsWith("E")
           ? tipoECF
@@ -1227,7 +1245,7 @@ function NuevaOrdenPage() {
           const result = await emitirECF(
             { ...orden, ncf: nextNCF }, // Pasamos el NCF generado (o undefined en Sandbox)
             targetCliente,
-            fiscalConfig?.pronesoft_tenant_id,
+            freshFiscalConfig?.pronesoft_tenant_id || fiscalConfig?.pronesoft_tenant_id,
             cfg,
             tenant,
             activeTipo,
