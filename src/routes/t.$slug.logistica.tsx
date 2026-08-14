@@ -641,12 +641,12 @@ function LogisticaPage() {
               </div>
 
               {/* Footer Actions */}
-              <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30 px-6 py-4">
+              <div className="flex items-center justify-between border-t border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 px-4 sm:px-6 py-3.5 sm:py-4 gap-2">
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => setDetailId(null)}
-                  className="rounded-xl text-xs font-bold"
+                  className="rounded-xl text-xs font-bold h-10 px-4"
                 >
                   Cerrar
                 </Button>
@@ -654,7 +654,7 @@ function LogisticaPage() {
                 <div className="flex items-center gap-2">
                   <Button
                     size="sm"
-                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1"
+                    className="rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold gap-1.5 h-10 px-4 shadow-sm"
                     asChild
                   >
                     <a
