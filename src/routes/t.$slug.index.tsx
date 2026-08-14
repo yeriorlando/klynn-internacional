@@ -119,6 +119,15 @@ function DashboardPage() {
 
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const { data: ecfConfig } = useECFConfig(tenantId);
+  const { data: ecfSequences = [] } = useECFSequences(tenantId);
+
+  const hasSecuenciaCredito = ecfSequences.some(
+    (s) => s.is_active && (s.tipo_ecf === "E34" || s.tipo_ecf === "34" || s.tipo_ecf === "B04") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
+  );
+  const hasSecuenciaDebito = ecfSequences.some(
+    (s) => s.is_active && (s.tipo_ecf === "E33" || s.tipo_ecf === "33" || s.tipo_ecf === "B03") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
+  );
+
   const emp = user?.empleado;
   const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
   const hasNotaDebito = emp ? can(emp, "nota-debito") : false;
@@ -991,8 +1000,8 @@ function DashboardPage() {
         setEstadoModal={setEstadoModal}
         clientes={clientes}
         cambiarEstado={cambiarEstado}
-        hasNotaCredito={hasNotaCredito}
-        hasNotaDebito={hasNotaDebito}
+        hasNotaCredito={hasNotaCredito && hasSecuenciaCredito}
+        hasNotaDebito={hasNotaDebito && hasSecuenciaDebito}
         hasCondonarDeuda={hasCondonarDeuda}
         hasAnularOrden={hasAnularOrden}
         ecfConfig={ecfConfig}

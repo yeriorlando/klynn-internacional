@@ -33,7 +33,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuLabel
 } from "@/components/ui/dropdown-menu";
-import { useOrdenes, useClientes, useCajaAbierta, useEmpleados, useServicios, useECFConfig } from "@/hooks/use-queries";
+import { useOrdenes, useClientes, useCajaAbierta, useEmpleados, useServicios, useECFConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { encodeEscPos, printDirectRaw } from "@/lib/impresora";
@@ -141,7 +141,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: empleados = [] } = useEmpleados(tenantId);
   const { data: servicios = [] } = useServicios(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
+  const { data: ecfSequences = [] } = useECFSequences(tenantId);
   const searchParams = useSearch({ strict: false }) as { view?: string; action?: string; filter?: string };
+
+  const hasSecuenciaCredito = ecfSequences.some(
+    (s) => s.is_active && (s.tipo_ecf === "E34" || s.tipo_ecf === "34" || s.tipo_ecf === "B04") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
+  );
+  const hasSecuenciaDebito = ecfSequences.some(
+    (s) => s.is_active && (s.tipo_ecf === "E33" || s.tipo_ecf === "33" || s.tipo_ecf === "B03") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
+  );
 
   useEffect(() => {
     if (searchParams.filter === "almacenadas" || searchParams.filter === "sin_retirar") {
@@ -1567,8 +1575,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         setEstadoModal={setEstadoModal}
         clientes={clientes}
         cambiarEstado={cambiarEstado}
-        hasNotaCredito={hasNotaCredito}
-        hasNotaDebito={hasNotaDebito}
+        hasNotaCredito={hasNotaCredito && hasSecuenciaCredito}
+        hasNotaDebito={hasNotaDebito && hasSecuenciaDebito}
         hasCondonarDeuda={hasCondonarDeuda}
         hasAnularOrden={hasAnularOrden}
         ecfConfig={ecfConfig}
@@ -1769,7 +1777,7 @@ export function EstadoOrdenDialog({
               Acciones Especiales
             </div>
             <div className="flex flex-wrap items-center justify-center gap-2">
-              {hasNotaCredito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && setCredito && setMontoCredito && setMotivoCredito && setCodigoCredito && (
+              {hasNotaCredito && (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) && setCredito && setMontoCredito && setMotivoCredito && setCodigoCredito && (
                 <button
                   type="button"
                   onClick={() => {
@@ -1786,7 +1794,7 @@ export function EstadoOrdenDialog({
                   Nota de Crédito
                 </button>
               )}
-              {hasNotaDebito && ecfConfig?.is_active && estadoModal.ncf?.startsWith("E") && setDebito && (
+              {hasNotaDebito && (estadoModal.ncf?.startsWith("E") || ecfConfig?.is_active) && setDebito && (
                 <button
                   type="button"
                   onClick={() => {
