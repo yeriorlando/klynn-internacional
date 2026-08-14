@@ -117,6 +117,8 @@ export function ProofOfDeliveryDialog({
         pod_firma: firmaUrl || undefined,
         pod_receptor: receptorGuardado,
         pod_fecha: new Date().toISOString(),
+        pod_cobro_monto: (montoACobrar > 0 && cobrarSaldo) ? montoACobrar : undefined,
+        pod_cobro_metodo: (montoACobrar > 0 && cobrarSaldo) ? metodoCobro : undefined,
       };
 
       await saveOrden(updated);

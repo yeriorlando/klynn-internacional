@@ -1,7 +1,7 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useMemo, useState, useRef } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
-import { playNotificationSoundDebounced, playOrderDeliveredSoundDebounced } from "@/lib/notificationSound";
+import { playNotificationSoundDebounced, playOrderDeliveredSoundDebounced, unlockAudioContext } from "@/lib/notificationSound";
 import {
   LayoutDashboard,
   Wallet,
@@ -87,7 +87,6 @@ import {
   type Notificacion,
 } from "@/lib/storage";
 import { Toaster, toast } from "sonner";
-import { useEffect } from "react";
 import { motion } from "framer-motion";
 import { CloudSync } from "@/components/klynn/CloudSync";
 import { TourManager, resetTours } from "@/components/klynn/onboarding/TourManager";
@@ -246,9 +245,99 @@ export function TenantShell() {
     };
   }, [tenantId]);
 
-  // CARGAR NOTIFICACIONES EN TIEMPO REAL
+  // Desbloquear contexto de audio en primer clic / toque para garantizar sonido en producción
+  useEffect(() => {
+    const unlock = () => unlockAudioContext();
+    window.addEventListener("click", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+  }, []);
+
+  // Tracking de órdenes entregadas conocidas para detectar nuevas entregas en tiempo real
+  const knownDeliveredMapRef = useRef<Set<string>>(new Set());
+  const isFirstDeliveredRunRef = useRef(true);
+  const lastToastOrderRef = useRef<Map<string, number>>(new Map());
+
+  // CARGAR NOTIFICACIONES EN TIEMPO REAL (WebSockets + Smart Polling de respaldo cada 4s)
   useEffect(() => {
     if (!tenantId || tenantId === "__loading__") return;
+
+    const isRepartidorUser = user?.empleado?.rol === "REPARTIDOR";
+
+    const formatNotificationText = (text: string): React.ReactNode => {
+      if (!text) return "";
+      const parts = text.split(/(#KL-[a-zA-Z0-9-]+|\*\*.*?\*\*)/g);
+      return (
+        <span className="inline">
+          {parts.map((part, i) => {
+            if (!part) return null;
+            if (part.startsWith("#KL-")) {
+              return (
+                <span
+                  key={i}
+                  className="mx-0.5 inline-block rounded-md border border-primary/15 bg-primary/10 px-1 py-px font-mono text-[10px] font-black text-primary"
+                >
+                  {part.replace("#", "")}
+                </span>
+              );
+            }
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return (
+                <strong key={i} className="font-extrabold text-slate-900 dark:text-white">
+                  {part.slice(2, -2)}
+                </strong>
+              );
+            }
+            return <span key={i}>{part}</span>;
+          })}
+        </span>
+      );
+    };
+
+    const handleIncomingNotif = (row: any) => {
+      if (!row) return;
+
+      const orderNumMatch = ((row.titulo || "") + " " + (row.mensaje || "")).match(/KL-[a-zA-Z0-9-]+/i);
+      const dedupeKey = orderNumMatch ? orderNumMatch[0].toUpperCase() : ((row.titulo || "") + "|" + (row.id || "")).toLowerCase();
+      
+      const now = Date.now();
+      const lastTime = lastToastOrderRef.current.get(dedupeKey) || 0;
+      
+      // Si ya emitimos un toast para esta orden hace menos de 6 segundos, no duplicar la alerta
+      const shouldShowToast = now - lastTime > 6000;
+      if (shouldShowToast) {
+        lastToastOrderRef.current.set(dedupeKey, now);
+      }
+
+      const titulo = (row.titulo || "").toLowerCase();
+      const isDelivery =
+        titulo.includes("entregad") ||
+        titulo.includes("repartidor") ||
+        titulo.includes("delivery") ||
+        row.tipo === "SUCCESS";
+
+      if (isDelivery) {
+        // La alerta de entrega y sonido solo suena para Admin, Supervisor y Vendedor (NO al Repartidor)
+        if (!isRepartidorUser) {
+          playOrderDeliveredSoundDebounced();
+          if (shouldShowToast) {
+            toast.success(row.titulo || "¡Orden Entregada! 🛵", {
+              id: `toast-order-${dedupeKey}`,
+              description: formatNotificationText(row.mensaje),
+            });
+          }
+        }
+      } else {
+        playNotificationSoundDebounced();
+        if (shouldShowToast) {
+          toast.info(row.titulo || "Nueva notificación", {
+            id: `toast-notif-${dedupeKey}`,
+            description: formatNotificationText(row.mensaje),
+          });
+        }
+      }
+      loadNotificaciones();
+    };
 
     // Cargar notificaciones y ordenes para mezclar
     const loadNotificaciones = async () => {
@@ -310,14 +399,54 @@ export function TenantShell() {
 
       // Órdenes entregadas recientemente (últimas 48h) con prioridad en la campanita
       const deliveredOrders = orders.filter((o) => o.estado === "ENTREGADA");
+      
+      // Detección en tiempo real de nuevas órdenes entregadas en producción
+      if (isFirstDeliveredRunRef.current) {
+        deliveredOrders.forEach((o) => knownDeliveredMapRef.current.add(o.id));
+        isFirstDeliveredRunRef.current = false;
+      } else {
+        for (const o of deliveredOrders) {
+          if (!knownDeliveredMapRef.current.has(o.id)) {
+            knownDeliveredMapRef.current.add(o.id);
+            if (!isRepartidorUser) {
+              const cleanNum = (o.numero || "").replace(/^#/, "");
+              let receptorTxt = " (Titular)";
+              if (o.pod_receptor && !o.pod_receptor.toLowerCase().startsWith("titular")) {
+                receptorTxt = ` • Recibió: **${o.pod_receptor}**`;
+              }
+              let cobroInfo = " • Pagado";
+              if (o.pod_cobro_monto && o.pod_cobro_monto > 0) {
+                cobroInfo = ` • Cobrado: **${formatRD(o.pod_cobro_monto)}** (${o.pod_cobro_metodo || "EFECTIVO"})`;
+              } else if (o.saldo > 0) {
+                cobroInfo = ` • Saldo pendiente: **${formatRD(o.saldo)}**`;
+              }
+              const clientName = clientMap.get(o.cliente_id) || "Cliente";
+
+              handleIncomingNotif({
+                titulo: `Orden #${cleanNum} Entregada`,
+                mensaje: `Cliente: **${clientName}**${receptorTxt}${cobroInfo}`,
+                tipo: "SUCCESS",
+              });
+            }
+          }
+        }
+      }
+
       for (const o of deliveredOrders) {
+        const cleanNum = (o.numero || "").replace(/^#/, "");
+        
+        // Si ya existe una notificación real en la BD para esta entrega, NO generar notificación virtual duplicada
+        const hasDbNotif = dbNotifs.some(
+          (n) => n.titulo.includes(cleanNum) || n.mensaje.includes(cleanNum)
+        );
+        if (hasDbNotif) continue;
+
         const dateToUse = o.pod_fecha || o.creado_en || new Date().toISOString();
         const diffHours = (Date.now() - new Date(dateToUse).getTime()) / (1000 * 60 * 60);
         if (diffHours <= 48) {
           const vId = `virtual-entregada-${o.id}`;
           if (!deletedVirtuals.includes(vId)) {
             const clientName = clientMap.get(o.cliente_id) || "Cliente";
-            const cleanNum = (o.numero || "").replace(/^#/, "");
             
             let receptorTxt = "";
             if (o.pod_receptor) {
@@ -327,13 +456,19 @@ export function TenantShell() {
                 receptorTxt = ` • Recibió: **${o.pod_receptor}**`;
               }
             }
-            const saldoInfo = o.saldo > 0 ? ` • Debe: **${formatRD(o.saldo)}**` : " • Pagado";
+            
+            let cobroInfo = " • Pagado";
+            if (o.pod_cobro_monto && o.pod_cobro_monto > 0) {
+              cobroInfo = ` • Cobrado: **${formatRD(o.pod_cobro_monto)}** (${o.pod_cobro_metodo || "EFECTIVO"})`;
+            } else if (o.saldo > 0) {
+              cobroInfo = ` • Saldo pendiente: **${formatRD(o.saldo)}**`;
+            }
 
             virtualNotifs.push({
               id: vId,
               tenant_id: tenantId,
               titulo: `Orden #${cleanNum} Entregada`,
-              mensaje: `Cliente: **${clientName}**${receptorTxt}${saldoInfo}`,
+              mensaje: `Cliente: **${clientName}**${receptorTxt}${cobroInfo}`,
               tipo: "SUCCESS",
               leida: readVirtuals.includes(vId),
               link: `/logistica`,
@@ -351,64 +486,6 @@ export function TenantShell() {
     };
 
     loadNotificaciones();
-
-    const isRepartidorUser = user?.empleado?.rol === "REPARTIDOR";
-
-    const formatNotificationText = (text: string): React.ReactNode => {
-      if (!text) return "";
-      const parts = text.split(/(#KL-[a-zA-Z0-9-]+|\*\*.*?\*\*)/g);
-      return (
-        <span className="inline">
-          {parts.map((part, i) => {
-            if (!part) return null;
-            if (part.startsWith("#KL-")) {
-              return (
-                <span
-                  key={i}
-                  className="mx-0.5 inline-block rounded-md border border-primary/15 bg-primary/10 px-1 py-px font-mono text-[10px] font-black text-primary"
-                >
-                  {part.replace("#", "")}
-                </span>
-              );
-            }
-            if (part.startsWith("**") && part.endsWith("**")) {
-              return (
-                <strong key={i} className="font-extrabold text-slate-900 dark:text-white">
-                  {part.slice(2, -2)}
-                </strong>
-              );
-            }
-            return <span key={i}>{part}</span>;
-          })}
-        </span>
-      );
-    };
-
-    const handleIncomingNotif = (row: any) => {
-      if (!row) return;
-      const titulo = (row.titulo || "").toLowerCase();
-      const isDelivery =
-        titulo.includes("entregad") ||
-        titulo.includes("repartidor") ||
-        titulo.includes("delivery") ||
-        row.tipo === "SUCCESS";
-
-      if (isDelivery) {
-        // La alerta de entrega y sonido solo suena para Admin, Supervisor y Vendedor (NO al Repartidor)
-        if (!isRepartidorUser) {
-          playOrderDeliveredSoundDebounced();
-          toast.success(row.titulo || "¡Orden Entregada! 🛵", {
-            description: formatNotificationText(row.mensaje),
-          });
-        }
-      } else {
-        playNotificationSoundDebounced();
-        toast.info(row.titulo || "Nueva notificación", {
-          description: formatNotificationText(row.mensaje),
-        });
-      }
-      loadNotificaciones();
-    };
 
     // 1. Supabase Postgres Realtime changes en notificaciones
     const channel = supabase
@@ -447,11 +524,16 @@ export function TenantShell() {
                   receptorTxt = ` • Recibió: **${newOrder.pod_receptor}**`;
                 }
               }
-              const saldoInfo = newOrder.saldo > 0 ? ` • Debe: **${formatRD(newOrder.saldo)}**` : " • Pagado";
+              let cobroInfo = " • Pagado";
+              if (newOrder.pod_cobro_monto && newOrder.pod_cobro_monto > 0) {
+                cobroInfo = ` • Cobrado: **${formatRD(newOrder.pod_cobro_monto)}** (${newOrder.pod_cobro_metodo || "EFECTIVO"})`;
+              } else if (newOrder.saldo > 0) {
+                cobroInfo = ` • Saldo pendiente: **${formatRD(newOrder.saldo)}**`;
+              }
 
               handleIncomingNotif({
                 titulo: `Orden #${cleanNum} Entregada`,
-                mensaje: `Cliente: **${newOrder.cliente_nombre || "Cliente"}**${receptorTxt}${saldoInfo}`,
+                mensaje: `Cliente: **${newOrder.cliente_nombre || "Cliente"}**${receptorTxt}${cobroInfo}`,
                 tipo: "SUCCESS",
               });
             }
@@ -482,7 +564,13 @@ export function TenantShell() {
       };
     }
 
+    // 5. Smart Polling periódico de respaldo (cada 4 segundos en producción)
+    const pollInterval = setInterval(() => {
+      loadNotificaciones();
+    }, 4000);
+
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(broadcastChannel);

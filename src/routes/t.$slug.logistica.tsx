@@ -139,12 +139,12 @@ function LogisticaPage() {
   const stats = useMemo(() => {
     const list = deliveryOrders;
     return {
-      pendientes: list.filter(o => o.estado === "LISTA").length,
+      pendientes: list.filter(o => ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado)).length,
       enCamino: list.filter(o => o.estado === "EN_CAMINO").length,
       entregadas: list.filter(o => o.estado === "ENTREGADA").length,
       incidencias: list.filter(o => o.estado === "INCIDENCIA").length,
       total: list.length,
-      saldoPorCobrar: list.filter(o => ["LISTA", "EN_CAMINO", "INCIDENCIA"].includes(o.estado)).reduce((s, o) => s + (o.saldo || 0), 0),
+      saldoPorCobrar: list.filter(o => ["RECIBIDA", "EN_PROCESO", "LISTA", "EN_CAMINO", "INCIDENCIA"].includes(o.estado)).reduce((s, o) => s + (o.saldo || 0), 0),
     };
   }, [deliveryOrders]);
 
@@ -154,7 +154,11 @@ function LogisticaPage() {
       const cli = clientes.find(c => c.id === o.cliente_id);
       
       // Filtro de Estado
-      if (filterStatus !== "TODAS" && o.estado !== filterStatus) return false;
+      if (filterStatus === "LISTA") {
+        if (!["RECIBIDA", "EN_PROCESO", "LISTA"].includes(o.estado)) return false;
+      } else if (filterStatus !== "TODAS" && o.estado !== filterStatus) {
+        return false;
+      }
 
       // Filtro de Repartidor
       if (filterRepartidor === "SIN_ASIGNAR" && o.repartidor_id) return false;
@@ -744,7 +748,17 @@ function DeliveryCard({
   const lng = orden.lng_entrega || cliente?.lng;
   const direccion = orden.direccion_entrega || cliente?.direccion || "Entrega en local";
 
+  const isPendingToDeliver = ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(orden.estado);
+
   const statusMeta: Record<string, { label: string; chip: string }> = {
+    RECIBIDA: { 
+      label: isRepartidor ? "Por Entregar" : "Por Despachar", 
+      chip: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300" 
+    },
+    EN_PROCESO: { 
+      label: isRepartidor ? "Por Entregar" : "Por Despachar", 
+      chip: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300" 
+    },
     LISTA: { 
       label: isRepartidor ? "Por Entregar" : "Por Despachar", 
       chip: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/50 dark:text-amber-300" 
@@ -939,7 +953,7 @@ function DeliveryCard({
             </button>
           )}
 
-          {orden.estado === "LISTA" && (
+          {isPendingToDeliver && (
             isRepartidor ? (
               <Button
                 size="sm"

@@ -260,6 +260,8 @@ export interface Orden {
   pod_firma?: string;
   pod_receptor?: string;
   pod_fecha?: string;
+  pod_cobro_monto?: number;
+  pod_cobro_metodo?: MetodoPago;
   incidencia_motivo?: string;
   incidencia_notas?: string;
   incidencia_fecha?: string;
