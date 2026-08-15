@@ -268,12 +268,17 @@ serve(async (req) => {
 
     } else if (action === 'list-received-documents') {
       console.log("[pronesoft-proxy] 📥 Listando documentos recibidos con el SDK...");
-      const res = await client.documentsReceived.listReceivedDocuments({
-        environment: environmentValue,
-        page: payload.page || 1,
-        pageSize: payload.pageSize || 50,
-      });
-      result = res;
+      try {
+        const res = await client.documentsReceived.listReceivedDocuments({
+          environment: environmentValue,
+          page: payload.page || 1,
+          pageSize: payload.pageSize || 50,
+        });
+        result = res;
+      } catch (sdkErr: any) {
+        console.warn("[pronesoft-proxy] ⚠️ Aviso en list-received-documents:", sdkErr?.message);
+        result = { data: [], total: 0 };
+      }
     } else if (action === 'commercial-approval') {
       console.log("[pronesoft-proxy] ✍️ Procesando aprobación comercial...");
       // Aprobación comercial mediante REST directo temporal ya que no está explícito en esta v. del SDK

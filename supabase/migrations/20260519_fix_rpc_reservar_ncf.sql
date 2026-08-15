@@ -56,3 +56,6 @@ BEGIN
     RETURN QUERY SELECT v_ncf, v_expiration_date;
 END;
 $$;
+
+-- Otorgar permisos de ejecución a los roles de Supabase
+GRANT EXECUTE ON FUNCTION public.reservar_proximo_ncf(TEXT, TEXT) TO authenticated, anon, service_role;

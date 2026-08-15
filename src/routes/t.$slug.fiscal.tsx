@@ -46,6 +46,8 @@ import {
   formatRD,
   getPlans,
   isModuleEnabled,
+  getECFDocuments,
+  getECFDocumentosRecibidos,
   type ECFConfig,
   type Orden
 } from "@/lib/storage";
@@ -137,45 +139,110 @@ function CentroFiscalPage() {
     loadConfig();
   }, [tenant?.id, tenant?.plan_id, tenant?.config?.modulos_override]);
 
-  // Cargar e-CF Enviados
+  // Cargar e-CF Enviados (Fusionando datos locales de órdenes/ecf_documents con Pronesoft)
   async function loadSentDocuments() {
     if (!tenant || tenant.id === "__loading__") return;
     setLoadingSent(true);
     try {
-      const res = await listSentDocumentsPronesoft(tenant.id, 1, 100);
-      const docs = res?.data || (Array.isArray(res) ? res : []);
-      if (docs.length > 0) {
-        setSentDocs(docs);
-      } else {
-        // Fallback local con órdenes locales que tienen NCF
-        const ords = await getOrdenes(tenant.id);
-        const fiscalOrds = (ords || []).filter(o => o.ncf);
-        setSentDocs(fiscalOrds.map(o => ({
-          encf: o.ncf,
-          type: o.ncf?.substring(0, 3) || 'E32',
-          buyerRnc: o.cliente_rnc || 'Consumidor Final',
-          buyerName: o.cliente_nombre || 'Cliente General',
-          totalAmount: o.total,
-          totalItbis: o.itbis,
-          status: 'ACCEPTED',
-          createdAt: o.creado_en
-        })));
+      // 1. Cargar datos locales de Supabase
+      const [localOrds, localEcfDocs] = await Promise.all([
+        getOrdenes(tenant.id).catch(() => []),
+        getECFDocuments(tenant.id).catch(() => []),
+      ]);
+
+      const fiscalOrds = (localOrds || []).filter((o: any) => o.ncf);
+
+      const ordsMap = new Map<string, any>();
+      fiscalOrds.forEach((o: any) => ordsMap.set(o.ncf, o));
+
+      const ecfDocsMap = new Map<string, any>();
+      (localEcfDocs || []).forEach((e: any) => ecfDocsMap.set(e.encf, e));
+
+      // 2. Intentar consultar Pronesoft
+      let proneDocs: any[] = [];
+      try {
+        const res = await listSentDocumentsPronesoft(tenant.id, 1, 100);
+        proneDocs = res?.data || (Array.isArray(res) ? res : []);
+      } catch (err: any) {
+        console.warn("Aviso al cargar e-CF enviados de Pronesoft (usando base local):", err.message);
       }
+
+      // 3. Fusionar datos para rellenar montos, clientes y enlaces
+      const mergedList: any[] = [];
+      const seenNCF = new Set<string>();
+
+      if (proneDocs.length > 0) {
+        for (const pd of proneDocs) {
+          const encf = pd.encf || pd.eNcf;
+          if (!encf) continue;
+          seenNCF.add(encf);
+
+          const localOrd: any = ordsMap.get(encf);
+          const localEcf: any = ecfDocsMap.get(encf);
+
+          mergedList.push({
+            id: pd.id || localEcf?.id || localOrd?.id,
+            encf: encf,
+            type: pd.documentType || pd.type || encf.substring(0, 3) || 'E32',
+            buyerName: localOrd?.cliente_nombre || pd.buyerName || pd.buyer?.name || 'Cliente General',
+            buyerRnc: localOrd?.cliente_rnc || localEcf?.rnc_receptor || pd.buyerRnc || pd.buyer?.taxId || 'Consumidor Final',
+            totalAmount: localOrd?.total ?? localEcf?.monto_total ?? pd.totalAmount ?? pd.totals?.totalAmount ?? 0,
+            totalItbis: localOrd?.itbis ?? localEcf?.monto_itbis ?? pd.totalItbis ?? pd.totals?.totalITBIS ?? 0,
+            status: pd.status === 'ACCEPTED' || pd.statusLabel === 'Aceptado' ? 'ACCEPTED' : (localEcf?.status === 'accepted' ? 'ACCEPTED' : (pd.status || 'ACCEPTED')),
+            createdAt: pd.createdAt || pd.receivedAt || localOrd?.creado_en || localEcf?.fecha_emision || new Date().toISOString(),
+            pdfUrl: localEcf?.pdf_url || pd.fileUrl || pd.pdfUrl || pd.pdf,
+            documentStampUrl: localOrd?.ecf_qr || localEcf?.qr_content || pd.documentStampUrl,
+          });
+        }
+      }
+
+      // 4. Agregar órdenes locales con NCF no listadas por Pronesoft
+      for (const ord of fiscalOrds) {
+        const ordNcf = (ord as any).ncf;
+        if (ordNcf && !seenNCF.has(ordNcf)) {
+          seenNCF.add(ordNcf);
+          const localEcf = ecfDocsMap.get(ordNcf);
+          mergedList.push({
+            id: localEcf?.id || ord.id,
+            encf: ordNcf,
+            type: ord.tipo_ecf || ordNcf.substring(0, 3) || 'E32',
+            buyerName: (ord as any).cliente_nombre || 'Cliente General',
+            buyerRnc: (ord as any).cliente_rnc || 'Consumidor Final',
+            totalAmount: ord.total || 0,
+            totalItbis: ord.itbis || 0,
+            status: 'ACCEPTED',
+            createdAt: ord.creado_en || localEcf?.fecha_emision || new Date().toISOString(),
+            pdfUrl: localEcf?.pdf_url,
+            documentStampUrl: ord.ecf_qr || localEcf?.qr_content,
+          });
+        }
+      }
+
+      // 5. Agregar documentos de ecf_documents no listados
+      for (const doc of localEcfDocs) {
+        if (doc.encf && !seenNCF.has(doc.encf)) {
+          seenNCF.add(doc.encf);
+          mergedList.push({
+            id: doc.id,
+            encf: doc.encf,
+            type: doc.tipo_ecf || doc.encf.substring(0, 3) || 'E32',
+            buyerName: 'Cliente General',
+            buyerRnc: doc.rnc_receptor || 'Consumidor Final',
+            totalAmount: doc.monto_total || 0,
+            totalItbis: doc.monto_itbis || 0,
+            status: doc.status === 'accepted' ? 'ACCEPTED' : (doc.status?.toUpperCase() || 'ACCEPTED'),
+            createdAt: doc.fecha_emision,
+            pdfUrl: doc.pdf_url,
+            documentStampUrl: doc.qr_content,
+          });
+        }
+      }
+
+      // Ordenar por fecha descendente
+      mergedList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      setSentDocs(mergedList);
     } catch (err: any) {
-      console.warn("Aviso al cargar e-CF enviados de Pronesoft:", err.message);
-      // Fallback local
-      const ords = await getOrdenes(tenant.id);
-      const fiscalOrds = (ords || []).filter(o => o.ncf);
-      setSentDocs(fiscalOrds.map(o => ({
-        encf: o.ncf,
-        type: o.ncf?.substring(0, 3) || 'E32',
-        buyerRnc: o.cliente_rnc || 'Consumidor Final',
-        buyerName: o.cliente_nombre || 'Cliente General',
-        totalAmount: o.total,
-        totalItbis: o.itbis,
-        status: 'ACCEPTED',
-        createdAt: o.creado_en
-      })));
+      console.warn("Aviso al cargar e-CF enviados:", err.message);
     } finally {
       setLoadingSent(false);
     }
@@ -186,11 +253,38 @@ function CentroFiscalPage() {
     if (!tenant || tenant.id === "__loading__") return;
     setLoadingReceived(true);
     try {
-      const res = await listReceivedDocumentsPronesoft(tenant.id, 1, 100);
-      const docs = res?.data || (Array.isArray(res) ? res : []);
-      setReceivedDocs(docs);
+      const localRecv = await getECFDocumentosRecibidos(tenant.id).catch(() => []);
+      let proneDocs: any[] = [];
+      try {
+        const res = await listReceivedDocumentsPronesoft(tenant.id, 1, 100);
+        proneDocs = res?.data || (Array.isArray(res) ? res : []);
+      } catch (err: any) {
+        // silencioso
+      }
+
+      const combined: any[] = [...localRecv];
+      const seen = new Set(localRecv.map((d: any) => d.encf || d.id));
+      for (const pd of proneDocs) {
+        const key = pd.encf || pd.eNcf || pd.id;
+        if (key && !seen.has(key)) {
+          seen.add(key);
+          combined.push({
+            id: pd.id || pd.trackId,
+            encf: pd.encf || pd.eNcf,
+            tipo_ecf: pd.documentType || pd.type || 'E31',
+            rnc_emisor: pd.issuerRnc || pd.sellerRnc || 'N/A',
+            nombre_emisor: pd.issuerName || pd.sellerName || 'Proveedor',
+            monto_total: pd.totalAmount || pd.totals?.totalAmount || 0,
+            monto_itbis: pd.totalItbis || pd.totals?.totalITBIS || 0,
+            estado_comercial: pd.commercialStatus || 'PENDIENTE',
+            pdf_url: pd.pdfUrl || pd.fileUrl || null,
+            creado_en: pd.receivedAt || pd.createdAt || new Date().toISOString(),
+          });
+        }
+      }
+      setReceivedDocs(combined);
     } catch (err: any) {
-      console.warn("Aviso al cargar e-CF recibidos de Pronesoft:", err.message);
+      console.warn("Aviso al cargar e-CF recibidos:", err.message);
       setReceivedDocs([]);
     } finally {
       setLoadingReceived(false);
@@ -439,22 +533,32 @@ function CentroFiscalPage() {
                         <div className="text-[10px] text-muted-foreground font-semibold uppercase">{d.type || 'e-CF'}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-bold text-foreground">{d.buyerName || 'Cliente General'}</div>
-                        <div className="text-xs font-mono text-muted-foreground">{d.buyerRnc || 'Consumidor Final'}</div>
+                        <div className="font-bold text-foreground">{d.buyerName || d.cliente_nombre || 'Cliente General'}</div>
+                        <div className="text-xs font-mono text-muted-foreground">{d.buyerRnc || d.rnc_receptor || 'Consumidor Final'}</div>
                       </td>
                       <td className="px-6 py-4 text-center text-xs text-muted-foreground font-medium whitespace-nowrap">
-                        {d.createdAt ? new Date(d.createdAt).toLocaleDateString("es-DO") : 'Hoy'}
+                        {d.createdAt || d.fecha_emision ? new Date(d.createdAt || d.fecha_emision).toLocaleDateString("es-DO") : 'Hoy'}
                       </td>
                       <td className="px-6 py-4 text-right font-mono text-xs whitespace-nowrap">
-                        <div>ITBIS: {formatRD(d.totalItbis || 0)}</div>
+                        <div>ITBIS: {formatRD(d.totalItbis ?? d.monto_itbis ?? 0)}</div>
                       </td>
                       <td className="px-6 py-4 text-right font-bold font-mono text-foreground text-sm whitespace-nowrap">
-                        {formatRD(d.totalAmount || 0)}
+                        {formatRD(d.totalAmount ?? d.monto_total ?? 0)}
                       </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap">
-                        <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold">
-                          ACEPTADO
-                        </Badge>
+                        {d.status === 'REJECTED' || d.status === 'rejected' ? (
+                          <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[10px] font-bold">
+                            RECHAZADO
+                          </Badge>
+                        ) : d.status === 'ACCEPTED_WITH_OBSERVATIONS' || d.status === 'accepted_with_reservations' ? (
+                          <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold">
+                            OBSERVADO
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold">
+                            ACEPTADO
+                          </Badge>
+                        )}
                       </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap">
                         <div className="flex justify-center gap-1.5">
@@ -550,21 +654,21 @@ function CentroFiscalPage() {
                         <div className="font-mono font-bold text-emerald-700 text-sm">{d.encf}</div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-bold text-foreground">{d.sellerName || d.issuerName || 'Proveedor SRL'}</div>
-                        <div className="text-xs font-mono text-muted-foreground">{d.sellerRnc || d.issuerRnc || 'RNC Proveedor'}</div>
+                        <div className="font-bold text-foreground">{d.sellerName || d.issuerName || d.nombre_emisor || 'Proveedor SRL'}</div>
+                        <div className="text-xs font-mono text-muted-foreground">{d.sellerRnc || d.issuerRnc || d.rnc_emisor || 'RNC Proveedor'}</div>
                       </td>
                       <td className="px-6 py-4 text-center text-xs text-muted-foreground font-medium whitespace-nowrap">
-                        {d.receivedAt ? new Date(d.receivedAt).toLocaleDateString("es-DO") : 'Reciente'}
+                        {d.receivedAt || d.createdAt || d.creado_en ? new Date(d.receivedAt || d.createdAt || d.creado_en).toLocaleDateString("es-DO") : 'Reciente'}
                       </td>
                       <td className="px-6 py-4 text-right font-bold font-mono text-foreground text-sm whitespace-nowrap">
-                        {formatRD(d.totalAmount || 0)}
+                        {formatRD(d.totalAmount ?? d.monto_total ?? 0)}
                       </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap">
-                        {d.commercialStatus === 'ACCEPTED' ? (
+                        {d.commercialStatus === 'ACCEPTED' || d.estado_comercial === 'APROBADO' ? (
                           <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold">
                             APROBADO
                           </Badge>
-                        ) : d.commercialStatus === 'REJECTED' ? (
+                        ) : d.commercialStatus === 'REJECTED' || d.estado_comercial === 'RECHAZADO' ? (
                           <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[10px] font-bold">
                             RECHAZADO
                           </Badge>
@@ -665,18 +769,18 @@ function CentroFiscalPage() {
                         {d.encf}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
-                        <div className="font-bold text-foreground">{d.sellerName || d.issuerName || 'Proveedor Registrado'}</div>
-                        <div className="text-xs font-mono text-muted-foreground">{d.sellerRnc || d.issuerRnc || 'RNC Proveedor'}</div>
+                        <div className="font-bold text-foreground">{d.sellerName || d.issuerName || d.nombre_emisor || 'Proveedor Registrado'}</div>
+                        <div className="text-xs font-mono text-muted-foreground">{d.sellerRnc || d.issuerRnc || d.rnc_emisor || 'RNC Proveedor'}</div>
                       </td>
                       <td className="px-6 py-4 text-center text-xs text-muted-foreground font-medium whitespace-nowrap">
-                        {d.receivedAt ? new Date(d.receivedAt).toLocaleDateString("es-DO") : 'Reciente'}
+                        {d.receivedAt || d.createdAt || d.creado_en ? new Date(d.receivedAt || d.createdAt || d.creado_en).toLocaleDateString("es-DO") : 'Reciente'}
                       </td>
                       <td className="px-6 py-4 text-right font-bold font-mono text-foreground text-sm whitespace-nowrap">
-                        {formatRD(d.totalAmount || 0)}
+                        {formatRD(d.totalAmount ?? d.monto_total ?? 0)}
                       </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap">
                         <Badge variant="outline" className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-bold">
-                          {d.commercialStatus || 'PENDIENTE'}
+                          {d.commercialStatus || d.estado_comercial || 'PENDIENTE'}
                         </Badge>
                       </td>
                       <td className="px-6 py-4 text-center whitespace-nowrap">
@@ -744,8 +848,8 @@ function CentroFiscalPage() {
 
           <div className="space-y-4 py-2">
             <div className="p-3 rounded-xl bg-slate-50 border border-slate-200/80 space-y-1 text-xs">
-              <div><strong className="text-slate-700">Proveedor:</strong> {selectedDocForApproval?.sellerName || 'Proveedor Registrado'}</div>
-              <div><strong className="text-slate-700">Monto Facturado:</strong> {formatRD(selectedDocForApproval?.totalAmount || 0)}</div>
+              <div><strong className="text-slate-700">Proveedor:</strong> {selectedDocForApproval?.sellerName || selectedDocForApproval?.issuerName || selectedDocForApproval?.nombre_emisor || 'Proveedor Registrado'}</div>
+              <div><strong className="text-slate-700">Monto Facturado:</strong> {formatRD(selectedDocForApproval?.totalAmount ?? selectedDocForApproval?.monto_total ?? 0)}</div>
             </div>
 
             <div className="space-y-1.5">

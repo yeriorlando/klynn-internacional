@@ -345,6 +345,13 @@ export interface ECFDocument {
   monto_total: number;
   monto_itbis: number;
   fecha_emision: string;
+  pdf_url?: string;
+  xml_url?: string;
+  document_stamp_url?: string;
+  security_code?: string;
+  contingency_mode?: boolean;
+  legal_status?: string;
+  pronesoft_id?: string;
 }
 
 export type EstadoCaja = "ABIERTA" | "CERRADA";
@@ -2930,13 +2937,58 @@ export async function getECFDocuments(tenantId: string): Promise<ECFDocument[]> 
     .select("*")
     .eq("tenant_id", tenantId)
     .order("fecha_emision", { ascending: false });
-  if (error) return [];
-  return data || [];
+  if (error) {
+    console.warn("Aviso al obtener ecf_documents:", error);
+    return [];
+  }
+  return (data || []).map((doc: any) => ({
+    ...doc,
+    pdf_url: doc.pdf_url || doc.dgii_response?.pdf || doc.dgii_response?.pdf_url,
+    xml_url: doc.xml_url || doc.dgii_response?.xmlUrl || doc.dgii_response?.xml_url,
+    document_stamp_url: doc.document_stamp_url || doc.dgii_response?.documentStampUrl || doc.qr_content,
+    security_code: doc.security_code || doc.dgii_response?.securityCode,
+    contingency_mode: doc.contingency_mode ?? doc.dgii_response?.contingencyMode ?? false,
+    legal_status: doc.legal_status || doc.dgii_response?.legalStatus,
+    pronesoft_id: doc.pronesoft_id || doc.dgii_response?.id,
+  }));
 }
 
 export async function saveECFDocument(doc: ECFDocument) {
-  const { error } = await supabase.from("ecf_documents").upsert(doc);
-  if (error) throw error;
+  // Construir objeto limpio respetando el esquema oficial de la tabla ecf_documents
+  const cleanDoc: Record<string, any> = {
+    id: doc.id,
+    tenant_id: doc.tenant_id,
+    order_id: doc.order_id || null,
+    encf: doc.encf,
+    tipo_ecf: doc.tipo_ecf,
+    rnc_receptor: doc.rnc_receptor || null,
+    track_id: doc.track_id || null,
+    status: doc.status || 'pending',
+    dgii_response: doc.dgii_response || {
+      pdf_url: (doc as any).pdf_url,
+      xml_url: (doc as any).xml_url,
+      document_stamp_url: (doc as any).document_stamp_url,
+      security_code: (doc as any).security_code,
+      contingency_mode: (doc as any).contingency_mode,
+      stamp_date: (doc as any).stamp_date,
+      signature_date: (doc as any).signature_date,
+      legal_status: (doc as any).legal_status,
+      pronesoft_id: (doc as any).pronesoft_id,
+    },
+    xml_content: doc.xml_content || null,
+    signature_value: doc.signature_value || null,
+    signature_date: doc.signature_date || null,
+    qr_content: doc.qr_content || (doc as any).document_stamp_url || null,
+    monto_total: doc.monto_total ?? 0,
+    monto_itbis: doc.monto_itbis ?? 0,
+    fecha_emision: doc.fecha_emision || new Date().toISOString(),
+  };
+
+  const { error } = await supabase.from("ecf_documents").upsert(cleanDoc);
+  if (error) {
+    console.error("Error al guardar ECFDocument en Supabase:", error);
+    throw error;
+  }
 }
 
 export async function nextECFNumero(
@@ -3003,37 +3055,41 @@ import { getProneSoftClient } from "./fiscal/pronesoft-client";
 
 export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDocumentRecibido[]> {
   try {
-    // 1. Obtener desde el SDK de Pronesoft los últimos recibidos
-    const pronesoft = getProneSoftClient(tenantId);
-    const res = await pronesoft.listReceivedDocuments(1, 100);
+    // 1. Obtener la config fiscal para saber si tiene pronesoft_tenant_id y está activo
+    const { data: config } = await supabase
+      .from("ecf_config")
+      .select("is_active, pronesoft_tenant_id, ambiente, usar_credenciales_propias, pronesoft_client_id, pronesoft_client_secret")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
 
-    // Si hay datos, upsertarlos en la base de datos local
-    if (res && res.data && res.data.length > 0) {
-      const { data: config } = await supabase
-        .from("ecf_config")
-        .select("is_active")
-        .eq("tenant_id", tenantId)
-        .single();
+    if (config?.is_active && config.pronesoft_tenant_id) {
+      const pronesoft = getProneSoftClient(
+        config.pronesoft_tenant_id,
+        config.ambiente === "pruebas" ? "sandbox" : "production",
+        config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
+        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+      );
+      const res = await pronesoft.listReceivedDocuments(1, 100);
 
-      // Solo sincronizar si el módulo e-CF está activo
-      if (config && config.is_active) {
+      // Si hay datos, upsertarlos en la base de datos local
+      if (res && res.data && res.data.length > 0) {
         const ops = res.data.map((doc: any) => ({
           tenant_id: tenantId,
-          // documentId o trackId depende de la estructura, normalmente id o eNcf
-          id: doc.id || doc.trackId || doc.eNcf,
-          tipo_ecf: doc.eNcf ? doc.eNcf.substring(0, 3) : "E31",
-          rnc_emisor: doc.issuerRnc || "N/A",
-          nombre_emisor: doc.issuerName || "Proveedor",
-          encf: doc.eNcf || "",
-          monto_total: doc.totalAmount || 0,
+          id: doc.id || doc.trackId || doc.eNcf || doc.encf,
+          tipo_ecf: doc.documentType || (doc.eNcf ? doc.eNcf.substring(0, 3) : (doc.encf ? doc.encf.substring(0, 3) : "E31")),
+          rnc_emisor: doc.issuerRnc || doc.sellerRnc || "N/A",
+          nombre_emisor: doc.issuerName || doc.sellerName || "Proveedor",
+          encf: doc.eNcf || doc.encf || "",
+          monto_total: doc.totalAmount || doc.totals?.totalAmount || 0,
+          monto_itbis: doc.totalItbis || doc.totals?.totalITBIS || 0,
           estado_comercial:
-            doc.commercialStatus === "ACCEPTED"
+            doc.commercialStatus === "ACCEPTED" || doc.commercialStatus === "APROBADO"
               ? "APROBADO"
-              : doc.commercialStatus === "REJECTED"
+              : doc.commercialStatus === "REJECTED" || doc.commercialStatus === "RECHAZADO"
                 ? "RECHAZADO"
                 : "PENDIENTE",
-          pdf_url: doc.pdfUrl || null,
-          creado_en: doc.issueDate || new Date().toISOString(),
+          pdf_url: doc.pdfUrl || doc.fileUrl || null,
+          creado_en: doc.receivedAt || doc.issueDate || doc.createdAt || new Date().toISOString(),
         }));
 
         // Guardamos los documentos en batch si no existen
@@ -3043,7 +3099,7 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
       }
     }
   } catch (error) {
-    console.error("Error sincronizando facturas recibidas con Pronesoft:", error);
+    console.warn("Aviso al sincronizar facturas recibidas con Pronesoft:", error);
   }
 
   // 2. Obtener de la base de datos local
@@ -3053,7 +3109,7 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
     .eq("tenant_id", tenantId)
     .order("creado_en", { ascending: false });
 
-  if (error) throw error;
+  if (error) return [];
   return data || [];
 }
 
@@ -3073,14 +3129,21 @@ export async function updateEstadoComercialECF(
   estado: "APROBADO" | "RECHAZADO",
   tenantId?: string,
 ) {
-  // Primero notificar al SDK
+  // Primero notificar al SDK si hay tenantId
   if (tenantId) {
     try {
-      const pronesoft = getProneSoftClient(tenantId);
-      await pronesoft.submitCommercialApproval(id, estado === "APROBADO" ? "ACCEPTED" : "REJECTED");
+      const config = await getECFConfig(tenantId);
+      if (config?.is_active) {
+        const pronesoft = getProneSoftClient(
+          config.pronesoft_tenant_id,
+          config.ambiente === "pruebas" ? "sandbox" : "production",
+          config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
+          config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+        );
+        await pronesoft.submitCommercialApproval(id, estado === "APROBADO" ? "ACCEPTED" : "REJECTED");
+      }
     } catch (err) {
-      console.error("Error al enviar aprobación comercial al SDK:", err);
-      // No lanzamos el error para no bloquear la app, pero idealmente se debería manejar
+      console.warn("Aviso al enviar aprobación comercial a Pronesoft:", err);
     }
   }
 
