@@ -2954,7 +2954,7 @@ export async function getECFDocuments(tenantId: string): Promise<ECFDocument[]> 
 }
 
 export async function saveECFDocument(doc: ECFDocument) {
-  // Construir objeto limpio respetando el esquema oficial de la tabla ecf_documents
+  // Construir objeto limpio respetando estrictamente el esquema oficial de la tabla ecf_documents
   const cleanDoc: Record<string, any> = {
     id: doc.id,
     tenant_id: doc.tenant_id,
@@ -2975,9 +2975,7 @@ export async function saveECFDocument(doc: ECFDocument) {
       legal_status: (doc as any).legal_status,
       pronesoft_id: (doc as any).pronesoft_id,
     },
-    xml_content: doc.xml_content || null,
-    signature_value: doc.signature_value || null,
-    signature_date: doc.signature_date || null,
+    xml_content: doc.xml_content || (doc as any).xml_url || (doc.dgii_response as any)?.xmlUrl || "",
     qr_content: doc.qr_content || (doc as any).document_stamp_url || null,
     monto_total: doc.monto_total ?? 0,
     monto_itbis: doc.monto_itbis ?? 0,
@@ -2986,8 +2984,18 @@ export async function saveECFDocument(doc: ECFDocument) {
 
   const { error } = await supabase.from("ecf_documents").upsert(cleanDoc);
   if (error) {
-    console.error("Error al guardar ECFDocument en Supabase:", error);
-    throw error;
+    if (error.code === "23503" && cleanDoc.order_id) {
+      // Reintentar sin order_id si la orden aún está en proceso de creación
+      cleanDoc.order_id = null;
+      const { error: retryError } = await supabase.from("ecf_documents").upsert(cleanDoc);
+      if (retryError) {
+        console.error("Error al guardar ECFDocument en Supabase:", retryError);
+        throw retryError;
+      }
+    } else {
+      console.error("Error al guardar ECFDocument en Supabase:", error);
+      throw error;
+    }
   }
 }
 
@@ -3062,7 +3070,9 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
       .eq("tenant_id", tenantId)
       .maybeSingle();
 
-    if (config?.is_active && config.pronesoft_tenant_id) {
+    const isUUID = config?.pronesoft_tenant_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(config.pronesoft_tenant_id);
+
+    if (config?.is_active && isUUID) {
       const pronesoft = getProneSoftClient(
         config.pronesoft_tenant_id,
         config.ambiente === "pruebas" ? "sandbox" : "production",

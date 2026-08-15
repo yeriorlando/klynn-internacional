@@ -1232,6 +1232,9 @@ function NuevaOrdenPage() {
         opcionPagoSelected !== "CREDITO"
       ) {
         try {
+          // 1. Guardar la orden inicial en Supabase para satisfacer la clave foránea
+          await saveOrden(orden);
+
           let nextNCF: string | undefined = undefined;
 
           try {

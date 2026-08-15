@@ -61,9 +61,10 @@ function HomologacionPage() {
     
     try {
       const caso = casos.find(c => c.id === casoId)!;
+      const proneEnv = config.ambiente === 'produccion' ? 'production' : 'sandbox';
       const client = getProneSoftClient(
         config.pronesoft_tenant_id || undefined,
-        undefined,
+        proneEnv,
         config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
         config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
       );

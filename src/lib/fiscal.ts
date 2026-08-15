@@ -77,7 +77,9 @@ export async function emitirECF(
   } catch (e) {
     console.error("Error al buscar ECFConfig del tenant:", e);
   }
-  const client = getProneSoftClient(ecfTenantId, undefined, customClientId, customClientSecret);
+
+  const targetProneEnv = ecfConf?.ambiente === 'produccion' ? 'production' : 'sandbox';
+  const client = getProneSoftClient(ecfTenantId, targetProneEnv, customClientId, customClientSecret);
 
   // 3. Enviar a Pronesoft → DGII
   let response: ECFSubmitResponse;
@@ -119,14 +121,12 @@ export async function emitirECF(
         stampDate: new Date().toISOString(),
         signatureDate: new Date().toISOString()
       };
-      
-      toast.success(`[Pruebas DGII] Comprobante ${encfGenerado} emitido ✅`);
     } else if (err.message && err.message.includes("Invalid tenant delegation")) {
       console.log("Detectado error de delegación de tenant. Re-registrando tenant en Pronesoft...");
       try {
         const nuevoProneTenantId = await registerTenantInPronesoft(tenant.id);
         if (nuevoProneTenantId) {
-          const nuevoClient = getProneSoftClient(nuevoProneTenantId, undefined, customClientId, customClientSecret);
+          const nuevoClient = getProneSoftClient(nuevoProneTenantId, targetProneEnv, customClientId, customClientSecret);
           response = await nuevoClient.submitDocument(payload);
         } else {
           throw err;
@@ -556,6 +556,11 @@ export async function listReceivedDocumentsPronesoft(
   pageSize: number = 50
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
+  const isUUID = config?.pronesoft_tenant_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(config.pronesoft_tenant_id);
+  if (!config?.is_active || !isUUID) {
+    return { data: [], total: 0 };
+  }
+
   const client = getProneSoftClient(
     config?.pronesoft_tenant_id,
     config?.ambiente === 'pruebas' ? 'sandbox' : 'production',
