@@ -4,7 +4,8 @@ import {
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil,
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
-  AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X
+  AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
+  Wrench, ArrowLeft, ArrowRight
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -142,6 +143,7 @@ function AdminPage() {
 
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [openEditModal, setOpenEditModal] = useState(false);
+  const [editStep, setEditStep] = useState<1 | 2>(1);
   const [newEmail, setNewEmail] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [selectedPlanId, setSelectedPlanId] = useState<PlanId>("basico");
@@ -155,6 +157,7 @@ function AdminPage() {
   const [modOverrideMultisucursal, setModOverrideMultisucursal] = useState(false);
   const [modOverrideLogistica, setModOverrideLogistica] = useState(false);
   const [modOverrideProcesos, setModOverrideProcesos] = useState(false);
+  const [modOverrideEstanteria, setModOverrideEstanteria] = useState(true);
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -344,7 +347,11 @@ function AdminPage() {
     setModOverrideProcesos(t.config?.modulos_override?.procesos !== undefined
       ? t.config.modulos_override.procesos
       : (pOfTenant?.modulos.procesos !== undefined ? !!pOfTenant.modulos.procesos : true));
+    setModOverrideEstanteria(t.config?.modulos_override?.estanteria !== undefined
+      ? t.config.modulos_override.estanteria
+      : (pOfTenant?.modulos.estanteria !== undefined ? !!pOfTenant.modulos.estanteria : true));
 
+    setEditStep(1);
     setOpenEditModal(true);
   }
 
@@ -352,7 +359,9 @@ function AdminPage() {
     if (!editingTenant) return;
     try {
       await updateTenantAdmin(editingTenant.id, newEmail, newPassword || undefined);
-      await updateTenantPlan(editingTenant.id, selectedPlanId);
+      if (editingTenant.plan_id !== selectedPlanId) {
+        await updateTenantPlan(editingTenant.id, selectedPlanId, false);
+      }
       await updateTenantStatus(editingTenant.id, newStatus);
       await updateTenantMaxSucursales(editingTenant.id, newMaxSucursales);
 
@@ -368,6 +377,7 @@ function AdminPage() {
           multisucursal: modOverrideMultisucursal,
           logistica: modOverrideLogistica,
           procesos: modOverrideProcesos,
+          estanteria: modOverrideEstanteria,
         }
       );
 
@@ -658,6 +668,9 @@ function AdminPage() {
                         const hasProcesos = t.config?.modulos_override?.procesos !== undefined 
                           ? t.config.modulos_override.procesos 
                           : (planOfTenant?.modulos.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
+                        const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined 
+                          ? t.config.modulos_override.estanteria 
+                          : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
 
                         const daysRemaining = t.trial_hasta
                           ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -802,10 +815,20 @@ function AdminPage() {
                                   <Truck className="h-3.5 w-3.5" />
                                 </span>
                                 <span
-                                  title={hasProcesos ? "Control de Producción/Procesos: Habilitado" : "Procesos: Inactivo"}
+                                  title={hasProcesos ? "Tablero de Procesos: Habilitado" : "Procesos: Inactivo"}
                                   className={`p-1.5 rounded-lg transition-all ${
                                     hasProcesos
                                       ? "bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Wrench className="h-3.5 w-3.5" />
+                                </span>
+                                <span
+                                  title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}
+                                  className={`p-1.5 rounded-lg transition-all ${
+                                    hasEstanteria
+                                      ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
                                       : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                   }`}
                                 >
@@ -927,6 +950,7 @@ function AdminPage() {
                   const hasSucursales = t.config?.modulos_override?.multisucursal !== undefined ? t.config.modulos_override.multisucursal : ((t.max_sucursales || 1) > 1 || !!planOfTenant?.modulos.multisucursal);
                   const hasLogistica = t.config?.modulos_override?.logistica !== undefined ? t.config.modulos_override.logistica : !!planOfTenant?.modulos.logistica;
                   const hasProcesos = t.config?.modulos_override?.procesos !== undefined ? t.config.modulos_override.procesos : (planOfTenant?.modulos.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
+                  const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined ? t.config.modulos_override.estanteria : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
 
                   const daysRemaining = t.trial_hasta
                     ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1010,7 +1034,8 @@ function AdminPage() {
                             <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50 dark:bg-blue-950/60' : 'text-muted-foreground/30 opacity-40'}`}><FileText className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
-                            <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Layers className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Layers className="h-3 w-3" /></span>
                           </div>
                         </div>
 
@@ -1238,7 +1263,9 @@ function AdminPage() {
                     <div>👥 {p.limite_empleados} Empleados</div>
                     <div>📦 {p.limite_ordenes_mes ?? "∞"} Órdenes/mes</div>
                     {p.modulos?.whatsapp && (
-                      <div className="text-blue-600 font-medium">💬 {(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp</div>
+                      <div className="text-blue-600 dark:text-blue-400 font-medium">
+                        💬 {p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp` : "Mensajes WhatsApp Ilimitados"}
+                      </div>
                     )}
                     <div className="border-t border-border pt-2.5 mt-2.5 text-left">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
@@ -1246,12 +1273,13 @@ function AdminPage() {
                       </div>
                       <div className="space-y-1.5">
                         {[
-                          { key: "whatsapp", label: "Mensajería WhatsApp" },
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica" },
-                          { key: "multisucursal", label: "Multisucursal" },
+                          { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
+                          { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
-                        ].map(({ key, label }) => {
+                          { key: "estanteria", label: "Estantería virtual" },
+                        ].map(({ key, label, extra }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
                             <div 
@@ -1274,7 +1302,14 @@ function AdminPage() {
                                   <path d="m9 9 6 6" />
                                 </svg>
                               )}
-                              <span>{label}</span>
+                              <span className="flex items-center flex-wrap gap-1">
+                                <span>{label}</span>
+                                {extra && (
+                                  <span className={`text-[10px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                                    {extra}
+                                  </span>
+                                )}
+                              </span>
                             </div>
                           );
                         })}
@@ -1469,213 +1504,305 @@ function AdminPage() {
         </Tabs>
       </main>
 
-      {/* Modal para editar Credenciales de Lavandería */}
+      {/* Modal para Gestionar Lavandería (Wizard) */}
       <Dialog open={openEditModal} onOpenChange={setOpenEditModal}>
-        <DialogContent className="rounded-2xl border-none shadow-card max-w-3xl">
-          <DialogHeader>
-            <DialogTitle className="font-display text-2xl flex items-center gap-2">
-              <Shield className="h-5 w-5 text-primary" /> Editar Credenciales
-            </DialogTitle>
-            <DialogDescription>
-              Actualiza el acceso, suscripción y cupo de sucursales para <strong>{editingTenant?.nombre}</strong>
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-5 gap-y-3 py-1">
-            {/* Correo Administrativo */}
-            <div className="space-y-1">
-              <Label htmlFor="edit-email" className="text-xs font-semibold text-slate-655">Correo Administrativo</Label>
-              <div className="relative">
-                <Users className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="edit-email"
-                  type="email"
-                  className="pl-10 rounded-xl h-9.5 text-sm"
-                  value={newEmail}
-                  onChange={(e) => setNewEmail(e.target.value)}
-                />
+        <DialogContent className="rounded-3xl max-w-xl p-0 gap-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+          {/* STEPPER HEADER */}
+          <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:px-5 sm:pt-4 sm:pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center justify-between mb-3 pr-10">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
+                  {editStep === 1 ? <Building2 className="h-4.5 w-4.5" /> : <Layers className="h-4.5 w-4.5" />}
+                </div>
+                <div>
+                  <DialogTitle className="text-base font-display font-bold text-foreground">
+                    Gestionar Lavandería: {editingTenant?.nombre || ""}
+                  </DialogTitle>
+                  <p className="text-xs text-muted-foreground">
+                    {editStep === 1
+                      ? "Paso 1: Accesos, suscripción y cupo de sucursales"
+                      : "Paso 2: Módulos y funciones habilitadas"}
+                  </p>
+                </div>
               </div>
             </div>
 
-            {/* Estado de la Lavandería */}
-            <div className="space-y-1">
-              <Label htmlFor="edit-status" className="text-xs font-semibold text-slate-655">Estado de la Lavandería</Label>
-              <Select
-                value={newStatus}
-                onValueChange={(v: any) => {
-                  setNewStatus(v);
-                  if (v === "ACTIVO" || v === "TRIAL") {
-                    setNewDaysLimit(30);
-                  }
-                }}
+            {/* Stepper Buttons */}
+            <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+              <button
+                type="button"
+                onClick={() => setEditStep(1)}
+                className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                  editStep === 1
+                    ? "bg-primary text-white shadow-md font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
               >
-                <SelectTrigger className="h-9.5 rounded-xl text-sm">
-                  <SelectValue placeholder="Seleccionar estado" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl shadow-elegant text-sm">
-                  <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
-                  <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
-                  <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
-                  <SelectItem value="CANCELADO" className="rounded-lg text-destructive">Cancelado</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+                <span
+                  className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                    editStep === 1
+                      ? "bg-white/25 text-white"
+                      : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  1
+                </span>
+                <span>Acceso & Suscripción</span>
+              </button>
 
-            {/* Nueva Contraseña (opcional) */}
-            <div className="space-y-1">
-              <Label htmlFor="edit-pass" className="text-xs font-semibold text-slate-655">Nueva Contraseña (opcional)</Label>
-              <div className="relative">
-                <Key className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="edit-pass"
-                  type="password"
-                  className="pl-10 rounded-xl h-9.5 text-sm"
-                  placeholder="Dejar en blanco para no cambiar"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Plan de Suscripción */}
-            <div className="space-y-1">
-              <Label htmlFor="edit-plan" className="text-xs font-semibold text-slate-655">Plan de Suscripción</Label>
-              <Select
-                value={selectedPlanId}
-                onValueChange={(v: PlanId) => {
-                  setSelectedPlanId(v);
-                  setNewDaysLimit(30);
-                  const newPlan = plans.find(p => p.id === v);
-                  if (newPlan) {
-                    setModOverrideWa(!!newPlan.modulos.whatsapp);
-                    setModOverrideFiscal(!!newPlan.modulos.facturacion_fiscal);
-                    setModOverrideMultisucursal(!!newPlan.modulos.multisucursal);
-                    setModOverrideLogistica(!!newPlan.modulos.logistica);
-                    setModOverrideProcesos(newPlan.modulos.procesos !== undefined ? !!newPlan.modulos.procesos : true);
-                  }
-                }}
+              <button
+                type="button"
+                onClick={() => setEditStep(2)}
+                className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                  editStep === 2
+                    ? "bg-primary text-white shadow-md font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                }`}
               >
-                <SelectTrigger className="h-9.5 rounded-xl text-sm">
-                  <SelectValue placeholder="Seleccionar plan" />
-                </SelectTrigger>
-                <SelectContent className="rounded-xl shadow-elegant text-sm">
-                  {plans.map((p) => (
-                    <SelectItem key={p.id} value={p.id} className="rounded-lg">
-                      <div className="flex items-center justify-between w-full gap-4 text-sm">
-                        <span className="font-semibold">{p.nombre}</span>
-                        <span className="text-xs text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
-                      </div>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {/* Días de vigencia / renovación */}
-            <div className="space-y-1">
-              <Label htmlFor="edit-days-limit" className="text-xs font-semibold text-slate-655">Días de vigencia / renovación</Label>
-              <div className="relative">
-                <Calendar className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="edit-days-limit"
-                  type="number"
-                  min={0}
-                  className="pl-10 rounded-xl h-9.5 text-sm"
-                  value={newDaysLimit}
-                  onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)}
-                />
-              </div>
-              <p className="text-[10.5px] text-muted-foreground">
-                Próxima renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
-              </p>
-            </div>
-
-            {/* Sucursales Habilitadas */}
-            <div className="space-y-1">
-              <Label htmlFor="edit-max-sucursales" className="text-xs font-semibold text-slate-655">Cupo de Sucursales Habilitadas</Label>
-              <div className="relative">
-                <Building2 className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="edit-max-sucursales"
-                  type="number"
-                  min={1}
-                  className="pl-10 rounded-xl h-9.5 font-bold text-sm"
-                  value={newMaxSucursales}
-                  onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)}
-                />
-              </div>
-            </div>
-
-            {/* SECCIÓN MÓDULOS PERSONALIZADOS */}
-            <div className="md:col-span-2 border-t border-border/60 pt-2.5 mt-1">
-              <Label className="text-slate-700 dark:text-slate-300 font-bold block mb-2 text-xs uppercase tracking-wider">
-                Módulos Habilitados (Personalización)
-              </Label>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
-                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold">WhatsApp</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Alertas</span>
-                  </div>
-                  <Switch
-                    checked={modOverrideWa}
-                    onCheckedChange={setModOverrideWa}
-                  />
-                </label>
-
-                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold">Facturación</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">e-CF / NCF</span>
-                  </div>
-                  <Switch
-                    checked={modOverrideFiscal}
-                    onCheckedChange={setModOverrideFiscal}
-                  />
-                </label>
-
-                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold">Sucursales</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Múltiples</span>
-                  </div>
-                  <Switch
-                    checked={modOverrideMultisucursal}
-                    onCheckedChange={setModOverrideMultisucursal}
-                  />
-                </label>
-
-                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold">Logística</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Envíos</span>
-                  </div>
-                  <Switch
-                    checked={modOverrideLogistica}
-                    onCheckedChange={setModOverrideLogistica}
-                  />
-                </label>
-
-                <label className="flex items-center justify-between rounded-xl border border-border/70 p-2 px-2.5 bg-card/60 shadow-2xs cursor-pointer hover:bg-accent/10 transition-all">
-                  <div className="flex flex-col">
-                    <span className="text-xs font-bold">Procesos</span>
-                    <span className="text-[9px] text-muted-foreground leading-tight">Producción</span>
-                  </div>
-                  <Switch
-                    checked={modOverrideProcesos}
-                    onCheckedChange={setModOverrideProcesos}
-                  />
-                </label>
-              </div>
+                <span
+                  className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                    editStep === 2
+                      ? "bg-white/25 text-white"
+                      : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  2
+                </span>
+                <span>Módulos Habilitados ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria].filter(Boolean).length})</span>
+              </button>
             </div>
           </div>
 
-          <DialogFooter className="gap-2 sm:gap-0 border-t pt-3">
-            <Button variant="ghost" onClick={() => setOpenEditModal(false)} className="rounded-xl h-9">Cancelar</Button>
-            <Button onClick={handleUpdateAdmin} className="bg-gradient-primary text-white rounded-xl shadow-md font-bold h-9">
-              Guardar Cambios
-            </Button>
-          </DialogFooter>
+          {/* DIALOG BODY */}
+          <div className="px-5 sm:px-6 py-4 max-h-[min(72vh,560px)] overflow-y-auto custom-scrollbar">
+            {editStep === 1 ? (
+              /* STEP 1: ACCESO & SUSCRIPCIÓN */
+              <div className="space-y-3.5 animate-in fade-in slide-in-from-left-3 duration-200">
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-email" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Correo Administrativo *
+                    </Label>
+                    <div className="relative">
+                      <Users className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="edit-email"
+                        type="email"
+                        className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                        value={newEmail}
+                        onChange={(e) => setNewEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-status" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Estado de la Lavandería
+                    </Label>
+                    <Select
+                      value={newStatus}
+                      onValueChange={(v: any) => {
+                        setNewStatus(v);
+                        if (v === "ACTIVO" || v === "TRIAL") {
+                          setNewDaysLimit(30);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm bg-surface border-border/60">
+                        <SelectValue placeholder="Seleccionar estado" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl shadow-elegant text-xs sm:text-sm">
+                        <SelectItem value="ACTIVO" className="rounded-lg">Activo</SelectItem>
+                        <SelectItem value="TRIAL" className="rounded-lg">En Prueba</SelectItem>
+                        <SelectItem value="SUSPENDIDO" className="rounded-lg text-amber-600">Suspendido</SelectItem>
+                        <SelectItem value="CANCELADO" className="rounded-lg text-destructive">Cancelado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-pass" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Nueva Contraseña (opcional)
+                    </Label>
+                    <div className="relative">
+                      <Key className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="edit-pass"
+                        type="password"
+                        className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                        placeholder="Dejar en blanco para conservar"
+                        value={newPassword}
+                        onChange={(e) => setNewPassword(e.target.value)}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-plan" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Plan de Suscripción
+                    </Label>
+                    <Select
+                      value={selectedPlanId}
+                      onValueChange={(v: PlanId) => {
+                        setSelectedPlanId(v);
+                        setNewDaysLimit(30);
+                        const newPlan = plans.find(p => p.id === v);
+                        if (newPlan) {
+                          setModOverrideWa(!!newPlan.modulos.whatsapp);
+                          setModOverrideFiscal(!!newPlan.modulos.facturacion_fiscal);
+                          setModOverrideMultisucursal(!!newPlan.modulos.multisucursal);
+                          setModOverrideLogistica(!!newPlan.modulos.logistica);
+                          setModOverrideProcesos(newPlan.modulos.procesos !== undefined ? !!newPlan.modulos.procesos : true);
+                          setModOverrideEstanteria(newPlan.modulos.estanteria !== undefined ? !!newPlan.modulos.estanteria : true);
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm bg-surface border-border/60">
+                        <SelectValue placeholder="Seleccionar plan" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl shadow-elegant text-xs sm:text-sm">
+                        {plans.map((p) => (
+                          <SelectItem key={p.id} value={p.id} className="rounded-lg">
+                            <div className="flex items-center justify-between w-full gap-3 text-xs sm:text-sm">
+                              <span className="font-semibold">{p.nombre}</span>
+                              <span className="text-[11px] text-muted-foreground">{formatRD(p.precio_mensual)}/mes</span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-days-limit" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Días de vigencia / renovación
+                    </Label>
+                    <div className="relative">
+                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="edit-days-limit"
+                        type="number"
+                        min={0}
+                        className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                        value={newDaysLimit}
+                        onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)}
+                      />
+                    </div>
+                    <p className="text-[11px] text-muted-foreground pt-0.5">
+                      Próxima renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
+                    </p>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor="edit-max-sucursales" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                      Cupo de Sucursales Habilitadas
+                    </Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        id="edit-max-sucursales"
+                        type="number"
+                        min={1}
+                        className="pl-9.5 rounded-xl h-10 font-bold text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                        value={newMaxSucursales}
+                        onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              /* STEP 2: MÓDULOS HABILITADOS (OVERRIDES) */
+              <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
+                <Label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Personalización de Módulos para este Negocio
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {[
+                    { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, checked: modOverrideWa, onChange: setModOverrideWa, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+                    { key: "fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, checked: modOverrideFiscal, onChange: setModOverrideFiscal, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
+                    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, checked: modOverrideMultisucursal, onChange: setModOverrideMultisucursal, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+                    { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, checked: modOverrideLogistica, onChange: setModOverrideLogistica, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
+                    { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: setModOverrideProcesos, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
+                    { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: setModOverrideEstanteria, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+                  ].map(({ key, label, desc, icon: IconComp, checked, onChange, colorClass, bgClass }) => (
+                    <div
+                      key={key}
+                      onClick={() => onChange(!checked)}
+                      className={`flex items-center justify-between p-2.5 px-3 rounded-2xl border transition-all cursor-pointer select-none ${
+                        checked
+                          ? "bg-white dark:bg-slate-900 border-primary/40 shadow-xs ring-1 ring-primary/20"
+                          : "bg-surface/50 border-border/60 hover:bg-white hover:border-border"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        <div className={`h-8 w-8 rounded-xl ${bgClass} ${colorClass} flex items-center justify-center shrink-0`}>
+                          <IconComp className="h-4 w-4" />
+                        </div>
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-foreground leading-tight truncate">{label}</div>
+                          <div className="text-[10px] text-muted-foreground leading-tight truncate">{desc}</div>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={checked}
+                        onCheckedChange={onChange}
+                        className="data-[state=checked]:bg-primary shrink-0"
+                      />
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* DIALOG FOOTER */}
+          <div className="border-t border-border/50 p-3 sm:px-6 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-900/30">
+            <div>
+              {editStep === 1 ? (
+                <Button
+                  type="button"
+                  onClick={() => setOpenEditModal(false)}
+                  className="h-9 rounded-xl text-xs font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 px-4 border border-slate-300 dark:border-slate-600 shadow-2xs active:scale-95 transition-all cursor-pointer"
+                >
+                  Cancelar
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  onClick={() => setEditStep(1)}
+                  className="h-9 rounded-xl text-xs font-bold gap-1.5 px-4"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" />
+                  Volver
+                </Button>
+              )}
+            </div>
+
+            <div>
+              {editStep === 1 ? (
+                <Button
+                  onClick={() => setEditStep(2)}
+                  className="h-9 rounded-xl bg-primary hover:bg-primary/90 text-white font-bold text-xs gap-1.5 shadow-sm active:scale-95 transition-all px-4"
+                >
+                  <span>Siguiente: Módulos</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleUpdateAdmin}
+                  className="h-9 rounded-xl bg-gradient-primary text-white font-bold text-xs shadow-md active:scale-95 transition-all gap-1.5 px-4"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Guardar Cambios</span>
+                </Button>
+              )}
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1783,22 +1910,32 @@ function KPI({
 function PlanDialog({ open, onOpenChange, initial, onSaved }: {
   open: boolean; onOpenChange: (o: boolean) => void; initial: Plan | null; onSaved: () => void;
 }) {
+  const [step, setStep] = useState<1 | 2>(1);
   const [f, setF] = useState<Partial<Plan>>({});
+
   useEffect(() => {
-    if (open) setF(initial ? { ...initial } : {
-      id: ("plan_" + Date.now()) as PlanId,
-      nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
-      limite_whatsapp_mes: 300,
-      modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true },
-    });
+    if (open) {
+      setStep(1);
+      setF(initial ? { ...initial } : {
+        id: ("plan_" + Date.now()) as PlanId,
+        nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
+        limite_whatsapp_mes: 300,
+        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true },
+      });
+    }
   }, [open, initial]);
 
   function setMod(k: keyof Plan["modulos"], v: boolean) {
     setF((s) => ({ ...s, modulos: { ...(s.modulos as Plan["modulos"]), [k]: v } }));
   }
 
+  function handlePriceInput(field: keyof Plan, rawValue: string) {
+    const clean = rawValue.replace(/,/g, "").replace(/[^\d]/g, "");
+    setF((prev) => ({ ...prev, [field]: clean === "" ? 0 : Number(clean) }));
+  }
+
   async function submit() {
-    if (!f.nombre?.trim()) { toast.error("Nombre requerido"); return; }
+    if (!f.nombre?.trim()) { toast.error("Nombre del plan requerido"); return; }
     const plan: Plan = {
       id: (initial?.id ?? f.id ?? ("plan_" + Date.now())) as PlanId,
       nombre: f.nombre!.trim(),
@@ -1816,146 +1953,370 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       limite_sucursales_adicionales: Number(f.limite_sucursales_adicionales) || 0,
     };
     await savePlan(plan);
-    toast.success("Plan guardado");
+    toast.success("Plan guardado correctamente");
     onSaved();
   }
 
   const mods = (f.modulos || {}) as Plan["modulos"];
+  const activeModsCount = Object.values(mods).filter(Boolean).length;
+
+  const moduleItems: { key: keyof Plan["modulos"]; label: string; desc: string; icon: any; colorClass: string; bgClass: string }[] = [
+    { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+    { key: "facturacion_fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
+    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+    { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
+    { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
+    { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+  ];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-4xl rounded-2xl border-none shadow-card">
-        <DialogHeader><DialogTitle>{initial ? "Editar plan" : "Nuevo plan"}</DialogTitle></DialogHeader>
-        <div className="grid gap-8 py-2 md:grid-cols-2">
-          {/* Columna Izquierda: Información básica y límites */}
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="mb-1.5 block text-sm font-bold">ID interno</Label>
-                <Input value={f.id || ""} onChange={(e) => setF({ ...f, id: e.target.value as PlanId })} disabled={!!initial} className="h-11 rounded-xl" />
+      <DialogContent className="rounded-2xl max-w-lg p-0 gap-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+        {/* STEPPER HEADER (COMPACT & SEAMLESS) */}
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-3 sm:px-4 sm:pt-3 sm:pb-2.5 relative border-b border-slate-100 dark:border-slate-800/60">
+          <div className="flex items-center justify-between mb-2 pr-10">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-2xs">
+                {step === 1 ? <Crown className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
               </div>
-              <div><Label className="mb-1.5 block text-sm font-bold">Nombre</Label>
-                <Input value={f.nombre || ""} onChange={(e) => setF({ ...f, nombre: e.target.value })} className="h-11 rounded-xl" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div><Label className="mb-1.5 block text-sm font-bold">Precio/mes (RD$)</Label>
-                <Input type="number" value={f.precio_mensual ?? 0} onChange={(e) => setF({ ...f, precio_mensual: Number(e.target.value) })} className="h-11 rounded-xl" />
-              </div>
-              <div><Label className="mb-1.5 block text-sm font-bold">Precio/año (RD$)</Label>
-                <Input type="number" value={f.precio_anual ?? 0} onChange={(e) => setF({ ...f, precio_anual: Number(e.target.value) })} className="h-11 rounded-xl" placeholder="Opcional" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div className="col-span-1"><Label className="mb-1.5 block text-sm font-bold">Empleados</Label>
-                <Input type="number" value={f.limite_empleados ?? 0} onChange={(e) => setF({ ...f, limite_empleados: Number(e.target.value) })} className="h-11 rounded-xl" />
-              </div>
-              <div className="col-span-1"><Label className="mb-1.5 block text-sm font-bold">Órdenes/mes</Label>
-                <Input type="number" value={f.limite_ordenes_mes ?? ""} onChange={(e) => setF({ ...f, limite_ordenes_mes: e.target.value === "" ? null : Number(e.target.value) })} className="h-11 rounded-xl" />
-              </div>
-              <div className="col-span-1"><Label className="mb-1.5 block text-sm font-bold">WhatsApp/mes</Label>
-                <Input type="number" value={f.limite_whatsapp_mes ?? 0} onChange={(e) => setF({ ...f, limite_whatsapp_mes: Number(e.target.value) })} className="h-11 rounded-xl" />
-              </div>
-            </div>
-
-            <label className="flex items-center gap-2 text-sm mt-2 mb-2">
-              <Switch checked={!!f.destacado} onCheckedChange={(v) => setF({ ...f, destacado: v })} />
-              Marcar como plan destacado / popular
-            </label>
-
-            {/* Campos adicionales para el modelo Pay-per-Branch */}
-            <div className="rounded-2xl border border-border p-4 bg-slate-50 space-y-3 mt-4">
-              <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground block">
-                Configuración Sucursales Adicionales
-              </Label>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-bold text-slate-600">Precio Sucursal Extra (RD$)</Label>
-                  <Input
-                    type="number"
-                    value={f.precio_sucursal_adicional ?? ""}
-                    onChange={(e) => setF({ ...f, precio_sucursal_adicional: Number(e.target.value) || 0 })}
-                    placeholder="1200"
-                    className="h-9 rounded-lg text-xs"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label className="text-[11px] font-bold text-slate-600">Límite de Extras</Label>
-                  <Input
-                    type="number"
-                    value={f.limite_sucursales_adicionales ?? ""}
-                    onChange={(e) => setF({ ...f, limite_sucursales_adicionales: Number(e.target.value) || 0 })}
-                    placeholder="3"
-                    className="h-9 rounded-lg text-xs"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-[11px] font-bold text-slate-600 flex items-center gap-1">
-                  <ExternalLink className="h-3 w-3 text-primary" /> Polar Sucursal Checkout Link
-                </Label>
-                <Input
-                  value={f.polar_sucursal_url || ""}
-                  onChange={(e) => setF({ ...f, polar_sucursal_url: e.target.value })}
-                  placeholder="https://buy.polar.sh/..."
-                  className="h-9 rounded-lg text-xs"
-                />
+              <div>
+                <DialogTitle className="text-sm sm:text-base font-display font-bold text-foreground">
+                  {initial ? `Editar plan "${f.nombre || ""}"` : "Crear nuevo plan"}
+                </DialogTitle>
+                <p className="text-[11px] text-muted-foreground">
+                  {step === 1
+                    ? "Paso 1: Información básica, precios y capacidades"
+                    : "Paso 2: Módulos habilitados y pasarelas Polar"}
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Columna Derecha: Módulos y Enlaces */}
-          <div className="space-y-4">
-            <div>
-              <Label className="mb-3 block text-sm font-bold text-muted-foreground uppercase tracking-wider">Módulos incluidos</Label>
-              <div className="grid grid-cols-2 gap-x-6 gap-y-3 rounded-2xl border border-border p-5 bg-accent/30 backdrop-blur-sm">
-                {(["whatsapp", "facturacion_fiscal", "multisucursal", "logistica", "procesos"] as const).map((m) => (
-                  <label key={m} className="flex items-center gap-3 text-sm p-1 rounded-lg transition-colors cursor-pointer group">
-                    <Switch
-                      checked={!!mods?.[m]}
-                      onCheckedChange={(v) => setMod(m, v)}
-                      className="data-[state=checked]:bg-primary"
-                    />
-                    <span className="font-semibold capitalize text-foreground group-hover:text-primary transition-colors">
-                      {m === "logistica" ? "Envío a domicilio" : m === "facturacion_fiscal" ? "Facturación Electrónica" : m === "procesos" ? "Tablero de Procesos" : m.replace(/_/g, " ")}
-                    </span>
-                  </label>
-                ))}
-              </div>
-            </div>
+          {/* Stepper Buttons (Centered Pills) */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
+            <button
+              type="button"
+              onClick={() => setStep(1)}
+              className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold transition-all ${
+                step === 1
+                  ? "bg-primary text-white shadow-xs font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
+                  step === 1
+                    ? "bg-white/25 text-white"
+                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
+                1
+              </span>
+              <span>Información y Límites</span>
+            </button>
 
-            <div className="space-y-3">
-              <div className="space-y-2">
-                <Label className="text-sm font-bold flex items-center gap-2">
-                  <ExternalLink className="h-4 w-4 text-primary" /> Polar Monthly Link
-                </Label>
-                <Input
-                  value={f.polar_product_monthly_url || ""}
-                  onChange={(e) => setF({ ...f, polar_product_monthly_url: e.target.value })}
-                  placeholder="https://polar.sh/..."
-                  className="h-10 rounded-xl"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label className="text-sm font-bold flex items-center gap-2">
-                  <ExternalLink className="h-4 w-4 text-primary" /> Polar Yearly Link
-                </Label>
-                <Input
-                  value={f.polar_product_yearly_url || ""}
-                  onChange={(e) => setF({ ...f, polar_product_yearly_url: e.target.value })}
-                  placeholder="https://polar.sh/..."
-                  className="h-10 rounded-xl"
-                />
-              </div>
-
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (!f.nombre?.trim()) { toast.error("Nombre del plan requerido"); return; }
+                setStep(2);
+              }}
+              className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold transition-all ${
+                step === 2
+                  ? "bg-primary text-white shadow-xs font-bold"
+                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              }`}
+            >
+              <span
+                className={`h-4 w-4 rounded-full flex items-center justify-center text-[9px] font-extrabold ${
+                  step === 2
+                    ? "bg-white/25 text-white"
+                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                }`}
+              >
+                2
+              </span>
+              <span>Módulos y Checkout ({activeModsCount})</span>
+            </button>
           </div>
         </div>
-        <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
-          <Button onClick={submit} className="bg-gradient-primary text-white">Guardar plan</Button>
-        </DialogFooter>
+
+        {/* DIALOG BODY (COMPACT NO EXTRA GAPS) */}
+        <div className="px-4 sm:px-5 py-3 max-h-[min(72vh,560px)] overflow-y-auto custom-scrollbar">
+          {step === 1 ? (
+            /* STEP 1: INFORMACIÓN BÁSICA, PRECIOS Y LÍMITES */
+            <div className="space-y-2.5 animate-in fade-in slide-in-from-left-3 duration-200">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    ID Interno *
+                  </Label>
+                  <Input
+                    value={f.id || ""}
+                    onChange={(e) => setF({ ...f, id: e.target.value as PlanId })}
+                    disabled={!!initial}
+                    placeholder="ej. basico, pro, enterprise"
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs font-mono"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Nombre Público *
+                  </Label>
+                  <Input
+                    value={f.nombre || ""}
+                    onChange={(e) => setF({ ...f, nombre: e.target.value })}
+                    placeholder="Ej. Básico, Pro, Enterprise"
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Precio Mensual (RD$) *
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={f.precio_mensual !== undefined && f.precio_mensual !== null ? Number(f.precio_mensual).toLocaleString("en-US") : ""}
+                    onChange={(e) => handlePriceInput("precio_mensual", e.target.value)}
+                    placeholder="0"
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs font-black text-primary"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Precio Anual (RD$)
+                  </Label>
+                  <Input
+                    type="text"
+                    inputMode="numeric"
+                    value={f.precio_anual ? Number(f.precio_anual).toLocaleString("en-US") : ""}
+                    onChange={(e) => handlePriceInput("precio_anual", e.target.value)}
+                    placeholder="Opcional (ej. 25,000)"
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs font-semibold"
+                  />
+                </div>
+              </div>
+
+              {/* LÍMITES */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Empleados
+                  </Label>
+                  <Input
+                    type="number"
+                    value={f.limite_empleados ?? 0}
+                    onChange={(e) => setF({ ...f, limite_empleados: Number(e.target.value) })}
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs text-center font-bold"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground" title="Dejar en blanco para ilimitadas">
+                    Órdenes / Mes
+                  </Label>
+                  <Input
+                    type="number"
+                    value={f.limite_ordenes_mes ?? ""}
+                    onChange={(e) => setF({ ...f, limite_ordenes_mes: e.target.value === "" ? null : Number(e.target.value) })}
+                    placeholder="∞ Ilimitadas"
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs text-center font-bold"
+                  />
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                    WhatsApp / Mes
+                  </Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    value={f.limite_whatsapp_mes ?? 0}
+                    onChange={(e) => setF({ ...f, limite_whatsapp_mes: Number(e.target.value) || 0 })}
+                    placeholder="0 = Ilimitado"
+                    className="h-8 rounded-lg bg-surface border-border/60 text-xs text-center font-bold"
+                  />
+                  <p className="text-[9px] text-muted-foreground text-center">0 = Ilimitado</p>
+                </div>
+              </div>
+
+              {/* DESTACADO SWITCH (COMPACT) */}
+              <label className="flex items-center justify-between p-2 px-2.5 rounded-xl border border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                  <div className="leading-tight">
+                    <span className="text-xs font-bold text-foreground">Marcar como plan destacado / popular</span>
+                    <p className="text-[9.5px] text-muted-foreground">Muestra la insignia en la tabla de precios</p>
+                  </div>
+                </div>
+                <Switch checked={!!f.destacado} onCheckedChange={(v) => setF({ ...f, destacado: v })} />
+              </label>
+
+              {/* SUCURSALES ADICIONALES (COMPACT) */}
+              <div className="rounded-xl border border-border/70 p-2.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                    <Building2 className="h-3.5 w-3.5 text-primary" /> Multi-Sucursal (Pay-per-Branch)
+                  </Label>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-0.5">
+                    <Label className="text-[9.5px] font-medium text-muted-foreground">Precio Sucursal Extra (RD$)</Label>
+                    <Input
+                      type="text"
+                      inputMode="numeric"
+                      value={f.precio_sucursal_adicional ? Number(f.precio_sucursal_adicional).toLocaleString("en-US") : ""}
+                      onChange={(e) => handlePriceInput("precio_sucursal_adicional", e.target.value)}
+                      placeholder="1,200"
+                      className="h-7.5 rounded-lg text-xs"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <Label className="text-[9.5px] font-medium text-muted-foreground">Límite de Extras</Label>
+                    <Input
+                      type="number"
+                      value={f.limite_sucursales_adicionales ?? ""}
+                      onChange={(e) => setF({ ...f, limite_sucursales_adicionales: Number(e.target.value) || 0 })}
+                      placeholder="3"
+                      className="h-7.5 rounded-lg text-xs"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-0.5">
+                  <Label className="text-[9.5px] font-medium text-muted-foreground flex items-center gap-1">
+                    <ExternalLink className="h-3 w-3 text-primary" /> Polar Sucursal Checkout Link
+                  </Label>
+                  <Input
+                    value={f.polar_sucursal_url || ""}
+                    onChange={(e) => setF({ ...f, polar_sucursal_url: e.target.value })}
+                    placeholder="https://buy.polar.sh/..."
+                    className="h-7.5 rounded-lg text-xs font-mono"
+                  />
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* STEP 2: MÓDULOS INCLUIDOS Y POLAR LINKS (COMPACT) */
+            <div className="space-y-2.5 animate-in fade-in slide-in-from-right-3 duration-200">
+              <div>
+                <Label className="mb-1.5 block text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Módulos incluidos en la suscripción
+                </Label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {moduleItems.map(({ key, label, desc, icon: IconComp, colorClass, bgClass }) => {
+                    const isChecked = !!mods?.[key];
+                    return (
+                      <div
+                        key={key}
+                        onClick={() => setMod(key, !isChecked)}
+                        className={`flex items-center justify-between p-2 px-2.5 rounded-xl border transition-all cursor-pointer select-none ${
+                          isChecked
+                            ? "bg-white dark:bg-slate-900 border-primary/40 shadow-2xs ring-1 ring-primary/20"
+                            : "bg-surface/50 border-border/60 hover:bg-white hover:border-border"
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0 pr-1.5">
+                          <div className={`h-7 w-7 rounded-lg ${bgClass} ${colorClass} flex items-center justify-center shrink-0`}>
+                            <IconComp className="h-3.5 w-3.5" />
+                          </div>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-foreground leading-tight truncate">{label}</div>
+                            <div className="text-[9.5px] text-muted-foreground leading-tight truncate">{desc}</div>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={isChecked}
+                          onCheckedChange={(v) => setMod(key, v)}
+                          className="data-[state=checked]:bg-primary shrink-0 scale-90"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* POLAR CHECKOUT LINKS (COMPACT) */}
+              <div className="rounded-xl border border-border/70 p-2.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">
+                <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center gap-1.5">
+                  <CreditCard className="h-3.5 w-3.5 text-primary" /> Enlaces de Pago Polar
+                </Label>
+                <div className="space-y-1.5">
+                  <div className="space-y-0.5">
+                    <Label className="text-[9.5px] font-medium text-muted-foreground flex items-center gap-1">
+                      <ExternalLink className="h-3 w-3 text-primary" /> Checkout Mensual Polar Link
+                    </Label>
+                    <Input
+                      value={f.polar_product_monthly_url || ""}
+                      onChange={(e) => setF({ ...f, polar_product_monthly_url: e.target.value })}
+                      placeholder="https://buy.polar.sh/polar_cl_..."
+                      className="h-7.5 rounded-lg text-xs font-mono"
+                    />
+                  </div>
+                  <div className="space-y-0.5">
+                    <Label className="text-[9.5px] font-medium text-muted-foreground flex items-center gap-1">
+                      <ExternalLink className="h-3 w-3 text-primary" /> Checkout Anual Polar Link
+                    </Label>
+                    <Input
+                      value={f.polar_product_yearly_url || ""}
+                      onChange={(e) => setF({ ...f, polar_product_yearly_url: e.target.value })}
+                      placeholder="https://buy.polar.sh/polar_cl_..."
+                      className="h-7.5 rounded-lg text-xs font-mono"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* DIALOG FOOTER (COMPACT & SEAMLESS) */}
+        <div className="border-t border-border/50 p-2.5 sm:px-4 flex items-center justify-between gap-2 bg-slate-50/50 dark:bg-slate-900/30">
+          <div>
+            {step === 1 ? (
+              <Button
+                type="button"
+                onClick={() => onOpenChange(false)}
+                className="h-8 rounded-lg text-xs font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 px-4 border border-slate-300 dark:border-slate-600 shadow-2xs active:scale-95 transition-all cursor-pointer"
+              >
+                Cancelar
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                onClick={() => setStep(1)}
+                className="h-8 rounded-lg text-xs font-bold gap-1 px-3"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" />
+                Volver
+              </Button>
+            )}
+          </div>
+
+          <div>
+            {step === 1 ? (
+              <Button
+                onClick={() => {
+                  if (!f.nombre?.trim()) { toast.error("Nombre del plan requerido"); return; }
+                  setStep(2);
+                }}
+                className="h-8 rounded-lg bg-primary hover:bg-primary/90 text-white font-bold text-xs gap-1.5 shadow-2xs active:scale-95 transition-all px-3"
+              >
+                <span>Siguiente: Módulos</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Button>
+            ) : (
+              <Button
+                onClick={submit}
+                className="h-8 rounded-lg bg-gradient-primary text-white font-bold text-xs shadow-xs active:scale-95 transition-all gap-1.5 px-3.5"
+              >
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>Guardar plan</span>
+              </Button>
+            )}
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -2015,7 +2376,13 @@ function BankDetailsDialog({ open, onOpenChange, config, onSaved }: {
           </div>
         </div>
         <DialogFooter>
-          <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancelar</Button>
+          <Button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="rounded-xl h-10 px-4 font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 shadow-2xs active:scale-95 transition-all cursor-pointer"
+          >
+            Cancelar
+          </Button>
           <Button onClick={submit} className="bg-primary text-white rounded-xl font-bold shadow-md">Guardar Datos</Button>
         </DialogFooter>
       </DialogContent>
@@ -2209,7 +2576,13 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
         </div>
 
         <DialogFooter className="mt-4 gap-2">
-          <Button variant="ghost" onClick={() => onOpenChange(false)} className="rounded-xl">Cancelar</Button>
+          <Button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            className="rounded-xl h-10 px-4 font-bold bg-slate-200 hover:bg-slate-300 dark:bg-slate-700 dark:hover:bg-slate-600 text-slate-800 dark:text-slate-100 border border-slate-300 dark:border-slate-600 shadow-2xs active:scale-95 transition-all cursor-pointer"
+          >
+            Cancelar
+          </Button>
           <Button onClick={submit} className="bg-primary text-white font-bold rounded-xl h-11 px-6 shadow-md hover:bg-primary/95 transition-all">Guardar Licencia</Button>
         </DialogFooter>
       </DialogContent>

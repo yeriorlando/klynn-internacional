@@ -45,12 +45,13 @@ export async function notificarWhatsApp(
   evento: Evento,
   pagoRecibido?: number,
 ): Promise<{ ok: boolean; reason?: string }> {
-  // 1. Verificar Límites del Plan
+  // 1. Verificar Límites del Plan (0 = Ilimitado / Sin restricción)
   const plan = getTenantPlan(tenant);
   const currentCount = tenant.whatsapp_sent_month || 0;
+  const limit = plan.limite_whatsapp_mes ?? 0;
 
-  if (currentCount >= plan.limite_whatsapp_mes) {
-    return { ok: false, reason: `Límite de mensajes alcanzado (${plan.limite_whatsapp_mes}/${plan.limite_whatsapp_mes}). Mejore su plan para enviar más.` };
+  if (limit > 0 && currentCount >= limit) {
+    return { ok: false, reason: `Límite de mensajes alcanzado (${currentCount}/${limit}). Mejore su plan para enviar más.` };
   }
 
   const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;

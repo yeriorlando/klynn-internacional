@@ -20,19 +20,24 @@ import {
   Shield,
   Settings,
   Lock,
+  Printer,
+  Tag,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import {
   getOrdenes,
   getClientes,
+  getEmpleados,
   updateOrdenEstado,
   saveTenant,
   isModuleEnabled,
   can,
   type Orden,
   type Cliente,
+  type Empleado,
   type EstadoOrden,
 } from "@/lib/storage";
+import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
 import { usePlans } from "@/hooks/use-queries";
 import { notificarWhatsApp, calcularDiasEnAlmacen } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
@@ -105,6 +110,8 @@ export function ProcesosPage() {
 
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const [printProduccionOrden, setPrintProduccionOrden] = useState<Orden | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [servicioFilter, setServicioFilter] = useState<string>("todos");
@@ -151,7 +158,11 @@ export function ProcesosPage() {
     if (!tenantId) return;
     setLoading(true);
     try {
-      const [ords, clis] = await Promise.all([getOrdenes(tenantId), getClientes(tenantId)]);
+      const [ords, clis, emps] = await Promise.all([
+        getOrdenes(tenantId), 
+        getClientes(tenantId),
+        getEmpleados(tenantId)
+      ]);
       const activasConServicio = (ords || []).filter((o) => {
         if (o.estado === "ENTREGADA" || o.estado === "ANULADA" || o.estado === "PAGADA") {
           return false;
@@ -163,6 +174,7 @@ export function ProcesosPage() {
       });
       setOrdenes(activasConServicio);
       setClientes(clis || []);
+      setEmpleados(emps || []);
     } catch (err) {
       console.error("Error cargando procesos:", err);
       toast.error("Error cargando tablero de procesos");
@@ -834,13 +846,23 @@ export function ProcesosPage() {
                               </div>
                             </div>
 
-                            <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1 shrink-0">
-                              <Clock className="h-3 w-3" />
-                              {new Date(orden.creado_en).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </span>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {new Date(orden.creado_en).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => setPrintProduccionOrden(orden)}
+                                className="h-6 w-6 rounded-md bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/40 dark:hover:bg-amber-900/60 text-amber-700 dark:text-amber-300 flex items-center justify-center transition-colors cursor-pointer border border-amber-200 dark:border-amber-800"
+                                title="Imprimir Ticket de Taller / Producción"
+                              >
+                                <Printer className="h-3.5 w-3.5" />
+                              </button>
+                            </div>
                           </div>
 
                           {/* LISTADO COMPLETO DE PRENDAS Y SERVICIOS (SIN TRUNCAR) */}
@@ -991,18 +1013,44 @@ export function ProcesosPage() {
               </div>
 
               {/* FOOTER MODAL */}
-              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => {
+                    const target = notaModalOrden;
+                    setNotaModalOrden(null);
+                    setPrintProduccionOrden(target);
+                  }}
+                  className="h-9 px-4 border-amber-300 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 text-amber-900 dark:text-amber-200 font-bold rounded-xl text-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+                  Imprimir Ticket de Taller
+                </Button>
+
                 <Button
                   onClick={() => setNotaModalOrden(null)}
-                  className="h-9 px-5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs"
+                  className="h-9 px-5 bg-slate-900 hover:bg-slate-800 text-white font-bold rounded-xl text-xs cursor-pointer"
                 >
-                  Entendido
+                  Cerrar
                 </Button>
               </div>
             </motion.div>
           </div>
         )}
       </AnimatePresence>
+
+      {/* PORTAL DE IMPRESIÓN DE PRODUCCIÓN / TALLER */}
+      {printProduccionOrden && (
+        <TicketPrintPortal
+          orden={printProduccionOrden}
+          tenant={user.tenant}
+          clientes={clientes}
+          empleados={empleados}
+          esProduccion={true}
+          onClose={() => setPrintProduccionOrden(null)}
+        />
+      )}
     </div>
   );
 }

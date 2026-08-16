@@ -161,6 +161,7 @@ function DashboardPage() {
   const [view, setView] = useState<Orden | null>(null);
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
+  const [showPrintProduccion, setShowPrintProduccion] = useState<Orden | null>(null);
   const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(
     undefined,
   );
@@ -211,17 +212,34 @@ function DashboardPage() {
     }
   }
 
-  async function cambiarEstado(o: Orden, estado: EstadoOrden) {
+  async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
     if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
       if (estado === "ENTREGADA" && o.saldo > 0 && o.metodo_pago !== "CREDITO") {
         toast.error("No se puede entregar una orden con saldo pendiente si no es a crédito");
       } else {
-        toast.error("No se permite esta transición de estado para una orden pagada");
+        toast.error("El flujo de estados es estrictamente secuencial: Recibida → En proceso → Lista → Entregada");
       }
-      return;
+      return true;
     }
     try {
-      await saveOrden({ ...o, estado });
+      const ordenActualizada: Orden = { ...o, estado };
+
+      // Actualización directa e instantánea de la tabla de órdenes en React Query
+      queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (old) => {
+        if (!old) return [ordenActualizada];
+        return old.map((item) => (item.id === o.id ? ordenActualizada : item));
+      });
+      queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) => {
+        if (!old) return old;
+        return old.map((item) => (item.id === o.id ? ordenActualizada : item));
+      });
+
+      if (estadoModal && estadoModal.id === o.id) {
+        setEstadoModal(ordenActualizada);
+      }
+
+      await saveOrden(ordenActualizada);
+      await updateOrdenEstado(o.id, estado);
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       if (estado === "LISTA" || estado === "ENTREGADA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
@@ -231,7 +249,7 @@ function DashboardPage() {
               ? "Orden lista — notificando al cliente..."
               : "Orden entregada — notificando al cliente...",
           );
-          notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada").then(
+          notificarWhatsApp(tenant, cli, { ...o, estado }, estado === "LISTA" ? "lista" : "entregada").then(
             (r) => {
               if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
             },
@@ -250,8 +268,11 @@ function DashboardPage() {
           });
         }
       }
+      return true;
     } catch (err: any) {
       toast.error("Error al actualizar estado");
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+      return true;
     }
   }
 
@@ -959,6 +980,7 @@ function DashboardPage() {
               cambiarEstado={cambiarEstado}
               setView={setView}
               onPrint={() => setShowPrint(view)}
+              onPrintProduccion={() => setShowPrintProduccion(view)}
               setCobrarOrden={setCobrarOrden}
             />
           )}
@@ -995,6 +1017,19 @@ function DashboardPage() {
           }}
         />
       )}
+
+      {/* Modal de impresión térmica para producción / taller */}
+      {showPrintProduccion && (
+        <TicketPrintPortal
+          orden={showPrintProduccion}
+          tenant={tenant}
+          clientes={clientes}
+          empleados={empleados}
+          esProduccion={true}
+          onClose={() => setShowPrintProduccion(null)}
+        />
+      )}
+
       {/* Modal de Estado de Orden */}
       <EstadoOrdenDialog
         estadoModal={estadoModal}
@@ -1043,6 +1078,7 @@ function DashboardPage() {
         }}
         setCobrarOrden={setCobrarOrden}
         setShowPrint={setShowPrint}
+        setShowPrintProduccion={setShowPrintProduccion}
       />
     </div>
   );

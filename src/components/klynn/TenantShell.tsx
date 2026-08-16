@@ -48,6 +48,9 @@ import {
   Clock,
   Shirt,
   AlertTriangle,
+  Maximize2,
+  Minimize2,
+  Layers,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -131,6 +134,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   },
   { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes" },
   { to: `/t/${slug}/procesos`, label: "Operaciones", icon: Wrench, permission: "procesos" },
+  { to: `/t/${slug}/estanteria`, label: "Estantería virtual", icon: Layers, permission: "procesos" },
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
@@ -162,15 +166,33 @@ export function TenantShell() {
   const { data: cajaData } = useCajaAbierta(user?.tenant?.id || "");
   const cajaAbierta = !!cajaData;
 
-  // UNREAD COUNT BADGE & GLOBAL REAL-TIME NOTIFICATIONS
   const [unreadCount, setUnreadCount] = useState(0);
   const prevUnreadRef = useRef(-1);
   const tenantId = user?.tenant?.id;
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(() => {});
+    } else {
+      document.exitFullscreen().catch(() => {});
+    }
+  };
 
   const [hasLogistica, setHasLogistica] = useState<boolean>(true);
   const [hasWhatsApp, setHasWhatsApp] = useState<boolean>(true);
   const [hasProcesos, setHasProcesos] = useState<boolean>(true);
   const [hasFiscal, setHasFiscal] = useState<boolean>(true);
+  const [hasEstanteria, setHasEstanteria] = useState<boolean>(true);
 
   // NOTIFICACIONES GENERALES
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -188,6 +210,7 @@ export function TenantShell() {
       setHasWhatsApp(isModuleEnabled(user.tenant, "whatsapp", plan));
       setHasProcesos(isModuleEnabled(user.tenant, "procesos", plan));
       setHasFiscal(isModuleEnabled(user.tenant, "facturacion_fiscal", plan));
+      setHasEstanteria(isModuleEnabled(user.tenant, "estanteria", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
@@ -648,6 +671,10 @@ export function TenantShell() {
       } else if (key === "P") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/procesos` });
+      } else if (key === "E") {
+        if (!hasEstanteria) return;
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/estanteria` });
       } else if (key === "C") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/caja` });
@@ -1031,17 +1058,19 @@ export function TenantShell() {
                 { label: "Ir a POS / Ventas", key: "N" },
                 { label: "Ir a Dashboard", key: "D" },
                 { label: "Ir a Órdenes", key: "O" },
+                { label: "Ir a Operaciones", key: "P" },
+                { label: "Ir a Estantería virtual", key: "E" },
                 { label: "Ver/Abrir Caja", key: "C" },
+                { label: "Órdenes modal", key: "Z" },
+                { label: "Buscar", key: "Ctrl" },
                 { label: "Cliente", key: "F2" },
                 { label: "Descuento", key: "F4" },
                 { label: "Nota", key: "F8" },
                 { label: "Deshacer", key: "Ctrl+Z" },
                 { label: "Cobrar", key: "Enter" },
                 { label: "Facturar", key: "Espacio" },
-                { label: "Buscar", key: "Ctrl" },
-                { label: "Ir a Operaciones", key: "P" },
-                { label: "Órdenes modal", key: "Z" },
                 { label: "Menu atajos", key: "Alt+K" },
+                { label: "Cerrar modal", key: "Esc" },
               ].map(({ label, key }) => (
                 <div
                   key={key}
@@ -1101,6 +1130,7 @@ export function TenantShell() {
           hasWhatsApp={hasWhatsApp}
           hasProcesos={hasProcesos}
           hasFiscal={hasFiscal}
+          hasEstanteria={hasEstanteria}
         />
       </aside>
 
@@ -1125,6 +1155,7 @@ export function TenantShell() {
               hasWhatsApp={hasWhatsApp}
               hasProcesos={hasProcesos}
               hasFiscal={hasFiscal}
+              hasEstanteria={hasEstanteria}
             />
           </aside>
         </div>
@@ -1173,6 +1204,27 @@ export function TenantShell() {
                 Alt+K
               </kbd>
             </button>
+
+            {pathname.endsWith("/nueva-orden") && (
+              <button
+                type="button"
+                onClick={toggleFullscreen}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold shadow-xs transition-all active:scale-95 cursor-pointer bg-white/70 dark:bg-slate-900/70 backdrop-blur-sm"
+                title={isFullscreen ? "Salir de pantalla completa" : "Pantalla completa"}
+              >
+                {isFullscreen ? (
+                  <>
+                    <Minimize2 className="h-4 w-4 text-primary shrink-0" />
+                    <span className="hidden sm:inline">Pantalla normal</span>
+                  </>
+                ) : (
+                  <>
+                    <Maximize2 className="h-4 w-4 text-primary shrink-0" />
+                    <span className="hidden sm:inline">Pantalla completa</span>
+                  </>
+                )}
+              </button>
+            )}
           </div>
 
           <ThemeSwitch />
@@ -1499,6 +1551,7 @@ function SidebarContent({
   hasWhatsApp,
   hasProcesos,
   hasFiscal,
+  hasEstanteria,
 }: {
   tenant: {
     id: string;
@@ -1520,6 +1573,7 @@ function SidebarContent({
   hasWhatsApp: boolean;
   hasProcesos: boolean;
   hasFiscal: boolean;
+  hasEstanteria: boolean;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
@@ -1617,6 +1671,13 @@ function SidebarContent({
             permission: "procesos",
             shortcut: "P",
           },
+          {
+            to: `/t/${slug}/estanteria`,
+            label: "Estantería virtual",
+            icon: Layers,
+            permission: "procesos",
+            shortcut: "E",
+          },
           { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
           { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
           { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
@@ -1675,12 +1736,13 @@ function SidebarContent({
         if (!hasLogistica) items = items.filter((i) => i.permission !== "logistica");
         if (!hasWhatsApp) items = items.filter((i) => i.permission !== "conversations");
         if (!hasProcesos) items = items.filter((i) => i.permission !== "procesos");
+        if (!hasEstanteria) items = items.filter((i) => !i.to.endsWith("/estanteria"));
         if (!hasFiscal) items = items.filter((i) => !i.to.endsWith("/fiscal"));
         items = items.filter((i) => !i.permission || can(empleado, i.permission));
         return { ...cat, items };
       })
       .filter((cat) => cat.items.length > 0);
-  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal]);
+  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal, hasEstanteria]);
 
   return (
     <>
@@ -2290,16 +2352,16 @@ function HerramientasModal({
               >
                 <div className="flex items-center justify-between">
                   <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20 group-hover:scale-110 transition-transform">
-                    <Package className="h-4.5 w-4.5" />
+                    <Layers className="h-4.5 w-4.5" />
                   </div>
                   <ChevronRight className="h-4 w-4 text-slate-400 group-hover:text-primary group-hover:translate-x-1 transition-all" />
                 </div>
                 <div>
                   <div className="font-extrabold text-slate-900 dark:text-white text-xs sm:text-sm">
-                    Ubicación en Conveyor / Perchero
+                    Localizador de Ubicaciones
                   </div>
                   <div className="text-[11px] text-muted-foreground mt-0.5 leading-snug line-clamp-2">
-                    Localiza rápidamente el gancho o perchero colgado de la prenda
+                    Localiza ganchos, casilleros o percheros asignados a cada orden
                   </div>
                 </div>
               </button>
@@ -2330,7 +2392,7 @@ function HerramientasModal({
             {activeTool === "deliveries" && (
               <DeliveryEnveosTool tenant={tenant} onClose={onClose} />
             )}
-            {activeTool === "conveyor" && <UbicacionConveyorTool tenant={tenant} />}
+            {activeTool === "conveyor" && <UbicacionConveyorTool tenant={tenant} onClose={onClose} />}
             {activeTool === "notas" && (
               <NotasRecordatoriosTool tenant={tenant} empleado={empleado} />
             )}
@@ -2747,16 +2809,25 @@ function DeliveryEnveosTool({ tenant, onClose }: { tenant: any; onClose: () => v
   );
 }
 
-/* 5. CONSULTAR UBICACIÓN EN CONVEYOR / PERCHERO TOOL */
-function UbicacionConveyorTool({ tenant }: { tenant: any }) {
+/* 5. CONSULTAR LOCALIZADOR DE UBICACIONES TOOL */
+function UbicacionConveyorTool({ tenant, onClose }: { tenant: any; onClose?: () => void }) {
   const [ordenes, setOrdenes] = useState<any[]>([]);
   const [clientesList, setClientesList] = useState<any[]>([]);
   const [busqueda, setBusqueda] = useState("");
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     Promise.all([getOrdenes(tenant.id), getClientes(tenant.id)]).then(([all, clis]) => {
-      setOrdenes((all || []).filter((o: any) => o.estado === "LISTA"));
+      // Filtrar órdenes activas que tienen ubicación asignada
+      const conUbicacion = (all || []).filter(
+        (o: any) =>
+          o.estado !== "ENTREGADA" &&
+          o.estado !== "ANULADA" &&
+          o.ubicacion_ropa &&
+          o.ubicacion_ropa.trim() !== ""
+      );
+      setOrdenes(conUbicacion);
       setClientesList(clis || []);
       setLoading(false);
     });
@@ -2768,7 +2839,9 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
     const num = (ord.numero || "").toLowerCase();
     const ubi = (ord.ubicacion_ropa || "").toLowerCase();
     const c = clientesList.find((x) => x.id === ord.cliente_id);
-    const cliName = c ? `${c.nombre} ${c.apellido || ""}`.toLowerCase() : "";
+    const cliName = c
+      ? `${c.nombre} ${c.apellido || ""}`.toLowerCase()
+      : (ord.cliente_nombre || "").toLowerCase();
     return num.includes(q) || ubi.includes(q) || cliName.includes(q);
   });
 
@@ -2776,14 +2849,14 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
     <div className="space-y-4">
       <div className="flex items-center gap-2.5">
         <div className="p-2 rounded-xl bg-primary/10 text-primary border border-primary/20">
-          <Package className="h-5 w-5" />
+          <Layers className="h-5 w-5" />
         </div>
         <div>
           <h4 className="font-display text-lg font-black text-slate-900 dark:text-white">
-            Ubicación en Conveyor / Perchero
+            Localizador de Ubicaciones
           </h4>
           <p className="text-xs text-muted-foreground">
-            {ordenes.length} órdenes listas colgadas en conveyor o perchero
+            {ordenes.length} {ordenes.length === 1 ? "orden activa con ubicación asignada" : "órdenes activas con ubicación asignada"}
           </p>
         </div>
       </div>
@@ -2792,24 +2865,30 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <input
           type="text"
-          placeholder="Buscar por # de Orden, Nombre de Cliente o Gancho..."
+          placeholder="Buscar por # de Orden, Nombre de Cliente o Ubicación..."
           value={busqueda}
           onChange={(e) => setBusqueda(e.target.value)}
           className="w-full h-10 pl-9 pr-3.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-primary/30"
+          autoFocus
         />
       </div>
 
       {loading ? (
         <div className="py-8 text-center text-xs text-muted-foreground animate-pulse">
-          Cargando posiciones en conveyor...
+          Cargando órdenes con ubicación asignada...
         </div>
       ) : result.length === 0 ? (
-        <div className="p-6 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-muted-foreground">
-          No se encontraron coincidencias para la búsqueda.
+        <div className="p-8 text-center rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs text-muted-foreground space-y-1">
+          <div className="font-bold text-foreground">No hay órdenes con ubicación asignada</div>
+          <p className="text-[11px]">
+            {busqueda
+              ? "No se encontraron resultados para la búsqueda."
+              : "Aún no se han asignado ganchos o casilleros a órdenes activas."}
+          </p>
         </div>
       ) : (
-        <div className="max-h-64 overflow-y-auto space-y-2.5 custom-scrollbar pr-1">
-          {result.slice(0, 15).map((ord) => {
+        <div className="max-h-72 overflow-y-auto space-y-2.5 custom-scrollbar pr-1">
+          {result.map((ord) => {
             const c = clientesList.find((x) => x.id === ord.cliente_id);
             const cliName = c
               ? `${c.nombre} ${c.apellido || ""}`.trim()
@@ -2818,30 +2897,33 @@ function UbicacionConveyorTool({ tenant }: { tenant: any }) {
             return (
               <div
                 key={ord.id}
-                className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shadow-2xs"
+                onClick={() => {
+                  if (onClose) onClose();
+                  navigate({
+                    to: "/t/$slug/ordenes",
+                    params: { slug: tenant.slug },
+                    search: { view: ord.numero, filter: undefined, action: undefined },
+                  });
+                }}
+                className="p-3.5 rounded-2xl bg-slate-50/80 dark:bg-slate-900/60 hover:bg-white dark:hover:bg-slate-800/80 border border-slate-200/80 dark:border-slate-800 hover:border-primary/40 flex items-center justify-between gap-3 shadow-2xs hover:shadow-md transition-all cursor-pointer group"
+                title="Hacer clic para ver detalle de la orden"
               >
-                <div>
+                <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
-                    <span className="font-extrabold text-sm text-foreground">
-                      Orden #{ord.numero}
+                    <span className="font-extrabold text-sm text-foreground group-hover:text-primary transition-colors">
+                      Orden #{ord.numero.replace(/^#/, "")}
                     </span>
                     <EstadoBadge estado={ord.estado} />
                   </div>
-                  <div className="text-xs text-muted-foreground mt-0.5">
-                    Cliente: <span className="font-medium text-foreground">{cliName}</span>
+                  <div className="text-xs text-muted-foreground mt-0.5 truncate">
+                    Cliente: <span className="font-bold text-foreground">{cliName}</span>
                   </div>
                 </div>
 
-                <div className="text-right">
-                  {ord.ubicacion_ropa ? (
-                    <span className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/25 font-black text-sm sm:text-base shadow-2xs">
-                      📍 {ord.ubicacion_ropa}
-                    </span>
-                  ) : (
-                    <span className="inline-flex items-center px-3 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 font-bold text-xs">
-                      Sin Ubicación
-                    </span>
-                  )}
+                <div className="text-right shrink-0">
+                  <span className="inline-flex items-center gap-1 px-3.5 py-1.5 rounded-xl bg-primary/10 text-primary border border-primary/25 font-black text-sm sm:text-base shadow-2xs group-hover:bg-primary group-hover:text-white transition-all">
+                    📍 {ord.ubicacion_ropa}
+                  </span>
                 </div>
               </div>
             );

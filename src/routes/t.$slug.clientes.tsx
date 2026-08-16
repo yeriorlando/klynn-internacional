@@ -138,11 +138,11 @@ function ClientesPage() {
             <Card key={c.id} className="cursor-pointer p-5 transition hover:shadow-elegant flex flex-col h-full" onClick={() => setEdit(c)}>
               <div className="flex items-start justify-between gap-3 flex-1">
                 <div className="min-w-0 flex-1">
-                  <div className="font-display text-lg line-clamp-2 leading-tight" title={`${c.nombre} ${c.apellido || ""}`.trim()}>
+                  <div className="font-display text-lg font-bold text-foreground line-clamp-2 leading-tight" title={`${c.nombre} ${c.apellido || ""}`.trim()}>
                     {c.nombre} {c.apellido || ""}
                   </div>
                   <div className="mt-2 flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Phone className="h-3 w-3 shrink-0" /> <span className="truncate">{c.telefono}</span>
+                    <Phone className="h-3 w-3 shrink-0" /> <span className="truncate">{formatPhoneRD(c.telefono) || c.telefono}</span>
                   </div>
                   {c.email && (
                     <div className="mt-1 flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -164,8 +164,16 @@ function ClientesPage() {
                 </div>
               </div>
               <div className="mt-4 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs shrink-0">
-                <div><div className="text-muted-foreground">Total gastado</div><div className="font-display text-base">{formatRD(total)}</div></div>
-                <div><div className="text-muted-foreground">Deuda</div><div className={`font-display text-base ${deuda > 0 ? "text-destructive" : ""}`}>{formatRD(deuda)}</div></div>
+                <div>
+                  <div className="text-muted-foreground font-normal">Total gastado</div>
+                  <div className="font-display text-base font-bold text-foreground">{formatRD(total)}</div>
+                </div>
+                <div>
+                  <div className="text-muted-foreground font-normal">Deuda</div>
+                  <div className={`font-display text-base font-bold ${deuda > 0 ? "text-destructive" : "text-foreground"}`}>
+                    {formatRD(deuda)}
+                  </div>
+                </div>
               </div>
             </Card>
           );

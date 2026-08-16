@@ -38,10 +38,12 @@ import {
   Monitor,
   HardDrive,
   Wifi,
+  Layers,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { LandingNavbar } from "@/components/klynn/LandingNavbar";
 import { PLANS as STATIC_PLANS, formatRD, getPlans, type Plan } from "@/lib/storage";
 import DRMap from "@/components/klynn/DRMap";
@@ -1202,6 +1204,71 @@ function LandingPage() {
                 </div>
               </div>
             </motion.div>
+
+            {/* 6. Estantería Virtual */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 font-display text-xl font-black shrink-0">6</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Estantería virtual & Ganchos</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  Organiza físicamente los ganchos, rieles, casilleros y percheros de tu lavandería. Ubica cualquier prenda o pedido en segundos con búsqueda instantánea y control de ocupación.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "Mapeo de zonas físicas: conveyors, estanterías, casilleros y rieles",
+                    "Generador de rangos de ganchos automático en lote",
+                    "Asignación y liberación de espacios en 1 clic desde el punto de venta",
+                    "Métricas de ocupación y prendas almacenadas en tiempo real",
+                    "Alertas de ropa lista sin retirar con notificación automática",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-indigo-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border bg-surface p-6 shadow-card">
+                <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-600">
+                      <Layers className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm">Conveyor Principal</div>
+                      <div className="text-[11px] text-muted-foreground">30 espacios · 8 ocupados</div>
+                    </div>
+                  </div>
+                  <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-bold">26% Ocupación</Badge>
+                </div>
+                <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
+                  {[
+                    { slot: "Gancho 01", ord: "#KL-0097", status: "OCUPADO" },
+                    { slot: "Gancho 02", ord: "#KL-0098", status: "OCUPADO" },
+                    { slot: "Gancho 03", ord: "", status: "LIBRE" },
+                    { slot: "Gancho 04", ord: "#KL-0102", status: "OCUPADO" },
+                    { slot: "Gancho 05", ord: "", status: "LIBRE" },
+                    { slot: "Gancho 06", ord: "", status: "LIBRE" },
+                  ].map((s) => (
+                    <div key={s.slot} className={`p-2 rounded-xl border text-center text-xs font-bold ${s.status === "OCUPADO" ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-800 dark:text-amber-200" : "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/60 text-emerald-700 dark:text-emerald-300"}`}>
+                      <div className="text-[10px] truncate">{s.slot}</div>
+                      <div className="text-[9px] font-medium mt-0.5 opacity-80">{s.ord || "Libre"}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="mt-4 rounded-xl bg-indigo-500/10 p-2.5 text-center text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
+                  ✓ Control de Ubicación Física Activo
+                </div>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -1314,12 +1381,13 @@ function LandingPage() {
                       </div>
                       <div className="space-y-2.5">
                         {[
-                          { key: "whatsapp", label: "Mensajería WhatsApp" },
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica" },
-                          { key: "multisucursal", label: "Multisucursal" },
+                          { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
+                          { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
-                        ].map(({ key, label }) => {
+                          { key: "estanteria", label: "Estantería virtual" },
+                        ].map(({ key, label, extra }) => {
                           const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                           return (
                             <div 
@@ -1342,15 +1410,20 @@ function LandingPage() {
                                   <path d="m9 9 6 6" />
                                 </svg>
                               )}
-                              <span>
-                                {label}
+                              <span className="flex items-center flex-wrap gap-1">
+                                <span>{label}</span>
+                                {extra && (
+                                  <span className={`text-[10px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                                    {extra}
+                                  </span>
+                                )}
                                 {key === "whatsapp" && v && plan.limite_whatsapp_mes && (
-                                  <span className="text-[10px] font-normal text-muted-foreground ml-1">
+                                  <span className="text-[10px] font-normal text-muted-foreground ml-0.5">
                                     ({plan.limite_whatsapp_mes.toLocaleString("es-DO")} msg/mes)
                                   </span>
                                 )}
                                 {key === "multisucursal" && v && (
-                                  <span className="text-[9px] font-bold text-primary ml-1 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                  <span className="text-[9px] font-bold text-primary ml-0.5 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
                                     Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
                                   </span>
                                 )}

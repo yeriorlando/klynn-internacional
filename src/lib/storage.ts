@@ -18,6 +18,7 @@ export interface Plan {
     multisucursal: boolean;
     logistica?: boolean;
     procesos?: boolean;
+    estanteria?: boolean;
   };
   destacado?: boolean;
   polar_product_monthly_url?: string;
@@ -106,6 +107,8 @@ export interface TenantConfig {
   pie_pagina_ticket: string;
   ticket_pie?: string;
   ticket_mostrar_empleado?: boolean;
+  ticket_mostrar_notas?: boolean;
+  ticket_mostrar_ubicacion?: boolean;
   ticket_nota?: string;
   recargo_urgencia: number; // %
   umbral_diferencia_caja: number;
@@ -131,6 +134,7 @@ export interface TenantConfig {
   pos_modo_defecto?: boolean;
   pos_auto_imprimir?: boolean;
   usar_ubicacion_ropa?: boolean;
+  estanteria_zonas?: EstanteriaZona[];
   meses_pagados_override?: number;
   modulos_override?: {
     whatsapp?: boolean;
@@ -138,7 +142,22 @@ export interface TenantConfig {
     multisucursal?: boolean;
     logistica?: boolean;
     procesos?: boolean;
+    estanteria?: boolean;
   };
+}
+
+export interface EstanteriaZona {
+  id: string;
+  nombre: string;
+  tipo: "conveyor" | "estante" | "riel" | "cesta" | "otro";
+  icono?: string;
+  color?: string;
+  prefijo?: string;
+  slots: string[];
+}
+
+export function getDefaultEstanteriaZonas(): EstanteriaZona[] {
+  return [];
 }
 export interface WhatsAppConfig {
   enabled: boolean;
@@ -488,7 +507,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 2,
     limite_ordenes_mes: 300,
     limite_whatsapp_mes: 300,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false, procesos: true },
+    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false, procesos: true, estanteria: true },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
     polar_sucursal_url: "",
@@ -501,7 +520,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 10,
     limite_ordenes_mes: 1000,
     limite_whatsapp_mes: 1000,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true, procesos: true },
+    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true, procesos: true, estanteria: true },
     destacado: true,
     precio_sucursal_adicional: 1200,
     limite_sucursales_adicionales: 3,
@@ -515,21 +534,24 @@ export const PLANS: Plan[] = [
     limite_empleados: 999,
     limite_ordenes_mes: null,
     limite_whatsapp_mes: 5000,
-    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true, procesos: true },
+    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true, procesos: true, estanteria: true },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
     polar_sucursal_url: "",
   },
 ];
 
-export function getTenantPlan(tenant: Tenant | null): Plan {
-  if (!tenant) return PLANS[0];
-  return PLANS.find((p) => p.id === tenant.plan_id) || PLANS[0];
+let _cachedPlans: Plan[] = PLANS;
+
+export function getTenantPlan(tenant: Tenant | null, dynamicPlans?: Plan[]): Plan {
+  const list = dynamicPlans || _cachedPlans || PLANS;
+  if (!tenant) return list[0] || PLANS[0];
+  return list.find((p) => p.id === tenant.plan_id) || list[0] || PLANS[0];
 }
 
 export function isModuleEnabled(
   tenant: Tenant | null,
-  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos",
+  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos" | "estanteria",
   plan?: Plan,
 ): boolean {
   if (!tenant) return false;
@@ -557,6 +579,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
   pie_pagina_ticket: "¡Gracias por su preferencia!",
   ticket_pie: "¡Gracias por su preferencia!",
   ticket_mostrar_empleado: true,
+  ticket_mostrar_notas: false,
+  ticket_mostrar_ubicacion: false,
   ticket_nota: "",
   recargo_urgencia: 30,
   umbral_diferencia_caja: 100,
@@ -807,11 +831,12 @@ function write<T>(k: string, v: T) {
 }
 
 // ============ Plans ============
+
 export async function getPlans(): Promise<Plan[]> {
   try {
     const { data, error } = await supabase.from("planes").select("*").order("precio_mensual");
     if (!error && data && data.length > 0) {
-      return data.map((p) => ({
+      const mapped = data.map((p) => ({
         id: p.id as PlanId,
         nombre: p.nombre,
         precio_mensual: p.precio_mensual,
@@ -824,8 +849,9 @@ export async function getPlans(): Promise<Plan[]> {
           multisucursal: !!p.multisucursal,
           logistica: !!p.logistica,
           procesos: p.procesos !== undefined ? !!p.procesos : (PLANS.find((sp) => sp.id === p.id)?.modulos?.procesos ?? true),
+          estanteria: p.estanteria !== undefined ? !!p.estanteria : (PLANS.find((sp) => sp.id === p.id)?.modulos?.estanteria ?? true),
         },
-        limite_whatsapp_mes: p.limite_whatsapp_mes || 0,
+        limite_whatsapp_mes: p.limite_whatsapp_mes ?? 0,
         destacado: !!p.destacado,
         polar_product_monthly_url: p.polar_product_monthly_url,
         polar_product_yearly_url: p.polar_product_yearly_url,
@@ -842,6 +868,8 @@ export async function getPlans(): Promise<Plan[]> {
             ? p.limite_sucursales_adicionales
             : PLANS.find((sp) => sp.id === p.id)?.limite_sucursales_adicionales || 0,
       }));
+      _cachedPlans = mapped;
+      return mapped;
     }
   } catch (e) {
     console.error("Error fetching plans from Supabase:", e);
@@ -896,6 +924,11 @@ export async function getTenants(): Promise<Tenant[]> {
 
 export async function saveTenant(t: Tenant) {
   const { error } = await supabase.from("tenants").upsert(t);
+  if (error) throw error;
+}
+
+export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
+  const { error } = await supabase.from("tenants").update({ config }).eq("id", tenantId);
   if (error) throw error;
 }
 
@@ -1128,13 +1161,14 @@ export async function updateTenantAdmin(tenant_id: string, newEmail: string, new
   }
 }
 
-export async function updateTenantPlan(tenantId: string, planId: PlanId) {
+export async function updateTenantPlan(tenantId: string, planId: PlanId, resetStartDate = false) {
+  const updates: any = { plan_id: planId };
+  if (resetStartDate) {
+    updates.plan_fecha_inicio = new Date().toISOString();
+  }
   const { error } = await supabase
     .from("tenants")
-    .update({
-      plan_id: planId,
-      plan_fecha_inicio: new Date().toISOString(),
-    })
+    .update(updates)
     .eq("id", tenantId);
   return !error;
 }
@@ -2177,8 +2211,8 @@ export function getBillingCycleStart(
   now: Date = new Date(),
 ): Date {
   const start = new Date(planStartDateStr);
-  if (isNaN(start.getTime())) return new Date(now.getFullYear(), now.getMonth(), 1);
-  if (now < start) return start;
+  if (isNaN(start.getTime())) return new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  if (now < start) return new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
 
   const year = now.getFullYear();
   const month = now.getMonth();
@@ -2188,10 +2222,10 @@ export function getBillingCycleStart(
     year,
     month,
     day,
-    start.getHours(),
-    start.getMinutes(),
-    start.getSeconds(),
-    start.getMilliseconds(),
+    0,
+    0,
+    0,
+    0,
   );
 
   // Manejar el desbordamiento de fin de mes (ej. si el mes tiene menos días que el día de aniversario)
@@ -2200,10 +2234,10 @@ export function getBillingCycleStart(
       year,
       month + 1,
       0,
-      start.getHours(),
-      start.getMinutes(),
-      start.getSeconds(),
-      start.getMilliseconds(),
+      0,
+      0,
+      0,
+      0,
     );
   }
 
@@ -2219,20 +2253,20 @@ export function getBillingCycleStart(
       prevYear,
       prevMonth,
       day,
-      start.getHours(),
-      start.getMinutes(),
-      start.getSeconds(),
-      start.getMilliseconds(),
+      0,
+      0,
+      0,
+      0,
     );
     if (cycleStart.getDate() !== day) {
       cycleStart = new Date(
         prevYear,
         prevMonth + 1,
         0,
-        start.getHours(),
-        start.getMinutes(),
-        start.getSeconds(),
-        start.getMilliseconds(),
+        0,
+        0,
+        0,
+        0,
       );
     }
   }

@@ -737,12 +737,34 @@ Característica escritura: —
 
               <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
                 <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Ubicación de la ropa en Conveyor</span>
-                  <p className="text-[10px] text-muted-foreground">Permite al cajero ingresar dónde está la ropa. Se mostrará en el ticket.</p>
+                  <span className="text-sm font-bold text-primary">Mostrar empleado en ticket</span>
+                  <p className="text-[10px] text-muted-foreground">Imprime el nombre del cajero que procesó la orden en la parte inferior del recibo.</p>
+                </div>
+                <Switch 
+                  checked={cfg.ticket_mostrar_empleado} 
+                  onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-bold text-primary">Ubicación de ropa en Conveyor</span>
+                  <p className="text-[10px] text-muted-foreground">Habilita la asignación de posiciones de conveyor en Nueva Orden y estados de entrega.</p>
                 </div>
                 <Switch 
                   checked={cfg.usar_ubicacion_ropa || false} 
                   onCheckedChange={(v) => updateCfg({ usar_ubicacion_ropa: v })} 
+                />
+              </label>
+
+              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-muted/40">
+                <div className="space-y-0.5">
+                  <span className="text-sm font-medium">Mostrar notas en ticket del cliente</span>
+                  <p className="text-[10px] text-muted-foreground">Imprime observaciones e instrucciones especiales en la factura del cliente (por defecto se ocultan por privacidad).</p>
+                </div>
+                <Switch 
+                  checked={cfg.ticket_mostrar_notas || false} 
+                  onCheckedChange={(v) => updateCfg({ ticket_mostrar_notas: v })} 
                 />
               </label>
             </div>
@@ -1785,12 +1807,12 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       <span>{p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</span>
                     </div>
                     {p.modulos?.whatsapp && (
-                      <div className="text-xs flex items-center gap-2.5 font-semibold text-blue-600">
+                      <div className="text-xs flex items-center gap-2.5 font-semibold text-blue-600 dark:text-blue-400">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
                           <circle cx="12" cy="12" r="10" />
                           <path d="m9 12 2 2 4-4" />
                         </svg>
-                        <span>{(p.limite_whatsapp_mes || 0).toLocaleString()} Mensajes WhatsApp/mes</span>
+                        <span>{p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp/mes` : "Mensajes WhatsApp Ilimitados"}</span>
                       </div>
                     )}
                     <div className="border-t border-border/60 pt-3 mt-3 text-left">
@@ -1799,12 +1821,13 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       </div>
                       <div className="space-y-1.5">
                         {[
-                          { key: "whatsapp", label: "Mensajería WhatsApp" },
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica" },
-                          { key: "multisucursal", label: "Multisucursal" },
+                          { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
+                          { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
-                        ].map(({ key, label }) => {
+                          { key: "estanteria", label: "Estantería virtual" },
+                        ].map(({ key, label, extra }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
                             <div 
@@ -1827,12 +1850,19 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                                   <path d="m9 9 6 6" />
                                 </svg>
                               )}
-                              <span>{label}</span>
-                              {key === "multisucursal" && v && (
-                                <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-1">
-                                  Hasta {1 + (p.limite_sucursales_adicionales || 0)}
-                                </span>
-                              )}
+                              <span className="flex items-center flex-wrap gap-1">
+                                <span>{label}</span>
+                                {extra && (
+                                  <span className={`text-[10px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                                    {extra}
+                                  </span>
+                                )}
+                                {key === "multisucursal" && v && (
+                                  <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-0.5">
+                                    Hasta {1 + (p.limite_sucursales_adicionales || 0)}
+                                  </span>
+                                )}
+                              </span>
                             </div>
                           );
                         })}
@@ -1897,6 +1927,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
 function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: { 
   tenant: Tenant; wa: WhatsAppConfig; saveWA: (w: Partial<WhatsAppConfig>) => void; enabled: boolean; onTabChange: (t: string) => void;
 }) {
+  const { data: plans = [] } = usePlans();
   const [draft, setDraft] = useState<WhatsAppConfig>(() => {
     const baseWa = { ...DEFAULT_CONFIG.whatsapp, ...wa };
     if (baseWa.base_url?.includes("wapisender")) {
@@ -1972,38 +2003,51 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
 
   return (
     <Card className={CARD + " relative overflow-hidden"}>
-      {/* Barra de progreso de uso */}
-      <div className="px-6 py-4 bg-slate-50/80 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="flex-1">
-          <div className="flex justify-between items-end mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Uso Mensual de WhatsApp</span>
-            <span className="text-xs font-bold text-primary">
-              {tenant.whatsapp_sent_month || 0} / {(getTenantPlan(tenant).limite_whatsapp_mes || 0).toLocaleString()}
-            </span>
+      {/* Barra de progreso de uso (solo se muestra si el plan tiene un límite numérico > 0) */}
+      {(() => {
+        const waPlan = plans.find((p) => p.id === tenant?.plan_id) || getTenantPlan(tenant, plans);
+        const waLimit = waPlan?.limite_whatsapp_mes ?? 0;
+        const waSent = tenant?.whatsapp_sent_month || 0;
+        
+        // Si el límite es 0 o no está establecido, no limitar ni mostrar la barra de progreso
+        if (waLimit <= 0) return null;
+
+        const usageRatio = waSent / waLimit;
+
+        return (
+          <div className="px-6 py-4 bg-slate-50/80 dark:bg-slate-900/60 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="flex-1">
+              <div className="flex justify-between items-end mb-1.5">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Uso Mensual de WhatsApp</span>
+                <span className="text-xs font-bold text-primary">
+                  {waSent} / {waLimit.toLocaleString()}
+                </span>
+              </div>
+              <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all duration-500 ${
+                    usageRatio > 0.9 ? 'bg-red-500' : 'bg-primary'
+                  }`}
+                  style={{ width: `${Math.min(100, usageRatio * 100)}%` }}
+                />
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              {usageRatio > 0.8 && (
+                <span className="text-[10px] bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-300 px-2 py-0.5 rounded font-bold animate-pulse">LÍMITE CERCA</span>
+              )}
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="h-7 text-[10px] rounded-lg font-bold border-primary/20 hover:bg-primary/5"
+                onClick={() => onTabChange("plan")}
+              >
+                MEJORAR PLAN
+              </Button>
+            </div>
           </div>
-          <div className="h-2 bg-slate-200 rounded-full overflow-hidden">
-            <div 
-              className={`h-full transition-all duration-500 ${
-                ((tenant.whatsapp_sent_month || 0) / getTenantPlan(tenant).limite_whatsapp_mes) > 0.9 ? 'bg-red-500' : 'bg-primary'
-              }`}
-              style={{ width: `${Math.min(100, ((tenant.whatsapp_sent_month || 0) / getTenantPlan(tenant).limite_whatsapp_mes) * 100)}%` }}
-            />
-          </div>
-        </div>
-        <div className="flex items-center gap-2">
-          {((tenant.whatsapp_sent_month || 0) / getTenantPlan(tenant).limite_whatsapp_mes) > 0.8 && (
-            <span className="text-[10px] bg-red-100 text-red-600 px-2 py-0.5 rounded font-bold animate-pulse">LÍMITE CERCA</span>
-          )}
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="h-7 text-[10px] rounded-lg font-bold border-primary/20 hover:bg-primary/5"
-            onClick={() => onTabChange("plan")}
-          >
-            MEJORAR PLAN
-          </Button>
-        </div>
-      </div>
+        );
+      })()}
 
       <div className="p-6 pt-6">
       <div>

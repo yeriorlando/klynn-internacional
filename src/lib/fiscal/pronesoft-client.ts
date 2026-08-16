@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 // ─── URLs por ambiente ──────────────────────────────────────────────────────
 const PRONESOFT_BASE_URLS = {
   sandbox: 'https://api.ecf.sandbox.pronesoft.com/api/v1',
-  production: 'https://api.ecf.pronesoft.com/api/v1',
+  production: (import.meta.env.VITE_PRONESOFT_API_URL as string) || 'https://api.ecf.pronesoft.com/api/v1',
 };
 
 const ECF_ENV = {

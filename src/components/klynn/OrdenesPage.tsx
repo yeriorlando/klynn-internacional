@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind } from "lucide-react";
+import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag } from "lucide-react";
 import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -37,6 +37,7 @@ import { useOrdenes, useClientes, useCajaAbierta, useEmpleados, useServicios, us
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { encodeEscPos, printDirectRaw } from "@/lib/impresora";
+import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
 
 function esParaHoy(fechaStr?: string): boolean {
   if (!fechaStr) return false;
@@ -57,24 +58,34 @@ function formatMetodoPagoLabel(metodo?: string): string {
   return metodo.replace(/_/g, " ");
 }
 
-const ESTADOS_ORDEN_ORDENADOS: EstadoOrden[] = ["RECIBIDA", "EN_PROCESO", "PAGADA", "LISTA", "EN_CAMINO", "ENTREGADA"];
-
 export function esTransicionEstadoPermitida(actual: EstadoOrden, destino: EstadoOrden, saldo: number, metodoPago?: string): boolean {
   if (actual === destino) return false;
   if (actual === "ANULADA" || destino === "ANULADA") return false;
+  if (actual === "ENTREGADA") return false;
+
+  // Secuencia estricta paso a paso (no saltarse ningún paso):
+  // RECIBIDA -> EN_PROCESO -> LISTA -> ENTREGADA
+  const transicionesPermitidas: Record<EstadoOrden, EstadoOrden[]> = {
+    RECIBIDA: ["EN_PROCESO"],
+    EN_PROCESO: ["LISTA"],
+    LISTA: ["ENTREGADA", "EN_CAMINO"],
+    EN_CAMINO: ["ENTREGADA"],
+    PAGADA: ["EN_PROCESO", "LISTA"],
+    ENTREGADA: [],
+    ANULADA: [],
+    INCIDENCIA: ["EN_PROCESO", "LISTA"],
+  };
+
+  const destinosValidos = transicionesPermitidas[actual] || [];
+  if (!destinosValidos.includes(destino)) {
+    return false;
+  }
 
   // Regla especial: Solo se permite entregar si está pagado, a menos que sea a CRÉDITO
   if (destino === "ENTREGADA" && saldo > 0 && metodoPago !== "CREDITO") {
     return false;
   }
 
-  if (saldo <= 0) {
-    if (actual === "ENTREGADA") return false;
-    const idxActual = ESTADOS_ORDEN_ORDENADOS.indexOf(actual);
-    const idxDestino = ESTADOS_ORDEN_ORDENADOS.indexOf(destino);
-    if (idxActual === -1 || idxDestino === -1) return true;
-    return idxDestino > idxActual;
-  }
   return true;
 }
 
@@ -105,6 +116,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [motivoCredito, setMotivoCredito] = useState("");
   const [codigoCredito, setCodigoCredito] = useState("04");
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
+  const [showPrintProduccion, setShowPrintProduccion] = useState<Orden | null>(null);
   const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [isPrintingList, setIsPrintingList] = useState(false);
@@ -323,7 +335,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       if (estado === "ENTREGADA" && o.saldo > 0 && o.metodo_pago !== "CREDITO") {
         toast.error("No se puede entregar una orden con saldo pendiente si no es a crédito");
       } else {
-        toast.error("No se permite esta transición de estado para una orden pagada");
+        toast.error("El flujo de estados es estrictamente secuencial: Recibida → En proceso → Lista → Entregada");
       }
       return true;
     }
@@ -334,8 +346,29 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       return false; // Don't close the current modal immediately
     }
     try {
+      const ordenActualizada: Orden = { ...o, estado };
+
+      // Actualización directa e instantánea de la tabla de órdenes en React Query
+      queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+        if (!old) return [ordenActualizada];
+        return old.map(item => item.id === o.id ? ordenActualizada : item);
+      });
+      queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+        if (!old) return old;
+        return old.map(item => item.id === o.id ? ordenActualizada : item);
+      });
+
+      if (estadoModal && estadoModal.id === o.id) {
+        setEstadoModal(ordenActualizada);
+      }
+      if (view && view.id === o.id) {
+        setView(ordenActualizada);
+      }
+
+      await saveOrden(ordenActualizada);
       await updateOrdenEstado(o.id, estado);
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      
       const labels: Record<EstadoOrden, string> = {
         RECIBIDA: "Orden recibida",
         EN_PROCESO: "Orden en proceso",
@@ -348,23 +381,37 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       if (estado === "LISTA" || estado === "ENTREGADA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
         if (cli) {
-          notificarWhatsApp(tenant, cli, o, estado === "LISTA" ? "lista" : "entregada");
+          notificarWhatsApp(tenant, cli, ordenActualizada, estado === "LISTA" ? "lista" : "entregada");
         }
       }
       return true;
     } catch (err: any) {
       toast.error("Error al actualizar estado");
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       return true;
     }
   }
 
-  async function confirmarConveyor() {
+  async function confirmarConveyor(ubicacionParam?: string) {
     if (!conveyorOrden) return;
+    const ubiToUse = ubicacionParam !== undefined ? ubicacionParam : conveyorUbicacion;
     setSavingConveyor(true);
     try {
-      await updateOrdenEstado(conveyorOrden.id, "LISTA" as EstadoOrden, conveyorUbicacion || undefined);
+      const ordenActualizada = { ...conveyorOrden, estado: "LISTA" as EstadoOrden, ubicacion_ropa: ubiToUse || undefined };
+      
+      queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+        if (!old) return [ordenActualizada];
+        return old.map(item => item.id === conveyorOrden.id ? ordenActualizada : item);
+      });
+      queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+        if (!old) return old;
+        return old.map(item => item.id === conveyorOrden.id ? ordenActualizada : item);
+      });
+
+      await saveOrden(ordenActualizada);
+      await updateOrdenEstado(conveyorOrden.id, "LISTA" as EstadoOrden, ubiToUse || undefined);
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
-      const ordenActualizada = { ...conveyorOrden, estado: "LISTA" as EstadoOrden, ubicacion_ropa: conveyorUbicacion || undefined };
+      
       const cli = clientes.find((c) => c.id === conveyorOrden.cliente_id);
       if (cli) {
         notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then((r) => {
@@ -377,8 +424,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       setConveyorUbicacion("");
     } catch (err: any) {
       toast.error("Error al guardar ubicación");
+    } finally {
+      setSavingConveyor(false);
     }
-    setSavingConveyor(false);
   }
 
   async function anularOrden() {
@@ -953,34 +1001,115 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       </PageHeader>
 
       {limits.orderLimit !== null && (
-        <Card className={`mb-4 border-none shadow-sm overflow-hidden ${limits.ordersReached ? "bg-destructive/5" : "bg-primary/5"}`}>
-          <div className="flex flex-col sm:flex-row items-center justify-between p-4 gap-4">
-            <div className="flex items-center gap-3">
-              <div className={`h-10 w-10 rounded-xl flex items-center justify-center ${limits.ordersReached ? "bg-destructive/10 text-destructive" : "bg-primary/10 text-primary"}`}>
-                {limits.ordersReached ? <AlertTriangle className="h-5 w-5" /> : <Rocket className="h-5 w-5" />}
-              </div>
-              <div>
-                <div className="text-sm font-bold">
-                  {limits.ordersReached 
-                    ? "Has alcanzado el límite de órdenes de tu plan" 
-                    : `Uso del plan: ${limits.orderCount} de ${limits.orderLimit} órdenes este mes`}
+        (() => {
+          const count = limits.orderCount || 0;
+          const limit = limits.orderLimit;
+          const pct = Math.min(100, Math.round((count / limit) * 100));
+          const isDanger = limits.ordersReached || pct >= 95;
+          const isWarning = !isDanger && pct >= 80;
+
+          return (
+            <div
+              className={`mb-4 p-3.5 sm:p-4 rounded-2xl border transition-all relative overflow-hidden ${
+                isDanger
+                  ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 shadow-2xs"
+                  : isWarning
+                  ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 shadow-2xs"
+                  : "bg-white/90 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800 shadow-2xs"
+              }`}
+            >
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3.5">
+                {/* Left side: Icon + Title + Description */}
+                <div className="flex items-center gap-3 min-w-0">
+                  <div
+                    className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-2xs ${
+                      isDanger
+                        ? "bg-rose-500/15 text-rose-600 border-rose-500/25"
+                        : isWarning
+                        ? "bg-amber-500/15 text-amber-600 border-amber-500/25"
+                        : "bg-primary/10 text-primary border-primary/20"
+                    }`}
+                  >
+                    {isDanger ? (
+                      <AlertTriangle className="h-5 w-5 stroke-[2.5]" />
+                    ) : isWarning ? (
+                      <Zap className="h-5 w-5 stroke-[2.5]" />
+                    ) : (
+                      <Rocket className="h-5 w-5 stroke-[2.5]" />
+                    )}
+                  </div>
+
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-extrabold text-sm text-foreground">
+                        {isDanger
+                          ? "Límite de órdenes alcanzado"
+                          : "Capacidad mensual del plan"}
+                      </span>
+                      <span
+                        className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
+                          isDanger
+                            ? "bg-rose-500 text-white"
+                            : isWarning
+                            ? "bg-amber-500 text-white"
+                            : "bg-primary text-white"
+                        }`}
+                      >
+                        {pct}% consumido
+                      </span>
+                    </div>
+
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
+                      {isDanger
+                        ? "Has utilizado todas las órdenes de este mes. Actualiza tu plan para continuar registrando."
+                        : isWarning
+                        ? "Estás cerca del límite mensual. Considera cambiar a un plan superior."
+                        : "Llevas un excelente ritmo en el ciclo de facturación actual."}
+                    </p>
+                  </div>
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  {limits.ordersReached 
-                    ? "Actualiza tu plan para seguir registrando nuevas órdenes." 
-                    : "Llevas un buen ritmo, considera cambiar de Plan si creces más."}
+
+                {/* Right side: Progress meter + Upgrade Button */}
+                <div className="flex items-center gap-4 shrink-0 justify-between md:justify-end">
+                  {/* Visual Meter */}
+                  <div className="flex flex-col items-start md:items-end gap-1.5 min-w-[140px]">
+                    <div className="text-xs font-display flex items-baseline gap-1">
+                      <strong className="text-foreground font-black text-sm">{count}</strong>
+                      <span className="text-muted-foreground font-bold">/ {limit} órdenes</span>
+                    </div>
+                    <div className="w-36 sm:w-48 h-3 rounded-full bg-slate-100 dark:bg-slate-800/80 overflow-hidden p-0.5 border border-slate-200/90 dark:border-slate-700 shadow-inner">
+                      <div
+                        className={`h-full rounded-full transition-all duration-500 ${
+                          isDanger
+                            ? "bg-rose-500 shadow-xs"
+                            : isWarning
+                            ? "bg-amber-500 shadow-xs"
+                            : "bg-primary shadow-xs"
+                        }`}
+                        style={{ width: `${Math.max(5, pct)}%` }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* Button */}
+                  <Button
+                    onClick={() =>
+                      navigate({
+                        to: "/t/$slug/configuracion",
+                        params: { slug: tenant.slug },
+                        search: { tab: "plan" } as any,
+                      })
+                    }
+                    className="h-9 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white font-extrabold text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer gap-1.5 shrink-0"
+                  >
+                    <Rocket className="h-3.5 w-3.5 text-white" />
+                    <span>Ver Planes</span>
+                  </Button>
                 </div>
               </div>
             </div>
-            <Button 
-              className="bg-gradient-primary text-white h-9 px-5 font-bold shrink-0 shadow-sm border-0 transition-all active:scale-95"
-              onClick={() => navigate({ to: "/t/$slug/configuracion", params: { slug: tenant.slug }, search: { tab: "plan" } as any })}
-            >
-              🚀 Ver planes
-            </Button>
-          </div>
-
-        </Card>
+          );
+        })()
       )}
 
       <Card className="mb-4 flex flex-wrap items-center gap-3 p-4">
@@ -1262,7 +1391,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               <button 
                                 onClick={() => { setOpenMenuId(null); setShowPrint(o); }}
                               >
-                                <Printer /> Imprimir Ticket
+                                <Printer /> Imprimir Ticket (Cliente)
+                              </button>
+
+                              <button 
+                                onClick={() => { setOpenMenuId(null); setShowPrintProduccion(o); }}
+                                className="text-amber-700 dark:text-amber-300 font-semibold"
+                              >
+                                <Tag className="text-amber-600 dark:text-amber-400" /> Imprimir Ticket de Taller
                               </button>
                               
                               <button 
@@ -1377,6 +1513,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               cambiarEstado={cambiarEstado} 
               setView={setView} 
               onPrint={() => setShowPrint(view)}
+              onPrintProduccion={() => setShowPrintProduccion(view)}
               setCobrarOrden={setCobrarOrden}
             />
           )}
@@ -1393,6 +1530,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           onClose={() => {
             setShowPrint(null);
             setPagoRecibidoParaTicket(undefined);
+          }} 
+        />
+      )}
+
+      {showPrintProduccion && (
+        <TicketPrintPortal 
+          orden={showPrintProduccion} 
+          tenant={tenant} 
+          clientes={clientes}
+          empleados={empleados}
+          esProduccion={true}
+          onClose={() => {
+            setShowPrintProduccion(null);
           }} 
         />
       )}
@@ -1589,43 +1739,27 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         setAnular={setAnular}
         setCobrarOrden={setCobrarOrden}
         setShowPrint={setShowPrint}
+        setShowPrintProduccion={setShowPrintProduccion}
       />
 
-      {/* Modal Conveyor - Ubicación de la ropa */}
-      <Dialog open={!!conveyorOrden} onOpenChange={(o) => { if (!o) { setConveyorOrden(null); setConveyorUbicacion(""); } }}>
-        <DialogContent className="sm:max-w-sm rounded-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-base">
-              <span className="text-xl">🔄</span>
-              Ubicación en Conveyor
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Orden <span className="font-bold text-foreground">{conveyorOrden?.numero}</span> — Ingresa la posición del conveyor donde quedará colgada la ropa. Se imprimirá en el ticket de logística.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="py-2">
-            <label className="text-xs font-bold text-muted-foreground block mb-1.5">Posición en Conveyor</label>
-            <Input
-              autoFocus
-              value={conveyorUbicacion}
-              onChange={(e) => setConveyorUbicacion(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter" && !savingConveyor) confirmarConveyor(); }}
-              placeholder="Ej. 1909, A-12, Gancho 5..."
-              className="text-lg font-bold h-11 text-center tracking-widest"
-            />
-            <p className="text-[10px] text-muted-foreground mt-1.5 text-center">Puede dejar vacío si no aplica</p>
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" size="sm" onClick={() => { setConveyorOrden(null); setConveyorUbicacion(""); }}>
-              Cancelar
-            </Button>
-            <Button size="sm" onClick={confirmarConveyor} disabled={savingConveyor} className="gap-1.5">
-              {savingConveyor ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <CircleCheck className="h-3.5 w-3.5" />}
-              Guardar e Imprimir Ticket
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Modal Estantería Virtual / Ubicación */}
+      <UbicacionSelectorDialog
+        open={!!conveyorOrden}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConveyorOrden(null);
+            setConveyorUbicacion("");
+          }
+        }}
+        ubicacionActual={conveyorUbicacion}
+        onSelectUbicacion={(ubi) => {
+          setConveyorUbicacion(ubi);
+          confirmarConveyor(ubi);
+        }}
+        tenant={tenant}
+        ordenesActivas={ordenes}
+        ordenActualId={conveyorOrden?.id}
+      />
 
       {estadoModal && (
         <TicketPrintPortal 
@@ -1660,6 +1794,7 @@ export interface EstadoOrdenDialogProps {
   setAnular?: (o: Orden) => void;
   setCobrarOrden?: (o: Orden) => void;
   setShowPrint?: (o: Orden) => void;
+  setShowPrintProduccion?: (o: Orden) => void;
 }
 
 export function EstadoOrdenDialog({
@@ -1681,6 +1816,7 @@ export function EstadoOrdenDialog({
   setAnular,
   setCobrarOrden,
   setShowPrint,
+  setShowPrintProduccion,
 }: EstadoOrdenDialogProps) {
   if (!estadoModal) return null;
 
@@ -1711,60 +1847,126 @@ export function EstadoOrdenDialog({
         </div>
         
         {/* Título Central Elevado */}
-        <div className="text-center mb-3 -mt-7 px-16">
+        <div className="text-center mb-4 -mt-7 px-8">
           <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">Cambiar estado de la orden</h2>
-          <p className="text-xs text-slate-500 font-medium">Selecciona el nuevo estado para actualizar el progreso de esta orden.</p>
+          <p className="text-xs text-slate-500 font-medium mt-0.5">
+            Flujo paso a paso: <span className="font-bold text-blue-600">1. Recibida</span> → <span className="font-bold text-amber-600">2. En proceso</span> → <span className="font-bold text-emerald-600">3. Lista</span> → <span className="font-bold text-purple-600">4. Entregada</span>
+          </p>
         </div>
         
-        {/* Tarjetas */}
+        {/* Tarjetas de Estados */}
         <div className="grid grid-cols-4 gap-2.5 mb-3.5 px-1">
           {([
-            { value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "La orden ha sido recibida y está pendiente de revisión." },
-            { value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "La orden está siendo procesada actualmente." },
-            { value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, color: "emerald", desc: "La orden está lista para ser entregada." },
-            { value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, color: "purple", desc: "La orden ha sido entregada al cliente." },
+            { step: 1, value: "RECIBIDA" as EstadoOrden, label: "Recibida", icon: Inbox, color: "blue", desc: "Orden recibida e ingresada al sistema." },
+            { step: 2, value: "EN_PROCESO" as EstadoOrden, label: "En proceso", icon: RefreshCw, color: "amber", desc: "Servicios siendo procesados actualmente." },
+            { step: 3, value: "LISTA" as EstadoOrden, label: "Lista", icon: CircleCheck, color: "emerald", desc: "Servicios completados y listos para entrega." },
+            { step: 4, value: "ENTREGADA" as EstadoOrden, label: "Entregada", icon: Truck, color: "purple", desc: "Orden entregada con éxito al cliente." },
           ]).map((s) => {
             const Icon = s.icon;
             const isCurrent = estadoModal.estado === s.value;
+            const isAllowed = esTransicionEstadoPermitida(estadoModal.estado, s.value, estadoModal.saldo, estadoModal.metodo_pago);
             
+            const ordenPasos: Record<EstadoOrden, number> = {
+              RECIBIDA: 1,
+              EN_PROCESO: 2,
+              PAGADA: 2,
+              LISTA: 3,
+              EN_CAMINO: 3,
+              ENTREGADA: 4,
+              ANULADA: 0,
+              INCIDENCIA: 2,
+            };
+            const currentStepNum = ordenPasos[estadoModal.estado] || 1;
+            const isPast = s.step < currentStepNum;
+            const isFutureBlocked = s.step > currentStepNum && !isAllowed;
+            const isBlockedBySaldo = s.value === "ENTREGADA" && estadoModal.estado === "LISTA" && estadoModal.saldo > 0 && estadoModal.metodo_pago !== "CREDITO";
+
             const colorClasses = {
-              blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/40", activeBorder: "border-blue-400", activeCheckBg: "bg-blue-500" },
-              amber: { iconBg: "bg-amber-100", iconColor: "text-amber-500", activeCardBg: "bg-amber-50/40", activeBorder: "border-amber-400", activeCheckBg: "bg-amber-500" },
-              emerald: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", activeCardBg: "bg-emerald-50/40", activeBorder: "border-emerald-400", activeCheckBg: "bg-emerald-500" },
-              purple: { iconBg: "bg-purple-100", iconColor: "text-purple-600", activeCardBg: "bg-purple-50/40", activeBorder: "border-purple-400", activeCheckBg: "bg-purple-500" }
+              blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/60", activeBorder: "border-blue-500", activeCheckBg: "bg-blue-500" },
+              amber: { iconBg: "bg-amber-100", iconColor: "text-amber-600", activeCardBg: "bg-amber-50/60", activeBorder: "border-amber-500", activeCheckBg: "bg-amber-500" },
+              emerald: { iconBg: "bg-emerald-100", iconColor: "text-emerald-600", activeCardBg: "bg-emerald-50/60", activeBorder: "border-emerald-500", activeCheckBg: "bg-emerald-500" },
+              purple: { iconBg: "bg-purple-100", iconColor: "text-purple-600", activeCardBg: "bg-purple-50/60", activeBorder: "border-purple-500", activeCheckBg: "bg-purple-500" }
             }[s.color]!;
 
-            const cardClass = isCurrent 
-              ? `border-[1.5px] ${colorClasses.activeBorder} ${colorClasses.activeCardBg}`
-              : `border border-slate-200 bg-white hover:border-slate-300`;
+            let cardClass = "";
+            let iconContainerClass = "";
+            let iconColorClass = "";
+
+            if (isCurrent) {
+              // Único elemento seleccionado / sombreado: Estado actual
+              cardClass = `border-2 ${colorClasses.activeBorder} ${colorClasses.activeCardBg} shadow-xs`;
+              iconContainerClass = colorClasses.iconBg;
+              iconColorClass = colorClasses.iconColor;
+            } else if (isAllowed) {
+              // Siguiente acción: Tarjeta blanca limpia sin sombreado competing, se activa con hover
+              cardClass = `border border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 hover:shadow-sm cursor-pointer active:scale-95 group transition-all`;
+              iconContainerClass = "bg-slate-100 group-hover:bg-slate-200/80 transition-colors";
+              iconColorClass = "text-slate-600 group-hover:text-slate-900 transition-colors";
+            } else if (isPast) {
+              cardClass = `border border-slate-200/60 bg-slate-50/50 opacity-50 cursor-not-allowed`;
+              iconContainerClass = "bg-slate-100/80";
+              iconColorClass = "text-slate-400";
+            } else {
+              cardClass = `border border-slate-200/40 bg-slate-50/30 opacity-30 cursor-not-allowed`;
+              iconContainerClass = "bg-slate-100/60";
+              iconColorClass = "text-slate-400";
+            }
 
             return (
               <button
                 key={s.value}
+                type="button"
                 onClick={async () => {
-                  if (!isCurrent) {
+                  if (isAllowed) {
+                    // Actualizar el estado visual del modal inmediatamente
+                    setEstadoModal({ ...estadoModal, estado: s.value });
                     const shouldCloseImmediately = await cambiarEstado(estadoModal, s.value);
                     if (shouldCloseImmediately) {
-                      setEstadoModal(null);
+                      setTimeout(() => setEstadoModal(null), 350);
                     } else {
-                      // Delay closing the current modal slightly so the conveyor modal can mount properly
                       setTimeout(() => setEstadoModal(null), 100);
                     }
                   }
                 }}
-                disabled={isCurrent || !esTransicionEstadoPermitida(estadoModal.estado, s.value, estadoModal.saldo, estadoModal.metodo_pago)}
-                className={`relative flex flex-col items-center justify-start text-center rounded-[14px] p-2.5 py-3 transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 cursor-pointer ${cardClass}`}
+                disabled={!isAllowed}
+                className={`relative flex flex-col items-center justify-start text-center rounded-[16px] p-2.5 py-3 transition-all duration-200 ${cardClass}`}
               >
-                {isCurrent && (
-                  <div className={`absolute top-2 right-2 h-[16px] w-[16px] rounded-full flex items-center justify-center text-white ${colorClasses.activeCheckBg}`}>
-                    <Check className="h-2.5 w-2.5" strokeWidth={3} />
-                  </div>
-                )}
-                <div className={`h-[42px] w-[42px] rounded-full flex items-center justify-center mb-1.5 ${colorClasses.iconBg}`}>
-                  <Icon className={`h-5 w-5 ${colorClasses.iconColor}`} strokeWidth={2.5} />
+                {/* Badge Superior */}
+                <div className="absolute top-2 right-2">
+                  {isCurrent && (
+                    <div className={`h-[18px] px-2 rounded-full flex items-center gap-1 text-white shadow-xs text-[9px] font-black uppercase tracking-wider ${colorClasses.activeCheckBg}`} title="Estado actual">
+                      <Check className="h-2.5 w-2.5" strokeWidth={3} />
+                      <span>Actual</span>
+                    </div>
+                  )}
+                  {isAllowed && (
+                    <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 transition-all flex items-center gap-0.5">
+                      <span>Avanzar</span>
+                      <span>→</span>
+                    </span>
+                  )}
+                  {isPast && (
+                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
+                      ✓ Listo
+                    </span>
+                  )}
+                </div>
+
+                <div className="text-[9px] font-black uppercase tracking-wider text-slate-400 self-start mb-1 px-1">
+                  Paso {s.step}
+                </div>
+
+                <div className={`h-[40px] w-[40px] rounded-full flex items-center justify-center mb-1.5 ${iconContainerClass}`}>
+                  <Icon className={`h-5 w-5 ${iconColorClass}`} strokeWidth={2.5} />
                 </div>
                 <h3 className="text-xs font-bold text-slate-900 mb-0.5">{s.label}</h3>
-                <p className="text-[10px] text-slate-500 leading-tight font-medium">{s.desc}</p>
+                <p className="text-[10px] text-slate-500 leading-tight font-medium">
+                  {isBlockedBySaldo 
+                    ? "Requiere estar pagada o a crédito para entregar." 
+                    : isFutureBlocked 
+                    ? "Completa el paso anterior primero." 
+                    : s.desc}
+                </p>
               </button>
             );
           })}
@@ -1868,14 +2070,46 @@ export function EstadoOrdenDialog({
               <Printer className="h-3.5 w-3.5" /> Imprimir Ticket
             </Button>
           )}
+          {setShowPrintProduccion && (
+            <Button 
+              variant="outline"
+              className="text-xs font-semibold h-9 px-4 rounded-xl border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 border shadow-none gap-1.5 active:scale-95 transition-all cursor-pointer" 
+              onClick={() => {
+                const target = estadoModal;
+                setEstadoModal(null);
+                setShowPrintProduccion(target);
+              }}
+              title="Imprimir copia de uso interno / taller"
+            >
+              <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Ticket Taller
+            </Button>
+          )}
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, setView, onPrint, setCobrarOrden }: { 
-  view: Orden; tenant: any; clientes: any[]; empleados: any[]; cambiarEstado: any; setView: any; onPrint: () => void; setCobrarOrden: any;
+export function OrderDetail({ 
+  view, 
+  tenant, 
+  clientes, 
+  empleados, 
+  cambiarEstado, 
+  setView, 
+  onPrint, 
+  onPrintProduccion,
+  setCobrarOrden 
+}: { 
+  view: Orden; 
+  tenant: any; 
+  clientes: any[]; 
+  empleados: any[]; 
+  cambiarEstado: any; 
+  setView: any; 
+  onPrint: () => void; 
+  onPrintProduccion?: () => void;
+  setCobrarOrden: any;
 }) {
   const [empleadoView, setEmpleadoView] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
@@ -1894,20 +2128,32 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
 
   return (
     <>
-      <DialogHeader className="mb-4 grid grid-cols-2 items-center space-y-0 pr-8">
-        <DialogTitle className="flex items-center gap-3 text-2xl font-bold text-slate-800">
-          <Receipt className="h-6 w-6 text-primary" />
+      <DialogHeader className="mb-4 flex flex-row items-center justify-between space-y-0 pr-8">
+        <DialogTitle className="flex items-center gap-2.5 text-xl font-bold text-slate-800 dark:text-slate-100">
+          <Receipt className="h-5.5 w-5.5 text-primary" />
           Orden {view.numero}
         </DialogTitle>
 
-        <div className="flex justify-center pl-16 translate-y-2.5">
+        <div className="flex items-center gap-2">
           <Button 
             onClick={onPrint}
-            className="bg-[#2E4A79] hover:bg-[#253d63] text-white font-bold text-[11px] uppercase tracking-wider rounded-xl h-8 px-5 gap-2 shadow-sm cursor-pointer"
+            className="bg-[#2E4A79] hover:bg-[#253d63] text-white font-bold text-[11px] uppercase tracking-wider rounded-xl h-8 px-3.5 gap-1.5 shadow-xs cursor-pointer"
+            title="Imprimir ticket regular del cliente"
           >
             <Printer className="h-3.5 w-3.5 text-white" />
-            IMPRIMIR ORDEN
+            Ticket Cliente
           </Button>
+          {onPrintProduccion && (
+            <Button 
+              onClick={onPrintProduccion}
+              variant="outline"
+              className="border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-bold text-[11px] uppercase tracking-wider rounded-xl h-8 px-3.5 gap-1.5 shadow-xs cursor-pointer"
+              title="Imprimir ticket para taller/producción con notas y ubicación"
+            >
+              <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
+              Ticket Taller
+            </Button>
+          )}
         </div>
       </DialogHeader>
       
@@ -2051,7 +2297,14 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
 
           {/* Recibo Térmico */}
           <div className="relative z-10 shrink-0" style={{ zoom: 0.78 }}>
-            <Ticket orden={view} tenant={tenant} empleado={emp} cliente={c} formato={tenant.config!.formato_ticket} serviciosList={srvList} />
+            <Ticket 
+              orden={view} 
+              tenant={tenant} 
+              empleado={emp} 
+              cliente={c} 
+              formato={tenant.config!.formato_ticket} 
+              serviciosList={srvList} 
+            />
           </div>
         </div>
       </div>
@@ -2059,7 +2312,29 @@ export function OrderDetail({ view, tenant, clientes, empleados, cambiarEstado, 
   );
 }
 
-export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose, pagoRecibido, hiddenPreview = false, ocultarUbicacion = false }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void; pagoRecibido?: number; hiddenPreview?: boolean; ocultarUbicacion?: boolean }) {
+export function TicketPrintPortal({ 
+  orden, 
+  tenant, 
+  clientes, 
+  empleados, 
+  onClose, 
+  pagoRecibido, 
+  hiddenPreview = false, 
+  ocultarUbicacion = false,
+  ocultarNotas = false,
+  esProduccion = false
+}: { 
+  orden: Orden; 
+  tenant: any; 
+  clientes: any[]; 
+  empleados: any[]; 
+  onClose: () => void; 
+  pagoRecibido?: number; 
+  hiddenPreview?: boolean; 
+  ocultarUbicacion?: boolean;
+  ocultarNotas?: boolean;
+  esProduccion?: boolean;
+}) {
   const initialEmp = empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" };
   const initialCli = clientes.find(c => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" };
   
@@ -2087,7 +2362,7 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
       if (printerType === "bluetooth" || printerType === "serial") {
         const runPhysicalPrint = async () => {
           try {
-            const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion);
+            const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion);
             const success = await printDirectRaw(bytes, tenant.config);
             if (success) {
               toast.success("¡Ticket impreso en impresora física!");
@@ -2104,7 +2379,7 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
         runPhysicalPrint();
       }
     }
-  }, [emp, cli, srvList, orden, tenant, pagoRecibido, onClose]);
+  }, [emp, cli, srvList, orden, tenant, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion, onClose]);
 
   if (!emp || !cli) return null;
 
@@ -2120,7 +2395,7 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
             Cerrar vista de impresión
           </Button>
           <Button 
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }} 
+            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }}
             className="bg-primary text-white gap-2 cursor-pointer"
           >
             <Printer className="h-4 w-4" /> Imprimir ahora
@@ -2136,6 +2411,8 @@ export function TicketPrintPortal({ orden, tenant, clientes, empleados, onClose,
           serviciosList={srvList}
           pagoRecibido={pagoRecibido}
           ocultarUbicacion={ocultarUbicacion}
+          ocultarNotas={ocultarNotas}
+          esProduccion={esProduccion}
         />
       </div>
 

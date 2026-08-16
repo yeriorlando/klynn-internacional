@@ -35,6 +35,16 @@ export function formatCenter(text: string, width: number): string {
   return " ".repeat(spaces) + cleanT;
 }
 
+export function formatPhoneDO(phoneStr?: string): string {
+  if (!phoneStr || phoneStr === "---") return "";
+  const digits = phoneStr.replace(/\D/g, "");
+  const cleanDigits = digits.length === 11 && digits.startsWith("1") ? digits.slice(1) : digits;
+  if (cleanDigits.length === 10) {
+    return `(${cleanDigits.slice(0, 3)}) ${cleanDigits.slice(3, 6)}-${cleanDigits.slice(6)}`;
+  }
+  return phoneStr;
+}
+
 // Verifica si la API de Puerto Serie está disponible en el navegador
 export function isSerialSupported(): boolean {
   return typeof window !== "undefined" && "serial" in navigator;
@@ -166,7 +176,9 @@ export function encodeEscPos(
   empleado: Empleado,
   serviciosList: any[],
   pagoRecibido?: number,
-  ocultarUbicacion?: boolean
+  ocultarUbicacion?: boolean,
+  ocultarNotas?: boolean,
+  esProduccion?: boolean
 ): Uint8Array {
   const config = tenant.config || {};
   const formato = config.formato_ticket || "80mm";
@@ -222,151 +234,242 @@ export function encodeEscPos(
   }
 
   // DATOS COMERCIALES
-  writeLine(tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado");
-  writeLine(tenant.direccion);
-  writeLine(`Tel: ${tenant.telefono}`);
-  writeLine("-".repeat(columns));
-
-  // DATOS DE LA ORDEN
-  bytes.push(...ALIGN_LEFT);
-  writeLine(`ORDEN: ${orden.numero}`);
-  if (orden.ncf) {
-    writeLine(`NCF: ${orden.ncf}`);
-    if (orden.ncf_vencimiento) {
-      writeLine(`Vence: ${new Date(orden.ncf_vencimiento).toLocaleDateString("es-DO")}`);
+  if (!esProduccion) {
+    writeLine(tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado");
+    if (tenant.direccion) {
+      writeLine(tenant.direccion);
     }
+    writeLine(`Tel: ${formatPhoneDO(tenant.telefono)}`);
+    writeLine("-".repeat(columns));
   }
-  writeLine(`Fecha: ${new Date(orden.creado_en).toLocaleString("es-DO")}`);
-  writeLine(`Entrega: ${orden.fecha_entrega}`);
-  writeLine(`Atendido por: ${empleado.nombre}`);
-  writeLine("-".repeat(columns));
 
-  // DATOS DEL CLIENTE
-  writeLine(`Cliente: ${cliente.nombre} ${cliente.apellido || ""}`);
-  if (cliente.cedula) {
-    writeLine(`Identificacion: ${cliente.cedula}`);
-  }
-  if (cliente.telefono && cliente.telefono !== "---") {
-    writeLine(`Tel: ${cliente.telefono}`);
-  }
-  if (orden.ubicacion_ropa && !ocultarUbicacion) {
-    writeLine(`Ubicacion Ropa: ${orden.ubicacion_ropa}`);
-  }
-  if (orden.notas) {
-    writeLine(`NOTA: ${orden.notas}`);
-  }
-  writeLine("=".repeat(columns));
+  if (esProduccion) {
+    const totalPrendasProd = (orden.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0);
 
-  // DETALLE DE ARTÍCULOS / SERVICIOS
-  if (perfil !== "basica") {
     bytes.push(...BOLD_ON);
-  }
-  writeLine(formatRow("DETALLE", "TOTAL", columns));
-  if (perfil !== "basica") {
+    writeLine("★ COPIA DE USO INTERNO ★");
     bytes.push(...BOLD_OFF);
-  }
-  writeLine("-".repeat(columns));
-
-  // Renderizar prendas del ticket
-  const itemsSueltos = orden.items.filter(it => !it.descripcion.startsWith("↳"));
-  const itemsDesglosados = orden.items.filter(it => it.descripcion.startsWith("↳"));
-
-  // Renderizar servicios asociados con sus desgloses
-  if (orden.servicios && orden.servicios.length > 0) {
-    orden.servicios.forEach((sName) => {
-      const srv = serviciosList.find((x) => x.nombre === sName);
-      const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
-      writeLine(formatRow(`Servicio: ${sName}`, `RD$${p.toFixed(2)}`, columns));
-      
-      const misPrendas = itemsDesglosados.filter(it => 
-        it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
-      );
-      misPrendas.forEach(it => {
-        const sub = it.cantidad * it.precio_unitario;
-        const subStr = sub > 0 ? `RD$${sub.toFixed(2)}` : "---";
-        writeLine(formatRow(`  ${it.cantidad}x ${it.descripcion}`, subStr, columns));
-      });
-    });
-  }
-
-  // Renderizar prendas sueltas
-  itemsSueltos.forEach((it) => {
-    const cantDesc = `${it.cantidad}x ${it.descripcion}`;
-    const sub = it.cantidad * it.precio_unitario;
-    const subStr = `RD$${sub.toFixed(2)}`;
-    if (cantDesc.length + subStr.length + 1 > columns) {
-      writeLine(cleanText(cantDesc));
-      writeLine(formatRow("", subStr, columns));
-    } else {
-      writeLine(formatRow(cantDesc, subStr, columns));
+    writeLine("-".repeat(columns));
+    
+    if (orden.ubicacion_ropa) {
+      bytes.push(...BOLD_ON);
+      writeLine(`UBICACION: ${orden.ubicacion_ropa.toUpperCase()}`);
+      bytes.push(...BOLD_OFF);
+      writeLine("-".repeat(columns));
     }
-  });
-  writeLine("=".repeat(columns));
 
-  // TOTALES
-  writeLine(formatRow("Subtotal:", `RD$${orden.subtotal.toFixed(2)}`, columns));
-  writeLine(formatRow(`ITBIS (${config.itbis_porcentaje ?? 18}%):`, `RD$${orden.itbis.toFixed(2)}`, columns));
-  if (perfil !== "basica") {
     bytes.push(...BOLD_ON);
-    bytes.push(...FONT_DOUBLE);
-    writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns / 2)); // Ajuste de columnas por font double
-    bytes.push(...FONT_NORMAL);
+    if (perfil !== "basica") {
+      bytes.push(...FONT_DOUBLE);
+    }
+    writeLine(`TOTAL PRENDAS: ${totalPrendasProd}`);
+    if (perfil !== "basica") {
+      bytes.push(...FONT_NORMAL);
+    }
+    bytes.push(...BOLD_OFF);
+    writeLine("-".repeat(columns));
+
+    bytes.push(...BOLD_ON);
+    writeLine(`ORDEN: ${orden.numero}`);
+    bytes.push(...BOLD_OFF);
+    if (orden.es_urgente) {
+      bytes.push(...BOLD_ON);
+      writeLine("★ URGENTE ★");
+      bytes.push(...BOLD_OFF);
+    }
+    writeLine(`FECHA DE ENTREGA: ${orden.fecha_entrega}`);
+    writeLine("-".repeat(columns));
+
+    // DATOS DEL CLIENTE
+    writeLine(`Cliente: ${cliente.nombre} ${cliente.apellido || ""}`);
+    if (cliente.telefono && cliente.telefono !== "---") {
+      writeLine(`Tel: ${formatPhoneDO(cliente.telefono)}`);
+    }
+    if (cliente.direccion) {
+      writeLine(`Direccion: ${cliente.direccion}`);
+    }
+    if (orden.notas) {
+      writeLine(`NOTA: ${orden.notas}`);
+    }
+    writeLine("=".repeat(columns));
+
+    // DETALLE DE PRENDAS PARA PRODUCCIÓN
+    bytes.push(...BOLD_ON);
+    writeLine("DETALLE DE PRENDAS A PROCESAR");
+    bytes.push(...BOLD_OFF);
+    writeLine("-".repeat(columns));
+
+    const itemsSueltos = orden.items.filter(it => !it.descripcion.startsWith("↳"));
+    const itemsDesglosados = orden.items.filter(it => it.descripcion.startsWith("↳"));
+
+    if (orden.servicios && orden.servicios.length > 0) {
+      orden.servicios.forEach((sName) => {
+        bytes.push(...BOLD_ON);
+        writeLine(`Servicio: ${sName}`);
+        bytes.push(...BOLD_OFF);
+        
+        const misPrendas = itemsDesglosados.filter(it => 
+          it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
+        );
+        misPrendas.forEach(it => {
+          writeLine(`  • ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}${it.es_libra ? ` (${it.cantidad}lb)` : ""}`);
+          if (it.notas) {
+            writeLine(`    Nota: ${it.notas}`);
+          }
+        });
+      });
+    }
+
+    itemsSueltos.forEach((it) => {
+      writeLine(`• ${it.cantidad}x ${it.descripcion}${it.es_libra ? ` (${it.cantidad}lb)` : ""}`);
+      if (it.notas) {
+        writeLine(`  Nota: ${it.notas}`);
+      }
+    });
+
+    writeLine("-".repeat(columns));
+    writeLine("ATENDIDO POR:");
+    bytes.push(...BOLD_ON);
+    writeLine(empleado.nombre.toUpperCase());
     bytes.push(...BOLD_OFF);
   } else {
-    writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns));
-  }
-  writeLine("-".repeat(columns));
-
-  // PAGOS
-  writeLine(formatRow("Metodo pago:", orden.metodo_pago, columns));
-  writeLine(formatRow("Monto Pagado:", `RD$${orden.pagado.toFixed(2)}`, columns));
-  if (orden.saldo > 0) {
-    writeLine(formatRow("Saldo Pendiente:", `RD$${orden.saldo.toFixed(2)}`, columns));
-  }
-  if (pagoRecibido !== undefined && pagoRecibido > orden.pagado) {
-    const cambio = pagoRecibido - orden.pagado;
-    writeLine(formatRow("Efectivo recibido:", `RD$${pagoRecibido.toFixed(2)}`, columns));
-    writeLine(formatRow("Cambio:", `RD$${cambio.toFixed(2)}`, columns));
-  }
-  writeLine("-".repeat(columns));
-
-  // PIE DE PÁGINA
-  bytes.push(...ALIGN_CENTER);
-  if (config.ticket_pie) {
-    writeLine(config.ticket_pie);
-  }
-  if (config.ticket_nota) {
-    writeLine(config.ticket_nota);
-  }
-
-  // QR CODE NATIVO (Solo en perfil completo/estándar si hay NCF electrónico y la impresora lo soporta)
-  const isECF = orden.ncf?.startsWith("E");
-  if (isECF && perfil === "completa") {
-    const qrData = orden.ecf_qr || `https://dgii.gov.do/consulta_ecf?RNC_EMISOR=${tenant.rnc}&E_NCF=${orden.ncf}&MONTO_TOTAL=${orden.total}&FECHA_EMISION=${new Date(orden.creado_en).toLocaleDateString("en-GB").replace(/\//g, "")}`;
-    
-    // Bytes de comando ESC/POS para QR Code
-    // 1. Elegir modelo QR (Model 2)
-    bytes.push(29, 40, 107, 4, 0, 49, 65, 50, 0);
-    // 2. Definir tamaño de celda (ej: 6)
-    bytes.push(29, 40, 107, 3, 0, 49, 67, 6);
-    // 3. Definir nivel de corrección de error M (49)
-    bytes.push(29, 40, 107, 3, 0, 49, 69, 49);
-    // 4. Guardar los datos en el buffer de la impresora
-    const storeLen = qrData.length + 3;
-    const lenL = storeLen & 0xFF;
-    const lenH = (storeLen >> 8) & 0xFF;
-    bytes.push(29, 40, 107, lenL, lenH, 49, 80, 48);
-    for (let k = 0; k < qrData.length; k++) {
-      bytes.push(qrData.charCodeAt(k));
+    // =========================================================
+    // FLUJO COMERCIAL / CLIENTE (CON PRECIOS Y TOTALES FISCALES)
+    // =========================================================
+    bytes.push(...ALIGN_LEFT);
+    writeLine(`ORDEN: ${orden.numero}`);
+    if (orden.ncf) {
+      writeLine(`NCF: ${orden.ncf}`);
+      if (orden.ncf_vencimiento) {
+        writeLine(`Vence: ${new Date(orden.ncf_vencimiento).toLocaleDateString("es-DO")}`);
+      }
     }
-    // 5. Imprimir el código QR
-    bytes.push(29, 40, 107, 3, 0, 49, 81, 48);
-    writeLine();
-    writeLine("Consulte su e-CF en dgii.gov.do");
-  } else if (isECF && perfil !== "completa") {
-    // Si no es completa, solo mostrar el texto del enlace QR
-    writeLine("Consulta Factura Electronica:");
-    writeLine(`dgii.gov.do/consulta_ecf?RNC=${tenant.rnc}&NCF=${orden.ncf}`);
+    writeLine(`Fecha: ${new Date(orden.creado_en).toLocaleString("es-DO")}`);
+    writeLine(`Entrega: ${orden.fecha_entrega}`);
+    writeLine("-".repeat(columns));
+    writeLine("ATENDIDO POR:");
+    bytes.push(...BOLD_ON);
+    writeLine(empleado.nombre.toUpperCase());
+    bytes.push(...BOLD_OFF);
+    writeLine("-".repeat(columns));
+
+    // DATOS DEL CLIENTE
+    writeLine(`Cliente: ${cliente.nombre} ${cliente.apellido || ""}`);
+    if (cliente.cedula) {
+      writeLine(`Identificacion: ${cliente.cedula}`);
+    }
+    if (cliente.telefono && cliente.telefono !== "---") {
+      writeLine(`Tel: ${formatPhoneDO(cliente.telefono)}`);
+    }
+    if (orden.notas && (config.ticket_mostrar_notas && !ocultarNotas)) {
+      writeLine(`NOTA: ${orden.notas}`);
+    }
+    writeLine("=".repeat(columns));
+
+    // DETALLE DE ARTÍCULOS / SERVICIOS
+    if (perfil !== "basica") {
+      bytes.push(...BOLD_ON);
+    }
+    writeLine(formatRow("DETALLE", "TOTAL", columns));
+    if (perfil !== "basica") {
+      bytes.push(...BOLD_OFF);
+    }
+    writeLine("-".repeat(columns));
+
+    // Renderizar prendas del ticket
+    const itemsSueltos = orden.items.filter(it => !it.descripcion.startsWith("↳"));
+    const itemsDesglosados = orden.items.filter(it => it.descripcion.startsWith("↳"));
+
+    // Renderizar servicios asociados con sus desgloses
+    if (orden.servicios && orden.servicios.length > 0) {
+      orden.servicios.forEach((sName) => {
+        const srv = serviciosList.find((x) => x.nombre === sName);
+        const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
+        writeLine(formatRow(`Servicio: ${sName}`, `RD$${p.toFixed(2)}`, columns));
+        
+        const misPrendas = itemsDesglosados.filter(it => 
+          it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
+        );
+        misPrendas.forEach(it => {
+          const sub = it.cantidad * it.precio_unitario;
+          const subStr = sub > 0 ? `RD$${sub.toFixed(2)}` : "---";
+          writeLine(formatRow(`  ${it.cantidad}x ${it.descripcion}`, subStr, columns));
+        });
+      });
+    }
+
+    // Renderizar prendas sueltas
+    itemsSueltos.forEach((it) => {
+      const cantDesc = `${it.cantidad}x ${it.descripcion}`;
+      const sub = it.cantidad * it.precio_unitario;
+      const subStr = `RD$${sub.toFixed(2)}`;
+      if (cantDesc.length + subStr.length + 1 > columns) {
+        writeLine(cleanText(cantDesc));
+        writeLine(formatRow("", subStr, columns));
+      } else {
+        writeLine(formatRow(cantDesc, subStr, columns));
+      }
+    });
+    writeLine("=".repeat(columns));
+
+    // TOTALES
+    writeLine(formatRow("Subtotal:", `RD$${orden.subtotal.toFixed(2)}`, columns));
+    writeLine(formatRow(`ITBIS (${config.itbis_porcentaje ?? 18}%):`, `RD$${orden.itbis.toFixed(2)}`, columns));
+    if (perfil !== "basica") {
+      bytes.push(...BOLD_ON);
+      bytes.push(...FONT_DOUBLE);
+      writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns / 2));
+      bytes.push(...FONT_NORMAL);
+      bytes.push(...BOLD_OFF);
+    } else {
+      writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns));
+    }
+    writeLine("-".repeat(columns));
+
+    // PAGOS
+    writeLine(formatRow("Metodo pago:", orden.metodo_pago, columns));
+    writeLine(formatRow("Monto Pagado:", `RD$${orden.pagado.toFixed(2)}`, columns));
+    if (orden.saldo > 0) {
+      writeLine(formatRow("Saldo Pendiente:", `RD$${orden.saldo.toFixed(2)}`, columns));
+    }
+    if (pagoRecibido !== undefined && pagoRecibido > orden.pagado) {
+      const cambio = pagoRecibido - orden.pagado;
+      writeLine(formatRow("Efectivo recibido:", `RD$${pagoRecibido.toFixed(2)}`, columns));
+      writeLine(formatRow("Cambio:", `RD$${cambio.toFixed(2)}`, columns));
+    }
+    writeLine("-".repeat(columns));
+
+    // PIE DE PÁGINA
+    bytes.push(...ALIGN_CENTER);
+    if (config.ticket_pie) {
+      writeLine(config.ticket_pie);
+    }
+    if (config.ticket_nota) {
+      writeLine(config.ticket_nota);
+    }
+
+    // QR CODE NATIVO
+    const isECF = orden.ncf?.startsWith("E");
+    if (isECF && perfil === "completa") {
+      const qrData = orden.ecf_qr || `https://dgii.gov.do/consulta_ecf?RNC_EMISOR=${tenant.rnc}&E_NCF=${orden.ncf}&MONTO_TOTAL=${orden.total}&FECHA_EMISION=${new Date(orden.creado_en).toLocaleDateString("en-GB").replace(/\//g, "")}`;
+      
+      bytes.push(29, 40, 107, 4, 0, 49, 65, 50, 0);
+      bytes.push(29, 40, 107, 3, 0, 49, 67, 6);
+      bytes.push(29, 40, 107, 3, 0, 49, 69, 49);
+      const storeLen = qrData.length + 3;
+      const lenL = storeLen & 0xFF;
+      const lenH = (storeLen >> 8) & 0xFF;
+      bytes.push(29, 40, 107, lenL, lenH, 49, 80, 48);
+      for (let k = 0; k < qrData.length; k++) {
+        bytes.push(qrData.charCodeAt(k));
+      }
+      bytes.push(29, 40, 107, 3, 0, 49, 81, 48);
+      writeLine();
+      writeLine("Consulte su e-CF en dgii.gov.do");
+    } else if (isECF && perfil !== "completa") {
+      writeLine("Consulta Factura Electronica:");
+      writeLine(`dgii.gov.do/consulta_ecf?RNC=${tenant.rnc}&NCF=${orden.ncf}`);
+    }
   }
 
   writeLine();

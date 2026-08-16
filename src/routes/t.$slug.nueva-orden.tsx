@@ -48,6 +48,7 @@ import {
   Tag,
   Layers,
   Package,
+  MapPin,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -124,6 +125,7 @@ import {
   useCatalogo,
   useServicios,
   useClientes,
+  useOrdenes,
   useCajaAbierta,
   useECFConfig,
   usePlans,
@@ -133,6 +135,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PriceInput } from "@/components/klynn/PriceInput";
 import { PendingCollectionsDialog } from "@/components/klynn/PendingCollectionsDialog";
+import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
 
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
@@ -241,7 +244,9 @@ function NuevaOrdenPage() {
   };
 
   const [notas, setNotas] = useState("");
+  const [ubicacionRopa, setUbicacionRopa] = useState("");
   const [showNotesPOS, setShowNotesPOS] = useState(false);
+  const [showConveyorPOS, setShowConveyorPOS] = useState(false);
   const [showDeliveryPOS, setShowDeliveryPOS] = useState(false);
   const [showDiscountPOS, setShowDiscountPOS] = useState(false);
   const [servicioDomicilio, setServicioDomicilio] = useState(false);
@@ -258,6 +263,7 @@ function NuevaOrdenPage() {
   const { data: catalogoData = [], isLoading: loadingCatalog } = useCatalogo(tenantId);
   const { data: serviciosData = [], isLoading: loadingServicios } = useServicios(tenantId);
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
+  const { data: ordenes = [] } = useOrdenes(tenantId);
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
   const { data: fiscalConfigData } = useECFConfig(tenantId);
   const { data: ecfSequences } = useECFSequences(tenantId);
@@ -458,7 +464,9 @@ function NuevaOrdenPage() {
     setCustomServicePrices({});
     setDescuento(0);
     setNotas("");
+    setUbicacionRopa("");
     setShowNotesPOS(false);
+    setShowConveyorPOS(false);
     setRecibido(0);
     setAbonoCredito(0);
     setReferencia("");
@@ -1207,6 +1215,7 @@ function NuevaOrdenPage() {
         fecha_entrega: deliveryDate.toISOString(),
         es_urgente: esUrgente,
         notas: notas || undefined,
+        ubicacion_ropa: ubicacionRopa.trim() || undefined,
         creado_en: new Date().toISOString(),
         ncf: finalNCF,
         ncf_vencimiento: ncfVencimiento,
@@ -1535,23 +1544,18 @@ function NuevaOrdenPage() {
                   <span>{notas ? "Nota activa" : "Notas"}</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={toggleFullscreen}
-                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${isFullscreen ? "bg-slate-800 text-white shadow-inner ring-2 ring-slate-400 ring-offset-1 dark:ring-offset-background" : "bg-slate-700 hover:bg-slate-800 text-white shadow-sm"}`}
-                >
-                  {isFullscreen ? (
-                    <>
-                      <Minimize className="h-4 w-4 text-white opacity-100" />
-                      <span>Pantalla normal</span>
-                    </>
-                  ) : (
-                    <>
-                      <Maximize className="h-4 w-4 text-white opacity-90 transition-colors group-hover:opacity-100" />
-                      <span>Pantalla completa</span>
-                    </>
-                  )}
-                </button>
+                {cfg.usar_ubicacion_ropa && (
+                  <button
+                    type="button"
+                    onClick={() => setShowConveyorPOS(true)}
+                    className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${ubicacionRopa ? "bg-indigo-600 hover:bg-indigo-700 text-white shadow-inner ring-2 ring-indigo-400 ring-offset-1 dark:ring-offset-background" : "bg-indigo-600 hover:bg-indigo-700 text-white shadow-sm"}`}
+                  >
+                    <MapPin
+                      className={`h-4 w-4 transition-colors text-white ${ubicacionRopa ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                    />
+                    <span>{ubicacionRopa ? `📍 ${ubicacionRopa}` : "Ubicación"}</span>
+                  </button>
+                )}
 
                 <button
                   type="button"
@@ -1589,12 +1593,14 @@ function NuevaOrdenPage() {
                     cliente.nombre === "Consumidor" && cliente.apellido === "Final";
                   if (
                     !isGenericClient &&
-                    direccionData.direccion.trim() &&
-                    direccionData.direccion.trim() !== cliente.direccion
+                    (direccionData.direccion ||
+                      direccionData.sector ||
+                      direccionData.edificio_apto ||
+                      direccionData.referencia)
                   ) {
-                    const updatedCliente = {
+                    const updatedCliente: Cliente = {
                       ...cliente,
-                      direccion: direccionData.direccion.trim(),
+                      direccion: direccionData.direccion || cliente.direccion,
                       sector: direccionData.sector || cliente.sector,
                       edificio_apto: direccionData.edificio_apto || cliente.edificio_apto,
                       referencia: direccionData.referencia || cliente.referencia,
@@ -1629,6 +1635,15 @@ function NuevaOrdenPage() {
               onOpenChange={setShowNotesPOS}
               notas={notas}
               setNotas={setNotas}
+            />
+
+            <UbicacionSelectorDialog
+              open={showConveyorPOS}
+              onOpenChange={setShowConveyorPOS}
+              ubicacionActual={ubicacionRopa}
+              onSelectUbicacion={setUbicacionRopa}
+              tenant={user?.tenant}
+              ordenesActivas={ordenes}
             />
 
             <DeliveryDatePickerPOSDialog
