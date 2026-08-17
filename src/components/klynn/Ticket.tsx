@@ -22,6 +22,7 @@ interface Props {
   ocultarUbicacion?: boolean;
   ocultarNotas?: boolean;
   esProduccion?: boolean;
+  esCopiaCaja?: boolean;
 }
 
 function humanizeDate(dateStr: string, showTime = true): string {
@@ -69,7 +70,8 @@ export function Ticket({
   serviciosList = [],
   ocultarUbicacion = false,
   ocultarNotas = false,
-  esProduccion = false
+  esProduccion = false,
+  esCopiaCaja = false
 }: Props) {
   const cfg = tenant.config;
   const w = formato === "57mm" ? "w-[58mm]" : "w-[80mm]";
@@ -313,15 +315,20 @@ export function Ticket({
       </div>
       <Sep />
       <div className="text-center font-bold uppercase text-[12px] py-1">{tipoDocumento}</div>
+      {esCopiaCaja && (
+        <div className="text-center font-black uppercase text-[10px] py-0.5 bg-black text-white my-1 rounded-xs tracking-wider">
+          ★ COPIA DE CAJA ★
+        </div>
+      )}
       <div className="text-center font-bold uppercase text-[11px] py-1 border border-black my-1">
         {orden.saldo === 0 ? "★ FACTURA PAGADA ★" : `⚠️ PENDIENTE: ${formatRD(orden.saldo)}`}
       </div>
       <Sep />
       <div>
-        <div className="flex justify-between items-center text-[12px] my-1">
-          <div><b>ORDEN:</b> <span className="font-mono font-black">{orden.numero}</span></div>
+        <div className="flex justify-between items-center">
+          <div><b>Orden No°:</b> {orden.numero}</div>
           {orden.es_urgente && (
-            <span className="font-black text-black border border-black px-1.5 py-0.5 text-[10px] uppercase">
+            <span className="font-black text-black border border-black px-1 py-0.5 text-[9px] uppercase">
               ★ URGENTE ★
             </span>
           )}

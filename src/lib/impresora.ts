@@ -178,7 +178,8 @@ export function encodeEscPos(
   pagoRecibido?: number,
   ocultarUbicacion?: boolean,
   ocultarNotas?: boolean,
-  esProduccion?: boolean
+  esProduccion?: boolean,
+  esCopiaCaja?: boolean
 ): Uint8Array {
   const config = tenant.config || {};
   const formato = config.formato_ticket || "80mm";
@@ -336,8 +337,15 @@ export function encodeEscPos(
     // =========================================================
     // FLUJO COMERCIAL / CLIENTE (CON PRECIOS Y TOTALES FISCALES)
     // =========================================================
+    if (esCopiaCaja) {
+      bytes.push(...ALIGN_CENTER);
+      bytes.push(...BOLD_ON);
+      writeLine("★ COPIA DE CAJA ★");
+      bytes.push(...BOLD_OFF);
+      writeLine("-".repeat(columns));
+    }
     bytes.push(...ALIGN_LEFT);
-    writeLine(`ORDEN: ${orden.numero}`);
+    writeLine(`Orden No°: ${orden.numero}`);
     if (orden.ncf) {
       writeLine(`NCF: ${orden.ncf}`);
       if (orden.ncf_vencimiento) {

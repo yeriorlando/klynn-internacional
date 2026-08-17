@@ -43,7 +43,9 @@ import {
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar, Clock,
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, Zap, Laptop, Wrench,
-  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search
+  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
+  Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
+  Percent, Scale, Wallet, Shirt, Maximize2, Server
 } from "lucide-react";
 import {
   connectBluetoothDevice,
@@ -70,13 +72,40 @@ const NCF_NOMBRES: Record<string, string> = {
   E41: "COMPRAS", E43: "GASTOS MENORES", E44: "REGÍMENES ESPECIALES", E45: "GUBERNAMENTAL", E46: "EXPORTACIONES", E47: "PAGOS AL EXTERIOR",
 };
 
-function Field({ label, children, hint, span }: { label: string; children: React.ReactNode; hint?: string; span?: boolean }) {
+function Field({ label, children, hint, span, icon: Icon, alignTop }: { label: string; children: React.ReactNode; hint?: string; span?: boolean; icon?: any; alignTop?: boolean }) {
   return (
-    <div className={`flex flex-col gap-2 ${span ? "md:col-span-2" : ""}`}>
-      <Label className={LABEL}>{label}</Label>
-      {children}
-      {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+    <div className={`flex flex-col gap-1.5 ${span ? "md:col-span-2" : ""}`}>
+      <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200`}>
+        {label}
+      </Label>
+      <div className={`relative flex ${alignTop ? "items-start" : "items-center"} w-full`}>
+        {Icon && (
+          <div className={`absolute left-3.5 ${alignTop ? "top-3" : ""} flex items-center pointer-events-none text-[#1B4B73] dark:text-[#38bdf8] z-10`}>
+            <Icon className="h-4.5 w-4.5" />
+          </div>
+        )}
+        {children}
+      </div>
+      {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
+  );
+}
+
+function SubtleExpandingTextarea({ value, onChange, placeholder, className = "", ...props }: any) {
+  const [isFocused, setIsFocused] = useState(false);
+
+  return (
+    <Textarea
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      className={`rounded-xl border-slate-200 dark:border-slate-800 bg-background pl-10.5 py-2.5 pr-3 text-xs md:text-sm leading-relaxed transition-all duration-300 shadow-2xs resize-none focus-visible:ring-2 focus-visible:ring-[#1B4B73] focus:border-[#1B4B73] ${
+        isFocused ? "h-[88px]" : "h-[42px] overflow-hidden"
+      } ${className}`}
+      {...props}
+    />
   );
 }
 
@@ -446,165 +475,295 @@ Característica escritura: —
     <div>
       <PageHeader title="Configuración" description="Personaliza tu lavandería." />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        <TabsList className="flex flex-wrap md:flex-nowrap w-full h-auto bg-accent/20 p-1.5 rounded-2xl gap-1.5 border border-border">
-          {[
-            { id: 'perfil', label: 'Perfil', icon: User },
-            { id: 'apariencia', label: 'Apariencia', icon: Palette },
-            { id: 'factura', label: 'Ticket', icon: FileText },
-            { id: 'caja', label: 'Caja', icon: Banknote },
-            { id: 'fiscal', label: 'Fiscal', icon: Shield, module: 'facturacion_fiscal' },
-            { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
-            { id: 'plan', label: 'Plan', icon: CreditCard },
-          ]
-          .filter(t => !t.module || isModuleEnabled(tenant, t.module, plans.find(p => p.id === tenant?.plan_id)))
-          .map(t => (
-            <TabsTrigger 
-              key={t.id}
-              value={t.id}
-              disabled={isTrialExpired && t.id !== 'plan'}
-              className="rounded-xl py-2 px-2 md:px-3 text-xs md:text-[13px] font-bold transition-all data-[state=active]:text-white data-[state=active]:shadow-lg border border-transparent data-[state=inactive]:border-border data-[state=inactive]:bg-white flex items-center justify-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed flex-1 md:flex-auto"
-              style={{ 
-                backgroundColor: activeTab === t.id ? tenant.color_primario : undefined
-              }}
-            >
-              <t.icon className="h-3.5 w-3.5" />
-              <span className="hidden md:inline">{t.label}</span>
-            </TabsTrigger>
-          ))}
-        </TabsList>
+        {/* Navigation Tabs Bar — Modern Clean Underline Style Centered & Prominent */}
+        <div className="border-b border-slate-200/90 dark:border-slate-800 -mx-1 px-1 overflow-x-auto no-scrollbar flex justify-center">
+          <TabsList className="flex items-center justify-center gap-2 sm:gap-5 md:gap-8 bg-transparent p-0 h-auto w-max border-none rounded-none mx-auto">
+            {[
+              { id: 'perfil', label: 'Perfil', icon: User },
+              { id: 'apariencia', label: 'Apariencia', icon: Palette },
+              { id: 'factura', label: 'Ticket', icon: FileText },
+              { id: 'caja', label: 'Caja', icon: Banknote },
+              { id: 'fiscal', label: 'Fiscal', icon: ShieldCheck, module: 'facturacion_fiscal' },
+              { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+              { id: 'plan', label: 'Plan', icon: CreditCard },
+            ]
+            .filter(t => !t.module || isModuleEnabled(tenant, t.module, plans.find(p => p.id === tenant?.plan_id)))
+            .map(t => {
+              const isActive = activeTab === t.id;
+              const Icon = t.icon;
+              return (
+                <TabsTrigger 
+                  key={t.id}
+                  value={t.id}
+                  disabled={isTrialExpired && t.id !== 'plan'}
+                  className={`group relative flex items-center gap-2.5 px-3 sm:px-4 py-3.5 text-sm sm:text-[15px] font-semibold transition-all duration-200 border-none rounded-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    isActive 
+                      ? "text-[#1B4B73] dark:text-sky-400 font-bold" 
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-900/40 rounded-t-xl"
+                  }`}
+                >
+                  <Icon className={`h-5 w-5 transition-colors ${
+                    isActive 
+                      ? "text-[#1B4B73] dark:text-sky-400" 
+                      : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
+                  }`} />
+                  <span className="tracking-tight">{t.label}</span>
+                  {isActive && (
+                    <span 
+                      className="absolute -bottom-px left-0 right-0 h-[3px] bg-[#1B4B73] dark:bg-sky-400 rounded-full"
+                    />
+                  )}
+                </TabsTrigger>
+              );
+            })}
+          </TabsList>
+        </div>
 
-        <TabsContent value="perfil">
-          <Card className={CARD}>
+        <TabsContent value="perfil" className="space-y-6 animate-in fade-in duration-300">
+          <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+            {/* Header del Perfil */}
+            <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+              <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Store className="h-5.5 w-5.5" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                  Información del Negocio
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Datos comerciales, vías de contacto y ubicación de tu lavandería.
+                </p>
+              </div>
+            </div>
+
             <div className="space-y-6">
-              {/* Fila 1: Datos principales */}
-              <div className="grid gap-4 md:grid-cols-3">
-                <Field label="Nombre comercial"><Input className={FIELD} placeholder="Ej: Lavandería Klynn Central" value={tenant.nombre} onChange={(e) => setTenant({ ...tenant, nombre: e.target.value })} /></Field>
-                <Field label="Teléfono"><Input className={FIELD} placeholder="Ej: 809-000-0000" value={tenant.telefono} onChange={(e) => setTenant({ ...tenant, telefono: formatPhoneRD(e.target.value) })} /></Field>
-                <Field label="Email"><Input className={FIELD} placeholder="Ej: admin@lavanderia.com" value={tenant.email} onChange={(e) => setTenant({ ...tenant, email: e.target.value })} /></Field>
+              {/* Sección 1: Datos de Contacto y Nombre */}
+              <div className="grid gap-5 md:grid-cols-3">
+                <Field label="Nombre comercial" icon={Building2}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    placeholder="Ej: Lavandería Klynn Central" 
+                    value={tenant.nombre} 
+                    onChange={(e) => setTenant({ ...tenant, nombre: e.target.value })} 
+                  />
+                </Field>
+                <Field label="Teléfono de contacto" icon={Phone}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    placeholder="Ej: 809-000-0000" 
+                    value={tenant.telefono} 
+                    onChange={(e) => setTenant({ ...tenant, telefono: formatPhoneRD(e.target.value) })} 
+                  />
+                </Field>
+                <Field label="Correo electrónico" icon={Mail}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    type="email"
+                    placeholder="Ej: admin@lavanderia.com" 
+                    value={tenant.email} 
+                    onChange={(e) => setTenant({ ...tenant, email: e.target.value })} 
+                  />
+                </Field>
               </div>
 
-              {/* Fila 2: Ubicación */}
-              <div className="grid gap-4 md:grid-cols-2">
-                <Field label="Provincia">
+              {/* Sección 2: Ubicación */}
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="Provincia" icon={MapPin}>
                   <Select value={tenant.provincia || ""} onValueChange={(v) => setTenant({ ...tenant, provincia: v })}>
-                    <SelectTrigger className={FIELD}><SelectValue placeholder="Selecciona..." /></SelectTrigger>
+                    <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
+                      <SelectValue placeholder="Selecciona la provincia..." />
+                    </SelectTrigger>
                     <SelectContent>
-                      {PROVINCIAS_RD.map((p) => <SelectItem key={p} value={p}>{p}</SelectItem>)}
+                      {PROVINCIAS_RD.map((p) => (
+                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </Field>
-                <Field label="Dirección"><Input className={FIELD} placeholder="Calle Principal #123, Edificio Los Laureles" value={tenant.direccion} onChange={(e) => setTenant({ ...tenant, direccion: e.target.value })} /></Field>
+                <Field label="Dirección física" icon={Navigation}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    placeholder="Calle Principal #123, Edificio Los Laureles" 
+                    value={tenant.direccion} 
+                    onChange={(e) => setTenant({ ...tenant, direccion: e.target.value })} 
+                  />
+                </Field>
               </div>
 
-              {/* Fila 3: Parámetros de prendas no retiradas */}
-              <div className="pt-4 border-t space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl border border-amber-500/25 bg-amber-500/5 dark:bg-amber-500/10">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-                      <Clock className="h-4 w-4" />
+              {/* Sección 3: Parámetros de prendas no retiradas */}
+              <div className="pt-5 border-t border-border/70">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700">
+                  <div className="flex items-center gap-3.5">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Clock className="h-5.5 w-5.5" />
                     </div>
                     <div>
-                      <div className="text-xs font-bold text-slate-900 dark:text-slate-100">
-                        Días de almacenamiento antes de considerar prendas sin retirar
+                      <div className="text-sm font-bold text-foreground">
+                        Alerta de prendas sin retirar
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        Tiempo límite en días (estado LISTA) para alertar en el resumen operativo e inventario de almacén.
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Días en estado LISTA antes de marcar como rezagada en inventario.
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1.5 self-start sm:self-auto shrink-0 bg-white dark:bg-slate-900 p-1.5 rounded-xl border border-amber-500/20 shadow-xs">
-                    {[3, 5, 7, 14].map((d) => (
-                      <button
-                        key={d}
-                        type="button"
-                        onClick={() => updateCfg({ dias_almacenamiento_sin_retirar: d })}
-                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-                          (tenant.config?.dias_almacenamiento_sin_retirar || tenant.config?.whatsapp?.dias_recordatorio_sin_retirar || 5) === d
-                            ? "bg-amber-500 text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800"
-                        }`}
-                      >
-                        {d}d
-                      </button>
-                    ))}
+                  <div className="flex items-center gap-1.5 self-start lg:self-auto shrink-0 bg-white dark:bg-slate-950 p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs">
+                    {[3, 5, 7, 14].map((d) => {
+                      const currentVal = tenant.config?.dias_almacenamiento_sin_retirar || tenant.config?.whatsapp?.dias_recordatorio_sin_retirar || 5;
+                      const isSelected = currentVal === d;
+                      return (
+                        <button
+                          key={d}
+                          type="button"
+                          onClick={() => updateCfg({ dias_almacenamiento_sin_retirar: d })}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-[#1B4B73] text-white shadow-xs"
+                              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                          }`}
+                        >
+                          {d}d
+                        </button>
+                      );
+                    })}
 
-                    <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-0.5" />
+                    <div className="h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
 
-                    <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/80 px-2 py-1 rounded-lg border border-slate-200/80 dark:border-slate-700">
-                      <Input
-                        className="h-6 w-10 text-xs font-black text-center p-0 border-0 bg-transparent focus-visible:ring-0"
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 focus-within:border-[#1B4B73] focus-within:ring-2 focus-within:ring-[#1B4B73]/15 transition-all">
+                      <input
                         type="number"
                         min={1}
                         max={90}
                         value={tenant.config?.dias_almacenamiento_sin_retirar || tenant.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}
                         onChange={(e) => updateCfg({ dias_almacenamiento_sin_retirar: Math.max(1, Number(e.target.value)) })}
+                        className="w-7 text-center text-xs font-black bg-transparent border-none outline-none text-foreground p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
-                      <span className="text-[10px] font-extrabold text-amber-700 dark:text-amber-400 uppercase tracking-wider">días</span>
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">DÍAS</span>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            <div className="mt-8 pt-6 border-t flex justify-start">
-              <Button onClick={() => save(tenant)}>
-                <Save className="mr-2 h-4 w-4" /> Guardar cambios
+
+            {/* Footer de Guardar */}
+            <div className="pt-6 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground text-center sm:text-left">
+                Los cambios se aplican de inmediato en tus recibos y plataformas.
+              </span>
+              <Button 
+                onClick={() => save(tenant)}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+              >
+                <Save className="h-4 w-4" />
+                <span>Guardar cambios</span>
               </Button>
             </div>
           </Card>
         </TabsContent>
 
-        <TabsContent value="apariencia" className="space-y-6">
+        <TabsContent value="apariencia" className="space-y-6 animate-in fade-in duration-300">
           <div className="grid gap-6 md:grid-cols-2">
             {/* Tarjeta 1: Logotipo */}
-            <Card className={CARD + " flex flex-col items-center justify-center min-h-[340px] text-center"}>
-              <div className="space-y-6">
-                <div className="flex flex-col items-center gap-4">
+            <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 flex flex-col justify-between`}>
+              <div>
+                {/* Header de la tarjeta */}
+                <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+                  <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <ImageIcon className="h-5.5 w-5.5" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-base text-foreground leading-tight">
+                      Logotipo del Negocio
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Aparecerá en los tickets térmicos y encabezados.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Contenido central */}
+                <div className="flex flex-col items-center justify-center py-6">
                   {tenant.logo_url ? (
-                    <div className="relative group">
-                      <img src={tenant.logo_url} alt="Logo" className="h-32 w-32 rounded-full object-contain bg-white p-4 shadow-sm border" />
-                      <button onClick={() => setTenant({ ...tenant, logo_url: undefined })} 
-                        className="absolute -right-2 -top-2 rounded-full bg-destructive p-1.5 text-white opacity-0 transition group-hover:opacity-100 shadow-lg">
-                        <Trash2 className="h-4 w-4" />
+                    <div className="relative group p-2 rounded-full bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-inner">
+                      <div className="h-32 w-32 rounded-full overflow-hidden bg-white p-3.5 flex items-center justify-center shadow-xs border border-slate-100 dark:border-slate-800">
+                        <img src={tenant.logo_url} alt="Logo" className="max-h-full max-w-full object-contain" />
+                      </div>
+                      <button 
+                        type="button"
+                        onClick={() => setTenant({ ...tenant, logo_url: undefined })} 
+                        className="absolute right-0 top-0 rounded-full bg-destructive p-2 text-white opacity-90 transition hover:opacity-100 hover:scale-110 shadow-md cursor-pointer"
+                        title="Eliminar logotipo"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
                       </button>
                     </div>
                   ) : (
-                    <div className="flex h-32 w-32 items-center justify-center rounded-full bg-accent/50 text-muted-foreground border-2 border-dashed border-border/60">
-                      <ImageIcon className="h-10 w-10 opacity-20" />
+                    <div className="flex flex-col items-center justify-center h-32 w-32 rounded-full bg-accent/40 text-muted-foreground border-2 border-dashed border-border/80 p-4 text-center">
+                      <ImageIcon className="h-8 w-8 opacity-30 mb-1" />
+                      <span className="text-[10px] font-semibold text-muted-foreground">Sin logotipo</span>
                     </div>
                   )}
-                  <div className="space-y-1">
-                    <div className="font-bold text-sm">Logotipo de la empresa</div>
-                    <p className="text-xs text-muted-foreground max-w-[200px]">Se mostrará en la factura (ticket) y en el dashboard.</p>
+
+                  <div className="mt-4 text-center">
+                    <p className="text-[11px] text-muted-foreground">
+                      Formatos recomendados: PNG o JPG con fondo blanco/transparente.
+                    </p>
                   </div>
                 </div>
-                <input type="file" accept="image/*" className="hidden" id="logo-upload" onChange={async (e) => {
-                  const file = e.target.files?.[0];
-                  if (file) {
-                    try {
-                      const compressed = await compressImage(file, 512, 512, 0.7);
-                      setTenant({ ...tenant, logo_url: compressed });
-                    } catch {
-                      toast.error("Error al procesar la imagen");
+              </div>
+
+              {/* Botón de subida */}
+              <div className="pt-4 border-t border-border/70 flex justify-center">
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  className="hidden" 
+                  id="logo-upload" 
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    if (file) {
+                      try {
+                        const compressed = await compressImage(file, 512, 512, 0.7);
+                        setTenant({ ...tenant, logo_url: compressed });
+                        toast.success("Logotipo cargado correctamente");
+                      } catch {
+                        toast.error("Error al procesar la imagen");
+                      }
                     }
-                  }
-                }} />
-                <Button variant="outline" size="sm" onClick={() => document.getElementById("logo-upload")?.click()}>
-                  <Upload className="mr-2 h-3.5 w-3.5" /> {tenant.logo_url ? "Cambiar imagen" : "Subir logotipo"}
+                  }} 
+                />
+                <Button 
+                  variant="outline" 
+                  onClick={() => document.getElementById("logo-upload")?.click()}
+                  className="rounded-xl border-border hover:bg-accent font-semibold text-xs h-9 px-4 gap-2 cursor-pointer"
+                >
+                  <Upload className="h-3.5 w-3.5 text-primary" /> 
+                  <span>{tenant.logo_url ? "Cambiar imagen de logo" : "Subir nuevo logotipo"}</span>
                 </Button>
               </div>
             </Card>
 
-            {/* Tarjeta 2: Color Primario */}
-            <Card className={CARD + " flex flex-col items-center justify-center min-h-[340px] text-center"}>
-              <div className="w-full max-w-sm space-y-6">
-                <div className="space-y-2">
-                  <div className="font-bold text-sm">Color de identidad</div>
-                  <p className="text-xs text-muted-foreground">Define el color principal de los botones y acentos del sistema.</p>
+            {/* Tarjeta 2: Color Primario / Identidad */}
+            <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 flex flex-col justify-between`}>
+              <div>
+                {/* Header de la tarjeta */}
+                <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+                  <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Palette className="h-5.5 w-5.5" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-base text-foreground leading-tight">
+                      Color de Identidad
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Color principal para botones, pestañas y acentos.
+                    </p>
+                  </div>
                 </div>
-                
-                <div className="flex flex-col items-center justify-center text-center w-full mt-4">
-                  <div className="flex flex-wrap items-center justify-center gap-2 p-2 bg-slate-50/80 border border-slate-200/50 rounded-full shadow-inner w-full max-w-[340px] mx-auto">
+
+                {/* Swatches y selector */}
+                <div className="flex flex-col items-center justify-center py-6 space-y-5">
+                  <div className="flex flex-wrap items-center justify-center gap-2.5 p-2.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-inner w-full max-w-[360px] mx-auto">
                     {[
                       { name: "Klynn Blue", hex: "#1B4B73" },
                       { name: "Teal", hex: "#0D9488" },
@@ -620,157 +779,214 @@ Característica escritura: —
                           key={p.hex}
                           type="button"
                           onClick={() => setTenant({ ...tenant, color_primario: p.hex })}
-                          className="relative h-8 w-8 rounded-full transition-all duration-300 hover:scale-110 active:scale-95 flex items-center justify-center shadow-sm"
+                          className="relative h-8 w-8 rounded-xl transition-all duration-200 hover:scale-115 active:scale-95 flex items-center justify-center shadow-xs cursor-pointer"
                           style={{ backgroundColor: p.hex }}
                           title={p.name}
                         >
                           {isSelected && (
-                            <div className="h-3 w-3 rounded-full bg-white flex items-center justify-center shadow-sm">
-                              <div className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: p.hex }} />
-                            </div>
+                            <Check className="h-4 w-4 text-white drop-shadow-xs stroke-[3]" />
                           )}
                         </button>
                       );
                     })}
 
                     {/* Custom Color Selector */}
-                    <div className="relative h-8 w-8 rounded-full border border-slate-250 bg-white hover:bg-slate-100 transition-all flex items-center justify-center shadow-sm cursor-pointer hover:scale-110 group active:scale-95">
+                    <div className="relative h-8 w-8 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 transition-all flex items-center justify-center shadow-xs cursor-pointer hover:scale-115 group active:scale-95">
                       <input
                         type="color"
                         value={tenant.color_primario}
                         onChange={(e) => setTenant({ ...tenant, color_primario: e.target.value })}
                         className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-                        title="Seleccionar otro color"
+                        title="Seleccionar color personalizado"
                       />
-                      <Palette className="h-3.5 w-3.5 text-slate-500 group-hover:text-primary transition-colors" />
+                      <Palette className="h-4 w-4 text-slate-600 dark:text-slate-400 group-hover:text-primary transition-colors" />
                     </div>
                   </div>
 
-                  <div className="mt-4 flex items-center justify-center">
-                    <div className="inline-flex items-center gap-2 rounded-full bg-slate-100 px-3 py-1 font-mono text-[11px] font-semibold text-slate-500">
-                      CÓDIGO HEX: <span className="uppercase text-slate-700">{tenant.color_primario}</span>
-                    </div>
+                  <div className="inline-flex items-center gap-2 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 px-3.5 py-1.5 font-mono text-xs font-bold text-slate-600 dark:text-slate-300 shadow-2xs">
+                    <span className="text-[10px] text-muted-foreground tracking-wider font-sans font-semibold">CÓDIGO HEX:</span>
+                    <span className="uppercase font-mono text-primary font-black">{tenant.color_primario}</span>
+                    <div className="h-3 w-3 rounded-full border shadow-2xs ml-0.5" style={{ backgroundColor: tenant.color_primario }} />
                   </div>
                 </div>
+              </div>
+
+              {/* Botón de vista previa / demostración */}
+              <div className="pt-4 border-t border-border/70 flex items-center justify-between">
+                <span className="text-[11px] text-muted-foreground">
+                  Vista previa de botón con este color:
+                </span>
+                <button
+                  type="button"
+                  className="px-3.5 py-1.5 rounded-xl text-xs font-bold text-white shadow-sm flex items-center gap-1.5 transition-all"
+                  style={{ backgroundColor: tenant.color_primario }}
+                >
+                  <Sparkles className="h-3.5 w-3.5" />
+                  <span>Botón Activo</span>
+                </button>
               </div>
             </Card>
           </div>
 
-          <div className="flex justify-center pt-2">
-            <Button onClick={() => save(tenant)}>
-              <Save className="mr-2 h-4 w-4" /> Guardar cambios
+          {/* Footer de Guardar */}
+          <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-4 md:p-6 flex flex-col sm:flex-row items-center justify-between gap-3`}>
+            <span className="text-xs text-muted-foreground text-center sm:text-left">
+              El logotipo y color de marca se reflejarán instantáneamente en toda la aplicación.
+            </span>
+            <Button 
+              onClick={() => save(tenant)}
+              className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+            >
+              <Save className="h-4 w-4" />
+              <span>Guardar cambios</span>
             </Button>
-          </div>
+          </Card>
         </TabsContent>
 
-        <TabsContent value="factura">
-          <Card className={CARD}>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <Field label="Formato impresora">
-                <Select value={cfg.formato_ticket} onValueChange={(v: any) => updateCfg({ formato_ticket: v })}>
-                  <SelectTrigger className="rounded-xl border-input">
-                    <SelectValue placeholder="Seleccionar formato" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="57mm">57mm</SelectItem>
-                    <SelectItem value="80mm">80mm</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field label="Tiempo de entrega estándar">
-                <Select value={String(cfg.tiempo_entrega_estandar || 24)} onValueChange={(v) => updateCfg({ tiempo_entrega_estandar: Number(v) })}>
-                  <SelectTrigger className="rounded-xl border-input">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="24">1 DÍA (24 HORAS)</SelectItem>
-                    <SelectItem value="48">2 DÍAS (48 HORAS)</SelectItem>
-                    <SelectItem value="72">3 DÍAS (72 HORAS)</SelectItem>
-                    <SelectItem value="96">4 DÍAS (96 HORAS)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field label="Tiempo de entrega URGENTE">
-                <Select value={String(cfg.tiempo_entrega_urgente || 6)} onValueChange={(v) => updateCfg({ tiempo_entrega_urgente: Number(v) })}>
-                  <SelectTrigger className="rounded-xl border-input">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="3">3 HORAS</SelectItem>
-                    <SelectItem value="6">6 HORAS</SelectItem>
-                    <SelectItem value="12">12 HORAS</SelectItem>
-                  </SelectContent>
-                </Select>
-              </Field>
-
-              <Field label="Pie de página del ticket">
-                <Textarea 
-                  className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
-                  value={cfg.ticket_pie || ""} 
-                  onChange={(e) => updateCfg({ ticket_pie: e.target.value })} 
-                  rows={2} 
-                />
-              </Field>
-
-              <Field label="Nota o mensaje personalizado (Adicional)" span>
-                <Textarea 
-                  className="rounded-md border-input focus-visible:ring-1 focus-visible:ring-ring" 
-                  value={cfg.ticket_nota || ""} 
-                  onChange={(e) => updateCfg({ ticket_nota: e.target.value })} 
-                  rows={2} 
-                  placeholder="Mensaje o nota adicional que aparecerá debajo del pie de página del ticket..."
-                />
-              </Field>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Mostrar empleado en ticket</span>
-                  <p className="text-[10px] text-muted-foreground">Imprime el nombre del cajero que procesó la orden en la parte inferior del recibo.</p>
-                </div>
-                <Switch 
-                  checked={cfg.ticket_mostrar_empleado} 
-                  onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Mostrar empleado en ticket</span>
-                  <p className="text-[10px] text-muted-foreground">Imprime el nombre del cajero que procesó la orden en la parte inferior del recibo.</p>
-                </div>
-                <Switch 
-                  checked={cfg.ticket_mostrar_empleado} 
-                  onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Ubicación de ropa en Conveyor</span>
-                  <p className="text-[10px] text-muted-foreground">Habilita la asignación de posiciones de conveyor en Nueva Orden y estados de entrega.</p>
-                </div>
-                <Switch 
-                  checked={cfg.usar_ubicacion_ropa || false} 
-                  onCheckedChange={(v) => updateCfg({ usar_ubicacion_ropa: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-muted/40">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-medium">Mostrar notas en ticket del cliente</span>
-                  <p className="text-[10px] text-muted-foreground">Imprime observaciones e instrucciones especiales en la factura del cliente (por defecto se ocultan por privacidad).</p>
-                </div>
-                <Switch 
-                  checked={cfg.ticket_mostrar_notas || false} 
-                  onCheckedChange={(v) => updateCfg({ ticket_mostrar_notas: v })} 
-                />
-              </label>
+        <TabsContent value="factura" className="space-y-6 animate-in fade-in duration-300">
+          <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+            {/* Header del Ticket */}
+            <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+              <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Receipt className="h-5.5 w-5.5" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                  Formato y Textos del Ticket
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Personaliza dimensiones térmicas, plazos de entrega y mensajes impresos.
+                </p>
+              </div>
             </div>
-            <Button className="mt-6" onClick={() => save(tenant)}>
-              <Save className="mr-2 h-4 w-4" /> Guardar cambios
-            </Button>
+
+            <div className="space-y-6">
+              {/* Fila 1: Configuración de impresión y tiempos */}
+              <div className="grid gap-5 md:grid-cols-3">
+                <Field label="Formato de papel" icon={Printer}>
+                  <Select value={cfg.formato_ticket} onValueChange={(v: any) => updateCfg({ formato_ticket: v })}>
+                    <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
+                      <SelectValue placeholder="Seleccionar formato" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="57mm">57mm (Papel estrecho)</SelectItem>
+                      <SelectItem value="80mm">80mm (Estándar POS)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Tiempo de entrega estándar" icon={Clock}>
+                  <Select value={String(cfg.tiempo_entrega_estandar || 24)} onValueChange={(v) => updateCfg({ tiempo_entrega_estandar: Number(v) })}>
+                    <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="24">1 DÍA (24 HORAS)</SelectItem>
+                      <SelectItem value="48">2 DÍAS (48 HORAS)</SelectItem>
+                      <SelectItem value="72">3 DÍAS (72 HORAS)</SelectItem>
+                      <SelectItem value="96">4 DÍAS (96 HORAS)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+
+                <Field label="Tiempo de entrega URGENTE" icon={Zap}>
+                  <Select value={String(cfg.tiempo_entrega_urgente || 6)} onValueChange={(v) => updateCfg({ tiempo_entrega_urgente: Number(v) })}>
+                    <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="3">3 HORAS</SelectItem>
+                      <SelectItem value="6">6 HORAS</SelectItem>
+                      <SelectItem value="12">12 HORAS</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </Field>
+              </div>
+
+              {/* Fila 2: Mensajes y Textos */}
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="Pie de página del ticket" icon={MessageSquare} alignTop>
+                  <SubtleExpandingTextarea 
+                    value={cfg.ticket_pie || ""} 
+                    onChange={(e: any) => updateCfg({ ticket_pie: e.target.value })} 
+                    placeholder="Ej: ¡Gracias por su preferencia!"
+                  />
+                </Field>
+
+                <Field label="Nota legal o mensaje adicional" icon={FileText} alignTop>
+                  <SubtleExpandingTextarea 
+                    value={cfg.ticket_nota || ""} 
+                    onChange={(e: any) => updateCfg({ ticket_nota: e.target.value })} 
+                    placeholder="Ej: Ropa con más de 30 días será vendida por importe de trabajo..."
+                  />
+                </Field>
+              </div>
+
+              {/* Fila 3: Switches estilizados con IconBoxes */}
+              <div className="grid gap-4 md:grid-cols-3 pt-2">
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <User className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Mostrar empleado</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Nombre del cajero en el recibo.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.ticket_mostrar_empleado} 
+                    onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Layers className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Ubicación Conveyor</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Ganchos, rieles y estantería.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.usar_ubicacion_ropa || false} 
+                    onCheckedChange={(v) => updateCfg({ usar_ubicacion_ropa: v })} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <FileEdit className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Notas en ticket cliente</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Instrucciones y observaciones.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.ticket_mostrar_notas || false} 
+                    onCheckedChange={(v) => updateCfg({ ticket_mostrar_notas: v })} 
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Footer de Guardar */}
+            <div className="pt-6 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground text-center sm:text-left">
+                Los ajustes se aplicarán en todos los nuevos tickets impresos.
+              </span>
+              <Button 
+                onClick={() => save(tenant)}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+              >
+                <Save className="h-4 w-4" />
+                <span>Guardar cambios</span>
+              </Button>
+            </div>
           </Card>
 
           {/* Configuración de Impresora Física */}
@@ -1556,79 +1772,207 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
           )}
         </TabsContent>
 
-        <TabsContent value="caja">
-          <Card className={CARD}>
-            <div className="grid gap-4 md:grid-cols-2">
-              <Field label="Recargo urgencia %">
-                <Input className={FIELD} type="number" value={cfg.recargo_urgencia} onChange={(e) => updateCfg({ recargo_urgencia: Number(e.target.value) })} />
-              </Field>
-              <Field label="Umbral diferencia caja (RD$)">
-                <Input className={FIELD} value={formatAmountInput(String(cfg.umbral_diferencia_caja))} onChange={(e) => updateCfg({ umbral_diferencia_caja: parseAmount(e.target.value) })} />
-              </Field>
-              <Field label="Máx caja chica (RD$)">
-                <Input className={FIELD} value={formatAmountInput(String(cfg.monto_max_caja_chica))} onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} />
-              </Field>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 w-full h-fit self-end">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Habilitar selección de servicios</span>
-                  <p className="text-[10px] text-muted-foreground">Muestra los botones de servicios (lavado, secado) en nueva orden.</p>
-                </div>
-                <Switch 
-                  checked={cfg.pos_habilitar_servicios !== false} 
-                  onCheckedChange={(v) => updateCfg({ pos_habilitar_servicios: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Habilitar selección de prendas</span>
-                  <p className="text-[10px] text-muted-foreground">Permite desglosar prendas individuales en nueva orden.</p>
-                </div>
-                <Switch 
-                  checked={cfg.pos_habilitar_prendas !== false} 
-                  onCheckedChange={(v) => updateCfg({ pos_habilitar_prendas: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Interfaz de venta POS (Modo POS)</span>
-                  <p className="text-[10px] text-muted-foreground">Activa el modo de cobro rápido optimizado para pantallas táctiles.</p>
-                </div>
-                <Switch 
-                  checked={cfg.pos_modo_defecto !== false} 
-                  onCheckedChange={(v) => updateCfg({ pos_modo_defecto: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Ventana modal para desglose de prendas</span>
-                  <p className="text-[10px] text-muted-foreground">Abre una ventana flotante al hacer clic en "+ Añadir prenda" (ideal para pantallas táctiles).</p>
-                </div>
-                <Switch 
-                  checked={cfg.pos_modal_desglose === true} 
-                  onCheckedChange={(v) => updateCfg({ pos_modal_desglose: v })} 
-                />
-              </label>
-
-              <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
-                <div className="space-y-0.5">
-                  <span className="text-sm font-bold text-primary">Imprimir ticket automáticamente al crear orden</span>
-                  <p className="text-[10px] text-muted-foreground">Envía la orden de impresión inmediatamente tras registrar la orden.</p>
-                </div>
-                <Switch 
-                  checked={cfg.pos_auto_imprimir === true} 
-                  onCheckedChange={(v) => updateCfg({ pos_auto_imprimir: v })} 
-                />
-              </label>
-
-
+        <TabsContent value="caja" className="space-y-6 animate-in fade-in duration-300">
+          <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+            {/* Header de Caja */}
+            <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+              <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Banknote className="h-5.5 w-5.5" />
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                  Punto de Venta y Flujo de Caja
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Parámetros operativos de cobro, arqueo de caja chica y emisión de comprobantes.
+                </p>
+              </div>
             </div>
-            <Button className="mt-6" onClick={() => save(tenant)}>
-              <Save className="mr-2 h-4 w-4" /> Guardar cambios
-            </Button>
+
+            <div className="space-y-6">
+              {/* Fila 1: Parámetros financieros */}
+              <div className="grid gap-5 md:grid-cols-3">
+                <Field label="Recargo urgencia %" icon={Percent}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    type="number" 
+                    value={cfg.recargo_urgencia} 
+                    onChange={(e) => updateCfg({ recargo_urgencia: Number(e.target.value) })} 
+                  />
+                </Field>
+
+                <Field label="Umbral diferencia caja (RD$)" icon={Scale}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    value={formatAmountInput(String(cfg.umbral_diferencia_caja))} 
+                    onChange={(e) => updateCfg({ umbral_diferencia_caja: parseAmount(e.target.value) })} 
+                  />
+                </Field>
+
+                <Field label="Máx caja chica (RD$)" icon={Wallet}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    value={formatAmountInput(String(cfg.monto_max_caja_chica))} 
+                    onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} 
+                  />
+                </Field>
+              </div>
+
+              {/* Fila 2: Switches de Configuración POS */}
+              <div className="grid gap-4 md:grid-cols-2 pt-2">
+                {/* Switch: Selección de servicios */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Sparkles className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Habilitar selección de servicios</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Botones de servicios (lavado, secado, planchado).</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.pos_habilitar_servicios !== false} 
+                    onCheckedChange={(v) => updateCfg({ pos_habilitar_servicios: v })} 
+                  />
+                </div>
+
+                {/* Switch: Selección de prendas */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Shirt className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Habilitar selección de prendas</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Desglose de prendas individuales en nueva orden.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.pos_habilitar_prendas !== false} 
+                    onCheckedChange={(v) => updateCfg({ pos_habilitar_prendas: v })} 
+                  />
+                </div>
+
+                {/* Switch: Interfaz de venta POS */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Monitor className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Interfaz de venta POS (Modo POS)</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Modo de cobro rápido para pantallas táctiles.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.pos_modo_defecto !== false} 
+                    onCheckedChange={(v) => updateCfg({ pos_modo_defecto: v })} 
+                  />
+                </div>
+
+                {/* Switch: Ventana modal para desglose */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Maximize2 className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Ventana modal para desglose</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Abre modal al hacer clic en "+ Añadir prenda".</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.pos_modal_desglose === true} 
+                    onCheckedChange={(v) => updateCfg({ pos_modal_desglose: v })} 
+                  />
+                </div>
+
+                {/* Switch: Imprimir ticket automáticamente */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Printer className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Imprimir automáticamente</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Envía a impresión al registrar la orden.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.pos_auto_imprimir === true} 
+                    onCheckedChange={(v) => updateCfg({ pos_auto_imprimir: v })} 
+                  />
+                </div>
+
+                {/* Switch: Copia de caja / Contabilidad */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Receipt className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Duplicado de factura (Copia de Caja)</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Segundo recibo con precios para cuadre contable.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.ticket_imprimir_copia_caja || false} 
+                    onCheckedChange={(v) => updateCfg({ ticket_imprimir_copia_caja: v })} 
+                  />
+                </div>
+
+                {/* Switch: Copia de taller */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <ClipboardList className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Imprimir copia de taller / producción</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Ticket operativo con desglose de prendas y ubicación.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.ticket_imprimir_taller_auto || false} 
+                    onCheckedChange={(v) => updateCfg({ ticket_imprimir_taller_auto: v })} 
+                  />
+                </div>
+
+                {/* Sub-switch: Solo imprimir si tiene ubicación */}
+                {cfg.ticket_imprimir_taller_auto && (
+                  <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors animate-in fade-in duration-200">
+                    <div className="flex items-center gap-3">
+                      <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <MapPin className="h-4.5 w-4.5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-foreground block">Solo imprimir taller si tiene ubicación</span>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">Solo emitirá la copia si la orden tiene gancho o casillero asignado.</p>
+                      </div>
+                    </div>
+                    <Switch 
+                      checked={cfg.ticket_taller_solo_con_ubicacion || false} 
+                      onCheckedChange={(v) => updateCfg({ ticket_taller_solo_con_ubicacion: v })} 
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Footer de Guardar */}
+            <div className="pt-6 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <span className="text-xs text-muted-foreground text-center sm:text-left">
+                Las configuraciones de cobro e impresión rápida se aplicarán en el punto de venta.
+              </span>
+              <Button 
+                onClick={() => save(tenant)}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+              >
+                <Save className="h-4 w-4" />
+                <span>Guardar cambios</span>
+              </Button>
+            </div>
           </Card>
         </TabsContent>
 
@@ -1654,51 +1998,40 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
           />
         </TabsContent>
 
-        <TabsContent value="plan">
-          <div className="mb-6 flex items-center justify-between">
+        <TabsContent value="plan" className="space-y-6 animate-in fade-in duration-300">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <h3 className="font-display text-2xl">Planes de Suscripción</h3>
-              <p className="text-sm text-muted-foreground">Elige el plan que mejor se adapte al crecimiento de tu lavandería.</p>
+              <h3 className="font-display font-bold text-2xl text-foreground">Planes de Suscripción</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Elige el plan que mejor se adapte al crecimiento de tu lavandería.</p>
             </div>
-            <div className="flex items-center gap-2">
-              <div className="flex items-center bg-muted/50 p-1 rounded-xl border border-border/50">
-                <Button 
-                  variant={billingPeriod === "monthly" ? "default" : "ghost"} 
-                  size="sm" 
-                  className={`rounded-lg font-bold text-xs px-4 h-8 transition-all ${billingPeriod === "monthly" ? "text-white shadow-sm" : "text-muted-foreground"}`}
-                  style={{ backgroundColor: billingPeriod === "monthly" ? tenant.color_primario : undefined }}
+            <div className="flex items-center gap-3">
+              <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs">
+                <button 
+                  type="button"
+                  className={`rounded-lg font-bold text-xs px-4 py-1.5 transition-all cursor-pointer ${billingPeriod === "monthly" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
                   onClick={() => setBillingPeriod("monthly")}
                 >
                   Mensual
-                </Button>
-                <Button 
-                  variant={billingPeriod === "yearly" ? "default" : "ghost"} 
-                  size="sm" 
-                  className={`rounded-lg font-bold text-xs px-4 h-8 transition-all ${billingPeriod === "yearly" ? "text-white shadow-sm" : "text-muted-foreground"}`}
-                  style={{ backgroundColor: billingPeriod === "yearly" ? tenant.color_primario : undefined }}
+                </button>
+                <button 
+                  type="button"
+                  className={`rounded-lg font-bold text-xs px-4 py-1.5 transition-all cursor-pointer ${billingPeriod === "yearly" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
                   onClick={() => setBillingPeriod("yearly")}
                 >
                   Anual
-                </Button>
+                </button>
               </div>
-              <span className="rounded-full bg-[#F0B900]/20 px-2.5 py-1 text-[10px] font-black text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 shadow-xs uppercase tracking-wider flex items-center gap-1">
+              <span className="rounded-full bg-[#F0B900]/20 px-3 py-1 text-[10px] font-black text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 shadow-xs uppercase tracking-wider flex items-center gap-1">
                 🎁 2 MESES GRATIS
               </span>
             </div>
           </div>
 
-          {/* Plan Actual Banner — Premium Light Surface Redesign */}
-          <div className="mb-8 rounded-2xl border border-border bg-card p-6 sm:p-7 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition-all hover:shadow-md">
+          {/* Plan Actual Banner — Solid #1B4B73 Icon Boxes */}
+          <div className="rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-card p-6 sm:p-7 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-6 transition-all hover:shadow-md">
             <div className="flex items-center gap-4">
-              <div 
-                className="h-12 w-12 rounded-xl flex items-center justify-center shrink-0 shadow-xs border"
-                style={{ 
-                  backgroundColor: `${tenant.color_primario || '#1B4B73'}10`,
-                  borderColor: `${tenant.color_primario || '#1B4B73'}25`,
-                  color: tenant.color_primario || '#1B4B73'
-                }}
-              >
-                <CreditCard className="h-6 w-6" />
+              <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <CreditCard className="h-5.5 w-5.5" />
               </div>
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
@@ -1727,16 +2060,9 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             </div>
 
             {/* Renewal status info chip */}
-            <div className="flex items-center gap-3.5 bg-muted/40 border border-border rounded-xl px-4.5 py-3 shrink-0">
-              <div 
-                className="h-9 w-9 rounded-lg flex items-center justify-center shrink-0 border"
-                style={{
-                  backgroundColor: `${tenant.color_primario || '#1B4B73'}15`,
-                  borderColor: `${tenant.color_primario || '#1B4B73'}25`,
-                  color: tenant.color_primario || '#1B4B73'
-                }}
-              >
-                <Calendar className="h-4 w-4" />
+            <div className="flex items-center gap-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl px-4.5 py-3 shrink-0 shadow-2xs">
+              <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Calendar className="h-4.5 w-4.5" />
               </div>
               <div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
@@ -1753,12 +2079,11 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             </div>
           </div>
 
-          <div className="grid gap-6 md:grid-cols-3 items-start">
+          <div className="grid gap-6 md:grid-cols-3 items-stretch pt-3">
             {plans.map(p => {
               const tenantBillingPeriod = (tenant as any)?.plan_periodo || "monthly";
               const isCurrentPeriodMatch = billingPeriod === tenantBillingPeriod;
               const isCurrent = p.id === tenant.plan_id && isCurrentPeriodMatch;
-              const showActualBadge = isCurrent && !isTrialExpired;
               const isCurrentActivePlan = isCurrent && tenant.estado !== "TRIAL";
 
               const monthlyTotal = p.precio_mensual * 12;
@@ -1769,37 +2094,63 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
               const period = billingPeriod === "monthly" ? "/mes" : "/año";
               
               return (
-                <Card key={p.id} className={`p-6 border-none shadow-card flex flex-col relative overflow-hidden ${showActualBadge ? "ring-2 ring-primary" : ""}`}>
-                  {showActualBadge && <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 rounded-bl-xl font-bold uppercase tracking-widest">Actual</div>}
-                  <div className="font-display text-xl mb-1">{p.nombre}</div>
-                  <div className="flex flex-col mb-4">
-                    <div className="text-2xl font-black text-primary">
-                      {formatRD(price)}
-                      <span className="text-xs font-normal text-muted-foreground">{period}</span>
+                <div 
+                  key={p.id} 
+                  style={{
+                    borderColor: isCurrent ? '#1B4B73' : (p.destacado ? '#F0B900' : undefined),
+                    borderWidth: (isCurrent || p.destacado) ? '2.5px' : '1.5px',
+                    borderStyle: 'solid',
+                  }}
+                  className={`plan-card relative rounded-3xl p-6 sm:p-8 flex flex-col transition-all duration-300 ${
+                    isCurrent
+                      ? "plan-card--current shadow-lg shadow-[#1B4B73]/15"
+                      : p.destacado
+                        ? "plan-card--featured shadow-lg shadow-[#F0B900]/20"
+                        : "shadow-sm hover:shadow-xl"
+                  }`}
+                >
+                  {isCurrent && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 font-sans font-extrabold text-[11px] tracking-wider uppercase px-4 py-1 bg-[#1B4B73] text-white rounded-full shadow-md whitespace-nowrap z-10">
+                      PLAN ACTUAL
                     </div>
-                    {billingPeriod === "yearly" && (
-                      <div className="mt-1 flex items-center gap-1.5 flex-wrap">
-                        <span className="rounded-md bg-[#F0B900]/20 text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
-                          🎁 2 MESES GRATIS
-                        </span>
-                        {savings > 0 && (
-                          <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
-                            (Ahorras {savings}% vs mensual)
-                          </span>
-                        )}
+                  )}
+                  {!isCurrent && p.destacado && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 font-sans font-extrabold text-[11px] tracking-wider uppercase px-4 py-1 bg-[#F0B900] text-[#133857] rounded-full shadow-md whitespace-nowrap z-10">
+                      RECOMENDADO
+                    </div>
+                  )}
+
+                  <div className="space-y-0.5 mb-2">
+                    <div className="font-display text-xl font-bold text-foreground leading-none">{p.nombre}</div>
+                    <div className="flex flex-col pt-1">
+                      <div className="text-3xl font-black text-primary leading-tight">
+                        {formatRD(price)}
+                        <span className="text-xs font-normal text-muted-foreground">{period}</span>
                       </div>
-                    )}
+                      {billingPeriod === "yearly" && (
+                        <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                          <span className="rounded-md bg-[#F0B900]/20 text-[#b88c00] dark:text-[#F0B900] border border-[#F0B900]/40 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider">
+                            🎁 2 MESES GRATIS
+                          </span>
+                          {savings > 0 && (
+                            <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-tighter">
+                              (Ahorras {savings}% vs mensual)
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
                   
-                  <div className="space-y-2 mb-6">
-                    <div className="text-xs flex items-center gap-2.5 font-semibold text-slate-800">
+                  <div className="space-y-2.5 mb-6 flex-1">
+                    <div className="text-xs flex items-center gap-2.5 font-semibold text-slate-800 dark:text-slate-200">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
                         <circle cx="12" cy="12" r="10" />
                         <path d="m9 12 2 2 4-4" />
                       </svg>
                       <span>{p.limite_empleados} Empleados</span>
                     </div>
-                    <div className="text-xs flex items-center gap-2.5 font-semibold text-slate-800">
+                    <div className="text-xs flex items-center gap-2.5 font-semibold text-slate-800 dark:text-slate-200">
                       <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
                         <circle cx="12" cy="12" r="10" />
                         <path d="m9 12 2 2 4-4" />
@@ -1815,11 +2166,12 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                         <span>{p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp/mes` : "Mensajes WhatsApp Ilimitados"}</span>
                       </div>
                     )}
+
                     <div className="border-t border-border/60 pt-3 mt-3 text-left">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
                         Módulos Habilitados
                       </div>
-                      <div className="space-y-1.5">
+                      <div className="space-y-2">
                         {[
                           { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
                           { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
@@ -1869,7 +2221,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       </div>
                     </div>
 
-                    <div className="border-t border-border/40 pt-2.5 mt-3 space-y-1.5">
+                    <div className="border-t border-border/40 pt-3 mt-3 space-y-2">
                       {[
                         "Clientes ilimitados",
                         "Generación de reportes",
@@ -1877,7 +2229,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                         "Cuentas x cobrar",
                         "Impresión A4/80mm"
                       ].map((feat) => (
-                        <div key={feat} className="flex items-center gap-2 text-xs font-semibold text-slate-500">
+                        <div key={feat} className="flex items-center gap-2 text-xs font-semibold text-slate-500 dark:text-slate-400">
                           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-400 shrink-0">
                             <circle cx="12" cy="12" r="10" />
                             <path d="m9 12 2 2 4-4" />
@@ -1888,18 +2240,42 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     </div>
                   </div>
 
-                      <Button 
-                        className="mt-auto h-10 rounded-xl font-bold" 
-                        variant={isCurrentActivePlan ? "outline" : "default"}
-                        disabled={isCurrentActivePlan}
-                        onClick={() => { setSelectedPlan(p); setShowCheckout(true); }}
-                      >
-                        {isCurrentActivePlan 
-                          ? "Tu plan" 
-                          : (isTrialExpired || tenant.estado === "TRIAL" ? "Contratar plan" : "Cambiar plan")}
-                      </Button>
-                </Card>
-              )
+                  <button 
+                    type="button"
+                    className={`plan-btn mt-auto ${
+                      isCurrentActivePlan
+                        ? "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/20 dark:text-[#38bdf8] font-bold border-none shadow-none cursor-default"
+                        : p.destacado
+                          ? "plan-btn--yellow shadow-md"
+                          : "plan-btn--outline"
+                    }`}
+                    disabled={isCurrentActivePlan}
+                    onClick={() => { setSelectedPlan(p); setShowCheckout(true); }}
+                  >
+                    {isCurrentActivePlan ? (
+                      <>
+                        <Check className="h-4 w-4" />
+                        <span>Tu Plan Actual</span>
+                      </>
+                    ) : p.destacado ? (
+                      <>
+                        <Sparkles className="h-4 w-4" />
+                        <span>Cambiar a {p.nombre}</span>
+                      </>
+                    ) : p.id === "enterprise" ? (
+                      <>
+                        <ShieldCheck className="h-4 w-4" />
+                        <span>Cambiar a {p.nombre}</span>
+                      </>
+                    ) : (
+                      <>
+                        <ArrowRight className="h-4 w-4" />
+                        <span>Cambiar a {p.nombre}</span>
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
             })}
           </div>
 
@@ -1921,6 +2297,36 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
         </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function ExpandingTextarea({ value, onChange, placeholder, ...props }: any) {
+  const [isFocused, setIsFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (textareaRef.current) {
+      if (isFocused) {
+        textareaRef.current.style.height = 'auto';
+        const targetHeight = Math.max(170, Math.min(400, textareaRef.current.scrollHeight + 12));
+        textareaRef.current.style.height = `${targetHeight}px`;
+      } else {
+        textareaRef.current.style.height = '68px';
+      }
+    }
+  }, [value, isFocused]);
+
+  return (
+    <Textarea
+      ref={textareaRef}
+      value={value}
+      onChange={onChange}
+      placeholder={placeholder}
+      onFocus={() => setIsFocused(true)}
+      onBlur={() => setIsFocused(false)}
+      className="rounded-2xl border-slate-200/80 dark:border-slate-800 bg-background focus-visible:ring-2 focus-visible:ring-[#1B4B73] focus:border-[#1B4B73] p-3.5 text-xs md:text-sm leading-relaxed transition-all duration-300 shadow-2xs resize-none"
+      {...props}
+    />
   );
 }
 
@@ -2002,14 +2408,13 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   }
 
   return (
-    <Card className={CARD + " relative overflow-hidden"}>
-      {/* Barra de progreso de uso (solo se muestra si el plan tiene un límite numérico > 0) */}
+    <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card overflow-hidden animate-in fade-in duration-300`}>
+      {/* Barra de progreso de uso */}
       {(() => {
         const waPlan = plans.find((p) => p.id === tenant?.plan_id) || getTenantPlan(tenant, plans);
         const waLimit = waPlan?.limite_whatsapp_mes ?? 0;
         const waSent = tenant?.whatsapp_sent_month || 0;
         
-        // Si el límite es 0 o no está establecido, no limitar ni mostrar la barra de progreso
         if (waLimit <= 0) return null;
 
         const usageRatio = waSent / waLimit;
@@ -2039,7 +2444,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
               <Button 
                 variant="outline" 
                 size="sm" 
-                className="h-7 text-[10px] rounded-lg font-bold border-primary/20 hover:bg-primary/5"
+                className="h-8 text-[11px] rounded-xl font-bold border-primary/20 hover:bg-primary/5 cursor-pointer"
                 onClick={() => onTabChange("plan")}
               >
                 MEJORAR PLAN
@@ -2049,121 +2454,192 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         );
       })()}
 
-      <div className="p-6 pt-6">
-      <div>
-        <div className="mb-8 flex items-start gap-4">
-          <div className="grid h-12 w-12 place-items-center rounded-2xl bg-emerald-500/10 text-emerald-600">
-            <MessageCircle className="h-6 w-6" />
+      <div className="p-6 md:p-8 space-y-6">
+        {/* Header Principal WhatsApp */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
+          <div className="flex items-center gap-3.5">
+            <div className="h-11 w-11 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <svg className="h-5.5 w-5.5 fill-white" viewBox="0 0 24 24">
+                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.197 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                Notificaciones por WhatsApp
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Envía avisos automáticos a tus clientes desde tu propio número con{" "}
+                <a className="text-primary hover:underline font-semibold" href="https://wasenderapi.com/api-docs" target="_blank" rel="noreferrer">WASenderAPI</a>.
+              </p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h3 className="font-display text-xl">Notificaciones WhatsApp</h3>
-            <p className="text-sm text-muted-foreground">
-              Envía avisos automáticos a tus clientes desde tu propio número. Powered by{" "}
-              <a className="text-primary underline" href="https://wasenderapi.com/api-docs" target="_blank" rel="noreferrer">WASenderAPI</a>.
-            </p>
+          <div className="flex items-center gap-3 self-end sm:self-center">
+            <span className="text-xs font-bold text-muted-foreground">Activar WhatsApp</span>
+            <Switch checked={draft.enabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
           </div>
-          <Switch checked={draft.enabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
         </div>
 
-        <div className="grid gap-4 md:grid-cols-2">
-          <Field label="API Token (Personal Access Token)" span>
-            <Input className={FIELD} type="password" placeholder="Tu token de wasenderapi.com" value={draft.api_key} onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} />
+        {/* Campos de Conexión API */}
+        <div className="grid gap-5 md:grid-cols-2">
+          <Field label="API Token (Personal Access Token)" icon={Key} span>
+            <Input 
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+              type="password" 
+              placeholder="Tu token de wasenderapi.com" 
+              value={draft.api_key} 
+              onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} 
+            />
           </Field>
-          <Field label="Session ID / Instance (Opcional)" hint="Solo si usas múltiples sesiones.">
-            <Input className={FIELD} placeholder="default" value={draft.instance} onChange={(e) => setDraft({ ...draft, instance: e.target.value })} />
+          <Field label="Session ID / Instance (Opcional)" hint="Solo si utilizas múltiples sesiones" icon={Smartphone}>
+            <Input 
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+              placeholder="default" 
+              value={draft.instance} 
+              onChange={(e) => setDraft({ ...draft, instance: e.target.value })} 
+            />
           </Field>
-          <Field label="Base URL (Servidor)">
-            <Input className={FIELD} placeholder="https://wasenderapi.com" value={draft.base_url || ""} onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} />
+          <Field label="Base URL (Servidor)" icon={Globe}>
+            <Input 
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+              placeholder="https://wasenderapi.com" 
+              value={draft.base_url || ""} 
+              onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} 
+            />
           </Field>
         </div>
 
         {/* Webhook Configuration for Incoming Messages */}
-        <div className="mt-6 p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-3">
-          <div className="flex items-center gap-2.5">
-            <div className="h-7 w-7 rounded-lg bg-emerald-500/15 flex items-center justify-center text-emerald-600">
-              <CheckCircle2 className="h-4 w-4" />
+        <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <CheckCircle2 className="h-4.5 w-4.5" />
             </div>
             <div>
-              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">Enlace de Webhook para Mensajes Entrantes</h4>
-              <p className="text-[11px] text-muted-foreground font-sans">Configura este enlace en tu panel de WASenderAPI para recibir los mensajes entrantes de tus clientes.</p>
+              <h4 className="text-sm font-bold text-foreground">Enlace de Webhook para Mensajes Entrantes</h4>
+              <p className="text-[11px] text-muted-foreground">Configura este enlace en tu panel de WASenderAPI para sincronizar respuestas y chat en vivo.</p>
             </div>
           </div>
           
-          <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-border rounded-xl p-2.5 shadow-sm">
-            <code className="flex-1 text-[11px] font-mono break-all text-slate-600 dark:text-slate-400 select-all leading-normal px-1">
+          <div className="flex items-center gap-2 bg-background border border-border rounded-xl p-2 shadow-xs">
+            <code className="flex-1 text-[11px] font-mono break-all text-slate-700 dark:text-slate-300 select-all leading-normal px-2">
               {`${import.meta.env.VITE_SUPABASE_URL || "https://lqtjwcphidbwiwrnqbac.supabase.co"}/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`}
             </code>
             <Button
               type="button"
               variant="outline"
               size="icon"
-              className="h-8 w-8 rounded-lg shrink-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 border-slate-200/80"
+              className="h-8 w-8 rounded-lg shrink-0 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950 border-border cursor-pointer"
               onClick={() => {
                 const urlStr = `${import.meta.env.VITE_SUPABASE_URL || "https://lqtjwcphidbwiwrnqbac.supabase.co"}/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`;
                 navigator.clipboard.writeText(urlStr);
-                toast.success("¡Enlace de Webhook copiado!");
+                toast.success("¡Enlace de Webhook copiado al portapapeles!");
               }}
             >
               <Copy className="h-3.5 w-3.5" />
             </Button>
           </div>
-          <p className="text-[10px] text-emerald-600 dark:text-emerald-400 leading-normal font-sans">
-            <strong>Instrucciones:</strong> Ve a tu sesión en wasenderapi.com, edítala, activa la casilla de "Webhook" y pega este enlace. Asegúrate de habilitar los eventos <code className="bg-emerald-100 dark:bg-emerald-950 px-1 rounded font-mono">messages.received</code> o <code className="bg-emerald-100 dark:bg-emerald-950 px-1 rounded font-mono">messages.upsert</code>.
+          <p className="text-[11px] text-emerald-700 dark:text-emerald-300 leading-normal font-medium">
+            <strong>Instrucciones:</strong> En wasenderapi.com edita tu sesión, activa la opción <strong>Webhook</strong> y pega este enlace. Habilita los eventos <code className="bg-emerald-100 dark:bg-emerald-950/70 px-1 py-0.5 rounded font-mono text-[10px]">messages.received</code> o <code className="bg-emerald-100 dark:bg-emerald-950/70 px-1 py-0.5 rounded font-mono text-[10px]">messages.upsert</code>.
           </p>
         </div>
 
-        <div className="mt-8">
-          <Label className={LABEL}>Eventos automáticos</Label>
-          <div className="mt-3 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        {/* Eventos automáticos con IconBoxes */}
+        <div className="space-y-3 pt-2">
+          <div className="flex items-center gap-2">
+            <Label className="font-bold text-xs text-slate-700 dark:text-slate-200">Eventos de Notificación Automática</Label>
+          </div>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             {[
-              { k: "notif_orden_creada", label: "Al crear orden" },
-              { k: "notif_orden_lista", label: "Cuando esté lista" },
-              { k: "notif_orden_entregada", label: "Al entregar" },
-              { k: "notif_orden_sin_retirar", label: "Recordatorio prendas no retiradas" },
+              { k: "notif_orden_creada", label: "Al crear orden", desc: "Envía recibo digital", icon: PlusCircle },
+              { k: "notif_orden_lista", label: "Cuando esté lista", desc: "Aviso de retiro", icon: Sparkles },
+              { k: "notif_orden_entregada", label: "Al entregar orden", desc: "Agradecimiento", icon: CheckCircle2 },
+              { k: "notif_orden_sin_retirar", label: "Prendas no retiradas", desc: "Recordatorio", icon: Clock },
             ].map((it) => (
-              <label key={it.k} className="flex items-center justify-between rounded-xl border border-input p-4 hover:bg-accent/30 transition-colors">
-                <span className="text-xs font-semibold leading-tight">{it.label}</span>
+              <div key={it.k} className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <it.icon className="h-4.5 w-4.5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-foreground block">{it.label}</span>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">{it.desc}</p>
+                  </div>
+                </div>
                 <Switch
                   checked={(draft as any)[it.k]}
                   onCheckedChange={(v) => setDraft({ ...draft, [it.k]: v } as WhatsAppConfig)}
                 />
-              </label>
+              </div>
             ))}
           </div>
         </div>
 
+        {/* Plantillas de Textos con auto-expansión al hacer clic/foco */}
+        <div className="space-y-4 pt-2">
+          <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {entrega} {web_url}">
+            <ExpandingTextarea 
+              value={draft.plantilla_creada} 
+              onChange={(e: any) => setDraft({ ...draft, plantilla_creada: e.target.value })} 
+            />
+          </Field>
 
-        <div className="mt-8 grid gap-4">
-          <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {lavanderia_dir} {numero} {fecha} {cliente} {cliente_tel} {cliente_dir} {detalle} {subtotal} {total} {metodo_pago} {pagado} {saldo} {entrega} {estado} {web_url} {ticket_pie} {ticket_nota}">
-            <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_creada} onChange={(e) => setDraft({ ...draft, plantilla_creada: e.target.value })} />
+          <Field label="Plantilla — Orden lista" hint="Variables: {lavanderia} {numero} {cliente} {total} {saldo} {web_url}">
+            <ExpandingTextarea 
+              value={draft.plantilla_lista} 
+              onChange={(e: any) => setDraft({ ...draft, plantilla_lista: e.target.value })} 
+            />
           </Field>
-          <Field label="Plantilla — Orden lista">
-            <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_lista} onChange={(e) => setDraft({ ...draft, plantilla_lista: e.target.value })} />
+
+          <Field label="Plantilla — Orden entregada" hint="Variables: {lavanderia} {numero} {cliente}">
+            <ExpandingTextarea 
+              value={draft.plantilla_entregada} 
+              onChange={(e: any) => setDraft({ ...draft, plantilla_entregada: e.target.value })} 
+            />
           </Field>
-          <Field label="Plantilla — Orden entregada">
-            <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_entregada} onChange={(e) => setDraft({ ...draft, plantilla_entregada: e.target.value })} />
-          </Field>
-          <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables adicionales: {dias} (días en almacén)">
-            <Textarea className="rounded-xl border-input focus-visible:ring-1 focus-visible:ring-ring" rows={2} value={draft.plantilla_sin_retirar} onChange={(e) => setDraft({ ...draft, plantilla_sin_retirar: e.target.value })} />
+
+          <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables: {lavanderia} {numero} {cliente} {dias} {saldo}">
+            <ExpandingTextarea 
+              value={draft.plantilla_sin_retirar} 
+              onChange={(e: any) => setDraft({ ...draft, plantilla_sin_retirar: e.target.value })} 
+            />
           </Field>
         </div>
 
-        <div className="mt-8 flex flex-wrap items-end gap-3 rounded-2xl bg-muted/30 p-6 border border-border/50">
-          <Field label="Probar al número">
-            <Input className={FIELD + " w-56 bg-background"} value={testPhone} onChange={(e) => setTestPhone(formatPhoneRD(e.target.value))} placeholder="829-000-0000" />
-          </Field>
-          <Button variant="outline" className="h-11 rounded-xl font-bold" disabled={sending || !draft.api_key} onClick={probar}>
-            {sending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />} Enviar prueba
-          </Button>
-          <div className="flex-1" />
-          <Button className="mt-4 rounded-xl font-bold h-11 px-8" onClick={() => saveWA(draft)}>
-            <Save className="mr-2 h-4 w-4" /> Guardar cambios
+        {/* Footer: Pruebas y Guardar */}
+        <div className="pt-6 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-4">
+          <div className="flex items-center gap-3 w-full sm:w-auto">
+            <div className="w-full sm:w-56">
+              <Field label="Probar al número" icon={Phone}>
+                <Input 
+                  className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                  value={testPhone} 
+                  onChange={(e) => setTestPhone(formatPhoneRD(e.target.value))} 
+                  placeholder="829-000-0000" 
+                />
+              </Field>
+            </div>
+            <Button 
+              variant="outline" 
+              className="h-10 rounded-xl font-bold border-border hover:bg-accent cursor-pointer gap-2 mt-6 shrink-0" 
+              disabled={sending || !draft.api_key} 
+              onClick={probar}
+            >
+              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+              <span>Enviar prueba</span>
+            </Button>
+          </div>
+
+          <Button 
+            className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 mt-2 sm:mt-0" 
+            onClick={() => saveWA(draft)}
+          >
+            <Save className="h-4 w-4" />
+            <span>Guardar cambios</span>
           </Button>
         </div>
       </div>
-    </div>
-  </Card>
-);
+    </Card>
+  );
 }
 
 function PlanBadge({ id }: { id: string }) {
@@ -2667,49 +3143,59 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 animate-in fade-in duration-300">
       <div className="space-y-6">
         {/* 1. Configuración de Impuestos (ITBIS) */}
-        <Card className={CARD}>
-          <div className="flex items-center gap-3 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-              <Banknote className="h-5 w-5" />
+        <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+          <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+            <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Banknote className="h-5.5 w-5.5" />
             </div>
             <div>
-              <h3 className="text-lg font-display">Configuración de Impuestos</h3>
-              <p className="text-xs text-muted-foreground">Define el ITBIS y cómo se aplica a tus precios.</p>
+              <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                Configuración de Impuestos
+              </h3>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Define la tasa de ITBIS y la modalidad de desglose en órdenes.
+              </p>
             </div>
           </div>
           
-          <div className="grid gap-6 md:grid-cols-2">
-            <Field label="ITBIS (%)">
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="ITBIS (%)" icon={Percent}>
               <Input 
-                className={FIELD} 
+                className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
                 type="number" 
                 value={cfg.itbis_porcentaje} 
                 onChange={(e) => updateCfg({ itbis_porcentaje: Number(e.target.value) })} 
               />
             </Field>
-            <label className="flex items-center justify-between rounded-md border border-input p-3 bg-primary/5 border-primary/20 h-fit self-end">
-              <div className="space-y-0.5">
-                <span className="text-sm font-bold text-primary">Precios incluyen ITBIS</span>
-                <p className="text-[10px] text-muted-foreground">Si está activo, el ITBIS se desglosará internamente del total de la orden.</p>
+
+            <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Receipt className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-foreground block">Precios incluyen ITBIS</span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Desglosar internamente el impuesto del total.</p>
+                </div>
               </div>
               <Switch checked={cfg.itbis_incluido} onCheckedChange={(v) => updateCfg({ itbis_incluido: v })} />
-            </label>
+            </div>
           </div>
         </Card>
 
         {/* 2. Selector de Modo de Facturación */}
-        <Card className={CARD + " border-primary/20 bg-primary/5"}>
+        <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex items-center gap-4">
-              <div className={`h-12 w-12 rounded-2xl flex items-center justify-center transition-colors ${isElectronic ? "bg-primary text-white shadow-glow" : "bg-white text-slate-400 border"}`}>
-                {isElectronic ? <Sparkles className="h-6 w-6" /> : <FileText className="h-6 w-6" />}
+              <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                {isElectronic ? <Sparkles className="h-5.5 w-5.5" /> : <FileText className="h-5.5 w-5.5" />}
               </div>
               <div>
                 <div className="flex items-center gap-3">
-                  <h3 className="text-lg font-display">Modo de Facturación</h3>
+                  <h3 className="font-display font-bold text-lg text-foreground leading-tight">Modo de Facturación</h3>
                   {isElectronic && (
                     <Button variant="ghost" size="sm" asChild className="h-6 text-[10px] bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-full font-bold">
                       <Link to={`/t/${tenant.slug}/fiscal-homologacion`}>
@@ -2718,16 +3204,16 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     </Button>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground">
+                <p className="text-xs text-muted-foreground mt-0.5">
                   {isElectronic 
-                    ? "Estás utilizando Facturación Electrónica (e-CF) conectada con DGII." 
-                    : "Estás utilizando Comprobantes Fiscales tradicionales (NCF)."}
+                    ? "Facturación Electrónica (e-CF) conectada en tiempo real con DGII." 
+                    : "Comprobantes Fiscales tradicionales (NCF) reportados por Oficina Virtual."}
                 </p>
                 {isElectronic && (
                   <button 
                     onClick={testConnection} 
                     disabled={loading}
-                    className="mt-3 text-[10px] font-bold text-primary bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-full flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95"
+                    className="mt-3 text-[10px] font-bold text-[#1B4B73] bg-[#1B4B73]/10 hover:bg-[#1B4B73]/20 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
                   >
                     {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
                     PROBAR CONEXIÓN CON PRONESOFT
@@ -2736,7 +3222,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
               </div>
             </div>
             
-            <div className="flex p-1 bg-white rounded-xl border shadow-sm">
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs shrink-0">
               <button 
                 type="button"
                 onClick={() => {
@@ -2744,7 +3230,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   setLocalIsElectronic(false);
                   setDraft(d => ({ ...d, is_active: false }));
                 }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${!isElectronic ? "bg-primary text-white" : "hover:bg-slate-50"}`}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${!isElectronic ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
               >
                 TRADICIONAL (NCF)
               </button>
@@ -2755,25 +3241,38 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   setLocalIsElectronic(true);
                   setDraft(d => ({ ...d, is_active: true }));
                 }}
-                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${isElectronic ? "bg-primary text-white" : "hover:bg-slate-50"}`}
+                className={`px-4 py-2 rounded-lg text-xs font-bold transition-all cursor-pointer ${isElectronic ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
               >
                 ELECTRÓNICA (e-CF)
               </button>
             </div>
           </div>
-      </Card>
+        </Card>
 
-      {/* 3. Contenido según el modo */}
+        {/* 3. Contenido según el modo */}
         <div className="grid gap-6 md:grid-cols-2">
           {/* Columna Izquierda: Datos del Emisor y NCF/Certificado */}
           <div className="space-y-6">
-            <Card className={CARD}>
-              <h3 className="text-lg font-display mb-4">Datos del Contribuyente</h3>
+            <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+              <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+                <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Building2 className="h-5.5 w-5.5" />
+                </div>
+                <div>
+                  <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                    Datos del Contribuyente
+                  </h3>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Identificación fiscal y ambiente de transmisión.
+                  </p>
+                </div>
+              </div>
+
               <div className="space-y-4">
-                <Field label="RNC / Cédula" hint="Ingresa tu RNC para consultar y auto-completar los datos">
-                  <div className="relative flex items-center">
+                <Field label="RNC / Cédula" hint="Ingresa tu RNC para consultar y auto-completar los datos" icon={ShieldCheck}>
+                  <div className="relative flex items-center w-full">
                     <Input 
-                      className={FIELD + " pr-10"} 
+                      className={`${FIELD} pl-10.5 pr-10 rounded-xl border-slate-200 dark:border-slate-800`} 
                       value={draft.rnc_emisor || ""} 
                       onChange={(e) => {
                         const val = e.target.value.toUpperCase();
@@ -2790,39 +3289,34 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       type="button"
                       onClick={() => handleSearchRNC()}
                       disabled={loadingRNC}
-                      className="absolute right-2.5 text-muted-foreground hover:text-primary transition-colors p-1 rounded-md"
+                      className="absolute right-2.5 text-muted-foreground hover:text-primary transition-colors p-1.5 rounded-lg cursor-pointer"
                       title="Buscar en DGII"
                     >
                       {loadingRNC ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Search className="h-4 w-4" />}
                     </button>
                   </div>
                 </Field>
-                <Field label="Nombre o Razón Social">
+
+                <Field label="Nombre o Razón Social" icon={Building2}>
                   <Input 
-                    className={FIELD} 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
                     value={draft.razon_social || ""} 
                     onChange={(e) => setDraft({ ...draft, razon_social: e.target.value })} 
                   />
                 </Field>
                 
                 {isElectronic && (
-                  <Field label="Ambiente DGII" hint="Pruebas o Producción.">
+                  <Field label="Ambiente DGII" hint="Pruebas o Producción" icon={Server}>
                     <Select value={draft.ambiente} onValueChange={(v: any) => setDraft({ ...draft, ambiente: v })}>
-                      <SelectTrigger className={FIELD + " font-bold"}>
+                      <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-bold`}>
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="w-[var(--radix-select-trigger-width)]">
                         <SelectItem value="pruebas" className="cursor-pointer font-bold">
-                          <span className="flex items-center gap-2">
-                            <FlaskConical className="h-4 w-4 text-slate-900 dark:text-white" />
-                            <span className="font-bold text-slate-900 dark:text-white">PRUEBAS</span>
-                          </span>
+                          PRUEBAS (SANDBOX)
                         </SelectItem>
                         <SelectItem value="produccion" className="cursor-pointer font-bold">
-                          <span className="flex items-center gap-2">
-                            <Globe className="h-4 w-4 text-slate-900 dark:text-white" />
-                            <span className="font-bold text-slate-900 dark:text-white">PRODUCCIÓN</span>
-                          </span>
+                          PRODUCCIÓN (EN VIVO)
                         </SelectItem>
                       </SelectContent>
                     </Select>
@@ -2830,74 +3324,100 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                 )}
 
                 {/* Mostrar RNC en Ticket Switch */}
-                <div className="flex items-center justify-between p-3 border rounded-xl bg-accent/5">
-                  <div className="space-y-0.5">
-                    <div className="text-sm font-bold">Mostrar RNC en Ticket</div>
-                    <div className="text-xs text-muted-foreground">Imprimir el RNC del contribuyente en todos los comprobantes impresos.</div>
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Printer className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Mostrar RNC en Ticket</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Imprimir el RNC en todos los recibos.</p>
+                    </div>
                   </div>
                   <Switch checked={cfg.ticket_mostrar_rnc} onCheckedChange={(v) => updateCfg({ ticket_mostrar_rnc: v })} />
                 </div>
                 
-                <Button className="w-full h-11 rounded-xl font-bold font-display" onClick={() => saveECF(isElectronic)} disabled={loading}>
-                  {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Guardar Datos Fiscales
+                <Button 
+                  className="w-full h-10 rounded-xl font-bold bg-primary hover:bg-primary/95 text-white shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2" 
+                  onClick={() => saveECF(isElectronic)} 
+                  disabled={loading}
+                >
+                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                  <span>Guardar Datos Fiscales</span>
                 </Button>
               </div>
             </Card>
 
             {!isElectronic ? (
-              <Card className={CARD + " bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white border-none shadow-2xl relative overflow-hidden"}>
+              <Card className={`${CARD} rounded-2xl bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 text-white border-none shadow-xl relative overflow-hidden p-6 md:p-8 space-y-4`}>
                 <div className="absolute top-0 right-0 w-32 h-32 bg-primary/10 rounded-full blur-3xl" />
-                <div className="flex items-center gap-3 mb-4">
+                <div className="flex items-center gap-3 mb-2">
                   <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center border border-white/10">
                     <ShieldCheck className="h-5 w-5 text-emerald-400" />
                   </div>
                   <h3 className="text-lg font-bold font-display">Normativa Fiscal NCF</h3>
                 </div>
-                <div className="space-y-4 text-xs text-slate-300 leading-relaxed font-sans">
+                <div className="space-y-3 text-xs text-slate-300 leading-relaxed font-sans">
                   <p>
                     Estás operando en el modo de <strong>Comprobantes Fiscales tradicionales (NCF)</strong> de la DGII.
                   </p>
                   <p>
-                    En este modo, las facturas se emiten localmente y se reportan mes a mes a través de la Oficina Virtual. Las secuencias se configuran y descuentan de forma puramente digital dentro de Klynn.
+                    En este modo, las facturas se emiten localmente y se reportan periódicamente a través de la Oficina Virtual.
                   </p>
-                  <div className="p-3 bg-white/5 rounded-xl border border-white/10 flex items-start gap-2.5">
-                    <Sparkles className="h-4 w-4 text-primary shrink-0 mt-0.5" />
-                    <span>Administra todos tus rangos de comprobantes autorizados y activa alertas inteligentes en tiempo real desde el gestor dinámico de la derecha.</span>
+                  <div className="p-3.5 bg-white/5 rounded-xl border border-white/10 flex items-start gap-2.5">
+                    <Sparkles className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
+                    <span>Administra todos tus rangos de comprobantes autorizados y activa alertas de agotamiento por WhatsApp.</span>
                   </div>
                 </div>
               </Card>
             ) : (
-              <Card className={CARD}>
-                <h3 className="text-lg font-display mb-4 flex items-center gap-2">
-                  <Key className="h-5 w-5 text-primary" /> Certificado Digital (.p12)
-                </h3>
+              <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+                <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+                  <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                    <Key className="h-5.5 w-5.5" />
+                  </div>
+                  <div>
+                    <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                      Certificado Digital (.p12)
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Firma digital autorizada para e-CF.
+                    </p>
+                  </div>
+                </div>
+
                 {draft.ambiente === 'pruebas' ? (
-                  <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-                    <p className="text-sm text-emerald-700">
-                      <strong>No necesitas subir un certificado P12 real.</strong><br/>
-                      El entorno de Pruebas (Sandbox) de Pronesoft genera uno internamente de forma automática.
+                  <div className="p-4.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:bg-emerald-950/20">
+                    <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
+                      <strong>No necesitas subir un certificado P12 real en pruebas.</strong><br/>
+                      El entorno Sandbox genera la firma de pruebas internamente de forma automática.
                     </p>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     {draft.certificate_data || config?.certificate_data ? (
-                      <div className="p-4 rounded-xl border border-emerald-200 bg-emerald-50">
-                        <div className="flex items-center gap-3 text-emerald-700 font-bold mb-1">
+                      <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/20">
+                        <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300 font-bold mb-1">
                           <CheckCircle2 className="h-5 w-5 text-emerald-600" />
                           <span>Cargado y Listo</span>
                         </div>
-                        <p className="text-xs text-emerald-800 font-medium">
+                        <p className="text-xs text-emerald-800 dark:text-emerald-400 font-medium">
                           {certFileName ? `Archivo: ${certFileName}` : "Certificado P12 digital adjunto y activo."}
                         </p>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-xl border border-dashed border-amber-200 bg-amber-50 text-center">
-                        <p className="text-xs text-amber-700 font-medium">Pendiente de subir certificado.</p>
+                      <div className="p-4 rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 dark:bg-amber-950/20 text-center">
+                        <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">Pendiente de subir certificado.</p>
                       </div>
                     )}
-                    <Field label="Contraseña del .p12">
-                      <Input type="password" className={FIELD} value={draft.certificate_password || ""} onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} placeholder="Contraseña de tu clave privada" />
+                    <Field label="Contraseña del .p12" icon={Key}>
+                      <Input 
+                        type="password" 
+                        className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                        value={draft.certificate_password || ""} 
+                        onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} 
+                        placeholder="Contraseña de tu clave privada" 
+                      />
                     </Field>
                     <input type="file" id="cert-upload" className="hidden" accept=".p12,.pfx" onChange={async (e) => {
                       const file = e.target.files?.[0];
@@ -2912,8 +3432,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                         reader.readAsDataURL(file);
                       }
                     }} />
-                    <Button variant="outline" className="w-full h-11 rounded-xl font-bold" onClick={() => document.getElementById('cert-upload')?.click()}>
-                      <Upload className="mr-2 h-4 w-4" /> {draft.certificate_data ? "Reemplazar Certificado (.p12)" : "Subir Archivo (.p12)"}
+                    <Button 
+                      variant="outline" 
+                      className="w-full h-10 rounded-xl font-bold border-border hover:bg-accent cursor-pointer gap-2" 
+                      onClick={() => document.getElementById('cert-upload')?.click()}
+                    >
+                      <Upload className="h-4 w-4" /> 
+                      <span>{draft.certificate_data ? "Reemplazar Certificado (.p12)" : "Subir Archivo (.p12)"}</span>
                     </Button>
                   </div>
                 )}
@@ -2925,17 +3450,17 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
           <div className="space-y-6">
             
             {/* Alerta de Secuencias (WhatsApp notification number config) */}
-            <Card className={CARD}>
-              <div className="flex items-center justify-between gap-4 mb-4">
-                <div className="flex items-center gap-3">
-                  <div className="h-10 w-10 rounded-full bg-[#25D366] flex items-center justify-center text-white shadow-sm shrink-0">
-                    <svg className="h-5 w-5 fill-white" viewBox="0 0 24 24">
+            <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+              <div className="flex items-center justify-between gap-4 pb-5 border-b border-border/70">
+                <div className="flex items-center gap-3.5">
+                  <div className="h-11 w-11 rounded-xl bg-[#25D366] flex items-center justify-center text-white shadow-xs shrink-0">
+                    <svg className="h-5.5 w-5.5 fill-white" viewBox="0 0 24 24">
                       <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.197 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
                     </svg>
                   </div>
                   <div>
-                    <h3 className="text-lg font-display">Alerta de Secuencias</h3>
-                    <p className="text-xs text-muted-foreground">Recibe alertas por WhatsApp cuando tus secuencias estén próximas a agotarse.</p>
+                    <h3 className="font-display font-bold text-base text-foreground leading-tight">Alerta de Secuencias</h3>
+                    <p className="text-xs text-muted-foreground mt-0.5">Aviso por WhatsApp cuando las secuencias se agoten.</p>
                   </div>
                 </div>
                 
@@ -2984,17 +3509,18 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       error: (err) => `Error al enviar: ${err.message}`
                     });
                   }}
-                  className="px-3 h-8 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-100 flex items-center gap-1.5 text-[10px] font-sans font-bold transition-all active:scale-95 shadow-sm"
+                  className="px-3 h-8 rounded-xl bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200/80 flex items-center gap-1.5 text-[11px] font-bold transition-all active:scale-95 shadow-xs cursor-pointer"
                   title="Enviar un mensaje de WhatsApp de prueba a este número"
                 >
                   <Send className="h-3 w-3" />
                   PROBAR
                 </button>
               </div>
+
               <div className="space-y-4">
-                <Field label="Número de WhatsApp de Alerta" hint="Ingresa el número con el código de país (Ej: 18091234567)">
+                <Field label="Número de WhatsApp de Alerta" hint="Ingresa el número con el código de país (Ej: 18091234567)" icon={Phone}>
                   <Input 
-                    className={FIELD} 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
                     placeholder="Ej: 18091234567" 
                     value={alertPhone} 
                     onChange={(e) => setAlertPhone(e.target.value)} 
@@ -3006,13 +3532,18 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
 
             {!isElectronic ? (
               // Traditional NCF Sequences manager
-              <Card className={CARD}>
-                <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4 border-b pb-3 border-border/40">
-                  <div>
-                    <h3 className="text-base font-bold font-display tracking-tight text-foreground">Secuencias NCF</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 font-medium">Rangos de comprobantes fiscales tradicionales aprobados por la DGII.</p>
+              <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-3.5 pb-4 border-b border-border/70">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold font-display tracking-tight text-foreground">Secuencias NCF</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Rangos tradicionales aprobados por la DGII.</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <input 
                       type="file" 
                       id="import-excel-traditional" 
@@ -3081,7 +3612,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-8 rounded-lg border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200"
+                      className="h-8 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer"
                       onClick={() => document.getElementById('import-excel-traditional')?.click()}
                     >
                       <Upload className="h-3 w-3 mr-1 stroke-[2.5]" /> Importar
@@ -3089,7 +3620,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-8 rounded-lg border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200" 
+                      className="h-8 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer" 
                       onClick={() => {
                         setDialogMode('traditional');
                         setShowNewSeq(true);
@@ -3118,11 +3649,11 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                         : `${seq.prefijo}${seq.tipo_ecf}${formattedCurrent}`;
 
                       return (
-                        <div key={seq.id} className="p-3 border rounded-xl flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-all bg-card">
+                        <div key={seq.id} className="p-3.5 border rounded-2xl flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-all bg-card border-slate-200/80 dark:border-slate-800 shadow-2xs">
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-bold font-mono flex items-center gap-1.5 flex-wrap">
                               <span className="text-primary truncate">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>
-                              <Badge className="bg-slate-100 text-slate-700 hover:bg-slate-100 text-[9px] px-1.5 py-0 h-4 border-none shrink-0 font-bold">NCF</Badge>
+                              <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-[9px] px-1.5 py-0 h-4 border-none shrink-0 font-bold">NCF</Badge>
                             </div>
                             <div className="text-[11px] text-muted-foreground font-mono mt-0.5 font-bold tracking-tight">
                               {codeDisplay}
@@ -3140,14 +3671,14 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                             </div>
                             
                             {/* Actions Group (Bell and Trash) */}
-                            <div className="flex items-center gap-1">
+                            <div className="flex items-center gap-1.5">
                               {/* Quick Mute Bell Toggle Button */}
                               <button 
                                 onClick={() => toggleSequenceAlert(seq)}
-                                className={`h-7.5 w-7.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
+                                className={`h-8 w-8 rounded-xl border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
                                   hasAlertEnabled 
                                     ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
-                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
+                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
                                 }`}
                                 title={hasAlertEnabled ? "Alertas de WhatsApp activadas. Clic para silenciar." : "Alertas desactivadas. Clic para activar."}
                               >
@@ -3157,7 +3688,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               {/* Trash/Delete Sequence Button */}
                               <button 
                                 onClick={() => setDeleteSeqId(seq.id)}
-                                className="h-7.5 w-7.5 rounded-lg border border-red-100 bg-white text-red-500 hover:bg-red-50 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-xs"
+                                className="h-8 w-8 rounded-xl border border-red-100 dark:border-red-900/30 bg-white dark:bg-slate-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-xs cursor-pointer"
                                 title="Eliminar esta secuencia permanentemente"
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -3172,13 +3703,18 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
               </Card>
             ) : (
               // Electronic sequences card
-              <Card className={CARD}>
-                <div className="flex flex-wrap items-center justify-between gap-2.5 mb-4 border-b pb-3 border-border/40">
-                  <div>
-                    <h3 className="text-base font-bold font-display tracking-tight text-foreground">Secuencias e-NCF</h3>
-                    <p className="text-xs text-muted-foreground mt-0.5 font-medium">Rangos de comprobantes fiscales electrónicos (e-CF) autorizados por la DGII.</p>
+              <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-5`}>
+                <div className="flex flex-wrap items-center justify-between gap-3.5 pb-4 border-b border-border/70">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold font-display tracking-tight text-foreground">Secuencias e-NCF</h3>
+                      <p className="text-xs text-muted-foreground mt-0.5">Rangos e-CF autorizados por la DGII.</p>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <input 
                       type="file" 
                       id="import-excel" 
@@ -3208,7 +3744,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-8 rounded-lg border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100/70 hover:text-blue-800 text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200"
+                      className="h-8 rounded-xl border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100/70 hover:text-blue-800 text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer"
                       onClick={async () => {
                         try {
                           toast.info("Consultando secuencias en Pronesoft...");
@@ -3250,7 +3786,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-8 rounded-lg border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200"
+                      className="h-8 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer"
                       onClick={() => document.getElementById('import-excel')?.click()}
                     >
                       <Upload className="h-3 w-3 mr-1 stroke-[2.5]" /> Importar
@@ -3258,7 +3794,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     <Button 
                       variant="outline"
                       size="sm" 
-                      className="h-8 rounded-lg border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary-dark text-[11px] font-bold px-2.5 shadow-xs transition-all active:scale-95 duration-200" 
+                      className="h-8 rounded-xl border-primary/20 bg-primary/5 text-primary hover:bg-primary/10 hover:text-primary text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer" 
                       onClick={() => {
                         setDialogMode('electronic');
                         setShowNewSeq(true);
@@ -3287,7 +3823,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                         : `${seq.prefijo}${seq.tipo_ecf}${formattedCurrent}`;
 
                       return (
-                        <div key={seq.id} className="p-3 border rounded-xl flex items-center justify-between gap-3 hover:bg-slate-50/50 transition-all bg-card">
+                        <div key={seq.id} className="p-3.5 border rounded-2xl flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/50 transition-all bg-card border-slate-200/80 dark:border-slate-800 shadow-2xs">
                           <div className="min-w-0 flex-1">
                             <div className="text-xs font-bold font-mono flex items-center gap-1.5 flex-wrap">
                               <span className="text-primary truncate">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>

@@ -1916,7 +1916,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
   useEffect(() => {
     if (open) {
       setStep(1);
-      setF(initial ? { ...initial } : {
+      setF(initial ? { ...initial, modulos: { ...initial.modulos } } : {
         id: ("plan_" + Date.now()) as PlanId,
         nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
         limite_whatsapp_mes: 300,
@@ -1944,7 +1944,14 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       limite_empleados: Number(f.limite_empleados) || 1,
       limite_ordenes_mes: f.limite_ordenes_mes === null ? null : Number(f.limite_ordenes_mes) || null,
       limite_whatsapp_mes: Number(f.limite_whatsapp_mes) || 0,
-      modulos: f.modulos as Plan["modulos"],
+      modulos: {
+        whatsapp: !!f.modulos?.whatsapp,
+        facturacion_fiscal: !!f.modulos?.facturacion_fiscal,
+        multisucursal: !!f.modulos?.multisucursal,
+        logistica: !!f.modulos?.logistica,
+        procesos: f.modulos?.procesos !== undefined ? !!f.modulos?.procesos : true,
+        estanteria: f.modulos?.estanteria !== undefined ? !!f.modulos?.estanteria : true,
+      },
       destacado: f.destacado,
       polar_product_monthly_url: f.polar_product_monthly_url?.trim() || undefined,
       polar_product_yearly_url: f.polar_product_yearly_url?.trim() || undefined,

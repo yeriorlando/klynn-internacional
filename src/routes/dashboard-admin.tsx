@@ -18,11 +18,25 @@ import {
   DollarSign,
   Users,
   Wallet,
-  Calendar
+  Calendar,
+  Zap,
+  Rocket,
+  MessageSquare,
+  FileText,
+  Wrench,
+  Layers,
+  Clock,
+  AlertCircle,
+  Search,
+  Filter,
+  BarChart3,
+  CreditCard,
+  Truck
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { 
@@ -55,14 +69,69 @@ export const Route = createFileRoute("/dashboard-admin")({
   component: DashboardAdminPage,
 });
 
+function PlanBadge({ id }: { id: string }) {
+  const configs: Record<string, { label: string; icon: any; className: string; iconColor: string }> = {
+    basico: { 
+      label: "Básico", 
+      icon: Zap, 
+      className: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800",
+      iconColor: "text-sky-500 dark:text-sky-400"
+    },
+    pro: { 
+      label: "Pro", 
+      icon: Crown, 
+      className: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800",
+      iconColor: "text-purple-600 dark:text-purple-400"
+    },
+    enterprise: { 
+      label: "Enterprise", 
+      icon: Rocket, 
+      className: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700",
+      iconColor: "text-amber-600 dark:text-amber-400"
+    },
+  };
+  const config = configs[id] || { label: id, icon: Zap, className: "bg-muted/60 text-foreground border-border", iconColor: "text-muted-foreground" };
+  const Icon = config.icon;
+
+  return (
+    <Badge 
+      variant="outline" 
+      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full uppercase text-[10px] font-extrabold tracking-wider shadow-2xs ${config.className}`}
+    >
+      <Icon className={`h-3 w-3 shrink-0 ${config.iconColor}`} />
+      <span>{config.label}</span>
+    </Badge>
+  );
+}
+
 function DashboardAdminPage() {
   const auth = useRequireAuth();
   const navigate = useNavigate();
   const [myTenants, setMyTenants] = useState<Tenant[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
   const [plans, setPlans] = useState<Plan[]>([]);
   const [tenantStats, setTenantStats] = useState<Record<string, { count: number; total: number }>>({}); 
   const [stats, setStats] = useState({ totalIngresos: 0, totalOrdenesCount: 0, activasCount: 0 });
   const [loading, setLoading] = useState(true);
+
+  const filteredTenants = useMemo(() => {
+    return myTenants.filter((t) => {
+      const q = searchQuery.toLowerCase().trim();
+      const matchesQuery = !q || 
+        t.nombre.toLowerCase().includes(q) || 
+        t.email?.toLowerCase().includes(q) || 
+        t.telefono?.toLowerCase().includes(q) ||
+        t.slug.toLowerCase().includes(q) ||
+        (t.rnc && t.rnc.toLowerCase().includes(q));
+      
+      const matchesStatus = statusFilter === "all" || 
+        (statusFilter === "ACTIVO" && t.estado === "ACTIVO") ||
+        (statusFilter === "TRIAL" && t.estado === "TRIAL");
+
+      return matchesQuery && matchesStatus;
+    });
+  }, [myTenants, searchQuery, statusFilter]);
 
   useEffect(() => {
     async function load() {
@@ -390,127 +459,507 @@ function DashboardAdminPage() {
     <div className="min-h-screen bg-background">
       {/* Header replicado de admin.tsx */}
       <header className="border-b border-border bg-surface">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-4">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-3">
             <Logo />
             <Badge variant="outline" className="border-primary/20 bg-primary/10">
               <Shield className="mr-1 h-3 w-3" /> Panel Propietario
             </Badge>
           </div>
-          <div className="flex items-center gap-2">
-            <Button 
-              size="sm" 
-              variant="destructive" 
-              onClick={handleLogout} 
-              className="h-9 px-4 rounded-lg font-bold shadow-md hover:opacity-90 transition-all"
+          <div className="flex items-center gap-3">
+            {auth?.empleado?.email && (
+              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/60 text-xs font-medium text-muted-foreground">
+                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                <span className="truncate max-w-[180px]">{auth.empleado.email}</span>
+              </div>
+            )}
+            <button
+              onClick={handleLogout}
+              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-95 shadow-sm transition-all duration-150 cursor-pointer"
             >
-              <LogOut className="mr-2 h-4 w-4" /> Cerrar sesión
-            </Button>
+              <LogOut className="h-3.5 w-3.5 text-white" />
+              <span>Cerrar sesión</span>
+            </button>
           </div>
         </div>
       </header>
 
-      <main className="mx-auto max-w-7xl px-6 py-8">
+      <main className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-8">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
           <div>
             <h1 className="font-display text-4xl tracking-tight">Panel central de Propietario</h1>
-            <p className="mt-1 text-muted-foreground">Administra tus lavanderías registradas en Klynn.</p>
+            <p className="mt-1 text-muted-foreground">Administra tus lavanderías y sucursales en tiempo real.</p>
           </div>
           <Button 
             onClick={() => setShowBranchModal(true)}
-            className="bg-primary text-white hover:bg-primary/90 h-9 px-5 rounded-lg shadow-md transition-all active:scale-95 font-bold"
+            className="bg-primary text-white hover:bg-primary/90 h-10 px-5 rounded-xl shadow-md transition-all active:scale-95 font-bold"
           >
             <Building2 className="mr-2 h-4 w-4" /> Registrar nueva sucursal
           </Button>
         </div>
 
         {/* KPIs replicados de admin.tsx */}
-        <div className="mt-8 grid gap-4 md:grid-cols-4">
-          <KPI t="Lavanderías" v={String(myTenants.length)} icon={Building2} />
-          <KPI t="Activas" v={String(stats.activasCount)} icon={Building2} />
-          <KPI t="Ingresos Totales" v={formatRD(stats.totalIngresos)} icon={TrendingUp} accent />
-          <KPI t="Órdenes Totales" v={String(stats.totalOrdenesCount)} icon={Package} />
+        <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <KPI 
+            title="Mis Lavanderías" 
+            value={`${stats.activasCount} / ${myTenants.length}`} 
+            sub={`${stats.activasCount} Activas • ${myTenants.filter(t => t.estado === 'TRIAL').length} Pruebas`} 
+            icon={Building2} 
+            variant="primary" 
+          />
+          <KPI 
+            title="Ingresos Totales" 
+            value={formatRD(stats.totalIngresos)} 
+            sub="Facturado en plataforma" 
+            icon={TrendingUp} 
+            variant="emerald" 
+          />
+          <KPI 
+            title="Órdenes Totales" 
+            value={stats.totalOrdenesCount.toLocaleString("es-DO")} 
+            sub="Pedidos acumulados" 
+            icon={Package} 
+            variant="indigo" 
+          />
+          <KPI 
+            title="Cupos Sucursal" 
+            value={`${sucursalesCreadas} / ${maxSucursalesContratadas}`} 
+            sub={tieneCuposLibres ? "¡Cupo disponible para agregar!" : "Límite actual de tu plan"} 
+            icon={Crown} 
+            variant="amber" 
+          />
         </div>
 
-        {/* Tabla replicada de admin.tsx */}
-        <Card className="mt-10 overflow-hidden border-none shadow-card">
-          <div className="border-b border-border p-4">
-            <h2 className="font-display text-xl">Lavanderías registradas</h2>
+        {/* Barra de Búsqueda y Filtros de Estado */}
+        <div className="mt-6 sm:mt-8 space-y-4">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/50 shadow-xs">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="Buscar por nombre, correo, RNC o subdominio..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-10 rounded-xl bg-background border-border/80 text-sm focus-visible:ring-primary/20"
+              />
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-xl p-1 shrink-0 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "all" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Todas ({myTenants.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("ACTIVO")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "ACTIVO" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Activas ({myTenants.filter(t => t.estado === "ACTIVO").length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("TRIAL")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "TRIAL" ? "bg-amber-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Pruebas ({myTenants.filter(t => t.estado === "TRIAL").length})
+                </button>
+              </div>
+            </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 text-left">Marca</th>
-                  <th className="px-4 py-3 text-right">Órdenes</th>
-                  <th className="px-4 py-3 text-right">Ingresos</th>
-                  <th className="px-4 py-3 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {myTenants.map((t) => {
-                  const ts = tenantStats[t.id] || { count: 0, total: 0 };
-                  return (
-                    <tr 
-                      key={t.id} 
-                      className="border-b border-border/50 hover:bg-slate-50/80 transition-colors"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div 
-                            className="h-8 w-8 rounded-full overflow-hidden flex items-center justify-center border border-slate-100 shadow-sm shrink-0" 
-                            style={{ 
-                              background: t.logo_url ? "white" : `linear-gradient(135deg, ${t.color_primario}, ${t.color_secundario})` 
-                            }} 
-                          >
-                            {t.logo_url ? (
-                              <img src={t.logo_url} alt="Logo" className="h-full w-full object-cover" />
-                            ) : (
-                              <span className="text-[10px] font-bold text-white uppercase">{t.nombre.charAt(0)}</span>
-                            )}
-                          </div>
-                          <div>
-                            <div className="font-medium text-slate-900">{t.nombre}</div>
-                            <div className="text-xs text-muted-foreground">{t.email}</div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-slate-700">{ts.count}</td>
-                      <td className="px-4 py-3 text-right font-medium text-slate-900">{formatRD(ts.total)}</td>
-                      <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
-                        <div className="flex justify-end gap-2">
-                          <Button 
-                            size="sm" 
-                            variant="secondary" 
-                            onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
-                            className="h-9 px-4 rounded-lg shadow-sm font-bold transition-all bg-white border border-slate-200 text-slate-700 hover:bg-slate-50"
-                          >
-                            Ver Reportes
-                          </Button>
-                          <Button 
-                            size="sm" 
-                            variant="outline" 
-                            onClick={() => handleManage(t.id, t.slug)}
-                            className="h-9 px-4 rounded-lg border-primary/20 text-primary hover:bg-primary hover:text-white transition-all group font-bold"
-                          >
-                            Gestionar sucursal <ArrowRight className="ml-2 h-3.5 w-3.5 group-hover:translate-x-1 transition-transform" />
-                          </Button>
-                        </div>
+
+          {/* VISTA ESCRITORIO (Tabla completa con diseño idéntico a /admin) */}
+          <Card className="hidden md:block overflow-hidden border border-border/60 shadow-card rounded-2xl bg-surface">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="relative z-10 text-[11px] uppercase tracking-wider font-black shadow-[0_4px_12px_-2px_rgba(0,0,0,0.06)] border-b border-border/80">
+                  <tr>
+                    <th className="px-4 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                      Lavandería / Sucursal
+                    </th>
+                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-blue-50 via-blue-100/90 to-blue-200/60 dark:from-blue-950/70 dark:via-blue-950/90 dark:to-blue-900/60 text-blue-950 dark:text-blue-200 border-x border-blue-200/50 dark:border-blue-800/40">
+                      Plan SaaS
+                    </th>
+                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-emerald-50 via-emerald-100/90 to-emerald-200/60 dark:from-emerald-950/70 dark:via-emerald-950/90 dark:to-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-r border-emerald-200/50 dark:border-emerald-800/40">
+                      Estado
+                    </th>
+                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-purple-50 via-purple-100/90 to-purple-200/60 dark:from-purple-950/70 dark:via-purple-950/90 dark:to-purple-900/60 text-purple-950 dark:text-purple-200 border-r border-purple-200/50 dark:border-purple-800/40">
+                      Módulos Activos
+                    </th>
+                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-cyan-50 via-cyan-100/90 to-cyan-200/60 dark:from-cyan-950/70 dark:via-cyan-950/90 dark:to-cyan-900/60 text-cyan-950 dark:text-cyan-200 border-r border-cyan-200/50 dark:border-cyan-800/40">
+                      Órdenes
+                    </th>
+                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-amber-50 via-amber-100/90 to-amber-200/60 dark:from-amber-950/70 dark:via-amber-950/90 dark:to-amber-900/60 text-amber-950 dark:text-amber-200 border-r border-amber-200/50 dark:border-amber-800/40">
+                      Facturación
+                    </th>
+                    <th className="px-4 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                      Acciones
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/40">
+                  {filteredTenants.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-12 text-center text-muted-foreground">
+                        <Building2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+                        <p className="text-base font-semibold text-foreground">No se encontraron lavanderías</p>
+                        <p className="text-xs text-muted-foreground mt-1">Prueba a cambiar el filtro de búsqueda o el estado.</p>
                       </td>
                     </tr>
-                  );
-                })}
-                {myTenants.length === 0 && (
-                  <tr>
-                    <td colSpan={4} className="py-12 text-center text-muted-foreground">
-                      No tienes lavanderías registradas aún.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    filteredTenants.map((t) => {
+                      const ts = tenantStats[t.id] || { count: 0, total: 0 };
+                      const planOfTenant = plans.find(p => p.id === t.plan_id);
+                      
+                      const hasWa = t.config?.modulos_override?.whatsapp !== undefined 
+                        ? t.config.modulos_override.whatsapp 
+                        : !!planOfTenant?.modulos?.whatsapp;
+                      const hasFiscal = t.config?.modulos_override?.facturacion_fiscal !== undefined 
+                        ? t.config.modulos_override.facturacion_fiscal 
+                        : !!planOfTenant?.modulos?.facturacion_fiscal;
+                      const hasSucursales = t.config?.modulos_override?.multisucursal !== undefined 
+                        ? t.config.modulos_override.multisucursal 
+                        : ((t.max_sucursales || 1) > 1 || !!planOfTenant?.modulos?.multisucursal);
+                      const hasLogistica = t.config?.modulos_override?.logistica !== undefined 
+                        ? t.config.modulos_override.logistica 
+                        : !!planOfTenant?.modulos?.logistica;
+                      const hasProcesos = t.config?.modulos_override?.procesos !== undefined 
+                        ? t.config.modulos_override.procesos 
+                        : (planOfTenant?.modulos?.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
+                      const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined 
+                        ? t.config.modulos_override.estanteria 
+                        : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
+
+                      const daysRemaining = t.trial_hasta
+                        ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+                        : 0;
+
+                      return (
+                        <tr 
+                          key={t.id} 
+                          className="hover:bg-muted/30 transition-colors border-b border-border/40"
+                        >
+                          <td className="px-4 py-3.5">
+                            <div className="flex items-center gap-3">
+                              {t.logo_url ? (
+                                <img
+                                  src={t.logo_url}
+                                  alt={t.nombre}
+                                  className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs ring-2 ring-primary/10"
+                                />
+                              ) : (
+                                <div
+                                  className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10"
+                                  style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                                >
+                                  {t.nombre.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="font-bold text-foreground text-sm tracking-tight hover:text-primary transition-colors flex items-center gap-1.5">
+                                  <span className="truncate">{t.nombre}</span>
+                                </div>
+                                <div className="text-[11px] text-muted-foreground mt-0.5 space-y-0.5">
+                                  <div className="truncate">
+                                    <span className="font-medium text-foreground/80">Correo:</span> {t.email || "Sin correo"}
+                                  </div>
+                                  <div className="truncate">
+                                    <span className="font-medium text-foreground/80">Teléfono:</span> {t.telefono || "Sin teléfono"}
+                                  </div>
+                                  <div className="flex items-center gap-1.5 pt-0.5">
+                                    <span className="font-medium text-foreground/80">RNC:</span>
+                                    {t.rnc ? (
+                                      <Badge className="bg-primary hover:bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0 rounded-md border-none shadow-2xs">
+                                        {t.rnc}
+                                      </Badge>
+                                    ) : (
+                                      <span className="italic text-muted-foreground/60 text-[10.5px]">Sin RNC</span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="px-3 py-3 text-center whitespace-nowrap bg-blue-500/[0.015] border-r border-border/20">
+                            <PlanBadge id={t.plan_id} />
+                          </td>
+
+                          <td className="px-3 py-3 text-center whitespace-nowrap bg-emerald-500/[0.015] border-r border-border/20">
+                            {t.estado === "ACTIVO" ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
+                              </Badge>
+                            ) : t.estado === "TRIAL" ? (
+                              <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                                <Clock className="h-3 w-3 text-amber-600" /> Prueba ({daysRemaining}d)
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                                <AlertCircle className="h-3 w-3 text-rose-600" /> Inactivo
+                              </Badge>
+                            )}
+                          </td>
+
+                          <td className="px-3 py-3 text-center whitespace-nowrap bg-purple-500/[0.015] border-r border-border/20">
+                            <div className="flex items-center justify-center gap-1">
+                              <span
+                                title={hasWa ? "WhatsApp Cloud: Habilitado" : "WhatsApp: Inactivo"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  hasWa
+                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
+                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                }`}
+                              >
+                                <MessageSquare className="h-3.5 w-3.5" />
+                              </span>
+                              <span
+                                title={hasFiscal ? "Facturación Fiscal (e-CF): Habilitada" : "Facturación Fiscal: Inactiva"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  hasFiscal
+                                    ? "bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 shadow-2xs"
+                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                }`}
+                              >
+                                <FileText className="h-3.5 w-3.5" />
+                              </span>
+                              <span
+                                title={hasSucursales ? "Sucursales Múltiples: Habilitadas" : "Sucursales: Inactivas"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  hasSucursales
+                                    ? "bg-purple-50 text-purple-700 border border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-700 shadow-2xs"
+                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                }`}
+                              >
+                                <Building2 className="h-3.5 w-3.5" />
+                              </span>
+                              <span
+                                title={hasLogistica ? "Envío a Domicilio: Habilitado" : "Logística: Inactiva"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  hasLogistica
+                                    ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
+                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                }`}
+                              >
+                                <Truck className="h-3.5 w-3.5" />
+                              </span>
+                              <span
+                                title={hasProcesos ? "Tablero Kanban de Procesos: Habilitado" : "Procesos: Inactivo"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  hasProcesos
+                                    ? "bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700 shadow-2xs"
+                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                }`}
+                              >
+                                <Wrench className="h-3.5 w-3.5" />
+                              </span>
+                              <span
+                                title={hasEstanteria ? "Estantería Virtual: Habilitada" : "Estantería: Inactiva"}
+                                className={`p-1.5 rounded-lg transition-all ${
+                                  hasEstanteria
+                                    ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
+                                    : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                }`}
+                              >
+                                <Layers className="h-3.5 w-3.5" />
+                              </span>
+                            </div>
+                          </td>
+
+                          <td className="px-3 py-3 text-center whitespace-nowrap bg-cyan-500/[0.015] border-r border-border/20">
+                            <span className="font-bold text-foreground">{ts.count.toLocaleString("es-DO")}</span>
+                            <span className="text-[10px] text-muted-foreground block">órdenes</span>
+                          </td>
+
+                          <td className="px-3 py-3 text-center whitespace-nowrap bg-amber-500/[0.015] border-r border-border/20">
+                            <span className="font-extrabold text-foreground">{formatRD(ts.total)}</span>
+                          </td>
+
+                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                            <div className="flex items-center justify-center gap-1.5">
+                              <Button
+                                size="sm"
+                                onClick={() => handleManage(t.id, t.slug)}
+                                className="h-8.5 px-3 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-500/80 shadow-2xs gap-1.5 cursor-pointer transition-all"
+                              >
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                <span>Entrar</span>
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                                className="h-8.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 font-bold text-xs gap-1.5 shadow-2xs cursor-pointer transition-all"
+                                title="Ver reportes de ventas"
+                              >
+                                <BarChart3 className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
+                                <span>Reportes</span>
+                              </Button>
+
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedInspectTenant(t)}
+                                className="h-8.5 px-2.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs gap-1 shadow-2xs cursor-pointer"
+                                title="Inspeccionar estadísticas en vivo"
+                              >
+                                <Sparkles className="h-3.5 w-3.5" />
+                              </Button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          {/* VISTA MÓVIL (Tarjetas estilizadas idénticas a /admin) */}
+          <div className="grid gap-3.5 md:hidden">
+            {filteredTenants.length === 0 ? (
+              <Card className="p-8 text-center text-muted-foreground rounded-2xl">
+                <Building2 className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
+                <p className="font-semibold text-foreground text-sm">No se encontraron lavanderías</p>
+                <p className="text-xs text-muted-foreground mt-0.5">Prueba con otro término de búsqueda.</p>
+              </Card>
+            ) : (
+              filteredTenants.map((t) => {
+                const ts = tenantStats[t.id] || { count: 0, total: 0 };
+                const planOfTenant = plans.find(p => p.id === t.plan_id);
+                const hasWa = t.config?.modulos_override?.whatsapp !== undefined ? t.config.modulos_override.whatsapp : !!planOfTenant?.modulos?.whatsapp;
+                const hasFiscal = t.config?.modulos_override?.facturacion_fiscal !== undefined ? t.config.modulos_override.facturacion_fiscal : !!planOfTenant?.modulos?.facturacion_fiscal;
+                const hasSucursales = t.config?.modulos_override?.multisucursal !== undefined ? t.config.modulos_override.multisucursal : ((t.max_sucursales || 1) > 1 || !!planOfTenant?.modulos?.multisucursal);
+                const hasLogistica = t.config?.modulos_override?.logistica !== undefined ? t.config.modulos_override.logistica : !!planOfTenant?.modulos?.logistica;
+                const hasProcesos = t.config?.modulos_override?.procesos !== undefined ? t.config.modulos_override.procesos : (planOfTenant?.modulos?.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
+                const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined ? t.config.modulos_override.estanteria : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
+
+                const daysRemaining = t.trial_hasta
+                  ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
+                  : 0;
+
+                return (
+                  <Card 
+                    key={t.id} 
+                    className="p-4 rounded-2xl border border-border/70 shadow-xs bg-surface"
+                  >
+                    <div className="flex items-start gap-3">
+                      {t.logo_url ? (
+                        <img
+                          src={t.logo_url}
+                          alt={t.nombre}
+                          className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs"
+                        />
+                      ) : (
+                        <div
+                          className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs"
+                          style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                        >
+                          {t.nombre.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center justify-between gap-1">
+                          <h3 className="font-bold text-foreground text-sm truncate">{t.nombre}</h3>
+                          {t.estado === "ACTIVO" ? (
+                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                              Activo
+                            </Badge>
+                          ) : t.estado === "TRIAL" ? (
+                            <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                              Prueba ({daysRemaining}d)
+                            </Badge>
+                          ) : (
+                            <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                              Inactivo
+                            </Badge>
+                          )}
+                        </div>
+
+                        <div className="text-[11px] text-muted-foreground mt-0.5 space-y-0.5">
+                          <div className="truncate"><span className="font-medium text-foreground/80">Correo:</span> {t.email || "Sin correo"}</div>
+                          <div className="truncate"><span className="font-medium text-foreground/80">Teléfono:</span> {t.telefono || "Sin teléfono"}</div>
+                          <div className="flex items-center gap-1.5 pt-0.5">
+                            <span className="font-medium text-foreground/80">RNC:</span>
+                            {t.rnc ? (
+                              <Badge className="bg-primary hover:bg-primary text-primary-foreground text-[9.5px] font-bold px-1.5 py-0 rounded-md border-none shadow-2xs">{t.rnc}</Badge>
+                            ) : (
+                              <span className="italic text-muted-foreground/60 text-[10px]">Sin RNC</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Métricas y Módulos Móvil */}
+                    <div className="mt-3 pt-2.5 border-t border-border/50 grid grid-cols-2 gap-2 text-xs">
+                      <div className="bg-blue-500/[0.04] p-2.5 rounded-xl border border-blue-500/10">
+                        <span className="text-[10px] font-bold uppercase text-blue-600 dark:text-blue-400 block mb-1">Plan & Módulos</span>
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <PlanBadge id={t.plan_id} />
+                        </div>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <span className={`p-1 rounded ${hasWa ? 'text-emerald-600 bg-emerald-50' : 'text-muted-foreground/30 opacity-40'}`}><MessageSquare className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasFiscal ? 'text-blue-600 bg-blue-50' : 'text-muted-foreground/30 opacity-40'}`}><FileText className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
+                          <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50' : 'text-muted-foreground/30 opacity-40'}`}><Layers className="h-3 w-3" /></span>
+                        </div>
+                      </div>
+
+                      <div className="bg-amber-500/[0.04] p-2.5 rounded-xl border border-amber-500/10 flex flex-col justify-between">
+                        <div>
+                          <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 block mb-0.5">Facturación</span>
+                          <div className="font-bold text-foreground text-xs">{formatRD(ts.total)}</div>
+                        </div>
+                        <div className="text-[10.5px] text-muted-foreground font-medium mt-1">
+                          {ts.count} órdenes
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Botones de acción móvil */}
+                    <div className="mt-3 pt-2.5 flex items-center justify-between gap-2">
+                      <Button
+                        size="sm"
+                        onClick={() => handleManage(t.id, t.slug)}
+                        className="flex-1 h-8 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-2xs cursor-pointer"
+                      >
+                        <ExternalLink className="h-3.5 w-3.5" />
+                        <span>Entrar</span>
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                        className="h-8 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 font-bold text-xs gap-1 cursor-pointer shadow-2xs"
+                      >
+                        <BarChart3 className="h-3.5 w-3.5" />
+                        <span>Reportes</span>
+                      </Button>
+
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => setSelectedInspectTenant(t)}
+                        className="h-8 px-2.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs gap-1 shadow-2xs cursor-pointer"
+                        title="Inspeccionar estadísticas"
+                      >
+                        <Sparkles className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </Card>
+                );
+              })
+            )}
           </div>
-        </Card>
+        </div>
       </main>
 
       {/* Modal centralizado de Sucursales */}
@@ -1253,14 +1702,69 @@ function DashboardAdminPage() {
   );
 }
 
-function KPI({ t, v, icon: Icon, accent }: { t: string; v: string; icon: any; accent?: boolean }) {
+function KPI({
+  title,
+  value,
+  sub,
+  icon: Icon,
+  variant = "primary",
+}: {
+  title: string;
+  value: string;
+  sub?: React.ReactNode;
+  icon: any;
+  variant?: "primary" | "amber" | "emerald" | "rose" | "indigo";
+}) {
+  const styles = {
+    primary: {
+      card: "bg-gradient-primary text-white shadow-md border-0",
+      title: "text-white/80 font-semibold",
+      value: "text-white",
+      sub: "text-white/90",
+      icon: "text-white/80",
+    },
+    amber: {
+      card: "bg-amber-500/10 border border-amber-500/20 shadow-2xs",
+      title: "text-amber-800 dark:text-amber-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-amber-900 dark:text-amber-300",
+      icon: "text-amber-600 dark:text-amber-400",
+    },
+    emerald: {
+      card: "bg-emerald-500/10 border border-emerald-500/20 shadow-2xs",
+      title: "text-emerald-800 dark:text-emerald-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-emerald-900 dark:text-emerald-300",
+      icon: "text-emerald-600 dark:text-emerald-400",
+    },
+    rose: {
+      card: "bg-rose-500/10 border border-rose-500/20 shadow-2xs",
+      title: "text-rose-800 dark:text-rose-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-rose-900 dark:text-rose-300",
+      icon: "text-rose-600 dark:text-rose-400",
+    },
+    indigo: {
+      card: "bg-indigo-500/10 border border-indigo-500/20 shadow-2xs",
+      title: "text-indigo-800 dark:text-indigo-300 font-semibold",
+      value: "text-foreground",
+      sub: "text-indigo-900 dark:text-indigo-200",
+      icon: "text-indigo-600 dark:text-indigo-400",
+    },
+  }[variant];
+
+  const isLong = value.length > 9;
+
   return (
-    <Card className={`border-none p-5 shadow-card ${accent ? "bg-gradient-primary text-white" : ""}`}>
-      <div className="flex items-start justify-between">
-        <div className={`text-xs uppercase ${accent ? "text-white/80" : "text-muted-foreground"}`}>{t}</div>
-        <Icon className={`h-4 w-4 ${accent ? "text-white/80" : "text-muted-foreground"}`} />
+    <Card className={`p-3.5 sm:p-5 h-full rounded-2xl ${styles.card}`}>
+      <div className="flex items-start justify-between gap-1.5">
+        <div className={`text-[10px] sm:text-xs uppercase tracking-wider ${styles.title}`}>{title}</div>
+        <Icon className={`h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 ${styles.icon}`} />
       </div>
-      <div className="mt-2 font-display text-3xl">{v}</div>
+      <div className={`mt-1.5 sm:mt-2 font-display font-black tracking-tight ${styles.value} ${isLong ? "text-lg sm:text-xl xl:text-[26px]" : "text-xl sm:text-2xl lg:text-3xl"}`} title={value}>
+        {value}
+      </div>
+      {sub && <div className={`mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate ${styles.sub}`}>{sub}</div>}
     </Card>
   );
 }

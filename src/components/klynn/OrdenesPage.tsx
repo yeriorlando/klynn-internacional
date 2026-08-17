@@ -23,7 +23,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -1004,15 +1004,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         (() => {
           const count = limits.orderCount || 0;
           const limit = limits.orderLimit;
+          const effectiveLimit = limits.effectiveLimit || (limit + (limits.graceBonus || 15));
+          const isGrace = !!limits.isGracePeriod;
+          const isDanger = !!limits.ordersReached;
           const pct = Math.min(100, Math.round((count / limit) * 100));
-          const isDanger = limits.ordersReached || pct >= 95;
-          const isWarning = !isDanger && pct >= 80;
+          const isWarning = !isDanger && !isGrace && pct >= 80;
 
           return (
             <div
               className={`mb-4 p-3.5 sm:p-4 rounded-2xl border transition-all relative overflow-hidden ${
                 isDanger
                   ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200 dark:border-rose-900/60 shadow-2xs"
+                  : isGrace
+                  ? "bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-indigo-500/10 border-amber-500/30 dark:border-amber-500/20 shadow-2xs"
                   : isWarning
                   ? "bg-amber-50/70 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/60 shadow-2xs"
                   : "bg-white/90 dark:bg-slate-900/80 border-slate-200/80 dark:border-slate-800 shadow-2xs"
@@ -1025,6 +1029,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     className={`h-10 w-10 rounded-2xl flex items-center justify-center shrink-0 border shadow-2xs ${
                       isDanger
                         ? "bg-rose-500/15 text-rose-600 border-rose-500/25"
+                        : isGrace
+                        ? "bg-amber-500/20 text-amber-600 dark:text-amber-400 border-amber-500/30 animate-pulse"
                         : isWarning
                         ? "bg-amber-500/15 text-amber-600 border-amber-500/25"
                         : "bg-primary/10 text-primary border-primary/20"
@@ -1032,6 +1038,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   >
                     {isDanger ? (
                       <AlertTriangle className="h-5 w-5 stroke-[2.5]" />
+                    ) : isGrace ? (
+                      <Gift className="h-5 w-5 stroke-[2.5]" />
                     ) : isWarning ? (
                       <Zap className="h-5 w-5 stroke-[2.5]" />
                     ) : (
@@ -1043,25 +1051,35 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="font-extrabold text-sm text-foreground">
                         {isDanger
-                          ? "Límite de órdenes alcanzado"
+                          ? "Límite del plan y cortesía agotados"
+                          : isGrace
+                          ? "🎁 Período de Gracia: +15 órdenes de cortesía activas"
                           : "Capacidad mensual del plan"}
                       </span>
                       <span
                         className={`text-[10px] font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider shadow-xs ${
                           isDanger
                             ? "bg-rose-500 text-white"
+                            : isGrace
+                            ? "bg-gradient-to-r from-amber-500 to-indigo-600 text-white"
                             : isWarning
                             ? "bg-amber-500 text-white"
                             : "bg-primary text-white"
                         }`}
                       >
-                        {pct}% consumido
+                        {isDanger
+                          ? "100% CONSUMIDO"
+                          : isGrace
+                          ? `${limits.graceRemaining ?? 0} DE REGALO RESTANTES`
+                          : `${pct}% consumido`}
                       </span>
                     </div>
 
                     <p className="text-xs text-muted-foreground mt-0.5 leading-snug">
                       {isDanger
-                        ? "Has utilizado todas las órdenes de este mes. Actualiza tu plan para continuar registrando."
+                        ? "Has utilizado todas las órdenes de tu plan y las 15 de cortesía. Actualiza tu plan para continuar registrando."
+                        : isGrace
+                        ? `Has alcanzado el límite de tu plan (${limit} órdenes). Klynn te ha otorgado 15 órdenes de cortesía (has usado ${limits.graceUsed ?? 0} de 15) para que tu mostrador no se detenga. Recuerda actualizar tu plan antes de que se agoten.`
                         : isWarning
                         ? "Estás cerca del límite mensual. Considera cambiar a un plan superior."
                         : "Llevas un excelente ritmo en el ciclo de facturación actual."}
@@ -1075,18 +1093,29 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   <div className="flex flex-col items-start md:items-end gap-1.5 min-w-[140px]">
                     <div className="text-xs font-display flex items-baseline gap-1">
                       <strong className="text-foreground font-black text-sm">{count}</strong>
-                      <span className="text-muted-foreground font-bold">/ {limit} órdenes</span>
+                      <span className="text-muted-foreground font-bold">
+                        / {isGrace || isDanger ? effectiveLimit : limit} órdenes
+                      </span>
                     </div>
                     <div className="w-36 sm:w-48 h-3 rounded-full bg-slate-100 dark:bg-slate-800/80 overflow-hidden p-0.5 border border-slate-200/90 dark:border-slate-700 shadow-inner">
                       <div
                         className={`h-full rounded-full transition-all duration-500 ${
                           isDanger
                             ? "bg-rose-500 shadow-xs"
+                            : isGrace
+                            ? "bg-gradient-to-r from-amber-500 to-indigo-600 shadow-xs"
                             : isWarning
                             ? "bg-amber-500 shadow-xs"
                             : "bg-primary shadow-xs"
                         }`}
-                        style={{ width: `${Math.max(5, pct)}%` }}
+                        style={{
+                          width: `${Math.max(
+                            5,
+                            isGrace
+                              ? Math.min(100, Math.round((count / (effectiveLimit || limit)) * 100))
+                              : pct
+                          )}%`,
+                        }}
                       />
                     </div>
                   </div>
@@ -1100,7 +1129,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         search: { tab: "plan" } as any,
                       })
                     }
-                    className="h-9 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white font-extrabold text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer gap-1.5 shrink-0"
+                    className={`h-9 px-4 rounded-xl font-extrabold text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer gap-1.5 shrink-0 ${
+                      isGrace
+                        ? "bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white"
+                        : "bg-primary hover:bg-primary/90 text-white"
+                    }`}
                   >
                     <Rocket className="h-3.5 w-3.5 text-white" />
                     <span>Ver Planes</span>

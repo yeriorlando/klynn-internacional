@@ -484,6 +484,12 @@ function NuevaOrdenPage() {
   const handleImprimirTicket = async (ordenToPrint: Orden | null) => {
     if (!ordenToPrint) return;
 
+    const imprimirCopiaCaja = !!tenant.config?.ticket_imprimir_copia_caja;
+    const imprimirTaller = !!(
+      tenant.config?.ticket_imprimir_taller_auto &&
+      (!tenant.config?.ticket_taller_solo_con_ubicacion || !!ordenToPrint.ubicacion_ropa)
+    );
+
     const printerType = tenant.config?.impresora_tipo || "usb";
     if (printerType === "bluetooth" || printerType === "serial") {
       try {
@@ -501,10 +507,33 @@ function NuevaOrdenPage() {
             limite_credito: 0,
             creado_en: new Date().toISOString(),
           };
-        const bytes = encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios);
-        const success = await printDirectRaw(bytes, tenant.config);
+
+        const ticketListBytes: Uint8Array[] = [];
+
+        // 1. Ticket Cliente (Original)
+        ticketListBytes.push(encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios, undefined, false, false, false, false));
+
+        // 2. Copia de Caja / Duplicado
+        if (imprimirCopiaCaja) {
+          ticketListBytes.push(encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios, undefined, false, false, false, true));
+        }
+
+        // 3. Copia de Taller
+        if (imprimirTaller) {
+          ticketListBytes.push(encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios, undefined, false, false, true, false));
+        }
+
+        const totalLength = ticketListBytes.reduce((acc, b) => acc + b.length, 0);
+        const allBytes = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const b of ticketListBytes) {
+          allBytes.set(b, offset);
+          offset += b.length;
+        }
+
+        const success = await printDirectRaw(allBytes, tenant.config);
         if (success) {
-          toast.success("¡Ticket impreso en impresora física!");
+          toast.success("¡Tickets impresos correctamente en impresora física!");
         } else {
           toast.error("No se pudo imprimir en la impresora física.");
         }
@@ -607,6 +636,11 @@ function NuevaOrdenPage() {
         setLimits(l);
         if (l.ordersReached) {
           setShowLimitModal(true);
+        } else if (l.isGracePeriod) {
+          toast.info(
+            `🎁 Modo Cortesía: Te quedan ${l.graceRemaining} órdenes de regalo de Klynn por este ciclo. Recuerda actualizar tu plan.`,
+            { duration: 6000 }
+          );
         }
       }
     }
@@ -5340,15 +5374,43 @@ function TicketPrintPortal({
   serviciosList: any[];
   onClose: () => void;
 }) {
+  const imprimirCopiaCaja = !!tenant.config?.ticket_imprimir_copia_caja;
+  const imprimirTaller = !!(
+    tenant.config?.ticket_imprimir_taller_auto &&
+    (!tenant.config?.ticket_taller_solo_con_ubicacion || !!orden.ubicacion_ropa)
+  );
+
   useEffect(() => {
     const printerType = tenant.config?.impresora_tipo || "usb";
     if (printerType === "bluetooth" || printerType === "serial") {
       const runPhysicalPrint = async () => {
         try {
-          const bytes = encodeEscPos(orden, tenant, cliente, empleado, serviciosList);
-          const success = await printDirectRaw(bytes, tenant.config);
+          const ticketListBytes: Uint8Array[] = [];
+
+          // 1. Ticket Cliente (Original)
+          ticketListBytes.push(encodeEscPos(orden, tenant, cliente, empleado, serviciosList, undefined, false, false, false, false));
+
+          // 2. Copia de Caja / Duplicado
+          if (imprimirCopiaCaja) {
+            ticketListBytes.push(encodeEscPos(orden, tenant, cliente, empleado, serviciosList, undefined, false, false, false, true));
+          }
+
+          // 3. Copia de Taller
+          if (imprimirTaller) {
+            ticketListBytes.push(encodeEscPos(orden, tenant, cliente, empleado, serviciosList, undefined, false, false, true, false));
+          }
+
+          const totalLength = ticketListBytes.reduce((acc, b) => acc + b.length, 0);
+          const allBytes = new Uint8Array(totalLength);
+          let offset = 0;
+          for (const b of ticketListBytes) {
+            allBytes.set(b, offset);
+            offset += b.length;
+          }
+
+          const success = await printDirectRaw(allBytes, tenant.config);
           if (success) {
-            toast.success("¡Ticket impreso en impresora física!");
+            toast.success("¡Tickets impresos físicamente!");
           } else {
             toast.error("No se pudo imprimir en la impresora física.");
           }
@@ -5367,7 +5429,7 @@ function TicketPrintPortal({
       }, 150);
       return () => clearTimeout(timer);
     }
-  }, [onClose, orden, tenant, cliente, empleado, serviciosList]);
+  }, [onClose, orden, tenant, cliente, empleado, serviciosList, imprimirCopiaCaja, imprimirTaller]);
 
   return createPortal(
     <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
@@ -5396,6 +5458,7 @@ function TicketPrintPortal({
           </Button>
         </div>
 
+        {/* 1. TICKET CLIENTE (ORIGINAL) */}
         <Ticket
           orden={orden}
           tenant={tenant}
@@ -5404,6 +5467,36 @@ function TicketPrintPortal({
           formato={tenant.config?.formato_ticket || "80mm"}
           serviciosList={serviciosList}
         />
+
+        {/* 2. TICKET COPIA DE CAJA / NEGOCIO */}
+        {imprimirCopiaCaja && (
+          <div className="pt-6 print:pt-0" style={{ pageBreakBefore: "always", breakBefore: "page" }}>
+            <Ticket
+              orden={orden}
+              tenant={tenant}
+              empleado={empleado}
+              cliente={cliente}
+              formato={tenant.config?.formato_ticket || "80mm"}
+              serviciosList={serviciosList}
+              esCopiaCaja={true}
+            />
+          </div>
+        )}
+
+        {/* 3. TICKET TALLER / USO INTERNO */}
+        {imprimirTaller && (
+          <div className="pt-6 print:pt-0" style={{ pageBreakBefore: "always", breakBefore: "page" }}>
+            <Ticket
+              orden={orden}
+              tenant={tenant}
+              empleado={empleado}
+              cliente={cliente}
+              formato={tenant.config?.formato_ticket || "80mm"}
+              serviciosList={serviciosList}
+              esProduccion={true}
+            />
+          </div>
+        )}
       </div>
 
       <style

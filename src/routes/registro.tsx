@@ -6,6 +6,8 @@ import {
   ArrowLeft, ArrowRight, Check, Building2, Palette, Package, UserCircle2, PartyPopper,
   AlertCircle, Search, MapPin, Upload, Image as ImageIcon, Receipt, MessageCircle, Sparkles,
   Eye, EyeOff, Cloud, Loader2, Droplet, Landmark, ShieldCheck, Trash2,
+  Store, Phone, User, Mail, Lock, ChevronRight,
+  Layers, Truck, Wallet, Tags, Users, BarChart3, QrCode, Shirt,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -41,6 +43,106 @@ const STEPS = [
   { id: 3, label: "Plan", icon: Package },
   { id: 4, label: "Admin", icon: UserCircle2 },
   { id: 5, label: "Listo", icon: PartyPopper },
+];
+
+const KLYNN_MODULES_LEFT = [
+  {
+    id: "procesos",
+    title: "Control de Procesos",
+    subtitle: "Lavado, Secado & Planchado",
+    icon: Layers,
+    bgClass: "bg-[#1B4B73]/10 text-[#1B4B73]",
+    floatY: [-7, 7, -7],
+    dur: 5.5,
+  },
+  {
+    id: "fiscal",
+    title: "Facturación DGII e-CF",
+    subtitle: "Comprobantes B01, B02, B14",
+    icon: Landmark,
+    bgClass: "bg-blue-600/10 text-blue-700",
+    floatY: [7, -7, 7],
+    dur: 6.2,
+  },
+  {
+    id: "estanteria",
+    title: "Estantería Virtual",
+    subtitle: "Ubicación de prendas y racks",
+    icon: Package,
+    bgClass: "bg-sky-600/10 text-sky-700",
+    floatY: [-6, 6, -6],
+    dur: 5.8,
+  },
+];
+
+const KLYNN_MODULES_RIGHT = [
+  {
+    id: "whatsapp",
+    title: "Avisos por WhatsApp",
+    subtitle: "Prendas listas y entregas",
+    icon: MessageCircle,
+    bgClass: "bg-emerald-500/10 text-emerald-600",
+    floatY: [7, -7, 7],
+    dur: 5.2,
+  },
+  {
+    id: "delivery",
+    title: "Logística & Delivery",
+    subtitle: "Rutas y choferes a domicilio",
+    icon: Truck,
+    bgClass: "bg-sky-500/10 text-sky-600",
+    floatY: [-7, 7, -7],
+    dur: 6.5,
+  },
+  {
+    id: "caja",
+    title: "Cuadre de Cajas & Pagos",
+    subtitle: "Turnos, efectivo y tarjetas",
+    icon: Wallet,
+    bgClass: "bg-amber-500/10 text-amber-600",
+    floatY: [6, -6, 6],
+    dur: 5.9,
+  },
+];
+
+const LAUNDRY_BUBBLES = [
+  // Lado Izquierdo
+  { id: 1, size: 100, top: "3%", left: "3%", dur: 7.5, delay: 0, swayX: [-12, 14, -8, 10, -12], floatY: [-22, 20, -22], scale: [1, 1.05, 0.96, 1.04, 1] },
+  { id: 2, size: 28, top: "14%", left: "10%", dur: 5.2, delay: 0.3, swayX: [10, -14, 12, -8, 10], floatY: [24, -22, 24], scale: [1, 1.08, 0.94, 1.06, 1] },
+  { id: 3, size: 14, top: "20%", left: "6%", dur: 4.2, delay: 0.8, swayX: [-8, 10, -6, 8, -8], floatY: [-16, 18, -16] },
+  { id: 4, size: 22, top: "25%", left: "14%", dur: 6.0, delay: 0.1, swayX: [14, -10, 12, -14, 14], floatY: [20, -24, 20], scale: [1, 1.06, 0.95, 1.04, 1] },
+  { id: 5, size: 10, top: "31%", left: "4%", dur: 3.8, delay: 1.2, swayX: [-6, 8, -8, 6, -6], floatY: [-14, 15, -14] },
+  { id: 6, size: 18, top: "37%", left: "12%", dur: 5.5, delay: 0.6, swayX: [8, -12, 10, -8, 8], floatY: [18, -20, 18] },
+  { id: 7, size: 8, top: "43%", left: "8%", dur: 3.4, delay: 1.7, swayX: [-5, 7, -6, 5, -5], floatY: [-12, 14, -12] },
+  { id: 8, size: 120, bottom: "4%", left: "2%", dur: 9.2, delay: 0, swayX: [-15, 12, -10, 14, -15], floatY: [-26, 24, -26], scale: [1, 1.04, 0.96, 1.03, 1] },
+  { id: 9, size: 36, bottom: "16%", left: "12%", dur: 6.5, delay: 0.4, swayX: [12, -16, 14, -10, 12], floatY: [25, -22, 25], scale: [1, 1.07, 0.94, 1.05, 1] },
+  { id: 10, size: 12, bottom: "24%", left: "5%", dur: 4.0, delay: 1.0, swayX: [-7, 9, -8, 7, -7], floatY: [-15, 16, -15] },
+  { id: 11, size: 20, bottom: "30%", left: "15%", dur: 5.0, delay: 0.5, swayX: [9, -11, 8, -10, 9], floatY: [18, -18, 18] },
+  { id: 12, size: 7, bottom: "38%", left: "8%", dur: 3.2, delay: 1.5, swayX: [-4, 6, -5, 4, -4], floatY: [-10, 12, -10] },
+  { id: 13, size: 16, bottom: "46%", left: "14%", dur: 4.6, delay: 0.9, swayX: [7, -9, 8, -6, 7], floatY: [16, -16, 16] },
+  { id: 14, size: 9, bottom: "54%", left: "6%", dur: 3.6, delay: 2.0, swayX: [-5, 7, -6, 5, -5], floatY: [-12, 13, -12] },
+
+  // Lado Derecho
+  { id: 15, size: 90, top: "5%", right: "4%", dur: 8.0, delay: 0.2, swayX: [14, -12, 10, -14, 14], floatY: [22, -24, 22], scale: [1, 1.05, 0.95, 1.04, 1] },
+  { id: 16, size: 30, top: "16%", right: "12%", dur: 5.6, delay: 0.5, swayX: [-12, 15, -10, 12, -12], floatY: [-22, 24, -22], scale: [1, 1.08, 0.94, 1.06, 1] },
+  { id: 17, size: 14, top: "22%", right: "5%", dur: 4.4, delay: 1.1, swayX: [8, -10, 7, -9, 8], floatY: [16, -17, 16] },
+  { id: 18, size: 24, top: "28%", right: "16%", dur: 6.2, delay: 0.3, swayX: [-14, 11, -13, 10, -14], floatY: [-20, 22, -20], scale: [1, 1.06, 0.95, 1.04, 1] },
+  { id: 19, size: 9, top: "34%", right: "7%", dur: 3.5, delay: 1.8, swayX: [6, -7, 5, -6, 6], floatY: [13, -14, 13] },
+  { id: 20, size: 18, top: "40%", right: "11%", dur: 5.1, delay: 0.7, swayX: [-8, 11, -9, 7, -8], floatY: [-18, 19, -18] },
+  { id: 21, size: 11, top: "46%", right: "18%", dur: 4.1, delay: 1.3, swayX: [7, -8, 6, -7, 7], floatY: [15, -16, 15] },
+  { id: 22, size: 85, bottom: "6%", right: "4%", dur: 7.8, delay: 0.1, swayX: [12, -15, 11, -13, 12], floatY: [24, -22, 24], scale: [1, 1.04, 0.96, 1.03, 1] },
+  { id: 23, size: 40, bottom: "18%", right: "13%", dur: 6.6, delay: 0.4, swayX: [-15, 18, -12, 14, -15], floatY: [-24, 26, -24], scale: [1, 1.07, 0.94, 1.05, 1] },
+  { id: 24, size: 12, bottom: "26%", right: "6%", dur: 4.3, delay: 1.2, swayX: [7, -9, 8, -6, 7], floatY: [15, -16, 15] },
+  { id: 25, size: 22, bottom: "33%", right: "17%", dur: 5.4, delay: 0.6, swayX: [-10, 12, -9, 11, -10], floatY: [-19, 21, -19] },
+  { id: 26, size: 8, bottom: "41%", right: "8%", dur: 3.3, delay: 1.9, swayX: [5, -6, 4, -5, 5], floatY: [11, -12, 11] },
+  { id: 27, size: 16, bottom: "49%", right: "12%", dur: 4.8, delay: 1.4, swayX: [-7, 9, -8, 6, -7], floatY: [-16, 17, -16] },
+  { id: 28, size: 6, bottom: "56%", right: "19%", dur: 3.0, delay: 2.2, swayX: [4, -5, 3, -4, 4], floatY: [9, -10, 9] },
+
+  // Flotando alrededor del Header y Bordes
+  { id: 29, size: 12, top: "7%", left: "28%", dur: 5.0, delay: 0.4, swayX: [-6, 8, -7, 5, -6], floatY: [-14, 16, -14] },
+  { id: 30, size: 10, top: "9%", right: "28%", dur: 4.7, delay: 0.9, swayX: [6, -7, 5, -6, 6], floatY: [13, -15, 13] },
+  { id: 31, size: 14, bottom: "3%", left: "30%", dur: 5.8, delay: 0.7, swayX: [-8, 9, -7, 8, -8], floatY: [-16, 18, -16] },
+  { id: 32, size: 11, bottom: "5%", right: "30%", dur: 4.5, delay: 1.3, swayX: [7, -8, 6, -7, 7], floatY: [14, -15, 14] },
 ];
 
 interface FormState {
@@ -354,59 +456,225 @@ function RegistroPage() {
   }
 
   return (
-    <div className="min-h-[112vh] bg-gradient-hero">
+    <div className="min-h-screen relative overflow-x-hidden bg-gradient-to-b from-[#B8E2FD] via-[#CEEBFE] to-[#A8DAFC] font-sans selection:bg-primary/20 pb-12">
       <SeedBootstrap />
-      <header className="flex flex-col items-center justify-center pt-5 pb-1 px-6 relative">
-        <div className="flex flex-col items-center">
-          <Logo size="lg" />
-          <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
-            Tu lavandería, simplificada.
-          </span>
-        </div>
-        <div className="absolute right-6 top-6 hidden text-sm md:block">
-          <span className="text-muted-foreground">¿Ya tienes cuenta? </span>
-          <Link to="/login" className="font-semibold text-primary hover:underline">Inicia sesión</Link>
-        </div>
-      </header>
 
-      <main className="container mx-auto pb-12 pt-2">
-        <div className="mx-auto mb-4 max-w-2xl px-2">
-          <div className="flex items-center gap-1.5 rounded-full border border-border bg-white/50 p-1 shadow-sm">
-            {filteredSteps.map((s) => {
-              const done = step > s.id;
-              const current = step === s.id;
-              return (
-                <div key={s.id} className={`relative flex transition-all duration-500 ${current ? "flex-[2]" : "flex-1"}`}>
-                  <motion.div
-                    animate={{
-                      backgroundColor: done ? "var(--success)" : current ? "var(--primary)" : "transparent",
-                    }}
-                    className={`flex h-9 w-full items-center gap-1.5 overflow-hidden rounded-full px-3 transition-all duration-300 ${
-                      done || current ? "text-white" : "text-slate-400"
-                    } ${!done && !current ? "hover:bg-white/50" : ""}`}
-                  >
-                    <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[11px] font-bold transition-colors ${
-                      done || current ? "bg-white/20" : "bg-slate-200 text-slate-500"
-                    }`}>
-                      {done ? <Check className="h-3 w-3" /> : s.id}
-                    </div>
-                    {(current || done) && (
-                      <motion.span
-                        initial={{ opacity: 0, width: 0 }}
-                        animate={{ opacity: 1, width: "auto" }}
-                        className="overflow-hidden whitespace-nowrap text-[10px] font-bold uppercase tracking-wider"
-                      >
-                        {s.label}
-                      </motion.span>
-                    )}
-                  </motion.div>
+      {/* 1. Atmósfera Acuática Sólida en Tonos de Azul Vibrante (#1B4B73, #0284C7, #38BDF8) */}
+      <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden">
+        {/* Esferas de Luz Azul Sólidas y Vivas */}
+        <div className="absolute -top-32 left-1/4 w-[700px] h-[550px] rounded-full bg-[#38BDF8]/45 blur-[90px]" />
+        <div className="absolute top-1/3 -left-28 w-[550px] h-[550px] rounded-full bg-[#1B4B73]/30 blur-[100px]" />
+        <div className="absolute -bottom-36 right-8 w-[650px] h-[600px] rounded-full bg-[#0284C7]/35 blur-[100px]" />
+        <div className="absolute top-1/4 -right-16 w-[450px] h-[450px] rounded-full bg-[#60A5FA]/40 blur-[90px]" />
+
+        {/* Ondas de Agua Sólidas SVG en el Fondo */}
+        <div className="absolute bottom-0 inset-x-0 h-96 opacity-60 overflow-hidden pointer-events-none">
+          <motion.svg
+            animate={{ x: [-35, 0, -35] }}
+            transition={{ duration: 12, repeat: Infinity, ease: "easeInOut" }}
+            viewBox="0 0 1440 320"
+            className="absolute bottom-0 w-[125%] h-full text-[#7DD3FC] fill-current"
+            preserveAspectRatio="none"
+          >
+            <path d="M0,192L48,197.3C96,203,192,213,288,197.3C384,181,480,139,576,138.7C672,139,768,181,864,186.7C960,192,1056,160,1152,144C1248,128,1344,128,1392,128L1440,128L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z" />
+          </motion.svg>
+          <motion.svg
+            animate={{ x: [0, -45, 0] }}
+            transition={{ duration: 16, repeat: Infinity, ease: "easeInOut" }}
+            viewBox="0 0 1440 320"
+            className="absolute bottom-0 w-[125%] h-full text-[#60A5FA]/60 fill-current"
+            preserveAspectRatio="none"
+          >
+            <path d="M0,96L48,112C96,128,192,160,288,181.3C384,203,480,213,576,192C672,171,768,117,864,112C960,107,1056,149,1152,165.3C1248,181,1344,171,1392,165.3L1440,160L1440,320L1392,320C1344,320,1248,320,1152,320C1056,320,960,320,864,320C768,320,672,320,576,320C480,320,384,320,288,320C192,320,96,320,48,320L0,320Z" />
+          </motion.svg>
+        </div>
+
+        {/* 2. Conjunto Rico de 32 Burbujas de Jabón y Agua con Movimiento Natural de Lavandería */}
+        {LAUNDRY_BUBBLES.map((b) => (
+          <motion.div
+            key={b.id}
+            style={{
+              width: b.size,
+              height: b.size,
+              top: b.top,
+              bottom: b.bottom,
+              left: b.left,
+              right: b.right,
+            }}
+            animate={{
+              y: b.floatY,
+              x: b.swayX,
+              scale: b.scale || [1, 1.06, 0.96, 1.03, 1],
+              rotate: [0, 8, -8, 4, 0],
+            }}
+            transition={{
+              duration: b.dur,
+              delay: b.delay,
+              repeat: Infinity,
+              ease: "easeInOut",
+            }}
+            className={`absolute rounded-full pointer-events-none select-none ${
+              b.size > 60
+                ? "bg-gradient-to-tr from-white/80 via-sky-200/60 to-blue-200/50 border-2 border-white shadow-[0_12px_36px_rgba(2,132,199,0.25)] backdrop-blur-xs"
+                : b.size > 20
+                ? "bg-gradient-to-tr from-white/85 via-sky-200/65 to-blue-100/50 border-1.5 border-white shadow-[0_4px_18px_rgba(2,132,199,0.2)]"
+                : "bg-gradient-to-tr from-white/95 via-sky-300/65 to-white/70 border border-white shadow-xs"
+            }`}
+          >
+            {/* Reflejo Curvo de Burbuja de Jabón Realista */}
+            {b.size >= 14 && (
+              <div 
+                className="absolute rounded-full bg-white/95 rotate-[-30deg]" 
+                style={{
+                  top: Math.max(2, b.size * 0.1),
+                  left: Math.max(2.5, b.size * 0.12),
+                  width: Math.max(3, b.size * 0.24),
+                  height: Math.max(1.5, b.size * 0.11),
+                }}
+              />
+            )}
+            {b.size >= 35 && (
+              <div 
+                className="absolute rounded-full bg-white/70"
+                style={{
+                  bottom: b.size * 0.12,
+                  right: b.size * 0.15,
+                  width: Math.max(2, b.size * 0.09),
+                  height: Math.max(2, b.size * 0.09),
+                }}
+              />
+            )}
+          </motion.div>
+        ))}
+      </div>
+
+      {/* 3. Tarjetas de Módulos Flotantes de Klynn con Iconos SVG (visibles en pantallas grandes) */}
+      <div className="fixed inset-0 z-0 pointer-events-none hidden xl:block max-w-7xl mx-auto">
+        {/* Columna Izquierda: 3 Módulos Oficiales */}
+        <div className="absolute left-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
+          {KLYNN_MODULES_LEFT.map((m) => {
+            const ModIcon = m.icon;
+            return (
+              <motion.div
+                key={m.id}
+                animate={{ y: m.floatY }}
+                transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
+                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
+              >
+                <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
+                  <ModIcon className="h-5 w-5" />
                 </div>
-              );
-            })}
-          </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
+                  <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
+                </div>
+              </motion.div>
+            );
+          })}
         </div>
 
-        <div className="mx-auto max-w-2xl rounded-2xl border border-border/80 bg-surface p-5 shadow-sm sm:p-6 md:p-8">
+        {/* Columna Derecha: 3 Módulos Oficiales */}
+        <div className="absolute right-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
+          {KLYNN_MODULES_RIGHT.map((m) => {
+            const ModIcon = m.icon;
+            return (
+              <motion.div
+                key={m.id}
+                animate={{ y: m.floatY }}
+                transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
+                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
+              >
+                <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
+                  <ModIcon className="h-5 w-5" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
+                  <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
+                </div>
+              </motion.div>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="relative z-10">
+        <header className="flex flex-col items-center justify-center pt-5 pb-1 px-6 relative">
+          <div className="flex flex-col items-center">
+            <Logo size="lg" />
+            <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
+              Tu lavandería, simplificada.
+            </span>
+          </div>
+          <div className="absolute right-6 top-4 hidden md:flex items-center gap-3 px-4 py-2 rounded-full bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25 border border-white/20 transition-all hover:scale-105">
+            <span className="text-xs sm:text-sm font-medium text-white/90">¿Ya tienes cuenta?</span>
+            <Link 
+              to="/login" 
+              className="inline-flex items-center gap-1.5 font-bold text-xs sm:text-sm text-[#1B4B73] bg-[#F0B900] hover:bg-[#F0B900]/90 px-3.5 py-1 rounded-full shadow-xs transition-colors"
+            >
+              Inicia sesión
+              <ArrowRight className="h-3.5 w-3.5 text-[#1B4B73]" />
+            </Link>
+          </div>
+        </header>
+
+        <main className="container mx-auto pb-6 pt-2">
+          {/* Wizard Stepper Compacto & Horizontal de Baja Altura */}
+          <div className="mx-auto mb-4 max-w-2xl px-2">
+            <div className="flex items-center justify-between gap-1 sm:gap-2 rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-1.5 sm:p-2 shadow-md shadow-slate-200/40">
+              {filteredSteps.map((s, index) => {
+                const done = step > s.id;
+                const current = step === s.id;
+                const StepIcon = s.icon;
+
+                return (
+                  <div key={s.id} className="flex items-center gap-1 sm:gap-2 flex-1 last:flex-none">
+                    <div
+                      className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl transition-all duration-300 w-full justify-center sm:justify-start ${
+                        current
+                          ? "bg-[#1B4B73] text-white shadow-xs font-bold"
+                          : done
+                          ? "bg-[#1B4B73]/10 text-[#1B4B73] font-semibold hover:bg-[#1B4B73]/15"
+                          : "text-slate-400 font-medium hover:text-slate-600"
+                      }`}
+                    >
+                      <div
+                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs transition-colors ${
+                          current
+                            ? "bg-white/15 text-[#F0B900]"
+                            : done
+                            ? "bg-[#1B4B73] text-[#F0B900]"
+                            : "bg-slate-100 text-slate-400"
+                        }`}
+                      >
+                        {done ? (
+                          <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                        ) : (
+                          <StepIcon className="h-3.5 w-3.5" />
+                        )}
+                      </div>
+
+                      <div className="hidden sm:flex flex-col">
+                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                          current ? "text-[#F0B900]" : done ? "text-[#1B4B73]" : "text-slate-400"
+                        }`}>
+                          0{index + 1}
+                        </span>
+                        <span className="text-[11px] font-bold tracking-tight leading-tight">
+                          {s.label}
+                        </span>
+                      </div>
+                    </div>
+
+                    {index < filteredSteps.length - 1 && (
+                      <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0 hidden sm:block" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-5 shadow-xl shadow-slate-200/50 sm:p-6 md:p-8">
           {isProvisioning ? (
             <div className="flex flex-col items-center justify-center py-8 text-center">
               <motion.div
@@ -439,8 +707,15 @@ function RegistroPage() {
               >
               {step === 1 && (
                 <>
-                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Cuéntanos de tu lavandería</h1>
-                  <p className="mb-4 text-xs text-muted-foreground">Solo lo esencial. El resto lo configuras después.</p>
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
+                      <Building2 className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Cuéntanos de tu lavandería</h1>
+                      <p className="text-xs text-muted-foreground mt-0.5">Solo lo esencial. El resto lo configuras después.</p>
+                    </div>
+                  </div>
 
                   {/* Asistente Inteligente DGII Banner Compacto */}
                   <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.02] px-3.5 py-2.5 transition-all">
@@ -489,27 +764,47 @@ function RegistroPage() {
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-3.5 sm:grid-cols-2">
                     <div className="sm:col-span-2">
                       <Field label="Nombre comercial de tu lavandería *" error={errors.nombre}>
-                        <Input 
-                          value={form.nombre} 
-                          onChange={(e) => {
-                            update("nombre", e.target.value);
-                            if (!form.slugTouched) update("slug", slugify(e.target.value));
-                          }} 
-                          placeholder="Ej. Lavandería La Burbuja o Dinnca Comercial" 
-                          className="h-9 text-xs sm:text-sm"
-                        />
+                        <div className="relative flex items-center">
+                          <Store className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                          <Input 
+                            value={form.nombre} 
+                            onChange={(e) => {
+                              update("nombre", e.target.value);
+                              if (!form.slugTouched) update("slug", slugify(e.target.value));
+                            }} 
+                            placeholder="Ej. Lavandería La Burbuja o Dinnca Comercial" 
+                            className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200"
+                          />
+                        </div>
                       </Field>
                     </div>
                     <Field label="Teléfono / WhatsApp *" error={errors.telefono}>
-                      <Input value={form.telefono} onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} placeholder="809-555-0142" className="h-9 text-xs sm:text-sm" />
+                      <div className="relative flex items-center">
+                        <Phone className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                        <Input 
+                          value={form.telefono} 
+                          onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} 
+                          placeholder="809-555-0142" 
+                          className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200" 
+                        />
+                      </div>
                     </Field>
                     <Field label="Provincia *" error={errors.provincia}>
-                      <button type="button" onClick={() => setProvOpen(true)} className="flex h-9 w-full items-center justify-between rounded-lg border border-input bg-background px-3 text-xs sm:text-sm shadow-sm hover:bg-accent/30 transition-all">
-                        <span className={form.provincia ? "text-foreground font-medium" : "text-muted-foreground"}>{form.provincia || "Selecciona tu provincia..."}</span>
-                        <MapPin className="h-3.5 w-3.5 text-muted-foreground" />
+                      <button 
+                        type="button" 
+                        onClick={() => setProvOpen(true)} 
+                        className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-background px-3 text-xs sm:text-sm shadow-xs hover:bg-accent/30 transition-all"
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <MapPin className="h-4 w-4 text-[#1B4B73] shrink-0" />
+                          <span className={form.provincia ? "text-foreground font-medium" : "text-muted-foreground"}>
+                            {form.provincia || "Selecciona tu provincia..."}
+                          </span>
+                        </div>
+                        <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
                       </button>
                     </Field>
                   </div>
@@ -518,8 +813,15 @@ function RegistroPage() {
 
               {step === 2 && (
                 <>
-                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Personaliza tu marca</h1>
-                  <p className="mb-4 text-xs text-muted-foreground">Define la identidad visual de tu lavandería.</p>
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
+                      <Palette className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Personaliza tu marca</h1>
+                      <p className="text-xs text-muted-foreground mt-0.5">Define la identidad visual de tu lavandería.</p>
+                    </div>
+                  </div>
                   
                   <div className="space-y-3">
                     {/* Branding Preview Compacto y Equilibrado */}
@@ -579,8 +881,15 @@ function RegistroPage() {
 
               {step === 3 && (
                 <>
-                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Elige tu plan</h1>
-                  <p className="mb-4 text-xs text-muted-foreground">{globalConfig.trialDays} días gratis. Sin tarjeta de crédito.</p>
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
+                      <Package className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Elige tu plan</h1>
+                      <p className="text-xs text-muted-foreground mt-0.5">{globalConfig.trialDays} días gratis. Sin tarjeta de crédito.</p>
+                    </div>
+                  </div>
                   <div className="grid gap-2">
                     {plans.map((p) => {
                       const sel = form.plan_id === p.id;
@@ -628,18 +937,49 @@ function RegistroPage() {
 
               {step === 4 && (
                 <>
-                  <h1 className="mb-0.5 text-2xl font-bold tracking-tight">Crea tu usuario administrador</h1>
-                  <p className="mb-4 text-xs text-muted-foreground">Tendrás acceso total al panel de tu lavandería.</p>
-                  <div className="grid gap-3 sm:grid-cols-2">
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
+                      <UserCircle2 className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Crea tu usuario administrador</h1>
+                      <p className="text-xs text-muted-foreground mt-0.5">Tendrás acceso total al panel de tu lavandería.</p>
+                    </div>
+                  </div>
+                  <div className="grid gap-3.5 sm:grid-cols-2">
                     <Field label="Nombre completo *" error={errors.admin_nombre} className="sm:col-span-2">
-                      <Input value={form.admin_nombre} onChange={(e) => update("admin_nombre", e.target.value)} placeholder="María González" className="h-9 text-xs sm:text-sm" />
+                      <div className="relative flex items-center">
+                        <User className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                        <Input 
+                          value={form.admin_nombre} 
+                          onChange={(e) => update("admin_nombre", e.target.value)} 
+                          placeholder="María González" 
+                          className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200" 
+                        />
+                      </div>
                     </Field>
                     <Field label="Email *" error={errors.admin_email} className="sm:col-span-2">
-                      <Input type="email" value={form.admin_email} onChange={(e) => update("admin_email", e.target.value)} placeholder="admin@tulavanderia.do" className="h-9 text-xs sm:text-sm" />
+                      <div className="relative flex items-center">
+                        <Mail className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                        <Input 
+                          type="email" 
+                          value={form.admin_email} 
+                          onChange={(e) => update("admin_email", e.target.value)} 
+                          placeholder="admin@tulavanderia.do" 
+                          className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200" 
+                        />
+                      </div>
                     </Field>
                     <Field label="Contraseña *" error={errors.admin_password}>
-                      <div className="relative">
-                        <Input type={showPass ? "text" : "password"} value={form.admin_password} onChange={(e) => update("admin_password", e.target.value)} placeholder="••••••••" className="h-9 pr-9 text-xs sm:text-sm" />
+                      <div className="relative flex items-center">
+                        <Lock className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                        <Input 
+                          type={showPass ? "text" : "password"} 
+                          value={form.admin_password} 
+                          onChange={(e) => update("admin_password", e.target.value)} 
+                          placeholder="••••••••" 
+                          className="h-10 pl-10 pr-9 text-xs sm:text-sm rounded-xl border-slate-200" 
+                        />
                         <button type="button" onClick={() => setShowPass(!showPass)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
                           {showPass ? <EyeOff size={15} /> : <Eye size={15} />}
                         </button>
@@ -647,8 +987,15 @@ function RegistroPage() {
                       <PasswordStrengthIndicator password={form.admin_password} />
                     </Field>
                     <Field label="Confirmar *" error={errors.admin_password_confirm}>
-                      <div className="relative">
-                        <Input type={showConfirm ? "text" : "password"} value={form.admin_password_confirm} onChange={(e) => update("admin_password_confirm", e.target.value)} placeholder="••••••••" className="h-9 pr-9 text-xs sm:text-sm" />
+                      <div className="relative flex items-center">
+                        <Lock className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                        <Input 
+                          type={showConfirm ? "text" : "password"} 
+                          value={form.admin_password_confirm} 
+                          onChange={(e) => update("admin_password_confirm", e.target.value)} 
+                          placeholder="••••••••" 
+                          className="h-10 pl-10 pr-9 text-xs sm:text-sm rounded-xl border-slate-200" 
+                        />
                         <button type="button" onClick={() => setShowConfirm(!showConfirm)} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 p-0.5">
                           {showConfirm ? <EyeOff size={15} /> : <Eye size={15} />}
                         </button>
@@ -692,6 +1039,7 @@ function RegistroPage() {
           )}
         </div>
       </main>
+      </div>
 
       <ProvinciaModal open={provOpen} onClose={() => setProvOpen(false)} value={form.provincia} onSelect={(p) => { update("provincia", p); setProvOpen(false); }} />
     </div>
@@ -916,7 +1264,7 @@ function LogoUploader({ label, value, onChange }: { label: string; value: string
 function Field({ label, error, className = "", children }: { label: string; error?: string; className?: string; children: React.ReactNode }) {
   return (
     <div className={className}>
-      <Label className="mb-1 block text-xs font-semibold text-slate-700">{label}</Label>
+      <Label className="mb-1.5 block text-xs font-semibold text-slate-700">{label}</Label>
       {children}
       {error && <div className="mt-1 flex items-center gap-1 text-[11px] text-destructive"><AlertCircle className="h-3 w-3" />{error}</div>}
     </div>

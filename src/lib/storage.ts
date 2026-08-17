@@ -133,6 +133,9 @@ export interface TenantConfig {
   pos_modal_desglose?: boolean;
   pos_modo_defecto?: boolean;
   pos_auto_imprimir?: boolean;
+  ticket_imprimir_taller_auto?: boolean;
+  ticket_taller_solo_con_ubicacion?: boolean;
+  ticket_imprimir_copia_caja?: boolean;
   usar_ubicacion_ropa?: boolean;
   estanteria_zonas?: EstanteriaZona[];
   meses_pagados_override?: number;
@@ -489,6 +492,10 @@ export interface Plan {
   modulos: {
     whatsapp: boolean;
     facturacion_fiscal: boolean;
+    multisucursal?: boolean;
+    logistica?: boolean;
+    procesos?: boolean;
+    estanteria?: boolean;
   };
   destacado?: boolean;
   polar_product_monthly_url?: string;
@@ -595,6 +602,9 @@ export const DEFAULT_CONFIG: TenantConfig = {
   alerta_ncf_limite: 50,
   alerta_ncf_telefono: "",
   pos_auto_imprimir: false,
+  ticket_imprimir_taller_auto: false,
+  ticket_taller_solo_con_ubicacion: false,
+  ticket_imprimir_copia_caja: false,
   whatsapp: {
     enabled: false,
     api_key: "",
@@ -836,38 +846,48 @@ export async function getPlans(): Promise<Plan[]> {
   try {
     const { data, error } = await supabase.from("planes").select("*").order("precio_mensual");
     if (!error && data && data.length > 0) {
-      const mapped = data.map((p) => ({
-        id: p.id as PlanId,
-        nombre: p.nombre,
-        precio_mensual: p.precio_mensual,
-        precio_anual: p.precio_anual,
-        limite_empleados: p.limite_empleados,
-        limite_ordenes_mes: p.limite_ordenes_mes,
-        modulos: {
-          whatsapp: !!p.whatsapp,
-          facturacion_fiscal: !!p.facturacion_fiscal,
-          multisucursal: !!p.multisucursal,
-          logistica: !!p.logistica,
-          procesos: p.procesos !== undefined ? !!p.procesos : (PLANS.find((sp) => sp.id === p.id)?.modulos?.procesos ?? true),
-          estanteria: p.estanteria !== undefined ? !!p.estanteria : (PLANS.find((sp) => sp.id === p.id)?.modulos?.estanteria ?? true),
-        },
-        limite_whatsapp_mes: p.limite_whatsapp_mes ?? 0,
-        destacado: !!p.destacado,
-        polar_product_monthly_url: p.polar_product_monthly_url,
-        polar_product_yearly_url: p.polar_product_yearly_url,
-        precio_sucursal_adicional:
-          p.precio_sucursal_adicional !== undefined
-            ? p.precio_sucursal_adicional
-            : PLANS.find((sp) => sp.id === p.id)?.precio_sucursal_adicional || 0,
-        polar_sucursal_url:
-          p.polar_sucursal_url !== undefined
-            ? p.polar_sucursal_url
-            : PLANS.find((sp) => sp.id === p.id)?.polar_sucursal_url || "",
-        limite_sucursales_adicionales:
-          p.limite_sucursales_adicionales !== undefined
-            ? p.limite_sucursales_adicionales
-            : PLANS.find((sp) => sp.id === p.id)?.limite_sucursales_adicionales || 0,
-      }));
+      const localStored = read<Plan[] | null>(KEY.plans, null) || [];
+      const mapped = data.map((p) => {
+        const localMatch = localStored.find((lp) => lp.id === p.id);
+        const staticMatch = PLANS.find((sp) => sp.id === p.id);
+
+        return {
+          id: p.id as PlanId,
+          nombre: p.nombre,
+          precio_mensual: p.precio_mensual,
+          precio_anual: p.precio_anual,
+          limite_empleados: p.limite_empleados,
+          limite_ordenes_mes: p.limite_ordenes_mes,
+          modulos: {
+            whatsapp: !!p.whatsapp,
+            facturacion_fiscal: !!p.facturacion_fiscal,
+            multisucursal: !!p.multisucursal,
+            logistica: !!p.logistica,
+            procesos: p.procesos !== undefined && p.procesos !== null
+              ? !!p.procesos
+              : (localMatch?.modulos?.procesos ?? staticMatch?.modulos?.procesos ?? true),
+            estanteria: p.estanteria !== undefined && p.estanteria !== null
+              ? !!p.estanteria
+              : (localMatch?.modulos?.estanteria ?? staticMatch?.modulos?.estanteria ?? true),
+          },
+          limite_whatsapp_mes: p.limite_whatsapp_mes ?? 0,
+          destacado: !!p.destacado,
+          polar_product_monthly_url: p.polar_product_monthly_url,
+          polar_product_yearly_url: p.polar_product_yearly_url,
+          precio_sucursal_adicional:
+            p.precio_sucursal_adicional !== undefined
+              ? p.precio_sucursal_adicional
+              : staticMatch?.precio_sucursal_adicional || 0,
+          polar_sucursal_url:
+            p.polar_sucursal_url !== undefined
+              ? p.polar_sucursal_url
+              : staticMatch?.polar_sucursal_url || "",
+          limite_sucursales_adicionales:
+            p.limite_sucursales_adicionales !== undefined
+              ? p.limite_sucursales_adicionales
+              : staticMatch?.limite_sucursales_adicionales || 0,
+        };
+      });
       _cachedPlans = mapped;
       return mapped;
     }
@@ -1945,8 +1965,22 @@ export async function deleteServicio(id: string) {
 
 // ============ Plans CRUD ============
 export async function savePlan(p: Plan) {
+  // 1. Actualizar caché en localStorage inmediatamente
+  const all = read<Plan[]>(KEY.plans, []) || [];
+  const i = all.findIndex((x) => x.id === p.id);
+  if (i >= 0) all[i] = { ...p };
+  else all.push({ ...p });
+  write(KEY.plans, all);
+
+  // 2. Actualizar caché en memoria inmediatamente
+  if (_cachedPlans) {
+    const idx = _cachedPlans.findIndex((x) => x.id === p.id);
+    if (idx >= 0) _cachedPlans[idx] = { ...p };
+    else _cachedPlans.push({ ...p });
+  }
+
   try {
-    // Guardar defensivamente en Supabase para evitar fallos si las columnas aún no están migradas en la nube
+    // 3. Guardar en Supabase incluyendo estanteria y procesos
     const { error } = await supabase.from("planes").upsert({
       id: p.id,
       nombre: p.nombre,
@@ -1954,11 +1988,12 @@ export async function savePlan(p: Plan) {
       precio_anual: p.precio_anual,
       limite_empleados: p.limite_empleados,
       limite_ordenes_mes: p.limite_ordenes_mes,
-      whatsapp: p.modulos.whatsapp,
-      facturacion_fiscal: p.modulos.facturacion_fiscal,
-      multisucursal: p.modulos.multisucursal,
-      logistica: p.modulos.logistica,
-      procesos: p.modulos.procesos,
+      whatsapp: !!p.modulos.whatsapp,
+      facturacion_fiscal: !!p.modulos.facturacion_fiscal,
+      multisucursal: !!p.modulos.multisucursal,
+      logistica: !!p.modulos.logistica,
+      procesos: p.modulos.procesos !== undefined ? !!p.modulos.procesos : true,
+      estanteria: p.modulos.estanteria !== undefined ? !!p.modulos.estanteria : true,
       limite_whatsapp_mes: p.limite_whatsapp_mes,
       destacado: p.destacado,
       polar_product_monthly_url: p.polar_product_monthly_url,
@@ -1980,10 +2015,10 @@ export async function savePlan(p: Plan) {
         precio_anual: p.precio_anual,
         limite_empleados: p.limite_empleados,
         limite_ordenes_mes: p.limite_ordenes_mes,
-        whatsapp: p.modulos.whatsapp,
-        facturacion_fiscal: p.modulos.facturacion_fiscal,
-        multisucursal: p.modulos.multisucursal,
-        logistica: p.modulos.logistica,
+        whatsapp: !!p.modulos.whatsapp,
+        facturacion_fiscal: !!p.modulos.facturacion_fiscal,
+        multisucursal: !!p.modulos.multisucursal,
+        logistica: !!p.modulos.logistica,
         limite_whatsapp_mes: p.limite_whatsapp_mes,
         destacado: p.destacado,
         polar_product_monthly_url: p.polar_product_monthly_url,
@@ -1996,13 +2031,6 @@ export async function savePlan(p: Plan) {
   } catch (e) {
     console.error("Error saving plan:", e);
   }
-
-  // Fallback / Cache local
-  const all = await getPlans();
-  const i = all.findIndex((x) => x.id === p.id);
-  if (i >= 0) all[i] = p;
-  else all.push(p);
-  write(KEY.plans, all);
 }
 
 export async function deletePlan(id: PlanId) {
@@ -2109,7 +2137,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   if (sessionStr) {
     try {
       session = JSON.parse(sessionStr);
-    } catch {}
+    } catch { }
   }
 
   // Caso 1: Es Super Admin
@@ -2305,18 +2333,27 @@ export async function getMonthlyOrderCount(
   }).length;
 }
 
+export const GRACE_ORDERS_BONUS = 15;
+
 export async function checkPlanLimits(tenant: Tenant | string) {
   // Asegurar que tenemos el objeto tenant completo
   const t = typeof tenant === "string" ? await getTenantById(tenant) : tenant;
   if (!t || t.id === "__loading__") {
+    const baseLimit = PLANS[0].limite_ordenes_mes;
+    const effectiveLimit = baseLimit !== null ? baseLimit + GRACE_ORDERS_BONUS : null;
     return {
       plan: PLANS[0],
       orderCount: 0,
       employeeCount: 0,
       ordersReached: false,
       employeesReached: false,
-      orderLimit: PLANS[0].limite_ordenes_mes,
+      orderLimit: baseLimit,
+      effectiveLimit,
       employeeLimit: PLANS[0].limite_empleados,
+      isGracePeriod: false,
+      graceRemaining: GRACE_ORDERS_BONUS,
+      graceUsed: 0,
+      graceBonus: GRACE_ORDERS_BONUS,
     };
   }
 
@@ -2326,8 +2363,15 @@ export async function checkPlanLimits(tenant: Tenant | string) {
   const orderCount = await getMonthlyOrderCount(t.id, t.plan_fecha_inicio || t.creado_en);
   const employeeCount = (await getEmpleados(t.id)).filter((e) => e.rol !== "ADMIN").length;
 
-  const ordersReached = plan.limite_ordenes_mes !== null && orderCount >= plan.limite_ordenes_mes;
+  const baseLimit = plan.limite_ordenes_mes;
+  const effectiveLimit = baseLimit !== null ? baseLimit + GRACE_ORDERS_BONUS : null;
+
+  const isGracePeriod = baseLimit !== null && orderCount >= baseLimit && orderCount < (effectiveLimit ?? 0);
+  const ordersReached = effectiveLimit !== null && orderCount >= effectiveLimit;
   const employeesReached = employeeCount >= plan.limite_empleados;
+
+  const graceUsed = isGracePeriod ? Math.max(0, orderCount - baseLimit) : (baseLimit !== null && orderCount >= (effectiveLimit ?? 0) ? GRACE_ORDERS_BONUS : 0);
+  const graceRemaining = isGracePeriod && effectiveLimit !== null ? Math.max(0, effectiveLimit - orderCount) : (orderCount < (baseLimit ?? Infinity) ? GRACE_ORDERS_BONUS : 0);
 
   return {
     plan,
@@ -2335,8 +2379,13 @@ export async function checkPlanLimits(tenant: Tenant | string) {
     employeeCount,
     ordersReached,
     employeesReached,
-    orderLimit: plan.limite_ordenes_mes,
+    orderLimit: baseLimit,
+    effectiveLimit,
     employeeLimit: plan.limite_empleados,
+    isGracePeriod,
+    graceRemaining,
+    graceUsed,
+    graceBonus: GRACE_ORDERS_BONUS,
   };
 }
 
@@ -3071,7 +3120,7 @@ export async function nextECFNumero(
         const current = seq.valor_actual || 0;
         const initial = seq.valor_inicial || 1;
         const proximo = current < initial ? initial : current + 1;
-        
+
         const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
         const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
 

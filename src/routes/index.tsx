@@ -39,6 +39,7 @@ import {
   HardDrive,
   Wifi,
   Layers,
+  MessageSquare,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -1205,7 +1206,7 @@ function LandingPage() {
               </div>
             </motion.div>
 
-            {/* 6. Estantería Virtual */}
+            {/* 5. WhatsApp Cloud Automatizado */}
             <motion.div
               initial={{ opacity: 0, y: 30 }}
               whileInView={{ opacity: 1, y: 0 }}
@@ -1215,19 +1216,97 @@ function LandingPage() {
             >
               <div>
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 font-display text-xl font-black shrink-0">6</div>
-                  <h3 className="font-display text-2xl md:text-3xl">Estantería virtual & Ganchos</h3>
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-600 font-display text-xl font-black shrink-0">5</div>
+                  <h3 className="font-display text-2xl md:text-3xl">WhatsApp Cloud Automatizado</h3>
                 </div>
                 <p className="text-muted-foreground leading-relaxed mb-6">
-                  Organiza físicamente los ganchos, rieles, casilleros y percheros de tu lavandería. Ubica cualquier prenda o pedido en segundos con búsqueda instantánea y control de ocupación.
+                  Comunícate con tus clientes en piloto automático. Envía tickets digitales, notificaciones de ropa lista y recordatorios de entrega sin tocar un solo botón.
                 </p>
                 <div className="space-y-3">
                   {[
-                    "Mapeo de zonas físicas: conveyors, estanterías, casilleros y rieles",
-                    "Generador de rangos de ganchos automático en lote",
-                    "Asignación y liberación de espacios en 1 clic desde el punto de venta",
-                    "Métricas de ocupación y prendas almacenadas en tiempo real",
-                    "Alertas de ropa lista sin retirar con notificación automática",
+                    "Envío automático del ticket digital con enlace de seguimiento interactivo al recibir la orden",
+                    "Aviso instantáneo por WhatsApp cuando las prendas están lavadas, planchadas y listas para retirar",
+                    "Notificación de salida a reparto con datos del chofer y confirmación de entrega en domicilio",
+                    "Recordatorios automáticos para prendas almacenadas que llevan más de 3 días listas",
+                    "Plantillas verificadas con el logotipo, nombre y teléfono oficial de tu lavandería",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border bg-surface p-6 sm:p-7 shadow-card">
+                <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-600">
+                      <MessageSquare className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm">Notificación de Orden</div>
+                      <div className="text-[11px] text-muted-foreground">Klynn WhatsApp Cloud API</div>
+                    </div>
+                  </div>
+                  <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">Enviado</Badge>
+                </div>
+                <div className="rounded-2xl bg-emerald-950/5 dark:bg-emerald-950/30 border border-emerald-200/50 dark:border-emerald-800/40 p-4 space-y-2.5 text-xs">
+                  <div className="flex items-center gap-2 text-emerald-800 dark:text-emerald-300 font-bold text-xs">
+                    <MessageCircle className="h-4 w-4 shrink-0 text-emerald-600" />
+                    <span>Lavandería Central ✨</span>
+                  </div>
+                  <p className="text-foreground/90 text-xs leading-relaxed">
+                    ¡Hola <strong>María</strong>! 👋 Tu orden <strong>#KL-0097</strong> ya está lavada, planchada y <strong>lista para retirar</strong> en nuestra sucursal.
+                  </p>
+                  <div className="rounded-xl bg-white dark:bg-slate-900 border border-border/70 p-3 space-y-1 text-[11px] font-mono shadow-2xs">
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Servicio:</span>
+                      <span className="text-foreground font-semibold">Lavado + Planchado</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Total a pagar:</span>
+                      <span className="text-emerald-600 font-bold">RD$ 850.00 (Pagado)</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Ubicación:</span>
+                      <span className="text-indigo-600 font-bold">Gancho G-04</span>
+                    </div>
+                  </div>
+                  <div className="pt-1 flex items-center justify-between text-[10.5px] text-muted-foreground">
+                    <span>klynn.com.do/t/demo/o/4832</span>
+                    <span className="text-emerald-700 dark:text-emerald-400 font-bold">10:42 AM ✓✓</span>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-xl bg-emerald-500/10 p-2.5 text-center text-[11px] font-bold text-emerald-700 uppercase tracking-wider">
+                  ✓ 100% Automatizado · Sin intervención manual
+                </div>
+              </div>
+            </motion.div>
+
+            {/* 6. Estantería Virtual */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div className="md:order-2">
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-indigo-500/10 text-indigo-600 font-display text-xl font-black shrink-0">6</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Estantería Virtual & Control de Ganchos</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  Elimina el caos y la pérdida de tiempo buscando prendas en almacén. Mapea físicamente tus ganchos, rieles, casilleros y percheros, ubica cualquier pedido en 5 segundos y mantén el control de ocupación en tiempo real.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "Mapeo de zonas físicas: conveyors rotativos, rieles de ganchos, casilleros doblados y percheros",
+                    "Generador de rangos de ganchos automático en lote (ej. G-01 a G-150) en un solo clic",
+                    "Asignación y liberación rápida de espacios desde el punto de venta o terminal de etiquetado",
+                    "Búsqueda instantánea por número de orden, cliente o código de gancho para entregas inmediatas",
+                    "Métricas de ocupación y capacidad en vivo para evitar sobrecargas en el almacén",
+                    "Liberación automática del gancho al momento de marcar la orden como entregada al cliente",
                   ].map((b, i) => (
                     <div key={i} className="flex items-start gap-2.5 text-sm">
                       <Check className="h-4 w-4 text-indigo-600 mt-0.5 shrink-0" />
@@ -1236,36 +1315,39 @@ function LandingPage() {
                   ))}
                 </div>
               </div>
-              <div className="rounded-2xl border border-border bg-surface p-6 shadow-card">
+              <div className="md:order-1 rounded-2xl border border-border bg-surface p-6 shadow-card">
                 <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
                   <div className="flex items-center gap-2.5">
                     <div className="h-9 w-9 rounded-xl bg-indigo-500/10 flex items-center justify-center text-indigo-600">
                       <Layers className="h-5 w-5" />
                     </div>
                     <div>
-                      <div className="font-bold text-sm">Conveyor Principal</div>
-                      <div className="text-[11px] text-muted-foreground">30 espacios · 8 ocupados</div>
+                      <div className="font-bold text-sm">Conveyor Principal · Zona A</div>
+                      <div className="text-[11px] text-muted-foreground">30 espacios físicos · 8 ocupados</div>
                     </div>
                   </div>
                   <Badge className="bg-indigo-50 text-indigo-700 border-indigo-200 text-[10px] font-bold">26% Ocupación</Badge>
                 </div>
                 <div className="grid grid-cols-3 sm:grid-cols-4 gap-2">
                   {[
-                    { slot: "Gancho 01", ord: "#KL-0097", status: "OCUPADO" },
-                    { slot: "Gancho 02", ord: "#KL-0098", status: "OCUPADO" },
-                    { slot: "Gancho 03", ord: "", status: "LIBRE" },
-                    { slot: "Gancho 04", ord: "#KL-0102", status: "OCUPADO" },
-                    { slot: "Gancho 05", ord: "", status: "LIBRE" },
-                    { slot: "Gancho 06", ord: "", status: "LIBRE" },
+                    { slot: "Gancho G-01", ord: "#KL-0097", client: "María L.", status: "OCUPADO" },
+                    { slot: "Gancho G-02", ord: "#KL-0098", client: "Pedro S.", status: "OCUPADO" },
+                    { slot: "Gancho G-03", ord: "", client: "Disponible", status: "LIBRE" },
+                    { slot: "Gancho G-04", ord: "#KL-0102", client: "Rosa M.", status: "OCUPADO" },
+                    { slot: "Gancho G-05", ord: "", client: "Disponible", status: "LIBRE" },
+                    { slot: "Gancho G-06", ord: "", client: "Disponible", status: "LIBRE" },
+                    { slot: "Gancho G-07", ord: "#KL-0109", client: "Carlos T.", status: "OCUPADO" },
+                    { slot: "Gancho G-08", ord: "", client: "Disponible", status: "LIBRE" },
                   ].map((s) => (
-                    <div key={s.slot} className={`p-2 rounded-xl border text-center text-xs font-bold ${s.status === "OCUPADO" ? "bg-amber-50 dark:bg-amber-950/40 border-amber-200 text-amber-800 dark:text-amber-200" : "bg-emerald-50/50 dark:bg-emerald-950/20 border-emerald-200/60 text-emerald-700 dark:text-emerald-300"}`}>
-                      <div className="text-[10px] truncate">{s.slot}</div>
-                      <div className="text-[9px] font-medium mt-0.5 opacity-80">{s.ord || "Libre"}</div>
+                    <div key={s.slot} className={`p-2.5 rounded-xl border text-center text-xs font-bold transition-all shadow-2xs ${s.status === "OCUPADO" ? "bg-amber-50/90 dark:bg-amber-950/40 border-amber-200 text-amber-800 dark:text-amber-200" : "bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-200/70 text-emerald-700 dark:text-emerald-300"}`}>
+                      <div className="text-[10.5px] font-extrabold truncate">{s.slot}</div>
+                      <div className="text-[9.5px] font-mono mt-0.5 font-bold truncate">{s.ord || "Libre"}</div>
+                      <div className="text-[8.5px] font-normal opacity-75 truncate">{s.client}</div>
                     </div>
                   ))}
                 </div>
                 <div className="mt-4 rounded-xl bg-indigo-500/10 p-2.5 text-center text-[11px] font-bold text-indigo-700 uppercase tracking-wider">
-                  ✓ Control de Ubicación Física Activo
+                  ✓ Control de Ubicación Física Activo · Entrega en 5 seg
                 </div>
               </div>
             </motion.div>
