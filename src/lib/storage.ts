@@ -988,6 +988,111 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
   if (error) throw error;
 }
 
+export async function sendSignUpOtp(email: string, password: string, nombre: string, tenantId: string) {
+  const { data, error } = await supabase.auth.signUp({
+    email,
+    password,
+    options: {
+      data: {
+        nombre,
+        tenant_id: tenantId,
+      },
+    },
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function resendSignUpOtp(email: string) {
+  const { data, error } = await supabase.auth.resend({
+    type: "signup",
+    email,
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function verifyOtpAndRegisterTenant(otpToken: string, tenant: Tenant, admin: Empleado) {
+  // 1. Verificar OTP en Supabase Auth
+  let verifyResult = await supabase.auth.verifyOtp({
+    email: admin.email,
+    token: otpToken.trim(),
+    type: "signup",
+  });
+
+  if (verifyResult.error) {
+    // Intentar con type: 'email' si signup falla
+    verifyResult = await supabase.auth.verifyOtp({
+      email: admin.email,
+      token: otpToken.trim(),
+      type: "email",
+    });
+  }
+
+  if (verifyResult.error) throw verifyResult.error;
+  const user = verifyResult.data.user;
+  if (!user) throw new Error("No se pudo verificar el usuario");
+
+  // 2. Guardar la lavandería
+  const branchName = tenant.nombre_sucursal || "Sucursal principal";
+  const tenantToSave: Tenant = {
+    ...tenant,
+    nombre_sucursal: branchName,
+    config: {
+      ...DEFAULT_CONFIG,
+      ...tenant.config,
+      nombre_sucursal: branchName,
+    },
+  };
+
+  let tenantError;
+  const { error: err1 } = await supabase.from("tenants").insert(tenantToSave);
+  if (err1 && err1.message && err1.message.includes("nombre_sucursal")) {
+    const { nombre_sucursal: _, ...fallbackTenant } = tenantToSave;
+    const { error: err2 } = await supabase.from("tenants").insert(fallbackTenant);
+    tenantError = err2;
+  } else {
+    tenantError = err1;
+  }
+
+  if (tenantError) {
+    throw new Error(
+      "Error al crear lavandería: " + tenantError.message + ". Por favor contacta soporte.",
+    );
+  }
+
+  // 3. Guardar el Administrador vinculado al ID de Auth
+  const { password: _pw, ...empData } = admin;
+  const { error: empError } = await supabase.from("empleados").insert({
+    ...empData,
+    avatar_url: admin.avatar_url || null,
+    id: user.id,
+    password: "***",
+  });
+
+  if (empError) {
+    await supabase.from("tenants").delete().eq("id", tenant.id);
+    throw new Error(
+      "Error al crear empleado: " + empError.message + ". Por favor intenta de nuevo.",
+    );
+  }
+
+  // 4. Iniciar sesión si no hay sesión activa
+  try {
+    const { data: sessionData } = await supabase.auth.getSession();
+    if (!sessionData?.session) {
+      await supabase.auth.signInWithPassword({
+        email: admin.email,
+        password: admin.password,
+      });
+    }
+  } catch (loginErr) {
+    console.warn("Auto-login warning:", loginErr);
+  }
+
+  return { tenant: tenantToSave, user };
+}
+
 export async function registerTenant(tenant: Tenant, admin: Empleado) {
   // 1. Crear el usuario en Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signUp({

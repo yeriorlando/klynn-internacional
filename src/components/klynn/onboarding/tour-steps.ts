@@ -11,16 +11,16 @@ export const SIDEBAR_TOUR: PageTour = {
     {
       popover: {
         title: "✨ Bienvenido a tu Lavandería Digital",
-        description: "Hemos diseñado Klynn para que sea el motor de tu negocio. Vamos a dar un paseo rápido por tus herramientas.",
+        description: "Hemos diseñado Klynn para que sea el motor de tu negocio. Vamos a dar un paseo rápido por tus herramientas disponibles.",
         side: "center",
         align: "start"
       }
     },
     {
-      element: "#tour-nav-conversations",
+      element: "#tour-nav-nueva-orden",
       popover: {
-        title: "💬 Conversaciones WhatsApp",
-        description: "Mantén contacto directo con tus clientes. Chatea y envía notificaciones automáticas desde un solo canal central.",
+        title: "📝 Punto de Venta (Nueva Orden)",
+        description: "Cuando un cliente llegue, usa este botón para crear su orden en segundos, desglosar prendas y emitir su ticket.",
         side: "right"
       }
     },
@@ -28,15 +28,15 @@ export const SIDEBAR_TOUR: PageTour = {
       element: "#tour-nav-dashboard",
       popover: {
         title: "📊 Panel de Control",
-        description: "Tu resumen diario. Aquí verás cómo van tus ventas y qué órdenes necesitan atención inmediata.",
+        description: "Tu resumen diario en tiempo real. Aquí verás tus ventas del día, metas y las órdenes que necesitan atención inmediata.",
         side: "right"
       }
     },
     {
-      element: "#tour-nav-nueva-orden",
+      element: "#tour-nav-conversations",
       popover: {
-        title: "📝 Registrar Servicio",
-        description: "Cuando un cliente llegue, usa este botón para crear su orden en segundos.",
+        title: "💬 Conversaciones WhatsApp",
+        description: "Mantén contacto directo con tus clientes. Chatea y envía notificaciones automáticas cuando sus prendas estén listas.",
         side: "right"
       }
     },
@@ -44,7 +44,23 @@ export const SIDEBAR_TOUR: PageTour = {
       element: "#tour-nav-ordenes",
       popover: {
         title: "📋 Listado de Órdenes",
-        description: "Busca, filtra y actualiza el estado de cada prenda. Aquí controlas todo el flujo de trabajo.",
+        description: "Busca, filtra, reimprime tickets y actualiza el estado de cada prenda. Aquí controlas todo el flujo de trabajo.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-procesos",
+      popover: {
+        title: "⚙️ Control de Operaciones",
+        description: "Gestiona las etapas de producción de tu taller: Lavado, Secado, Planchado y Control de Calidad.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-estanteria",
+      popover: {
+        title: "🧺 Estantería Virtual",
+        description: "Ubica fácilmente en qué rack, percha o estante se encuentra cada pedido para una entrega rápida sin confusiones.",
         side: "right"
       }
     },
@@ -52,39 +68,7 @@ export const SIDEBAR_TOUR: PageTour = {
       element: "#tour-nav-caja",
       popover: {
         title: "💰 Gestión de Efectivo",
-        description: "Abre turnos y controla cada peso que entra o sale de tu gaveta.",
-        side: "right"
-      }
-    },
-    {
-      element: "#tour-nav-clientes",
-      popover: {
-        title: "👥 Tu Base de Datos",
-        description: "Gestiona a tus clientes frecuentes, mira su historial y fidelízalos.",
-        side: "right"
-      }
-    },
-    {
-      element: "#tour-nav-catalogo",
-      popover: {
-        title: "🏷️ Servicios y Precios",
-        description: "Configura qué lavas, qué planchas y cuánto cobras por cada prenda.",
-        side: "right"
-      }
-    },
-    {
-      element: "#tour-nav-personal",
-      popover: {
-        title: "👔 Equipo de Trabajo",
-        description: "Administra a tus empleados y sus permisos dentro del sistema.",
-        side: "right"
-      }
-    },
-    {
-      element: "#tour-nav-logistica",
-      popover: {
-        title: "🚚 Delivery y Rutas",
-        description: "Organiza tus repartidores y asegúrate de que la ropa llegue a tiempo a casa del cliente.",
+        description: "Abre turnos de cobro, registra entradas o salidas y realiza cuadres de gaveta con total precisión.",
         side: "right"
       }
     },
@@ -92,7 +76,47 @@ export const SIDEBAR_TOUR: PageTour = {
       element: "#tour-nav-gastos",
       popover: {
         title: "📉 Gastos del Local",
-        description: "Registra compras de insumos, luz o alquiler para saber tu beneficio real.",
+        description: "Registra compras de insumos, detergentes, luz o alquiler para conocer tu rentabilidad real mes a mes.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-logistica",
+      popover: {
+        title: "🚚 Delivery y Rutas",
+        description: "Organiza tus repartidores, programa recogidas a domicilio y confirma entregas a tiempo en la puerta del cliente.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-catalogo-prendas",
+      popover: {
+        title: "🏷️ Catálogo de Prendas",
+        description: "Configura tu tarifario de ropa, precios por unidad o por libra, y tiempos de entrega estimados.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-catalogo-servicios",
+      popover: {
+        title: "🧼 Servicios de Lavandería",
+        description: "Define tus líneas de servicio: Lavado en Seco, Planchado, Lavado por Libra, Tintorería y más.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-clientes",
+      popover: {
+        title: "👥 Base de Datos de Clientes",
+        description: "Gestiona a tus clientes frecuentes, consulta su historial de visitas, saldos pendientes y fidelízalos.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-personal",
+      popover: {
+        title: "👔 Equipo de Trabajo",
+        description: "Administra a tus empleados, crea cajeros y operarios, y define sus permisos de acceso dentro del sistema.",
         side: "right"
       }
     },
@@ -100,7 +124,15 @@ export const SIDEBAR_TOUR: PageTour = {
       element: "#tour-nav-reportes",
       popover: {
         title: "📈 Inteligencia de Negocio",
-        description: "Gráficas detalladas sobre el crecimiento de tu lavandería mes a mes.",
+        description: "Gráficas interactivas y reportes detallados sobre el crecimiento financiero y operativo de tu lavandería.",
+        side: "right"
+      }
+    },
+    {
+      element: "#tour-nav-fiscal",
+      popover: {
+        title: "🛡️ Centro Fiscal e-CF",
+        description: "Emite comprobantes fiscales electrónicos homologados ante la DGII (B01, B02, B14) de forma directa y segura.",
         side: "right"
       }
     },
@@ -108,10 +140,9 @@ export const SIDEBAR_TOUR: PageTour = {
       element: "#tour-nav-configuracion",
       popover: {
         title: "⚙️ Configuración General",
-        description: "Personaliza el perfil de tu lavandería, configura tus métodos de facturación y activa las notificaciones automáticas por WhatsApp.",
+        description: "Personaliza el perfil de tu lavandería, logotipo, formato de tickets térmicos, sucursales y notificaciones.",
         side: "right"
       }
     }
   ]
 };
-

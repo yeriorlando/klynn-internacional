@@ -17,11 +17,14 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import {
   PLANS, formatRD, formatPhoneRD, isSlugAvailable, registerTenant,
+  sendSignUpOtp, resendSignUpOtp, verifyOtpAndRegisterTenant,
   setActiveTenant, uid, PROVINCIAS_RD, NCF_TIPOS, DEFAULT_CONFIG, getGlobalConfig, getPlans,
   updateECFConfig, saveECFConfig,
   type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan, type ECFConfig,
 } from "@/lib/storage";
 import { registerTenantInPronesoft, consultarRNC } from "@/lib/fiscal";
+import { sendWelcomeEmail } from "@/lib/email";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 
 // Definimos IS_LOCAL_MODE como false para asegurar compatibilidad 100% cloud
@@ -42,7 +45,8 @@ const STEPS = [
   { id: 2, label: "Marca", icon: Palette },
   { id: 3, label: "Plan", icon: Package },
   { id: 4, label: "Admin", icon: UserCircle2 },
-  { id: 5, label: "Listo", icon: PartyPopper },
+  { id: 5, label: "Verificación", icon: ShieldCheck },
+  { id: 6, label: "Listo", icon: PartyPopper },
 ];
 
 const KLYNN_MODULES_LEFT = [
@@ -219,6 +223,25 @@ function RegistroPage() {
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisioningStep, setProvisioningStep] = useState(0);
 
+  // Estados de Verificación OTP
+  const [otpCode, setOtpCode] = useState("");
+  const [otpSending, setOtpSending] = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [resendCooldown, setResendCooldown] = useState(60);
+  const [isResending, setIsResending] = useState(false);
+  const [otpError, setOtpError] = useState<string | null>(null);
+  const tenantIdRef = useRef<string>(uid("ten"));
+
+  useEffect(() => {
+    let interval: any;
+    if (step === 5 && resendCooldown > 0) {
+      interval = setInterval(() => {
+        setResendCooldown((c) => (c > 0 ? c - 1 : 0));
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, resendCooldown]);
+
   const logoInputRef = useRef<HTMLInputElement>(null);
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -328,14 +351,69 @@ function RegistroPage() {
     return Object.keys(e).length === 0;
   }
 
-  async function handleFinalize() {
+  async function handleInitiateOtp() {
+    if (!validateStep()) return;
+    setOtpSending(true);
+    setOtpError(null);
+
+    try {
+      await sendSignUpOtp(
+        form.admin_email.trim(),
+        form.admin_password,
+        form.admin_nombre.trim(),
+        tenantIdRef.current,
+      );
+      setStep(5);
+      setResendCooldown(60);
+      setOtpCode("");
+      toast.success(`Código de verificación enviado a ${form.admin_email}`, { id: "otp-toast" });
+    } catch (err: any) {
+      let errMsg = err.message || "Error al enviar código";
+      if (errMsg.includes("User already registered") || errMsg.includes("user_already_exists")) {
+        errMsg = "Ya existe una cuenta registrada con este correo electrónico.";
+        setErrors({ admin_email: errMsg });
+      } else if (errMsg.includes("Password should be at least")) {
+        errMsg = "La contraseña debe tener al menos 8 caracteres.";
+        setErrors({ admin_password: errMsg });
+      } else {
+        toast.error(errMsg);
+      }
+    } finally {
+      setOtpSending(false);
+    }
+  }
+
+  async function handleResendOtp() {
+    if (resendCooldown > 0 || isResending) return;
+    setIsResending(true);
+    try {
+      await resendSignUpOtp(form.admin_email.trim());
+      setResendCooldown(60);
+      toast.success(`Nuevo código de 6 dígitos enviado a ${form.admin_email}`);
+    } catch (err: any) {
+      toast.error(err.message || "Error al reenviar el código");
+    } finally {
+      setIsResending(false);
+    }
+  }
+
+  async function handleVerifyAndFinalize(codeToVerify?: string) {
+    const code = (codeToVerify || otpCode).trim();
+    if (code.length < 6) {
+      setOtpError("Por favor ingresa los 6 dígitos del código");
+      return;
+    }
+
+    setOtpVerifying(true);
+    setOtpError(null);
+
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
       nombre_sucursal: "Sucursal principal",
     };
     const cleanRnc = form.rnc.replace(/\D/g, "");
     const tenant: Tenant = {
-      id: uid("ten"),
+      id: tenantIdRef.current,
       nombre: form.nombre,
       nombre_sucursal: "Sucursal principal",
       slug: form.slug,
@@ -356,7 +434,7 @@ function RegistroPage() {
     };
 
     const admin: Empleado = {
-      id: "", // Se llenará en registerTenant con el ID de Auth
+      id: "", // Se asigna automáticamente con el ID de Auth verificado
       tenant_id: tenant.id,
       nombre: form.admin_nombre,
       email: form.admin_email,
@@ -366,11 +444,8 @@ function RegistroPage() {
       creado_en: new Date().toISOString(),
     };
 
-    setIsProvisioning(true);
-    setProvisioningStep(0);
-
     try {
-      await registerTenant(tenant, admin);
+      await verifyOtpAndRegisterTenant(code, tenant, admin);
 
       // Guardar configuración inicial fiscal (ecf_config) vinculada al tenant
       try {
@@ -402,9 +477,20 @@ function RegistroPage() {
         console.warn("Aviso al inicializar ecf_config:", ecfInitErr);
       }
 
+      // Enviar correo de bienvenida oficial con Resend
+      sendWelcomeEmail({
+        to: form.admin_email,
+        adminNombre: form.admin_nombre,
+        nombreLavanderia: form.nombre,
+        tenantSlug: form.slug,
+      }).catch((emailErr) => console.warn("[Registro] Aviso al enviar correo de bienvenida:", emailErr));
+
       localStorage.setItem("klynn_tour_is_new_registration", "true");
       setActiveTenant(tenant.slug);
       setCreatedTenant(tenant);
+
+      setIsProvisioning(true);
+      setProvisioningStep(0);
 
       let current = 0;
       const interval = setInterval(() => {
@@ -414,38 +500,19 @@ function RegistroPage() {
           clearInterval(interval);
           setTimeout(() => {
             setIsProvisioning(false);
-            setStep(5);
+            setStep(6);
           }, 800);
         }
       }, 1200);
     } catch (err: any) {
-      setIsProvisioning(false);
-      let errMsg = err.message || "Error al registrar";
-      
-      // Mapeo de errores técnicos a mensajes amigables
-      if (errMsg.includes("tenants_slug_key")) {
-        errMsg = "Este nombre de lavandería o subdominio ya está en uso. Por favor elige otro.";
-        setErrors({ slug: errMsg });
-        setStep(2); // Devolver al paso de marca
-        return;
+      setOtpVerifying(false);
+      let errMsg = err.message || "Error al verificar el código";
+      if (errMsg.includes("Token has expired") || errMsg.includes("expired")) {
+        errMsg = "El código ha expirado. Por favor solicita uno nuevo.";
+      } else if (errMsg.includes("invalid") || errMsg.includes("Token is invalid")) {
+        errMsg = "Código de verificación incorrecto. Revisa tu correo e intenta de nuevo.";
       }
-      
-      if (errMsg.includes("User already registered") || errMsg.includes("user_already_exists")) {
-        errMsg = "Ya existe una cuenta registrada con este correo electrónico.";
-        setErrors({ admin_email: errMsg });
-        setStep(4);
-        return;
-      }
-
-      if (errMsg.includes("Password should be at least")) {
-        errMsg = "La contraseña es muy corta. Debe tener al menos 6 caracteres.";
-        setErrors({ admin_password: errMsg });
-        setStep(4);
-        return;
-      }
-
-      setErrors({ admin_email: errMsg });
-      setStep(4);
+      setOtpError(errMsg);
     }
   }
 
@@ -455,9 +522,10 @@ function RegistroPage() {
     if (nextStep === 3 && !globalConfig.requirePlanOnRegistration) {
       nextStep = 4;
     }
-    if (nextStep <= 4) setStep(nextStep);
-    else if (step === 4) {
-      handleFinalize();
+    if (nextStep <= 4) {
+      setStep(nextStep);
+    } else if (step === 4) {
+      handleInitiateOtp();
     }
   }
 
@@ -1019,7 +1087,92 @@ function RegistroPage() {
                 </>
               )}
 
-              {step === 5 && createdTenant && (
+              {step === 5 && (
+                <>
+                  <div className="flex items-center gap-3.5 mb-4">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
+                      <ShieldCheck className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">
+                        Verifica tu correo electrónico
+                      </h1>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Hemos enviado un código OTP de 6 dígitos a <strong className="text-slate-800">{form.admin_email}</strong>.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="my-6 flex flex-col items-center justify-center space-y-4 text-center">
+                    <div className="inline-flex items-center gap-2 rounded-full bg-blue-50 px-3 py-1 text-xs font-semibold text-[#1B4B73] border border-blue-100">
+                      <ShieldCheck className="h-3.5 w-3.5" />
+                      <span>Válido por 10 minutos</span>
+                    </div>
+
+                    <div className="flex justify-center py-2">
+                      <InputOTP
+                        maxLength={6}
+                        value={otpCode}
+                        onChange={(val) => {
+                          setOtpCode(val);
+                          setOtpError(null);
+                          if (val.length === 6) {
+                            handleVerifyAndFinalize(val);
+                          }
+                        }}
+                        disabled={otpVerifying}
+                        autoFocus
+                      >
+                        <InputOTPGroup className="gap-2 sm:gap-2.5">
+                          <InputOTPSlot index={0} className="h-12 w-10 sm:h-14 sm:w-12 text-lg sm:text-xl font-bold rounded-xl border-slate-300 focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                          <InputOTPSlot index={1} className="h-12 w-10 sm:h-14 sm:w-12 text-lg sm:text-xl font-bold rounded-xl border-slate-300 focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                          <InputOTPSlot index={2} className="h-12 w-10 sm:h-14 sm:w-12 text-lg sm:text-xl font-bold rounded-xl border-slate-300 focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                          <InputOTPSlot index={3} className="h-12 w-10 sm:h-14 sm:w-12 text-lg sm:text-xl font-bold rounded-xl border-slate-300 focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                          <InputOTPSlot index={4} className="h-12 w-10 sm:h-14 sm:w-12 text-lg sm:text-xl font-bold rounded-xl border-slate-300 focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                          <InputOTPSlot index={5} className="h-12 w-10 sm:h-14 sm:w-12 text-lg sm:text-xl font-bold rounded-xl border-slate-300 focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                        </InputOTPGroup>
+                      </InputOTP>
+                    </div>
+
+                    {otpError && (
+                      <motion.div
+                        initial={{ opacity: 0, y: -4 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        className="flex items-center gap-1.5 text-xs font-semibold text-destructive bg-red-50 border border-red-200/60 px-3.5 py-1.5 rounded-xl"
+                      >
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{otpError}</span>
+                      </motion.div>
+                    )}
+
+                    <div className="pt-2 text-xs text-slate-500">
+                      ¿No recibiste el código?{" "}
+                      {resendCooldown > 0 ? (
+                        <span className="font-semibold text-slate-400">
+                          Reenviar en 00:{resendCooldown < 10 ? `0${resendCooldown}` : resendCooldown}
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={handleResendOtp}
+                          disabled={isResending}
+                          className="font-bold text-[#1B4B73] hover:underline inline-flex items-center gap-1"
+                        >
+                          {isResending ? (
+                            <>
+                              <Loader2 className="h-3 w-3 animate-spin" /> Reenviando...
+                            </>
+                          ) : (
+                            "Reenviar código"
+                          )}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+
+              {step === 6 && createdTenant && (
                 <SuccessCard 
                   tenant={createdTenant} 
                   adminNombre={form.admin_nombre} 
@@ -1032,23 +1185,52 @@ function RegistroPage() {
           </AnimatePresence>
         )}
 
-          {step < 5 && (
+          {step < 6 && (
             <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
               <Button 
                 variant="outline" 
                 onClick={prev} 
-                disabled={step === 1}
+                disabled={step === 1 || otpSending || otpVerifying}
                 className="h-8 px-3.5 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
               >
-                <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Atrás
+                <ArrowLeft className="mr-1 h-3.5 w-3.5" /> {step === 5 ? "Cambiar datos" : "Atrás"}
               </Button>
-              <Button 
-                onClick={next} 
-                size="sm"
-                className="bg-primary text-white shadow-sm hover:opacity-95 font-bold h-8 px-5 text-xs"
-              >
-                {step === 4 ? "Crear lavandería" : "Continuar"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
-              </Button>
+              
+              {step === 5 ? (
+                <Button 
+                  onClick={() => handleVerifyAndFinalize()} 
+                  disabled={otpCode.length < 6 || otpVerifying}
+                  size="sm"
+                  className="bg-[#1B4B73] hover:bg-[#1B4B73]/90 text-white shadow-sm font-bold h-8 px-5 text-xs"
+                >
+                  {otpVerifying ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Verificando...
+                    </>
+                  ) : (
+                    <>
+                      Verificar y Activar <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button 
+                  onClick={next} 
+                  disabled={otpSending}
+                  size="sm"
+                  className="bg-primary text-white shadow-sm hover:opacity-95 font-bold h-8 px-5 text-xs"
+                >
+                  {otpSending ? (
+                    <>
+                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Enviando código...
+                    </>
+                  ) : (
+                    <>
+                      {step === 4 ? "Continuar a Verificación" : "Continuar"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                    </>
+                  )}
+                </Button>
+              )}
             </div>
           )}
         </div>

@@ -61,7 +61,7 @@ function RecuperarPage() {
   }
 
   return (
-    <div className="grid min-h-[112vh] lg:grid-cols-2 font-sans">
+    <div className="grid min-h-screen lg:grid-cols-2 font-sans">
       <SeedBootstrap />
 
       {/* Panel informativo lateral */}
@@ -75,7 +75,7 @@ function RecuperarPage() {
           </Link>
         </div>
 
-        <div className="relative text-white text-center mt-[-10%]">
+        <div className="relative text-white text-center">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -96,8 +96,8 @@ function RecuperarPage() {
 
       {/* Formulario */}
       <div className="flex items-center justify-center bg-background p-6 lg:p-12">
-        <div className="w-full max-w-md">
-          <div className="mb-10">
+        <div className="w-full max-w-md -mt-6 lg:-mt-10">
+          <div className="mb-6 lg:mb-8">
             <Button 
               variant="default" 
               onClick={() => {

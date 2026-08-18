@@ -102,6 +102,7 @@ import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
 import { UserAvatar } from "@/components/klynn/UserAvatar";
 
 interface NavItem {
+  id?: string;
   to: string;
   label: string;
   icon: any;
@@ -1668,6 +1669,7 @@ function SidebarContent({
         title: "OPERACIÓN",
         items: [
           {
+            id: "dashboard",
             to: `/t/${slug}`,
             label: "Dashboard",
             icon: LayoutDashboard,
@@ -1676,12 +1678,14 @@ function SidebarContent({
             shortcut: "D",
           },
           {
+            id: "conversations",
             to: `/t/${slug}/conversations`,
             label: "Conversaciones",
             icon: MessageCircle,
             permission: "conversations",
           },
           {
+            id: "ordenes",
             to: `/t/${slug}/ordenes`,
             label: "Órdenes",
             icon: ShoppingCart,
@@ -1689,6 +1693,7 @@ function SidebarContent({
             shortcut: "O",
           },
           {
+            id: "procesos",
             to: `/t/${slug}/procesos`,
             label: "Operaciones",
             icon: Wrench,
@@ -1696,27 +1701,30 @@ function SidebarContent({
             shortcut: "P",
           },
           {
+            id: "estanteria",
             to: `/t/${slug}/estanteria`,
             label: "Estantería virtual",
             icon: Layers,
             permission: "procesos",
             shortcut: "E",
           },
-          { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
-          { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
-          { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
+          { id: "caja", to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
+          { id: "gastos", to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
+          { id: "logistica", to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
         ],
       },
       {
         title: "CATÁLOGO",
         items: [
           {
+            id: "catalogo-prendas",
             to: `/t/${slug}/catalogo?tab=prendas`,
             label: "Prendas",
             icon: Package,
             permission: "catalogo",
           },
           {
+            id: "catalogo-servicios",
             to: `/t/${slug}/catalogo?tab=servicios`,
             label: "Servicios",
             icon: LayoutGrid,
@@ -1728,28 +1736,29 @@ function SidebarContent({
       {
         title: "PERSONAS",
         items: [
-          { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
-          { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
+          { id: "clientes", to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
+          { id: "personal", to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
         ],
       },
       {
         title: "ANÁLISIS",
         items: [
-          { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
-          { to: `/t/${slug}/fiscal`, label: "Centro Fiscal e-CF", icon: Shield, permission: "configuracion" },
+          { id: "reportes", to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
+          { id: "fiscal", to: `/t/${slug}/fiscal`, label: "Centro Fiscal e-CF", icon: Shield, permission: "configuracion" },
         ],
       },
       {
         title: "SISTEMA",
         items: [
           {
+            id: "configuracion",
             to: `/t/${slug}/configuracion`,
             label: "Configuración",
             icon: Settings,
             permission: "configuracion",
             hasArrow: true,
           },
-          { to: "#", label: "Soporte", icon: HelpCircle, isSoporte: true },
+          { id: "soporte", to: "#", label: "Soporte", icon: HelpCircle, isSoporte: true },
         ],
       },
     ];
@@ -1929,7 +1938,7 @@ function SidebarContent({
                   <Link
                     key={item.to}
                     to={item.to}
-                    id={`tour-nav-${item.permission}`}
+                    id={item.id ? `tour-nav-${item.id}` : item.permission ? `tour-nav-${item.permission}` : undefined}
                     onClick={onNavigate}
                     onMouseEnter={() => item.permission && prefetch(item.permission)}
                     className={`relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition duration-200 ${
@@ -2146,6 +2155,27 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
               </span>
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            onSelect={() => {
+              setOpen(false);
+              localStorage.setItem("klynn_tour_is_new_registration", "true");
+              localStorage.removeItem(`klynn_tour_sidebar_${user?.empleado?.id || ""}`);
+              window.location.reload();
+            }}
+            className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-indigo-50 focus:text-slate-950 dark:focus:bg-indigo-950/30 dark:focus:text-white"
+          >
+            <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 transition-colors group-focus:bg-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-400 dark:ring-indigo-900">
+              <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-xs font-bold leading-tight">Reiniciar Tour</span>
+              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                Ver recorrido interactivo
+              </span>
+            </span>
+            <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-indigo-500 dark:text-slate-600" />
           </DropdownMenuItem>
 
           <DropdownMenuSeparator className="mx-1 my-1 bg-slate-100 dark:bg-slate-800" />

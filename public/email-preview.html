@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Vista Previa de Plantillas de Email — Klynn Cloud</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { font-family: 'Plus Jakarta Sans', sans-serif; }
+  </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen">
+  
+  <!-- Header de Control -->
+  <header class="border-b border-slate-800 bg-slate-950/80 backdrop-blur sticky top-0 z-50 px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <div class="h-10 w-10 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center font-bold text-xl shadow-md">
+        K
+      </div>
+      <div>
+        <h1 class="font-extrabold text-lg text-white">Plantillas de Email Klynn</h1>
+        <p class="text-xs text-slate-400">Diseño oficial para Resend &bull; Supabase GoTrue</p>
+      </div>
+    </div>
+
+    <!-- Pestañas de Cambio de Plantilla -->
+    <div class="flex items-center gap-2 bg-slate-900 p-1.5 rounded-xl border border-slate-800 flex-wrap">
+      <button id="btn-otp" onclick="switchTemplate('otp')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white">
+        1. Verificación OTP (10 min)
+      </button>
+      <button id="btn-recovery" onclick="switchTemplate('recovery')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white">
+        2. Recuperar Contraseña (60 min)
+      </button>
+      <button id="btn-welcome" onclick="switchTemplate('welcome')" class="px-4 py-2 rounded-lg text-xs font-bold transition-all bg-[#1B4B73] text-white shadow">
+        3. Bienvenida Lavandería ✨
+      </button>
+    </div>
+
+    <!-- Dispositivo / Responsive switcher -->
+    <div class="flex items-center gap-2">
+      <button onclick="setFrameWidth('100%')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200">
+        💻 Desktop
+      </button>
+      <button onclick="setFrameWidth('400px')" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-slate-700 text-slate-200">
+        📱 Móvil
+      </button>
+    </div>
+  </header>
+
+  <!-- Contenedor del IFrame -->
+  <main class="flex flex-col items-center justify-center p-6 sm:p-10">
+    <div id="frame-wrapper" class="w-full max-w-lg transition-all duration-300 shadow-2xl rounded-2xl overflow-hidden border border-slate-800 bg-[#F8FAFC]">
+      <iframe id="email-frame" class="w-full h-[650px] border-0 rounded-2xl bg-[#F8FAFC]" srcdoc=""></iframe>
+    </div>
+  </main>
+
+  <script>
+    const templates = {
+      otp: `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Plus Jakarta Sans', sans-serif; color: #1E293B; }
+    @media screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border: none !important; border-radius: 0 !important; }
+      .fluid-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      .otp-code { font-size: 28px !important; letter-spacing: 8px !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table border="0" cellpadding="0" cellspacing="0" width="480" class="email-container" style="max-width: 480px; width: 100%; background-color: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);">
+          <tr>
+            <td height="4" style="background-color: #1B4B73; line-height: 4px; font-size: 4px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 32px 24px 20px 24px;">
+              <img src="https://api.klynn.com.do/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="205" style="display: block; width: 205px; max-width: 205px; height: auto; margin: 0 auto; border: 0;" />
+              <p style="margin: 6px 0 0 0; font-size: 12px; font-weight: 600; color: #64748B; letter-spacing: -0.2px;">
+                Tu lavandería, simplificada.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="fluid-padding" style="padding: 0 32px 14px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                <tr>
+                  <td align="center" style="background-color: #F1F5F9; border-radius: 6px; padding: 5px 14px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #1B4B73; text-transform: uppercase; letter-spacing: 0.8px;">
+                      CÓDIGO DE VERIFICACIÓN
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <h1 style="margin: 0 0 8px 0; font-size: 21px; font-weight: 800; color: #0F172A; letter-spacing: -0.4px; line-height: 1.3;">
+                Confirma tu correo electrónico
+              </h1>
+              <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #64748B;">
+                Ingresa el siguiente código en la pantalla de registro para verificar tu cuenta en <strong style="color: #1B4B73;">Klynn</strong>:
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="fluid-padding" style="padding: 8px 32px 16px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; text-align: center;">
+                <tr>
+                  <td style="padding: 18px 12px;">
+                    <div class="otp-code" style="font-family: 'JetBrains Mono', monospace; font-size: 34px; font-weight: 800; color: #1B4B73; letter-spacing: 10px; margin: 0; padding-left: 10px;">
+                      854 912
+                    </div>
+                    <div style="margin-top: 6px; font-size: 11px; color: #94A3B8; font-weight: 500;">
+                      Válido por 10 minutos
+                    </div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="fluid-padding" style="padding: 0 32px 24px 32px;">
+              <p style="margin: 0; font-size: 11px; line-height: 1.5; color: #94A3B8; text-align: center;">
+                Si tú no solicitaste este código, puedes ignorar este mensaje de forma segura.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 16px 24px; border-top: 1px solid #F1F5F9; background-color: #FFFFFF;">
+              <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #64748B;">
+                Klynn Cloud &bull; <a href="mailto:soporte@klynn.com.do" style="color: #1B4B73; text-decoration: none;">soporte@klynn.com.do</a>
+              </p>
+              <p style="margin: 0; font-size: 10px; color: #94A3B8;">
+                &copy; 2026 Klynn. Todos los derechos reservados.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+      recovery: `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Plus Jakarta Sans', sans-serif; color: #1E293B; }
+    @media screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border: none !important; border-radius: 0 !important; }
+      .fluid-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      .btn-primary { width: 100% !important; box-sizing: border-box !important; text-align: center !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table border="0" cellpadding="0" cellspacing="0" width="480" class="email-container" style="max-width: 480px; width: 100%; background-color: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);">
+          <tr>
+            <td height="4" style="background-color: #1B4B73; line-height: 4px; font-size: 4px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 32px 24px 20px 24px;">
+              <img src="https://api.klynn.com.do/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="205" style="display: block; width: 205px; max-width: 205px; height: auto; margin: 0 auto; border: 0;" />
+              <p style="margin: 6px 0 0 0; font-size: 12px; font-weight: 600; color: #64748B; letter-spacing: -0.2px;">
+                Tu lavandería, simplificada.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="fluid-padding" style="padding: 0 32px 14px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 16px;">
+                <tr>
+                  <td align="center" style="background-color: #F1F5F9; border-radius: 6px; padding: 5px 14px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #1B4B73; text-transform: uppercase; letter-spacing: 0.8px;">
+                      RECUPERACIÓN DE CONTRASEÑA
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <h1 style="margin: 0 0 8px 0; font-size: 21px; font-weight: 800; color: #0F172A; letter-spacing: -0.4px; line-height: 1.3;">
+                Restablece tu contraseña
+              </h1>
+              <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #64748B;">
+                Hemos recibido una solicitud para restablecer la contraseña de tu cuenta en <strong style="color: #1B4B73;">Klynn</strong>. Haz clic en el botón de abajo para continuar:
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="fluid-padding" style="padding: 10px 32px 16px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td align="center" style="border-radius: 10px; background-color: #1B4B73;">
+                    <a href="https://klynn.com.do/restablecer-contrasena?token=sample_token_xyz" target="_blank" class="btn-primary" style="display: inline-block; padding: 13px 28px; font-size: 13px; font-weight: 700; color: #FFFFFF; text-decoration: none; border-radius: 10px; background-color: #1B4B73; border: 1px solid #1B4B73;">
+                      Restablecer contraseña
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <div style="margin-top: 8px; font-size: 11px; color: #94A3B8; font-weight: 500;">
+                Válido por 60 minutos
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td class="fluid-padding" style="padding: 0 32px 18px 32px;">
+              <p style="margin: 0; font-size: 11px; line-height: 1.4; color: #94A3B8; text-align: center; word-break: break-all;">
+                O copia este enlace: <span style="color: #1B4B73; text-decoration: underline;">https://klynn.com.do/restablecer-contrasena?token=sample_token_xyz</span>
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td class="fluid-padding" style="padding: 0 32px 24px 32px;">
+              <p style="margin: 0; font-size: 11px; line-height: 1.5; color: #94A3B8; text-align: center;">
+                Si tú no solicitaste este cambio, puedes ignorar este correo de forma segura. Tu contraseña actual no cambiará.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 16px 24px; border-top: 1px solid #F1F5F9; background-color: #FFFFFF;">
+              <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #64748B;">
+                Klynn Cloud &bull; <a href="mailto:soporte@klynn.com.do" style="color: #1B4B73; text-decoration: none;">soporte@klynn.com.do</a>
+              </p>
+              <p style="margin: 0; font-size: 10px; color: #94A3B8;">
+                &copy; 2026 Klynn. Todos los derechos reservados.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`,
+      welcome: `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&display=swap" rel="stylesheet">
+  <style>
+    body { margin: 0; padding: 0; background-color: #F8FAFC; font-family: 'Plus Jakarta Sans', sans-serif; color: #1E293B; }
+    @media screen and (max-width: 600px) {
+      .email-container { width: 100% !important; border: none !important; border-radius: 0 !important; }
+      .fluid-padding { padding-left: 20px !important; padding-right: 20px !important; }
+      .btn-primary { width: 100% !important; box-sizing: border-box !important; text-align: center !important; }
+    }
+  </style>
+</head>
+<body style="margin: 0; padding: 0; background-color: #F8FAFC;">
+  <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; padding: 24px 12px;">
+    <tr>
+      <td align="center">
+        <table border="0" cellpadding="0" cellspacing="0" width="480" class="email-container" style="max-width: 480px; width: 100%; background-color: #FFFFFF; border-radius: 16px; overflow: hidden; border: 1px solid #E2E8F0; box-shadow: 0 4px 20px -2px rgba(15, 23, 42, 0.05);">
+          <tr>
+            <td height="4" style="background: linear-gradient(90deg, #1B4B73 0%, #0284C7 60%, #F0B900 100%); line-height: 4px; font-size: 4px;">&nbsp;</td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 30px 24px 18px 24px;">
+              <img src="https://api.klynn.com.do/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="205" style="display: block; width: 205px; max-width: 205px; height: auto; margin: 0 auto; border: 0;" />
+              <p style="margin: 6px 0 0 0; font-size: 12px; font-weight: 600; color: #64748B; letter-spacing: -0.2px;">
+                Tu lavandería, simplificada.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="fluid-padding" style="padding: 0 32px 14px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 14px;">
+                <tr>
+                  <td align="center" style="background-color: #EFF6FF; border: 1px solid #DBEAFE; border-radius: 6px; padding: 5px 14px;">
+                    <span style="font-size: 10px; font-weight: 700; color: #1B4B73; text-transform: uppercase; letter-spacing: 0.8px;">
+                      BIENVENIDO A KLYNN CLOUD
+                    </span>
+                  </td>
+                </tr>
+              </table>
+              <h1 style="margin: 0 0 8px 0; font-size: 21px; font-weight: 800; color: #0F172A; letter-spacing: -0.4px; line-height: 1.25;">
+                ¡Todo listo para <span style="color: #1B4B73;">Lavandería La Burbuja</span>!
+              </h1>
+              <p style="margin: 0; font-size: 13px; line-height: 1.55; color: #475569;">
+                Hola <strong style="color: #0F172A;">Yeri Orlando</strong>, tu cuenta ya está activa. Hemos preparado tu panel de control para que comiences a operar hoy mismo.
+              </p>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" class="fluid-padding" style="padding: 4px 32px 18px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #F8FAFC; border: 1px solid #E2E8F0; border-radius: 12px; text-align: center;">
+                <tr>
+                  <td style="padding: 16px 14px;">
+                    <div style="font-size: 12px; font-weight: 700; color: #1B4B73; margin-bottom: 10px;">
+                      https://laburbuja.klynn.app
+                    </div>
+                    <table border="0" cellpadding="0" cellspacing="0" align="center">
+                      <tr>
+                        <td align="center" style="border-radius: 10px; background-color: #1B4B73;">
+                          <a href="https://klynn.com.do/t/laburbuja" target="_blank" class="btn-primary" style="display: inline-block; padding: 11px 26px; font-size: 13px; font-weight: 700; color: #FFFFFF; text-decoration: none; border-radius: 10px; background-color: #1B4B73; border: 1px solid #1B4B73;">
+                            Ingresar a mi lavandería &rarr;
+                          </a>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td class="fluid-padding" style="padding: 0 32px 24px 32px;">
+              <table border="0" cellpadding="0" cellspacing="0" width="100%" style="background-color: #FFFFFF; border: 1px solid #E2E8F0; border-radius: 12px; overflow: hidden;">
+                <tr>
+                  <td style="padding: 12px 16px; background-color: #F8FAFC; border-bottom: 1px solid #E2E8F0;">
+                    <span style="font-size: 11px; font-weight: 800; color: #1B4B73; text-transform: uppercase; letter-spacing: 0.6px;">
+                      Primeros pasos para comenzar
+                    </span>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #F1F5F9;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td width="30" valign="top" style="padding-right: 12px;">
+                          <div style="width: 24px; height: 24px; border-radius: 6px; background-color: #EFF6FF; border: 1px solid #DBEAFE; text-align: center; line-height: 22px; font-size: 11px; font-weight: 800; color: #1B4B73;">
+                            1
+                          </div>
+                        </td>
+                        <td valign="middle">
+                          <div style="font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">
+                            Configura tus precios
+                          </div>
+                          <p style="margin: 0; font-size: 11px; line-height: 1.4; color: #64748B;">
+                            Personaliza tu catálogo de servicios (lavado, secado, planchado o por libras).
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 16px; border-bottom: 1px solid #F1F5F9;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td width="30" valign="top" style="padding-right: 12px;">
+                          <div style="width: 24px; height: 24px; border-radius: 6px; background-color: #EFF6FF; border: 1px solid #DBEAFE; text-align: center; line-height: 22px; font-size: 11px; font-weight: 800; color: #1B4B73;">
+                            2
+                          </div>
+                        </td>
+                        <td valign="middle">
+                          <div style="font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">
+                            Registra a tu primer cliente
+                          </div>
+                          <p style="margin: 0; font-size: 11px; line-height: 1.4; color: #64748B;">
+                            Guarda su teléfono y RNC/Cédula para facturación y avisos de WhatsApp.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding: 12px 16px;">
+                    <table border="0" cellpadding="0" cellspacing="0" width="100%">
+                      <tr>
+                        <td width="30" valign="top" style="padding-right: 12px;">
+                          <div style="width: 24px; height: 24px; border-radius: 6px; background-color: #EFF6FF; border: 1px solid #DBEAFE; text-align: center; line-height: 22px; font-size: 11px; font-weight: 800; color: #1B4B73;">
+                            3
+                          </div>
+                        </td>
+                        <td valign="middle">
+                          <div style="font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 2px;">
+                            Crea tu primera orden
+                          </div>
+                          <p style="margin: 0; font-size: 11px; line-height: 1.4; color: #64748B;">
+                            Recibe las prendas, genera el comprobante fiscal y entrega el ticket.
+                          </p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td align="center" style="padding: 16px 24px; border-top: 1px solid #F1F5F9; background-color: #FFFFFF;">
+              <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 600; color: #64748B;">
+                Klynn Cloud &bull; <a href="mailto:soporte@klynn.com.do" style="color: #1B4B73; text-decoration: none;">soporte@klynn.com.do</a>
+              </p>
+              <p style="margin: 0; font-size: 10px; color: #94A3B8;">
+                &copy; 2026 Klynn. Todos los derechos reservados.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`
+    };
+
+    function switchTemplate(name) {
+      const frame = document.getElementById('email-frame');
+      frame.srcdoc = templates[name];
+
+      ['otp', 'recovery', 'welcome'].forEach(key => {
+        const btn = document.getElementById('btn-' + key);
+        if (btn) {
+          btn.className = key === name 
+            ? 'px-4 py-2 rounded-lg text-xs font-bold transition-all bg-[#1B4B73] text-white shadow'
+            : 'px-4 py-2 rounded-lg text-xs font-bold transition-all text-slate-400 hover:text-white';
+        }
+      });
+
+      frame.style.height = name === 'welcome' ? '650px' : '580px';
+    }
+
+    function setFrameWidth(w) {
+      document.getElementById('frame-wrapper').style.maxWidth = w === '100%' ? '520px' : '380px';
+    }
+
+    // Inicializar
+    switchTemplate('welcome');
+  </script>
+</body>
+</html>
