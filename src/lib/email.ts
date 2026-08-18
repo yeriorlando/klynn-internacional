@@ -8,7 +8,7 @@ export interface SendWelcomeEmailParams {
 }
 
 export const sendWelcomeEmailServer = createServerFn({ method: "POST" })
-  .validator((data: SendWelcomeEmailParams) => data)
+  .inputValidator((data: SendWelcomeEmailParams) => data)
   .handler(async ({ data }) => {
     try {
       const { to, adminNombre, nombreLavanderia, tenantSlug } = data;
