@@ -92,9 +92,20 @@ export interface Tenant {
   max_sucursales?: number;
   limite_credito_dias?: number;
   plan_fecha_inicio?: string;
+  nombre_sucursal?: string;
+}
+
+export function getTenantBranchName(tenant?: Partial<Tenant> | null): string {
+  if (!tenant) return "Sucursal principal";
+  const name = tenant.nombre_sucursal || tenant.config?.nombre_sucursal;
+  if (name && typeof name === "string" && name.trim()) {
+    return name.trim();
+  }
+  return "Sucursal principal";
 }
 
 export interface TenantConfig {
+  nombre_sucursal?: string;
   modo_facturacion?: "electronica" | "tradicional";
   itbis_incluido: boolean;
   itbis_porcentaje: number;
@@ -578,6 +589,7 @@ export function isModuleEnabled(
 }
 
 export const DEFAULT_CONFIG: TenantConfig = {
+  nombre_sucursal: "Sucursal principal",
   itbis_incluido: false,
   itbis_porcentaje: 18,
   formato_ticket: "80mm",
@@ -946,8 +958,29 @@ export async function getTenants(): Promise<Tenant[]> {
 }
 
 export async function saveTenant(t: Tenant) {
-  const { error } = await supabase.from("tenants").upsert(t);
-  if (error) throw error;
+  // Asegurar que nombre_sucursal esté sincronizado en config
+  const branchName = t.nombre_sucursal || t.config?.nombre_sucursal || "Sucursal principal";
+  const updatedTenant: Tenant = {
+    ...t,
+    nombre_sucursal: branchName,
+    config: {
+      ...DEFAULT_CONFIG,
+      ...t.config,
+      nombre_sucursal: branchName,
+    },
+  };
+
+  const { error } = await supabase.from("tenants").upsert(updatedTenant);
+  if (error) {
+    // Si la columna nombre_sucursal aún no existe en PostgREST schema cache, guardar sin columna de nivel superior
+    if (error.message && error.message.includes("nombre_sucursal")) {
+      const { nombre_sucursal: _, ...fallbackTenant } = updatedTenant;
+      const { error: errFallback } = await supabase.from("tenants").upsert(fallbackTenant);
+      if (errFallback) throw errFallback;
+      return;
+    }
+    throw error;
+  }
 }
 
 export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
@@ -981,8 +1014,29 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
     console.error("Error auto-confirming tenant admin email:", confirmErr);
   }
 
+  // Asegurar que la primera cuenta creada sea 'Sucursal principal'
+  const branchName = tenant.nombre_sucursal || "Sucursal principal";
+  const tenantToSave: Tenant = {
+    ...tenant,
+    nombre_sucursal: branchName,
+    config: {
+      ...DEFAULT_CONFIG,
+      ...tenant.config,
+      nombre_sucursal: branchName,
+    },
+  };
+
   // 2. Guardar la lavandería
-  const { error: tenantError } = await supabase.from("tenants").insert(tenant);
+  let tenantError;
+  const { error: err1 } = await supabase.from("tenants").insert(tenantToSave);
+  if (err1 && err1.message && err1.message.includes("nombre_sucursal")) {
+    const { nombre_sucursal: _, ...fallbackTenant } = tenantToSave;
+    const { error: err2 } = await supabase.from("tenants").insert(fallbackTenant);
+    tenantError = err2;
+  } else {
+    tenantError = err1;
+  }
+
   if (tenantError) {
     // Rollback Auth user — no se puede desde el cliente, pero al menos señalar el error
     throw new Error(
@@ -1013,12 +1067,32 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
     password: admin.password,
   });
 
-  return { tenant, user: authData.user };
+  return { tenant: tenantToSave, user: authData.user };
 }
 
 export async function registerBranch(tenant: Tenant, admin: Empleado, userId: string) {
+  const branchName = tenant.nombre_sucursal || tenant.config?.nombre_sucursal || "Sucursal principal";
+  const tenantToSave: Tenant = {
+    ...tenant,
+    nombre_sucursal: branchName,
+    config: {
+      ...DEFAULT_CONFIG,
+      ...tenant.config,
+      nombre_sucursal: branchName,
+    },
+  };
+
   // 1. Guardar la lavandería
-  const { error: tenantError } = await supabase.from("tenants").insert(tenant);
+  let tenantError;
+  const { error: err1 } = await supabase.from("tenants").insert(tenantToSave);
+  if (err1 && err1.message && err1.message.includes("nombre_sucursal")) {
+    const { nombre_sucursal: _, ...fallbackTenant } = tenantToSave;
+    const { error: err2 } = await supabase.from("tenants").insert(fallbackTenant);
+    tenantError = err2;
+  } else {
+    tenantError = err1;
+  }
+
   if (tenantError) {
     throw new Error(
       "Error al crear sucursal: " + tenantError.message + ". Por favor contacta soporte.",
@@ -1043,7 +1117,7 @@ export async function registerBranch(tenant: Tenant, admin: Empleado, userId: st
     );
   }
 
-  return { tenant };
+  return { tenant: tenantToSave };
 }
 
 export async function deleteTenant(id: string) {
@@ -1525,16 +1599,37 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
 
 // ============ Clientes (Supabase) ============
 export async function getClientes(tenant_id: string): Promise<Cliente[]> {
-  const { data, error } = await supabase
-    .from("clientes")
-    .select("*")
-    .eq("tenant_id", tenant_id)
-    .order("nombre");
-  if (error) {
-    console.error("Error getClientes:", error);
-    return [];
+  const PAGE_SIZE = 1000;
+  let allData: Cliente[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("clientes")
+      .select("*")
+      .eq("tenant_id", tenant_id)
+      .order("nombre")
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error getClientes:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
   }
-  return data || [];
+
+  return allData;
 }
 
 export async function saveCliente(c: Cliente) {
@@ -1565,12 +1660,37 @@ export async function getClienteById(id: string): Promise<Cliente | undefined> {
 
 // ============ Órdenes (Supabase) ============
 export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
-  const { data, error } = await supabase
-    .from("ordenes")
-    .select("*")
-    .eq("tenant_id", tenant_id)
-    .order("creado_en", { ascending: false });
-  let results = data || [];
+  const PAGE_SIZE = 1000;
+  let allData: Orden[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("ordenes")
+      .select("*")
+      .eq("tenant_id", tenant_id)
+      .order("creado_en", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error getOrdenes:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  let results = allData;
 
   if (isBrowser()) {
     const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
@@ -1593,26 +1713,48 @@ export async function getOrdenesByPeriod(filters: {
   desde?: string;
   hasta?: string;
 }): Promise<Orden[]> {
-  let query = supabase.from("ordenes").select("*").eq("tenant_id", filters.tenant_id);
+  const PAGE_SIZE = 1000;
+  let allData: Orden[] = [];
+  let from = 0;
+  let hasMore = true;
 
-  if (filters.empleado_id && filters.empleado_id !== "all") {
-    query = query.eq("empleado_id", filters.empleado_id);
+  while (hasMore) {
+    let query = supabase.from("ordenes").select("*").eq("tenant_id", filters.tenant_id);
+
+    if (filters.empleado_id && filters.empleado_id !== "all") {
+      query = query.eq("empleado_id", filters.empleado_id);
+    }
+
+    if (filters.desde) {
+      query = query.gte("creado_en", filters.desde);
+    }
+
+    if (filters.hasta) {
+      query = query.lte("creado_en", filters.hasta + "T23:59:59Z");
+    }
+
+    const { data, error } = await query
+      .order("creado_en", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error getOrdenesByPeriod:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
   }
 
-  if (filters.desde) {
-    query = query.gte("creado_en", filters.desde);
-  }
-
-  if (filters.hasta) {
-    query = query.lte("creado_en", filters.hasta + "T23:59:59Z");
-  }
-
-  const { data, error } = await query.order("creado_en", { ascending: false });
-  if (error) {
-    console.error("Error getOrdenesByPeriod:", error);
-    return [];
-  }
-  return data || [];
+  return allData;
 }
 
 export async function saveOrden(o: Orden) {
@@ -1756,11 +1898,36 @@ export async function getMovimientos(
   tenant_id: string,
   caja_id?: string,
 ): Promise<MovimientoCaja[]> {
-  let query = supabase.from("movimientos_caja").select("*").eq("tenant_id", tenant_id);
-  if (caja_id) query = query.eq("caja_id", caja_id);
-  const { data, error } = await query.order("creado_en", { ascending: true });
-  if (error) return [];
-  return data || [];
+  const PAGE_SIZE = 1000;
+  let allData: MovimientoCaja[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    let query = supabase.from("movimientos_caja").select("*").eq("tenant_id", tenant_id);
+    if (caja_id) query = query.eq("caja_id", caja_id);
+    const { data, error } = await query
+      .order("creado_en", { ascending: true })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error getMovimientos:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  return allData;
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
@@ -1780,12 +1947,37 @@ export async function saveMovimiento(m: MovimientoCaja) {
 
 // ============ Gastos (Supabase) ============
 export async function getGastos(tenant_id: string): Promise<Gasto[]> {
-  const { data, error } = await supabase
-    .from("gastos")
-    .select("*")
-    .eq("tenant_id", tenant_id)
-    .order("fecha", { ascending: false });
-  let results = data || [];
+  const PAGE_SIZE = 1000;
+  let allData: Gasto[] = [];
+  let from = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("gastos")
+      .select("*")
+      .eq("tenant_id", tenant_id)
+      .order("fecha", { ascending: false })
+      .range(from, from + PAGE_SIZE - 1);
+
+    if (error) {
+      console.error("Error getGastos:", error);
+      break;
+    }
+
+    if (data && data.length > 0) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    } else {
+      hasMore = false;
+    }
+  }
+
+  let results = allData;
 
   if (isBrowser()) {
     const local = read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);

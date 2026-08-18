@@ -301,56 +301,61 @@ export function Ticket({
   // ★ FORMATO COMERCIAL / FISCAL / CLIENTE (INTACTO) ★
   // =========================================================================
   return (
-    <div className={`thermal-ticket mx-auto ${w} ${cols} bg-white p-3 font-sans text-[11px] leading-snug text-black`} style={{ fontFamily: '"Segoe UI", Arial, sans-serif' }}>
+    <div className={`thermal-ticket mx-auto ${w} ${cols} bg-white p-3 font-sans text-[11px] font-semibold leading-snug text-black`} style={{ fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif' }}>
       <div className="text-center space-y-0.5">
         {tenant.logo_url && (
           <div className="flex justify-center mb-0">
             <img src={tenant.logo_url} alt="Logo" className="h-24 w-auto max-w-[220px] object-contain filter grayscale" />
           </div>
         )}
-        {!tenant.logo_url && <div className="text-base font-bold uppercase leading-tight">{tenant.nombre}</div>}
-        {cfg?.ncf_facturacion_activa && cfg?.ticket_mostrar_rnc && tenant.rnc && <div>RNC: {tenant.rnc}</div>}
-        {tenant.telefono && <div>Tel: {formatPhoneDO(tenant.telefono)}</div>}
-        {tenant.direccion && <div className="text-[10px] leading-tight">{tenant.direccion}</div>}
+        {!tenant.logo_url && <div className="text-base font-black uppercase leading-tight">{tenant.nombre}</div>}
+        {cfg?.ncf_facturacion_activa && cfg?.ticket_mostrar_rnc && tenant.rnc && <div className="font-bold">RNC: {tenant.rnc}</div>}
+        {tenant.telefono && <div className="font-bold">Tel: {formatPhoneDO(tenant.telefono)}</div>}
+        {tenant.direccion && <div className="text-[10.5px] font-semibold leading-tight">{tenant.direccion}</div>}
       </div>
       <Sep />
-      <div className="text-center font-bold uppercase text-[12px] py-1">{tipoDocumento}</div>
+      <div className="text-center font-black uppercase text-[12px] py-1">{tipoDocumento}</div>
       {esCopiaCaja && (
-        <div className="text-center font-black uppercase text-[10px] py-0.5 bg-black text-white my-1 rounded-xs tracking-wider">
+        <div className="text-center font-black uppercase text-[10.5px] py-0.5 bg-black text-white my-1 rounded-xs tracking-wider">
           ★ COPIA DE CAJA ★
         </div>
       )}
-      <div className="text-center font-bold uppercase text-[11px] py-1 border border-black my-1">
+      <div className="text-center font-black uppercase text-[11px] py-1 border-2 border-black my-1">
         {orden.saldo === 0 ? "★ FACTURA PAGADA ★" : `⚠️ PENDIENTE: ${formatRD(orden.saldo)}`}
       </div>
       <Sep />
       <div>
         <div className="flex justify-between items-center">
-          <div><b>Orden No°:</b> {orden.numero}</div>
+          <div><b className="font-bold">Orden No°:</b> <span className="font-extrabold">{orden.numero}</span></div>
           {orden.es_urgente && (
-            <span className="font-black text-black border border-black px-1 py-0.5 text-[9px] uppercase">
+            <span className="font-black text-black border-2 border-black px-1 py-0.5 text-[9px] uppercase">
               ★ URGENTE ★
             </span>
           )}
         </div>
         {orden.nota_credito_ncf ? (
           <>
-            <div className="text-destructive font-bold">
-              <b>{isECF ? 'e-NCF' : 'NCF'}:</b> {orden.nota_credito_ncf}
+            <div className="text-destructive font-black">
+              <b>{isECF ? 'e-NCF' : 'NCF'}:</b> <span className="font-extrabold">{orden.nota_credito_ncf}</span>
             </div>
-            <div><b>Doc. Modificado:</b> {orden.ncf}</div>
+            <div><b className="font-bold">Doc. Modificado:</b> <span className="font-bold">{orden.ncf}</span></div>
           </>
         ) : (
           <>
             {orden.ncf && (
               <div>
-                <b>{isECF ? 'e-NCF' : 'NCF'}:</b> {orden.ncf}
+                <b className="font-bold">{isECF ? 'e-NCF' : 'NCF'}:</b> <span className="font-extrabold">{orden.ncf}</span>
                 {orden.ncf_vencimiento && (
                   <div className="font-bold">Fecha Vencimiento: {formatDateRD(orden.ncf_vencimiento)}</div>
                 )}
               </div>
             )}
-            <div><b>Fecha Emisión:</b> {formatDateTimeRD(orden.creado_en)}</div>
+            <div><b className="font-bold">Fecha Emisión:</b> <span className="font-bold">{formatDateTimeRD(orden.creado_en)}</span></div>
+            {orden.notas && ((cfg?.ticket_mostrar_notas || esCopiaCaja) && !ocultarNotas) && (
+              <div className="border border-black px-1.5 py-0.5 my-1 text-[10.5px] leading-tight font-bold bg-black/5">
+                <span className="font-black uppercase">NOTA:</span> {orden.notas}
+              </div>
+            )}
           </>
         )}
       </div>
@@ -359,27 +364,18 @@ export function Ticket({
       ) : (
         <>
           <Sep />
-          <div className="text-center font-bold uppercase tracking-widest text-[10px]">Datos del Cliente</div>
+          <div className="text-center font-black uppercase tracking-widest text-[10.5px]">Datos del Cliente</div>
           <Sep />
-          <div>
-            <div><b>Cliente:</b> {cliente.nombre} {cliente.apellido || ""}</div>
-            {cliente.cedula && <div><b>{cliente.tipo === 'Empresa' ? 'RNC:' : 'Cédula:'}</b> {cliente.cedula}</div>}
-            {cliente.telefono && cliente.telefono !== "---" && <div><b>Teléfono:</b> {formatPhoneDO(cliente.telefono)}</div>}
-            {cliente.direccion && <div><b>Dirección:</b> {cliente.direccion}</div>}
+          <div className="font-semibold">
+            <div><b className="font-bold">Cliente:</b> <span className="font-bold">{cliente.nombre} {cliente.apellido || ""}</span></div>
+            {cliente.cedula && <div><b className="font-bold">{cliente.tipo === 'Empresa' ? 'RNC:' : 'Cédula:'}</b> <span className="font-bold">{cliente.cedula}</span></div>}
+            {cliente.telefono && cliente.telefono !== "---" && <div><b className="font-bold">Teléfono:</b> <span className="font-bold">{formatPhoneDO(cliente.telefono)}</span></div>}
+            {cliente.direccion && <div><b className="font-bold">Dirección:</b> <span className="font-semibold">{cliente.direccion}</span></div>}
           </div>
           <Sep />
         </>
       )}
-      {orden.notas && (cfg?.ticket_mostrar_notas && !ocultarNotas) && (
-        <>
-          <div className="my-1 border border-black p-1.5 text-center font-bold leading-snug uppercase text-[11px] bg-slate-50">
-            📝 INSTRUCCIONES / NOTA:<br />
-            <span className="font-extrabold">{orden.notas}</span>
-          </div>
-          <Sep />
-        </>
-      )}
-      <div className="flex justify-between font-bold uppercase text-[10px] mb-1">
+      <div className="flex justify-between font-black uppercase text-[10.5px] mb-1">
         <div className="w-[44%] DESCRIPCION">DESCRIPCION</div>
         <div className="w-[26%] text-right">ITBIS</div>
         <div className="w-[30%] text-right">VALOR</div>
@@ -427,11 +423,11 @@ export function Ticket({
                         <div key={'s'+i} className="mb-2">
                           <div className="flex justify-between items-start mb-1">
                             <div className="w-[44%] pr-1">
-                              <div className="font-bold leading-tight uppercase text-[11px]">Servicio: {sName}</div>
-                              <div className="text-[10px] text-black font-semibold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
+                              <div className="font-black leading-tight uppercase text-[11px]">Servicio: {sName}</div>
+                              <div className="text-[10px] text-black font-bold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
                             </div>
-                            <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
-                            <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
+                            <div className="w-[26%] text-right font-black pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
+                            <div className="w-[30%] text-right font-black pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
                           </div>
 
                           {/* Desgloses anidados debajo del servicio */}
@@ -451,13 +447,13 @@ export function Ticket({
                             return (
                               <div key={'sd'+dIdx} className="flex justify-between items-start pl-3 mb-1 animate-in fade-in duration-200">
                                 <div className="w-[44%] pr-1">
-                                  <div className="font-normal text-black text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : (it.cantidad > 1 ? ` (x${it.cantidad})` : "")}</div>
-                                  {it.notas && <div className="text-[9px] italic leading-tight text-black">Nota: {it.notas}</div>}
+                                  <div className="font-bold text-black text-[10.5px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : (it.cantidad > 1 ? ` (x${it.cantidad})` : "")}</div>
+                                  {it.notas && <div className="text-[9.5px] font-bold italic leading-tight text-black">Nota: {it.notas}</div>}
                                 </div>
-                                <div className="w-[26%] text-right font-medium pt-0.5 text-black">
+                                <div className="w-[26%] text-right font-bold pt-0.5 text-black">
                                   {baseTotal > 0 ? (itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00") : "—"}
                                 </div>
-                                <div className="w-[30%] text-right font-medium pt-0.5 text-black">
+                                <div className="w-[30%] text-right font-bold pt-0.5 text-black">
                                   {baseTotal > 0 ? formatRD(valor).replace("RD$", "") : "—"}
                                 </div>
                               </div>
@@ -481,14 +477,14 @@ export function Ticket({
                         }
                       }
                       return (
-                        <div key={'suelto'+i} className="flex justify-between items-start mb-1.5">
+                        <div key={'suelto'+i} className="flex justify-between items-start mb-1.5 font-semibold">
                           <div className="w-[44%] pr-1">
-                            <div className="font-semibold leading-tight text-[11px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
-                            <div className="text-[10px] text-black font-semibold leading-tight">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
-                            {it.notas && <div className="text-[9px] italic leading-tight text-black font-sans">Nota: {it.notas}</div>}
+                            <div className="font-bold leading-tight text-[11px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                            <div className="text-[10px] text-black font-bold leading-tight">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
+                            {it.notas && <div className="text-[9.5px] font-bold italic leading-tight text-black">Nota: {it.notas}</div>}
                           </div>
-                          <div className="w-[26%] text-right font-semibold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
-                          <div className="w-[30%] text-right font-semibold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
+                          <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
+                          <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
                         </div>
                       );
                    })}
@@ -498,7 +494,7 @@ export function Ticket({
           </div>
           <Sep />
           <div>
-            <div className="text-center font-bold text-[12px] my-1">
+            <div className="text-center font-black text-[12px] my-1">
               TOTAL DE PRENDAS: {totalPrendas}
             </div>
             <Row k="Subtotal" v={formatRD(orden.subtotal).replace("DOP", "RD$")} />
@@ -556,20 +552,20 @@ export function Ticket({
               } 
               boldValue
             />
-            <Row k="Estado de la orden" v={orden.estado.replace("_", " ")} />
+            <Row k="Estado de la orden" v={orden.estado.replace("_", " ")} boldValue />
             {orden.motivo_anulacion && (
-              <div className="text-[9px] mt-1 italic leading-tight">
+              <div className="text-[9.5px] mt-1 font-bold italic leading-tight">
                 <b>Motivo ({orden.motivo_anulacion_codigo || "01"}):</b> {orden.motivo_anulacion}
               </div>
             )}
-            {orden.es_urgente && <div className="font-bold text-center mt-1">★ URGENTE ★</div>}
+            {orden.es_urgente && <div className="font-black text-center mt-1 text-[11px]">★ URGENTE ★</div>}
           </div>
           {cfg?.ticket_mostrar_empleado && (
             <>
               <Sep />
               <div className="text-center py-0.5">
-                <div className="text-[9px] font-bold uppercase tracking-wider text-black">ATENDIDO POR:</div>
-                <div className="text-[12px] font-black uppercase text-black mt-0.5">
+                <div className="text-[9.5px] font-bold uppercase tracking-wider text-black">ATENDIDO POR:</div>
+                <div className="text-[13px] font-black uppercase text-black mt-0.5">
                   {empleado.nombre}
                 </div>
               </div>
@@ -577,9 +573,9 @@ export function Ticket({
           )}
           <Sep />
           <div className="text-center py-1">
-            <div>{cfg?.ticket_pie ?? "¡Gracias por su preferencia!"}</div>
+            <div className="font-bold text-[11px]">{cfg?.ticket_pie ?? "¡Gracias por su preferencia!"}</div>
             {cfg?.ticket_nota && (
-              <div className="text-[10px] leading-tight whitespace-pre-line border-t border-dashed border-black/30 pt-1 mt-1 font-medium">
+              <div className="text-[10px] leading-tight whitespace-pre-line border-t border-dashed border-black/40 pt-1 mt-1 font-semibold">
                 {cfg.ticket_nota}
               </div>
             )}
@@ -588,13 +584,13 @@ export function Ticket({
 
           {isECF && qrData && (
             <div className="mt-2 flex flex-col items-center gap-1">
-              <div className="text-[9px] font-bold uppercase text-center">
+              <div className="text-[9.5px] font-black uppercase text-center">
                 {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : ""}
               </div>
               <div className="p-1 bg-white">
                 <QRCodeSVG value={qrData} size={100} level="M" />
               </div>
-              <div className="text-[8px] text-center leading-tight">
+              <div className="text-[8.5px] font-bold text-center leading-tight">
                 {orden.ecf_security_code && orden.ecf_security_code !== "null" && (
                   <div>Código de Seguridad: {orden.ecf_security_code}</div>
                 )}
@@ -602,7 +598,7 @@ export function Ticket({
                   <div>Fecha Firma: {formatDateTimeRD(orden.ecf_signature_date)}</div>
                 )}
               </div>
-              <div className="text-[8px] text-center leading-tight mt-1">
+              <div className="text-[8.5px] font-bold text-center leading-tight mt-1">
                 Consulte su factura en:<br/>
                 dgii.gov.do
               </div>
@@ -615,9 +611,9 @@ export function Ticket({
 function Sep() { return <div className="my-1.5 border-t border-dashed border-black" />; }
 function Row({ k, v, bold, boldValue }: { k: string; v: string; bold?: boolean; boldValue?: boolean }) {
   return (
-    <div className={`flex justify-between ${bold ? "font-bold text-[12px]" : ""}`}>
-      <span>{k}:</span>
-      <span className={boldValue ? "font-bold" : ""}>{v}</span>
+    <div className={`flex justify-between text-[11px] ${bold ? "font-black text-[12px]" : "font-semibold"}`}>
+      <span className="font-bold">{k}:</span>
+      <span className={boldValue || bold ? "font-black" : "font-bold"}>{v}</span>
     </div>
   );
 }

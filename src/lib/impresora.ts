@@ -369,8 +369,10 @@ export function encodeEscPos(
     if (cliente.telefono && cliente.telefono !== "---") {
       writeLine(`Tel: ${formatPhoneDO(cliente.telefono)}`);
     }
-    if (orden.notas && (config.ticket_mostrar_notas && !ocultarNotas)) {
+    if (orden.notas && ((config.ticket_mostrar_notas || esCopiaCaja) && !ocultarNotas)) {
+      bytes.push(...BOLD_ON);
       writeLine(`NOTA: ${orden.notas}`);
+      bytes.push(...BOLD_OFF);
     }
     writeLine("=".repeat(columns));
 

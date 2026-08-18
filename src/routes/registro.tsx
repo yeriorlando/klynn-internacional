@@ -331,11 +331,13 @@ function RegistroPage() {
   async function handleFinalize() {
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
+      nombre_sucursal: "Sucursal principal",
     };
     const cleanRnc = form.rnc.replace(/\D/g, "");
     const tenant: Tenant = {
       id: uid("ten"),
       nombre: form.nombre,
+      nombre_sucursal: "Sucursal principal",
       slug: form.slug,
       rnc: cleanRnc || undefined,
       telefono: form.telefono,

@@ -541,13 +541,28 @@ Característica escritura: —
 
             <div className="space-y-6">
               {/* Sección 1: Datos de Contacto y Nombre */}
-              <div className="grid gap-5 md:grid-cols-3">
-                <Field label="Nombre comercial" icon={Building2}>
+              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
+                <Field label="Nombre comercial de la empresa" icon={Building2}>
                   <Input 
-                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                    placeholder="Ej: Lavandería Klynn Central" 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-medium`} 
+                    placeholder="Ej: Lavandería Klynn" 
                     value={tenant.nombre} 
                     onChange={(e) => setTenant({ ...tenant, nombre: e.target.value })} 
+                  />
+                </Field>
+                <Field label="Nombre de la sucursal" icon={Store}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-medium`} 
+                    placeholder="Ej: Sucursal principal, Bella Vista..." 
+                    value={tenant.nombre_sucursal || tenant.config?.nombre_sucursal || ""} 
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setTenant({ 
+                        ...tenant, 
+                        nombre_sucursal: val,
+                        config: { ...(tenant.config || DEFAULT_CONFIG), nombre_sucursal: val }
+                      });
+                    }} 
                   />
                 </Field>
                 <Field label="Teléfono de contacto" icon={Phone}>

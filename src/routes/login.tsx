@@ -13,7 +13,7 @@ import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { setActiveTenant, setSession, ADMIN_EMAILS } from "@/lib/storage";
+import { setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 
 export const Route = createFileRoute("/login")({
@@ -300,7 +300,12 @@ function LoginPage() {
                         </div>
                         <div className="min-w-0">
                           <p className="font-bold text-slate-900 dark:text-white text-sm truncate">{acc.tenant.nombre}</p>
-                          <p className="text-[10px] text-slate-400 font-mono truncate">klynn.com.do/t/{acc.tenant.slug}</p>
+                          <div className="mt-1 flex items-center gap-1.5">
+                            <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
+                              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                              {getTenantBranchName(acc.tenant)}
+                            </span>
+                          </div>
                         </div>
                       </div>
                       <div className="h-8 w-8 rounded-lg bg-slate-100 dark:bg-slate-800 group-hover:bg-[#1B4B73] group-hover:text-white text-slate-600 dark:text-slate-300 flex items-center justify-center transition-colors shrink-0">
@@ -310,23 +315,25 @@ function LoginPage() {
                   ))}
                 </div>
 
-                <div className="pt-1 space-y-2">
+                <div className="pt-2 space-y-2">
                   <Link to="/dashboard-admin" className="w-full block">
                     <Button
-                      variant="outline"
-                      className="w-full h-10 border-slate-200 text-slate-700 hover:bg-slate-50 font-bold rounded-xl text-xs transition-all"
+                      type="button"
+                      className="w-full h-10 bg-[#1B4B73] hover:bg-[#153a5b] active:bg-[#0f2c45] text-white font-bold rounded-xl text-xs shadow-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                     >
-                      <LayoutDashboard className="h-3.5 w-3.5 mr-1.5 text-[#1B4B73]" /> Ir al panel general Propietario
+                      <LayoutDashboard className="h-3.5 w-3.5 text-[#F0B900]" />
+                      <span>Ir al panel general de propietario</span>
                     </Button>
                   </Link>
 
                   <Button
                     onClick={() => setMatchingAccounts([])}
-                    variant="ghost"
-                    size="sm"
-                    className="w-full h-9 text-slate-500 hover:text-slate-900 font-semibold rounded-xl text-xs transition-all"
+                    type="button"
+                    variant="outline"
+                    className="w-full h-10 bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-slate-700 font-semibold rounded-xl text-xs shadow-2xs flex items-center justify-center gap-2 transition-all cursor-pointer"
                   >
-                    <UserPlus className="h-3.5 w-3.5 mr-1.5" /> Iniciar con otra cuenta
+                    <UserPlus className="h-3.5 w-3.5 text-slate-500 dark:text-slate-400" />
+                    <span>Iniciar con otra cuenta</span>
                   </Button>
                 </div>
               </motion.div>

@@ -164,11 +164,11 @@ function CajaPage() {
     const toastId = toast.loading("Preparando cuadre para impresión...");
     try {
       // Fetch orders within the exact period (ISO timestamps)
-      let query = supabase.from("ordenes").select("*").eq("tenant_id", tenantId);
-      query = query
-        .gte("creado_en", c.abierta_en)
-        .lte("creado_en", c.cerrada_en || new Date().toISOString());
-      const { data: ordsData } = await query.order("creado_en", { ascending: false });
+      const ordsData = await getOrdenesByPeriod({
+        tenant_id: tenantId,
+        desde: c.abierta_en,
+        hasta: c.cerrada_en || new Date().toISOString(),
+      });
       setPrintOrders(ordsData || []);
 
       // Fetch movements within the exact period
@@ -2306,12 +2306,12 @@ function HistoricoCuadreDialog({
   }
 
   async function fetchOrdersAndMovs(startRange: string, endRange: string) {
-    let query = supabase.from("ordenes").select("*").eq("tenant_id", tenant.id);
-    if (empId && empId !== "all") {
-      query = query.eq("empleado_id", empId);
-    }
-    query = query.gte("creado_en", startRange).lte("creado_en", endRange);
-    const { data: ordsData } = await query.order("creado_en", { ascending: false });
+    const ordsData = await getOrdenesByPeriod({
+      tenant_id: tenant.id,
+      empleado_id: empId && empId !== "all" ? empId : undefined,
+      desde: startRange,
+      hasta: endRange,
+    });
     setOrdenes(ordsData || []);
 
     const allMovs = await getMovimientos(tenant.id);

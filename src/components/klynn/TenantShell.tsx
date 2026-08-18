@@ -70,6 +70,7 @@ import {
   getCajaAbierta,
   formatRD,
   can,
+  getTenantBranchName,
   getTenantsForUser,
   setActiveTenant,
   setSession,
@@ -1822,9 +1823,9 @@ function SidebarContent({
             </div>
 
             <div className="mt-1 flex items-center gap-1.5">
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                {tenant.rnc ? `RNC: ${tenant.rnc}` : "Sucursal Activa"}
+                {getTenantBranchName(tenant)}
               </span>
             </div>
           </div>
@@ -1857,8 +1858,9 @@ function SidebarContent({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-bold">{t.nombre}</div>
-                      <div className="truncate text-[10px] text-muted-foreground">
-                        {t.rnc ? `RNC ${t.rnc}` : "Sucursal principal"}
+                      <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                        <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
+                        {getTenantBranchName(t)}
                       </div>
                     </div>
                     {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}

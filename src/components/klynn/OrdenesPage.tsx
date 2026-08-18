@@ -2486,9 +2486,9 @@ export function TicketPrintPortal({
             max-width: ${tenant.config?.formato_ticket === "57mm" ? "52mm" : "72mm"} !important;
             padding: ${tenant.config?.formato_ticket === "57mm" ? "1.5mm" : "2mm"} !important;
             margin: 0 auto !important;
-            background: white;
             color: black;
-            font-family: monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif !important;
+            font-weight: 600;
             font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};
             line-height: ${tenant.config?.formato_ticket === "57mm" ? "1.2" : "1.3"};
             box-sizing: border-box !important;

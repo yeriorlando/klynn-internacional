@@ -17,6 +17,9 @@ certs/
 *.pem
 *.key
 *.crt
+*.docx
+*.xlsx
+Fichas_Tecnicas*
 
 # Production
 dist

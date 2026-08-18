@@ -42,6 +42,7 @@ import { Badge } from "@/components/ui/badge";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { 
   getTenantsForUser, 
+  getTenantBranchName,
   getOrdenes, 
   getPlans,
   PLANS,
@@ -467,7 +468,7 @@ function DashboardAdminPage() {
   }
 
   if (!auth || auth.empleado.id === '__loading__') {
-    return <GlobalPageLoader text="Cargando panel de administración..." />;
+    return <GlobalPageLoader text="Cargando panel de administración..." minHeight="min-h-screen" />;
   }
 
   return (
@@ -585,31 +586,31 @@ function DashboardAdminPage() {
             </div>
           </div>
 
-          {/* VISTA ESCRITORIO (Tabla completa con diseño idéntico a /admin) */}
+          {/* VISTA ESCRITORIO (Tabla completa con diseño optimizado) */}
           <Card className="hidden md:block overflow-hidden border border-border/60 shadow-card rounded-2xl bg-surface">
-            <div className="overflow-x-auto">
+            <div className="overflow-x-auto custom-scrollbar">
               <table className="w-full text-sm">
-                <thead className="relative z-10 text-[11px] uppercase tracking-wider font-black shadow-[0_4px_12px_-2px_rgba(0,0,0,0.06)] border-b border-border/80">
+                <thead className="relative z-10 text-[10.5px] uppercase tracking-wider font-black shadow-[0_4px_12px_-2px_rgba(0,0,0,0.06)] border-b border-border/80">
                   <tr>
-                    <th className="px-4 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                    <th className="px-3.5 py-3 text-left whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
                       Lavandería / Sucursal
                     </th>
-                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-blue-50 via-blue-100/90 to-blue-200/60 dark:from-blue-950/70 dark:via-blue-950/90 dark:to-blue-900/60 text-blue-950 dark:text-blue-200 border-x border-blue-200/50 dark:border-blue-800/40">
+                    <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-blue-50 via-blue-100/90 to-blue-200/60 dark:from-blue-950/70 dark:via-blue-950/90 dark:to-blue-900/60 text-blue-950 dark:text-blue-200 border-x border-blue-200/50 dark:border-blue-800/40">
                       Plan SaaS
                     </th>
-                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-emerald-50 via-emerald-100/90 to-emerald-200/60 dark:from-emerald-950/70 dark:via-emerald-950/90 dark:to-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-r border-emerald-200/50 dark:border-emerald-800/40">
+                    <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-emerald-50 via-emerald-100/90 to-emerald-200/60 dark:from-emerald-950/70 dark:via-emerald-950/90 dark:to-emerald-900/60 text-emerald-950 dark:text-emerald-200 border-r border-emerald-200/50 dark:border-emerald-800/40">
                       Estado
                     </th>
-                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-purple-50 via-purple-100/90 to-purple-200/60 dark:from-purple-950/70 dark:via-purple-950/90 dark:to-purple-900/60 text-purple-950 dark:text-purple-200 border-r border-purple-200/50 dark:border-purple-800/40">
+                    <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-purple-50 via-purple-100/90 to-purple-200/60 dark:from-purple-950/70 dark:via-purple-950/90 dark:to-purple-900/60 text-purple-950 dark:text-purple-200 border-r border-purple-200/50 dark:border-purple-800/40">
                       Módulos Activos
                     </th>
-                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-cyan-50 via-cyan-100/90 to-cyan-200/60 dark:from-cyan-950/70 dark:via-cyan-950/90 dark:to-cyan-900/60 text-cyan-950 dark:text-cyan-200 border-r border-cyan-200/50 dark:border-cyan-800/40">
+                    <th className="px-2 py-3 text-center whitespace-nowrap bg-gradient-to-b from-cyan-50 via-cyan-100/90 to-cyan-200/60 dark:from-cyan-950/70 dark:via-cyan-950/90 dark:to-cyan-900/60 text-cyan-950 dark:text-cyan-200 border-r border-cyan-200/50 dark:border-cyan-800/40">
                       Órdenes
                     </th>
-                    <th className="px-3 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-amber-50 via-amber-100/90 to-amber-200/60 dark:from-amber-950/70 dark:via-amber-950/90 dark:to-amber-900/60 text-amber-950 dark:text-amber-200 border-r border-amber-200/50 dark:border-amber-800/40">
+                    <th className="px-2.5 py-3 text-center whitespace-nowrap bg-gradient-to-b from-amber-50 via-amber-100/90 to-amber-200/60 dark:from-amber-950/70 dark:via-amber-950/90 dark:to-amber-900/60 text-amber-950 dark:text-amber-200 border-r border-amber-200/50 dark:border-amber-800/40">
                       Facturación
                     </th>
-                    <th className="px-4 py-3.5 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
+                    <th className="px-3 py-3 text-center whitespace-nowrap bg-gradient-to-b from-slate-50 via-slate-100 to-slate-200/70 dark:from-slate-800 dark:via-slate-800 dark:to-slate-850 text-slate-800 dark:text-slate-200">
                       Acciones
                     </th>
                   </tr>
@@ -656,41 +657,45 @@ function DashboardAdminPage() {
                           key={t.id} 
                           className="hover:bg-muted/30 transition-colors border-b border-border/40"
                         >
-                          <td className="px-4 py-3.5">
-                            <div className="flex items-center gap-3">
+                          <td className="px-3.5 py-2.5">
+                            <div className="flex items-center gap-2.5">
                               {t.logo_url ? (
                                 <img
                                   src={t.logo_url}
                                   alt={t.nombre}
-                                  className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs ring-2 ring-primary/10"
+                                  className="h-10 w-10 rounded-full object-contain border-2 border-border/70 bg-white p-0.5 shrink-0 shadow-xs ring-2 ring-primary/10"
                                 />
                               ) : (
                                 <div
-                                  className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10"
+                                  className="h-10 w-10 rounded-full flex items-center justify-center font-black text-white text-sm shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10"
                                   style={{ backgroundColor: t.color_primario || "#0891b2" }}
                                 >
                                   {t.nombre.charAt(0).toUpperCase()}
                                 </div>
                               )}
                               <div className="min-w-0">
-                                <div className="font-bold text-foreground text-sm tracking-tight hover:text-primary transition-colors flex items-center gap-1.5">
+                                <div className="font-bold text-foreground text-[13px] tracking-tight hover:text-primary transition-colors flex items-center gap-1.5 flex-wrap">
                                   <span className="truncate">{t.nombre}</span>
+                                  <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                    {getTenantBranchName(t)}
+                                  </span>
                                 </div>
-                                <div className="text-[11px] text-muted-foreground mt-0.5 space-y-0.5">
+                                <div className="text-[10.5px] text-muted-foreground mt-0.5 space-y-0.2">
                                   <div className="truncate">
                                     <span className="font-medium text-foreground/80">Correo:</span> {t.email || "Sin correo"}
                                   </div>
                                   <div className="truncate">
                                     <span className="font-medium text-foreground/80">Teléfono:</span> {t.telefono || "Sin teléfono"}
                                   </div>
-                                  <div className="flex items-center gap-1.5 pt-0.5">
+                                  <div className="flex items-center gap-1.5 pt-0.2">
                                     <span className="font-medium text-foreground/80">RNC:</span>
                                     {t.rnc ? (
-                                      <Badge className="bg-primary hover:bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0 rounded-md border-none shadow-2xs">
+                                      <Badge className="bg-primary hover:bg-primary text-primary-foreground text-[9.5px] font-bold px-1.5 py-0 rounded-md border-none shadow-2xs">
                                         {t.rnc}
                                       </Badge>
                                     ) : (
-                                      <span className="italic text-muted-foreground/60 text-[10.5px]">Sin RNC</span>
+                                      <span className="italic text-muted-foreground/60 text-[10px]">Sin RNC</span>
                                     )}
                                   </div>
                                 </div>
@@ -698,106 +703,106 @@ function DashboardAdminPage() {
                             </div>
                           </td>
 
-                          <td className="px-3 py-3 text-center whitespace-nowrap bg-blue-500/[0.015] border-r border-border/20">
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap bg-blue-500/[0.015] border-r border-border/20">
                             <PlanBadge id={t.plan_id} />
                           </td>
 
-                          <td className="px-3 py-3 text-center whitespace-nowrap bg-emerald-500/[0.015] border-r border-border/20">
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap bg-emerald-500/[0.015] border-r border-border/20">
                             {t.estado === "ACTIVO" ? (
-                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
                                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
                               </Badge>
                             ) : t.estado === "TRIAL" ? (
-                              <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                              <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
                                 <Clock className="h-3 w-3 text-amber-600" /> Prueba ({daysRemaining}d)
                               </Badge>
                             ) : (
-                              <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[11px] font-bold px-2.5 py-0.5 rounded-full gap-1.5 shadow-2xs">
+                              <Badge className="bg-rose-50 text-rose-700 hover:bg-rose-50 border-rose-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
                                 <AlertCircle className="h-3 w-3 text-rose-600" /> Inactivo
                               </Badge>
                             )}
                           </td>
 
-                          <td className="px-3 py-3 text-center whitespace-nowrap bg-purple-500/[0.015] border-r border-border/20">
-                            <div className="flex items-center justify-center gap-1">
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap bg-purple-500/[0.015] border-r border-border/20">
+                            <div className="flex items-center justify-center gap-0.5">
                               <span
                                 title={hasWa ? "WhatsApp Cloud: Habilitado" : "WhatsApp: Inactivo"}
-                                className={`p-1.5 rounded-lg transition-all ${
+                                className={`p-1 rounded-md transition-all ${
                                   hasWa
                                     ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
                                     : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                 }`}
                               >
-                                <MessageSquare className="h-3.5 w-3.5" />
+                                <MessageSquare className="h-3 w-3" />
                               </span>
                               <span
                                 title={hasFiscal ? "Facturación Fiscal (e-CF): Habilitada" : "Facturación Fiscal: Inactiva"}
-                                className={`p-1.5 rounded-lg transition-all ${
+                                className={`p-1 rounded-md transition-all ${
                                   hasFiscal
                                     ? "bg-blue-50 text-blue-700 border border-blue-300 dark:bg-blue-950/50 dark:text-blue-300 dark:border-blue-700 shadow-2xs"
                                     : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                 }`}
                               >
-                                <FileText className="h-3.5 w-3.5" />
+                                <FileText className="h-3 w-3" />
                               </span>
                               <span
                                 title={hasSucursales ? "Sucursales Múltiples: Habilitadas" : "Sucursales: Inactivas"}
-                                className={`p-1.5 rounded-lg transition-all ${
+                                className={`p-1 rounded-md transition-all ${
                                   hasSucursales
                                     ? "bg-purple-50 text-purple-700 border border-purple-300 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-700 shadow-2xs"
                                     : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                 }`}
                               >
-                                <Building2 className="h-3.5 w-3.5" />
+                                <Building2 className="h-3 w-3" />
                               </span>
                               <span
                                 title={hasLogistica ? "Envío a Domicilio: Habilitado" : "Logística: Inactiva"}
-                                className={`p-1.5 rounded-lg transition-all ${
+                                className={`p-1 rounded-md transition-all ${
                                   hasLogistica
                                     ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
                                     : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                 }`}
                               >
-                                <Truck className="h-3.5 w-3.5" />
+                                <Truck className="h-3 w-3" />
                               </span>
                               <span
                                 title={hasProcesos ? "Tablero Kanban de Procesos: Habilitado" : "Procesos: Inactivo"}
-                                className={`p-1.5 rounded-lg transition-all ${
+                                className={`p-1 rounded-md transition-all ${
                                   hasProcesos
                                     ? "bg-teal-50 text-teal-700 border border-teal-300 dark:bg-teal-950/50 dark:text-teal-300 dark:border-teal-700 shadow-2xs"
                                     : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                 }`}
                               >
-                                <Wrench className="h-3.5 w-3.5" />
+                                <Wrench className="h-3 w-3" />
                               </span>
                               <span
                                 title={hasEstanteria ? "Estantería Virtual: Habilitada" : "Estantería: Inactiva"}
-                                className={`p-1.5 rounded-lg transition-all ${
+                                className={`p-1 rounded-md transition-all ${
                                   hasEstanteria
                                     ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
                                     : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
                                 }`}
                               >
-                                <Layers className="h-3.5 w-3.5" />
+                                <Layers className="h-3 w-3" />
                               </span>
                             </div>
                           </td>
 
-                          <td className="px-3 py-3 text-center whitespace-nowrap bg-cyan-500/[0.015] border-r border-border/20">
-                            <span className="font-bold text-foreground">{ts.count.toLocaleString("es-DO")}</span>
-                            <span className="text-[10px] text-muted-foreground block">órdenes</span>
+                          <td className="px-2 py-2.5 text-center whitespace-nowrap bg-cyan-500/[0.015] border-r border-border/20">
+                            <span className="font-bold text-xs text-foreground">{ts.count.toLocaleString("es-DO")}</span>
+                            <span className="text-[9.5px] text-muted-foreground block">órdenes</span>
                           </td>
 
-                          <td className="px-3 py-3 text-center whitespace-nowrap bg-amber-500/[0.015] border-r border-border/20">
-                            <span className="font-extrabold text-foreground">{formatRD(ts.total)}</span>
+                          <td className="px-2.5 py-2.5 text-center whitespace-nowrap bg-amber-500/[0.015] border-r border-border/20">
+                            <span className="font-extrabold text-xs text-foreground">{formatRD(ts.total)}</span>
                           </td>
 
-                          <td className="px-4 py-3 text-center whitespace-nowrap">
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap">
                             <div className="flex items-center justify-center gap-1.5">
                               <Button
                                 size="sm"
                                 onClick={() => handleManage(t.id, t.slug)}
-                                className="h-8.5 px-3 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-500/80 shadow-2xs gap-1.5 cursor-pointer transition-all"
+                                className="h-8 px-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-500/80 shadow-2xs gap-1 cursor-pointer transition-all"
                               >
                                 <ExternalLink className="h-3.5 w-3.5" />
                                 <span>Entrar</span>
@@ -807,21 +812,11 @@ function DashboardAdminPage() {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
-                                className="h-8.5 px-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 font-bold text-xs gap-1.5 shadow-2xs cursor-pointer transition-all"
+                                className="h-8 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 font-bold text-xs gap-1 shadow-2xs cursor-pointer transition-all"
                                 title="Ver reportes de ventas"
                               >
                                 <BarChart3 className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
                                 <span>Reportes</span>
-                              </Button>
-
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedInspectTenant(t)}
-                                className="h-8.5 px-2.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs gap-1 shadow-2xs cursor-pointer"
-                                title="Inspeccionar estadísticas en vivo"
-                              >
-                                <Sparkles className="h-3.5 w-3.5" />
                               </Button>
                             </div>
                           </td>
@@ -957,16 +952,6 @@ function DashboardAdminPage() {
                       >
                         <BarChart3 className="h-3.5 w-3.5" />
                         <span>Reportes</span>
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => setSelectedInspectTenant(t)}
-                        className="h-8 px-2.5 rounded-xl border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary font-bold text-xs gap-1 shadow-2xs cursor-pointer"
-                        title="Inspeccionar estadísticas"
-                      >
-                        <Sparkles className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </Card>

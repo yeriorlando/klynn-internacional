@@ -23,6 +23,7 @@ import {
   type PlanId, type Tenant, type TenantConfig, type Empleado, type GlobalConfig
 } from "@/lib/storage";
 import { useRequireAuth } from "@/lib/useRequireAuth";
+import { consultarRNC } from "@/lib/fiscal";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/nueva-sucursal")({
@@ -142,6 +143,9 @@ const LAUNDRY_BUBBLES = [
 
 interface FormState {
   nombre: string;
+  nombre_sucursal: string;
+  rnc: string;
+  razon_social: string;
   telefono: string;
   provincia: string;
   slug: string;
@@ -154,6 +158,9 @@ interface FormState {
 
 const initial: FormState = {
   nombre: "",
+  nombre_sucursal: "",
+  rnc: "",
+  razon_social: "",
   telefono: "",
   provincia: "",
   slug: "",
@@ -184,6 +191,21 @@ function NuevaSucursalPage() {
       setForm(f => ({ ...f, plan_id: f.plan_id || cfg.defaultPlanId }));
     });
 
+    // Cargar datos por defecto de la empresa matriz
+    if (auth?.tenant) {
+      setForm(f => ({
+        ...f,
+        nombre: f.nombre || auth.tenant.nombre || "",
+        rnc: f.rnc || auth.tenant.rnc || "",
+        razon_social: f.razon_social || auth.tenant.config?.razon_social || "",
+        color_primario: f.color_primario || auth.tenant.color_primario || "#1B4B73",
+        color_secundario: f.color_secundario || auth.tenant.color_secundario || "#F0B900",
+        logo_url: f.logo_url || auth.tenant.logo_url || "",
+        provincia: f.provincia || auth.tenant.provincia || "",
+        telefono: f.telefono || auth.tenant.telefono || "",
+      }));
+    }
+
     // Protección de multisucursal
     async function checkPermission() {
       if (!auth?.empleado.email || auth.empleado.id === '__loading__') return;
@@ -206,7 +228,7 @@ function NuevaSucursalPage() {
       }
     }
     checkPermission();
-  }, [auth?.empleado.email]);
+  }, [auth?.empleado.email, auth?.tenant?.id]);
 
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [provOpen, setProvOpen] = useState(false);
@@ -215,6 +237,39 @@ function NuevaSucursalPage() {
   const [provisioningStep, setProvisioningStep] = useState(0);
 
   const logoInputRef = useRef<HTMLInputElement>(null);
+
+  const [loadingRNC, setLoadingRNC] = useState(false);
+  const lastSearchedRNCRef = useRef<string>("");
+
+  async function handleSearchRNC(rncValue?: string, force = false) {
+    const val = rncValue !== undefined ? rncValue : form.rnc;
+    const cleanRnc = val.replace(/\D/g, "");
+    if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) return;
+
+    if (!force && lastSearchedRNCRef.current === cleanRnc) return;
+    lastSearchedRNCRef.current = cleanRnc;
+
+    setLoadingRNC(true);
+    try {
+      const contribuyente = await consultarRNC(cleanRnc);
+      if (contribuyente && contribuyente.name) {
+        const suggestedName = contribuyente.commercialName || contribuyente.name;
+        setForm((f) => ({
+          ...f,
+          rnc: contribuyente.rnc || cleanRnc,
+          razon_social: contribuyente.name,
+          nombre: f.nombre.trim() && f.nombre !== "Lavandería La Burbuja" ? f.nombre : suggestedName,
+        }));
+        toast.success(`Contribuyente DGII: ${contribuyente.name} ✅`, { id: "dgii-rnc-toast" });
+      } else {
+        toast.error("No se encontró el contribuyente en DGII", { id: "dgii-rnc-toast" });
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setLoadingRNC(false);
+    }
+  }
 
   async function handleLogoUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const f = e.target.files?.[0];
@@ -236,8 +291,14 @@ function NuevaSucursalPage() {
   function update<K extends keyof FormState>(k: K, v: FormState[K]) {
     setForm((f) => {
       const next = { ...f, [k]: v };
-      if (k === "nombre" && !f.slugTouched) {
-        next.slug = slugify(String(v));
+      if ((k === "nombre_sucursal" || k === "nombre") && !f.slugTouched) {
+        const branchPart = k === "nombre_sucursal" ? String(v) : f.nombre_sucursal;
+        const brandPart = k === "nombre" ? String(v) : f.nombre;
+        if (branchPart && branchPart.trim()) {
+          next.slug = slugify(branchPart);
+        } else if (brandPart && brandPart.trim()) {
+          next.slug = slugify(brandPart);
+        }
       }
       return next;
     });
@@ -247,6 +308,7 @@ function NuevaSucursalPage() {
   function validateStep(): boolean {
     const e: Partial<Record<keyof FormState, string>> = {};
     if (step === 1) {
+      if (!form.nombre_sucursal.trim()) e.nombre_sucursal = "Ingresa el nombre de la sucursal (ej: Bella Vista)";
       if (!form.nombre.trim()) e.nombre = "Requerido";
       if (!form.telefono || form.telefono.replace(/\D/g, "").length < 10) e.telefono = "Teléfono inválido";
       if (!form.provincia) e.provincia = "Selecciona tu provincia";
@@ -261,13 +323,18 @@ function NuevaSucursalPage() {
   async function handleFinalize() {
     if (!auth) return;
 
+    const branchName = form.nombre_sucursal.trim() || "Nueva Sucursal";
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
+      nombre_sucursal: branchName,
+      razon_social: form.razon_social || auth.tenant.config?.razon_social || "",
     };
     const tenant: Tenant = {
       id: uid("ten"),
-      nombre: form.nombre,
-      slug: form.slug,
+      nombre: form.nombre.trim(),
+      nombre_sucursal: branchName,
+      slug: form.slug.trim(),
+      rnc: form.rnc.trim() || auth.tenant.rnc,
       telefono: form.telefono,
       direccion: "",
       provincia: form.provincia,
@@ -357,7 +424,7 @@ function NuevaSucursalPage() {
   }
 
   if (!auth || auth.empleado.id === '__loading__') {
-    return <GlobalPageLoader text="Cargando configuración de sucursales..." />;
+    return <GlobalPageLoader text="Cargando configuración de sucursales..." minHeight="min-h-screen" />;
   }
 
   return (
@@ -629,28 +696,87 @@ function NuevaSucursalPage() {
                     <>
                       <div className="flex items-center gap-3.5 mb-4">
                         <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
-                          <Building2 className="h-5.5 w-5.5" />
+                          <Store className="h-5.5 w-5.5" />
                         </div>
                         <div>
                           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Datos de la nueva sucursal</h1>
-                          <p className="text-xs text-muted-foreground mt-0.5">Expande tu negocio agregando una nueva lavandería.</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Expande tu negocio agregando una nueva sucursal a tu lavandería.</p>
+                        </div>
+                      </div>
+
+                      {/* Asistente Inteligente DGII Banner Compacto */}
+                      <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.02] px-3.5 py-2.5 transition-all">
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                              <Landmark className="h-3.5 w-3.5" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-slate-800 flex items-center gap-2 flex-wrap sm:flex-nowrap">
+                                <span className="whitespace-nowrap">¿Eres contribuyente ante DGII?</span>
+                                <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shrink-0 whitespace-nowrap">
+                                  Consultar ante DGII
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-muted-foreground">
+                                Escribe tu RNC o Cédula para autocompletar el nombre oficial.
+                              </p>
+                            </div>
+                          </div>
+                          <div className="relative flex items-center shrink-0 w-full sm:w-48">
+                            <Input 
+                              value={form.rnc} 
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                update("rnc", val);
+                                const clean = val.replace(/\D/g, "");
+                                if (clean.length === 9 || clean.length === 11) {
+                                  handleSearchRNC(clean);
+                                }
+                              }} 
+                              onBlur={() => handleSearchRNC()}
+                              placeholder="Ej: 133-19090-7" 
+                              className="h-8 text-xs pr-7 bg-white border-primary/25 focus-visible:ring-primary/20 shadow-none rounded-lg"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => handleSearchRNC(undefined, true)}
+                              disabled={loadingRNC}
+                              className="absolute right-1.5 text-muted-foreground hover:text-primary transition-colors p-0.5"
+                              title="Buscar en DGII"
+                            >
+                              {loadingRNC ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : <Search className="h-3.5 w-3.5 text-primary" />}
+                            </button>
+                          </div>
                         </div>
                       </div>
 
                       <div className="grid gap-3.5 sm:grid-cols-2">
-                        <div className="sm:col-span-2">
-                          <Field label="Nombre comercial de la sucursal *" error={errors.nombre}>
-                            <div className="relative flex items-center">
-                              <Store className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
-                              <Input 
-                                value={form.nombre} 
-                                onChange={(e) => update("nombre", e.target.value)} 
-                                placeholder="Ej. Lavandería La Burbuja (Suc. Norte)" 
-                                className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200"
-                              />
-                            </div>
-                          </Field>
-                        </div>
+                        <Field label="Nombre de lavandería / marca *" error={errors.nombre}>
+                          <div className="relative flex items-center">
+                            <Building2 className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                            <Input 
+                              value={form.nombre} 
+                              onChange={(e) => update("nombre", e.target.value)} 
+                              placeholder="Ej. Lavandería Reyna" 
+                              className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200"
+                            />
+                          </div>
+                        </Field>
+
+                        <Field label="Nombre de la sucursal *" error={errors.nombre_sucursal}>
+                          <div className="relative flex items-center">
+                            <Store className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                            <Input 
+                              value={form.nombre_sucursal} 
+                              onChange={(e) => update("nombre_sucursal", e.target.value)} 
+                              placeholder="Ej. Bella Vista, Naco..." 
+                              className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 font-medium"
+                              autoFocus
+                            />
+                          </div>
+                        </Field>
+
                         <Field label="Teléfono / WhatsApp *" error={errors.telefono}>
                           <div className="relative flex items-center">
                             <Phone className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
@@ -689,13 +815,13 @@ function NuevaSucursalPage() {
                         </div>
                         <div>
                           <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Personaliza la sucursal</h1>
-                          <p className="text-xs text-muted-foreground mt-0.5">Define la identidad de esta nueva lavandería.</p>
+                          <p className="text-xs text-muted-foreground mt-0.5">Define la identidad y subdominio de esta sucursal.</p>
                         </div>
                       </div>
                       
                       <div className="space-y-3">
                         {/* Branding Preview Compacto y Equilibrado */}
-                        <div className="rounded-xl border border-border/80 bg-slate-50/70 p-3 sm:p-3.5 text-center relative overflow-hidden shadow-inner">
+                        <div className="rounded-xl border border-border/80 bg-slate-50/70 p-3.5 text-center relative overflow-hidden shadow-inner">
                           <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
                             <div
                               className="relative h-16 w-16 shrink-0 overflow-hidden rounded-full border-2 border-white shadow-sm transition-all duration-300 bg-white"
@@ -711,13 +837,20 @@ function NuevaSucursalPage() {
                             </div>
                             <div className="text-center sm:text-left min-w-0">
                               <div 
-                                className="text-lg font-display font-bold tracking-tight truncate max-w-[300px]" 
+                                className="text-lg font-display font-black tracking-tight truncate max-w-[300px]" 
                                 style={{ color: form.color_primario }}
                               >
-                                {form.nombre || "Tu Sucursal"}
+                                {form.nombre || auth.tenant.nombre || "Tu Lavandería"}
+                              </div>
+
+                              <div className="mt-1 flex items-center justify-center sm:justify-start gap-1.5">
+                                <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  {form.nombre_sucursal || "Nueva Sucursal"}
+                                </span>
                               </div>
                               
-                              <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-1.5">
+                              <div className="flex items-center justify-center sm:justify-start gap-1.5 mt-2">
                                 <input ref={logoInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoUpload} />
                                 <button
                                   type="button"
@@ -741,7 +874,24 @@ function NuevaSucursalPage() {
                           </div>
                         </div>
 
-                        <div className="pt-0.5">
+                        <div className="grid gap-3 sm:grid-cols-2 pt-1">
+                          <Field label="Subdominio web de la sucursal *" error={errors.slug}>
+                            <div className="relative flex items-center">
+                              <Input 
+                                value={form.slug} 
+                                onChange={(e) => {
+                                  update("slugTouched", true);
+                                  update("slug", slugify(e.target.value));
+                                }} 
+                                placeholder="bellavista" 
+                                className="h-10 text-xs sm:text-sm pl-3 pr-24 rounded-xl border-slate-200 font-mono"
+                              />
+                              <span className="absolute right-3 text-[11px] font-mono text-muted-foreground pointer-events-none">
+                                .klynn.com.do
+                              </span>
+                            </div>
+                          </Field>
+
                           <ColorField label="Color principal de la sucursal" value={form.color_primario} onChange={(v) => update("color_primario", v)} />
                         </div>
                       </div>
@@ -785,6 +935,7 @@ function NuevaSucursalPage() {
 
 function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNombre: string; onEnter: () => void }) {
   const planNombre = PLANS.find((p) => p.id === tenant.plan_id)?.nombre || tenant.plan_id;
+  const branchName = tenant.nombre_sucursal || tenant.config?.nombre_sucursal || "Sucursal";
   return (
     <div className="text-center">
       <motion.div
@@ -808,7 +959,9 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
         transition={{ delay: 0.2 }}
       >
         <h1 className="mb-1 text-2xl font-bold tracking-tight text-slate-900">¡Sucursal Creada, {adminNombre.split(" ")[0]}!</h1>
-        <p className="mb-4 text-xs text-muted-foreground text-balance">Tu sucursal <strong className="text-foreground">{tenant.nombre}</strong> ya está lista.</p>
+        <p className="mb-4 text-xs text-muted-foreground text-balance">
+          Tu sucursal <strong className="text-[#1B4B73] font-bold">{branchName}</strong> de <strong className="text-foreground">{tenant.nombre}</strong> ya está lista.
+        </p>
 
         <div className="mx-auto mb-5 max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
