@@ -621,6 +621,18 @@ body.pos-mode .main-header {
 .plan-card:hover { transform: translateY(-6px); box-shadow: 0 16px 40px -12px rgba(15, 23, 42, 0.12); }
 .plan-card--current { border: 2.5px solid #1B4B73 !important; background: rgba(27, 75, 115, 0.03); }
 .plan-card--featured { border: 2.5px solid #F0B900 !important; background: rgba(240, 185, 0, 0.05); }
+.dark .plan-card {
+  background: hsl(var(--card));
+  border-color: hsl(var(--border));
+}
+.dark .plan-card--featured {
+  border-color: #F0B900 !important;
+  background: rgba(240, 185, 0, 0.04) !important;
+}
+.dark .plan-card--current {
+  border-color: #38bdf8 !important;
+  background: rgba(56, 189, 248, 0.05) !important;
+}
 .plan-card__badge {
   position: absolute; top: -0.85rem; left: 50%; transform: translateX(-50%);
   font-family: "JetBrains Mono", monospace; font-size: 12.5px; font-weight: 700;

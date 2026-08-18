@@ -484,16 +484,19 @@ function DashboardAdminPage() {
           </div>
           <div className="flex items-center gap-3">
             {auth?.empleado?.email && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/60 text-xs font-medium text-muted-foreground">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="truncate max-w-[180px]">{auth.empleado.email}</span>
+              <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 sm:py-2.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span className="truncate max-w-[200px]">{auth.empleado.email}</span>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-95 shadow-sm transition-all duration-150 cursor-pointer"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-rose-600 hover:bg-rose-700 active:scale-95 text-white border border-rose-600 transition-all cursor-pointer shrink-0 whitespace-nowrap"
             >
-              <LogOut className="h-3.5 w-3.5 text-white" />
+              <LogOut className="h-4 w-4 shrink-0 text-white" />
               <span>Cerrar sesión</span>
             </button>
           </div>

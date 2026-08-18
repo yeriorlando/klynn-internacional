@@ -48,7 +48,7 @@ import {
   updateLicenciaLocal,
   deleteLicenciaLocal,
 
-  type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal
+  type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal, type BankDetails
 } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { listAssociatedCompaniesPronesoft } from "@/lib/fiscal";
@@ -155,6 +155,7 @@ function AdminPage() {
   const [newDaysLimit, setNewDaysLimit] = useState<number>(30);
   const [newMesesPagados, setNewMesesPagados] = useState<number>(1);
 
+  const [isCustomOverride, setIsCustomOverride] = useState(false);
   const [modOverrideWa, setModOverrideWa] = useState(false);
   const [modOverrideFiscal, setModOverrideFiscal] = useState(false);
   const [modOverrideMultisucursal, setModOverrideMultisucursal] = useState(false);
@@ -237,7 +238,7 @@ function AdminPage() {
       // 2. Consultar empresas asociadas en la API de Pronesoft
       const res = await listAssociatedCompaniesPronesoft(undefined, targetEnv);
       console.log("[Pronesoft API] Empresas asociadas recibidas:", res);
-      const apiItems: any[] = Array.isArray(res) ? res : (res?.data || []);
+      const apiItems: any[] = Array.isArray(res) ? res : ((res as any)?.data || []);
       setPronesoftCompanies(apiItems);
     } catch (err: any) {
       console.warn("Aviso al cargar empresas de Pronesoft:", err.message);
@@ -359,6 +360,9 @@ function AdminPage() {
       : 0;
     setNewDaysLimit(daysRemaining || 30);
 
+    const hasOverride = !!(t.config?.modulos_override && Object.keys(t.config.modulos_override).length > 0);
+    setIsCustomOverride(hasOverride);
+
     const pOfTenant = plans.find(pl => pl.id === t.plan_id);
     setModOverrideWa(t.config?.modulos_override?.whatsapp !== undefined
       ? t.config.modulos_override.whatsapp
@@ -396,18 +400,22 @@ function AdminPage() {
       const trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
       await updateTenantTrialHasta(editingTenant.id, trialHasta);
 
-      // Guardar anulaciones de módulos
-      await updateTenantModulosOverride(
-        editingTenant.id,
-        {
-          whatsapp: modOverrideWa,
-          facturacion_fiscal: modOverrideFiscal,
-          multisucursal: modOverrideMultisucursal,
-          logistica: modOverrideLogistica,
-          procesos: modOverrideProcesos,
-          estanteria: modOverrideEstanteria,
-        }
-      );
+      // Guardar anulaciones si están activas o limpiar para heredar del plan oficial
+      if (isCustomOverride) {
+        await updateTenantModulosOverride(
+          editingTenant.id,
+          {
+            whatsapp: modOverrideWa,
+            facturacion_fiscal: modOverrideFiscal,
+            multisucursal: modOverrideMultisucursal,
+            logistica: modOverrideLogistica,
+            procesos: modOverrideProcesos,
+            estanteria: modOverrideEstanteria,
+          }
+        );
+      } else {
+        await updateTenantModulosOverride(editingTenant.id, null);
+      }
 
       toast.success("Información de lavandería actualizada");
       setOpenEditModal(false);
@@ -449,16 +457,19 @@ function AdminPage() {
           </div>
           <div className="flex items-center gap-3">
             {user?.empleado?.email && (
-              <div className="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-xl bg-muted/40 border border-border/60 text-xs font-medium text-muted-foreground">
-                <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span className="truncate max-w-[180px]">{user.empleado.email}</span>
+              <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 sm:py-2.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
+                <span className="relative flex h-2 w-2 shrink-0">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                </span>
+                <span className="truncate max-w-[200px]">{user.empleado.email}</span>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-semibold text-white bg-red-600 hover:bg-red-700 active:scale-95 shadow-sm transition-all duration-150 cursor-pointer"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-rose-600 hover:bg-rose-700 active:scale-95 text-white border border-rose-600 transition-all cursor-pointer shrink-0 whitespace-nowrap"
             >
-              <LogOut className="h-3.5 w-3.5 text-white" />
+              <LogOut className="h-4 w-4 shrink-0 text-white" />
               <span>Cerrar sesión</span>
             </button>
           </div>
@@ -1295,23 +1306,50 @@ function AdminPage() {
               </div>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-6 md:grid-cols-3 items-stretch pt-3">
               {plans.map((p) => (
-                <Card key={p.id} className={`border-none p-6 shadow-card ${p.destacado ? "ring-2 ring-primary" : ""}`}>
-                  <div className="flex items-start justify-between">
-                    <span className="font-display text-2xl">{p.nombre}</span>
-                    {p.destacado && <Badge>Popular</Badge>}
-                  </div>
-                  <div className="mt-2 font-display text-3xl text-primary">{formatRD(p.precio_mensual)}<span className="text-sm font-normal text-muted-foreground">/mes</span></div>
-                  {p.precio_anual && (
-                    <div className="text-xs text-muted-foreground font-medium">o {formatRD(p.precio_anual)}/año</div>
+                <div
+                  key={p.id}
+                  style={{
+                    borderColor: p.destacado ? '#F0B900' : undefined,
+                    borderWidth: p.destacado ? '2.5px' : '1.5px',
+                    borderStyle: 'solid',
+                  }}
+                  className={`plan-card relative rounded-3xl p-6 flex flex-col transition-all duration-300 ${
+                    p.destacado
+                      ? "plan-card--featured shadow-lg shadow-[#F0B900]/20"
+                      : "shadow-sm hover:shadow-xl bg-card border-border/80"
+                  }`}
+                >
+                  {p.destacado && (
+                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 font-sans font-extrabold text-[11px] tracking-wider uppercase px-4 py-1 bg-[#F0B900] text-[#133857] rounded-full shadow-md whitespace-nowrap z-10">
+                      POPULAR
+                    </div>
                   )}
-                  <div className="mt-4 space-y-2 text-sm">
-                    <div>👥 {p.limite_empleados} Empleados</div>
-                    <div>📦 {p.limite_ordenes_mes ?? "∞"} Órdenes/mes</div>
+
+                  <div className="space-y-0.5">
+                    <div className="font-display text-xl font-bold text-foreground leading-none">{p.nombre}</div>
+                    <div className="text-3xl font-black text-primary leading-tight">
+                      {formatRD(p.precio_mensual)}<span className="text-xs font-normal text-muted-foreground">/mes</span>
+                    </div>
+                    {p.precio_anual && (
+                      <div className="text-xs text-muted-foreground font-medium">o {formatRD(p.precio_anual)}/año</div>
+                    )}
+                  </div>
+
+                  <div className="mt-3.5 space-y-2 text-xs font-semibold flex-1">
+                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                      <Users className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+                      <span>{p.limite_empleados} Empleados</span>
+                    </div>
+                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                      <Package className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+                      <span>{p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes/mes ilimitadas"}</span>
+                    </div>
                     {p.modulos?.whatsapp && (
-                      <div className="text-blue-600 dark:text-blue-400 font-medium">
-                        💬 {p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp` : "Mensajes WhatsApp Ilimitados"}
+                      <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                        <MessageSquare className="h-4 w-4 text-blue-500 shrink-0" />
+                        <span>{p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp` : "Mensajes WhatsApp Ilimitados"}</span>
                       </div>
                     )}
                     <div className="border-t border-border pt-2.5 mt-2.5 text-left">
@@ -1363,11 +1401,11 @@ function AdminPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="mt-4 flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1" onClick={() => { setEditingPlan(p); setOpenPlan(true); }}>
+                  <div className="mt-auto pt-4 flex gap-2">
+                    <Button size="sm" variant="outline" className="flex-1 cursor-pointer" onClick={() => { setEditingPlan(p); setOpenPlan(true); }}>
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                     </Button>
-                    <Button size="sm" variant="outline" onClick={async () => {
+                    <Button size="sm" variant="outline" className="cursor-pointer" onClick={async () => {
                       if (confirm(`¿Eliminar plan ${p.nombre}?`)) {
                         await deletePlan(p.id);
                         setTick((r) => r + 1);
@@ -1376,7 +1414,7 @@ function AdminPage() {
                       <Trash2 className="h-3.5 w-3.5 text-destructive" />
                     </Button>
                   </div>
-                </Card>
+                </div>
               ))}
             </div>
           </TabsContent>
@@ -1413,7 +1451,7 @@ function AdminPage() {
                           <div className="text-xs font-semibold text-foreground mt-0.5">{l.nombre_lavanderia}</div>
                         </td>
                         <td className="px-6 py-4 text-center">
-                          <Badge variant={l.estado === "ACTIVO" ? "success" : "outline"} className={l.estado === "INACTIVO" ? "bg-muted text-muted-foreground" : ""}>
+                          <Badge variant="outline" className={l.estado === "ACTIVO" ? "bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 border-emerald-300" : "bg-muted text-muted-foreground"}>
                             {l.estado}
                           </Badge>
                         </td>
@@ -1811,17 +1849,71 @@ function AdminPage() {
             ) : (
               /* STEP 2: MÓDULOS HABILITADOS (OVERRIDES) */
               <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
-                <Label className="block text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Personalización de Módulos para este Negocio
-                </Label>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/60">
+                  <div>
+                    <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      {isCustomOverride ? (
+                        <span className="inline-flex items-center gap-1 text-amber-700 dark:text-amber-400 font-bold">
+                          <Sparkles className="h-3.5 w-3.5" /> Personalización manual activa
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center gap-1 text-emerald-700 dark:text-emerald-400 font-bold">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Heredando del Plan Oficial ({plans.find(p => p.id === selectedPlanId)?.nombre || selectedPlanId})
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[10px] text-muted-foreground">
+                      {isCustomOverride 
+                        ? "Este negocio tiene módulos asignados específicamente."
+                        : "Sincronizado automáticamente con las funciones oficiales del plan."}
+                    </p>
+                  </div>
+                  {isCustomOverride ? (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setIsCustomOverride(false);
+                        const currentPlan = plans.find(p => p.id === selectedPlanId);
+                        if (currentPlan) {
+                          setModOverrideWa(!!currentPlan.modulos.whatsapp);
+                          setModOverrideFiscal(!!currentPlan.modulos.facturacion_fiscal);
+                          setModOverrideMultisucursal(!!currentPlan.modulos.multisucursal);
+                          setModOverrideLogistica(!!currentPlan.modulos.logistica);
+                          setModOverrideProcesos(currentPlan.modulos.procesos !== undefined ? !!currentPlan.modulos.procesos : true);
+                          setModOverrideEstanteria(currentPlan.modulos.estanteria !== undefined ? !!currentPlan.modulos.estanteria : true);
+                        }
+                        toast.info("Restablecido a los módulos del Plan Oficial");
+                      }}
+                      className="h-7 text-xs font-bold px-2.5 rounded-lg border-primary/30 text-primary hover:bg-primary/10 shrink-0"
+                    >
+                      <RefreshCw className="h-3 w-3 mr-1" /> Restablecer al Plan
+                    </Button>
+                  ) : (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        setIsCustomOverride(true);
+                        toast.info("Personalización manual habilitada");
+                      }}
+                      className="h-7 text-xs font-bold px-2.5 rounded-lg border-slate-300 dark:border-slate-700 shrink-0"
+                    >
+                      <Sparkles className="h-3 w-3 mr-1" /> Personalizar
+                    </Button>
+                  )}
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {[
-                    { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, checked: modOverrideWa, onChange: setModOverrideWa, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
-                    { key: "fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, checked: modOverrideFiscal, onChange: setModOverrideFiscal, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
-                    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, checked: modOverrideMultisucursal, onChange: setModOverrideMultisucursal, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
-                    { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, checked: modOverrideLogistica, onChange: setModOverrideLogistica, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
-                    { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: setModOverrideProcesos, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
-                    { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: setModOverrideEstanteria, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+                    { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, checked: modOverrideWa, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideWa(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+                    { key: "fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, checked: modOverrideFiscal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideFiscal(v); }, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
+                    { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, checked: modOverrideMultisucursal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideMultisucursal(v); }, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+                    { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, checked: modOverrideLogistica, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideLogistica(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
+                    { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideProcesos(v); }, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
+                    { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideEstanteria(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
                   ].map(({ key, label, desc, icon: IconComp, checked, onChange, colorClass, bgClass }) => (
                     <div
                       key={key}
@@ -1843,8 +1935,7 @@ function AdminPage() {
                       </div>
                       <Switch
                         checked={checked}
-                        onCheckedChange={onChange}
-                        className="data-[state=checked]:bg-primary shrink-0"
+                        className="data-[state=checked]:bg-primary shrink-0 pointer-events-none"
                       />
                     </div>
                   ))}
@@ -2328,8 +2419,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                         </div>
                         <Switch
                           checked={isChecked}
-                          onCheckedChange={(v) => setMod(key, v)}
-                          className="data-[state=checked]:bg-primary shrink-0 scale-90"
+                          className="data-[state=checked]:bg-primary shrink-0 scale-90 pointer-events-none"
                         />
                       </div>
                     );

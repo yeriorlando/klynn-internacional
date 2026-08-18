@@ -12,6 +12,7 @@ export interface Plan {
   precio_anual?: number;
   limite_empleados: number;
   limite_ordenes_mes: number | null;
+  limite_whatsapp_mes?: number;
   modulos: {
     whatsapp: boolean;
     facturacion_fiscal: boolean;
@@ -492,30 +493,6 @@ const KEY = {
 
 export const ADMIN_EMAILS = ["admin@klynn.com.do"];
 
-export interface Plan {
-  id: PlanId;
-  nombre: string;
-  precio_mensual: number;
-  precio_anual?: number;
-  limite_empleados: number;
-  limite_ordenes_mes: number | null;
-  limite_whatsapp_mes: number; // Nuevo límite
-  modulos: {
-    whatsapp: boolean;
-    facturacion_fiscal: boolean;
-    multisucursal?: boolean;
-    logistica?: boolean;
-    procesos?: boolean;
-    estanteria?: boolean;
-  };
-  destacado?: boolean;
-  polar_product_monthly_url?: string;
-  polar_product_yearly_url?: string;
-  precio_sucursal_adicional?: number;
-  polar_sucursal_url?: string;
-  limite_sucursales_adicionales?: number;
-}
-
 export const PLANS: Plan[] = [
   {
     id: "basico",
@@ -574,16 +551,19 @@ export function isModuleEnabled(
 ): boolean {
   if (!tenant || tenant.id === "__loading__") return true;
 
-  // 1. Check if there is an override in tenant.config.modulos_override
+  // 1. Check if there is an explicit override in tenant.config.modulos_override
   const override = tenant.config?.modulos_override?.[moduleKey];
-  if (override !== undefined) {
+  if (override !== undefined && override !== null) {
     return !!override;
   }
 
   // 2. Fallback to plan
   const activePlan = plan || getTenantPlan(tenant);
   if (moduleKey === "estanteria") {
-    return activePlan?.modulos?.estanteria !== false;
+    return activePlan?.modulos?.estanteria !== undefined ? !!activePlan.modulos.estanteria : true;
+  }
+  if (moduleKey === "procesos") {
+    return activePlan?.modulos?.procesos !== undefined ? !!activePlan.modulos.procesos : true;
   }
   return !!activePlan?.modulos?.[moduleKey];
 }
@@ -874,36 +854,45 @@ export async function getPlans(): Promise<Plan[]> {
           limite_empleados: p.limite_empleados,
           limite_ordenes_mes: p.limite_ordenes_mes,
           modulos: {
-            whatsapp: !!p.whatsapp,
-            facturacion_fiscal: !!p.facturacion_fiscal,
-            multisucursal: !!p.multisucursal,
-            logistica: !!p.logistica,
+            whatsapp: p.whatsapp !== undefined && p.whatsapp !== null
+              ? !!p.whatsapp
+              : (localMatch?.modulos?.whatsapp !== undefined ? !!localMatch.modulos.whatsapp : !!staticMatch?.modulos?.whatsapp),
+            facturacion_fiscal: p.facturacion_fiscal !== undefined && p.facturacion_fiscal !== null
+              ? !!p.facturacion_fiscal
+              : (localMatch?.modulos?.facturacion_fiscal !== undefined ? !!localMatch.modulos.facturacion_fiscal : !!staticMatch?.modulos?.facturacion_fiscal),
+            multisucursal: p.multisucursal !== undefined && p.multisucursal !== null
+              ? !!p.multisucursal
+              : (localMatch?.modulos?.multisucursal !== undefined ? !!localMatch.modulos.multisucursal : !!staticMatch?.modulos?.multisucursal),
+            logistica: p.logistica !== undefined && p.logistica !== null
+              ? !!p.logistica
+              : (localMatch?.modulos?.logistica !== undefined ? !!localMatch.modulos.logistica : !!staticMatch?.modulos?.logistica),
             procesos: p.procesos !== undefined && p.procesos !== null
               ? !!p.procesos
-              : (staticMatch?.modulos?.procesos ?? true),
+              : (localMatch?.modulos?.procesos !== undefined ? !!localMatch.modulos.procesos : (staticMatch?.modulos?.procesos ?? true)),
             estanteria: p.estanteria !== undefined && p.estanteria !== null
               ? !!p.estanteria
-              : (staticMatch?.modulos?.estanteria ?? true),
+              : (localMatch?.modulos?.estanteria !== undefined ? !!localMatch.modulos.estanteria : (staticMatch?.modulos?.estanteria ?? true)),
           },
-          limite_whatsapp_mes: p.limite_whatsapp_mes ?? 0,
-          destacado: !!p.destacado,
-          polar_product_monthly_url: p.polar_product_monthly_url,
-          polar_product_yearly_url: p.polar_product_yearly_url,
+          limite_whatsapp_mes: p.limite_whatsapp_mes ?? localMatch?.limite_whatsapp_mes ?? staticMatch?.limite_whatsapp_mes ?? 0,
+          destacado: p.destacado !== undefined && p.destacado !== null ? !!p.destacado : (localMatch?.destacado ?? !!staticMatch?.destacado),
+          polar_product_monthly_url: p.polar_product_monthly_url ?? localMatch?.polar_product_monthly_url ?? staticMatch?.polar_product_monthly_url,
+          polar_product_yearly_url: p.polar_product_yearly_url ?? localMatch?.polar_product_yearly_url ?? staticMatch?.polar_product_yearly_url,
           precio_sucursal_adicional:
-            p.precio_sucursal_adicional !== undefined
+            p.precio_sucursal_adicional !== undefined && p.precio_sucursal_adicional !== null
               ? p.precio_sucursal_adicional
-              : staticMatch?.precio_sucursal_adicional || 0,
+              : (localMatch?.precio_sucursal_adicional ?? staticMatch?.precio_sucursal_adicional ?? 0),
           polar_sucursal_url:
-            p.polar_sucursal_url !== undefined
+            p.polar_sucursal_url !== undefined && p.polar_sucursal_url !== null
               ? p.polar_sucursal_url
-              : staticMatch?.polar_sucursal_url || "",
+              : (localMatch?.polar_sucursal_url ?? staticMatch?.polar_sucursal_url ?? ""),
           limite_sucursales_adicionales:
-            p.limite_sucursales_adicionales !== undefined
+            p.limite_sucursales_adicionales !== undefined && p.limite_sucursales_adicionales !== null
               ? p.limite_sucursales_adicionales
-              : staticMatch?.limite_sucursales_adicionales || 0,
+              : (localMatch?.limite_sucursales_adicionales ?? staticMatch?.limite_sucursales_adicionales ?? 0),
         };
       });
       _cachedPlans = mapped;
+      write(KEY.plans, mapped);
       return mapped;
     }
   } catch (e) {
@@ -912,9 +901,11 @@ export async function getPlans(): Promise<Plan[]> {
 
   const s = read<Plan[] | null>(KEY.plans, null);
   if (!Array.isArray(s) || s.length === 0) return PLANS;
+  _cachedPlans = s;
   return s;
 }
 export function savePlans(plans: Plan[]) {
+  _cachedPlans = plans;
   write(KEY.plans, plans);
 }
 
@@ -1237,10 +1228,22 @@ export async function deleteTenant(id: string) {
       console.log(`Archivos de lavandería ${id} eliminados de Storage.`);
     }
   } catch (e) {
-    console.error("Error al limpiar archivos de Storage:", e);
+    console.warn("Aviso al limpiar archivos de Storage:", e);
   }
 
-  // 2. Limpiar Usuarios en Auth (Vía RPC de Admin)
+  // 2. Ejecutar eliminación en cascada completa en Supabase (Auth + DB)
+  try {
+    const { error: rpcError } = await supabase.rpc("admin_delete_tenant_complete", { target_tenant_id: id });
+    if (!rpcError) {
+      console.log(`[deleteTenant] Lavandería ${id} y sus usuarios eliminados exitosamente vía RPC.`);
+      return;
+    }
+    console.warn("Aviso en admin_delete_tenant_complete, ejecutando limpieza manual de respaldo...", rpcError);
+  } catch (rpcErr) {
+    console.warn("Excepción al ejecutar admin_delete_tenant_complete:", rpcErr);
+  }
+
+  // 3. Fallback manual por si la RPC no estuviera disponible
   try {
     const emps = await getEmpleados(id);
     for (const emp of emps) {
@@ -1250,40 +1253,39 @@ export async function deleteTenant(id: string) {
         console.warn(`No se pudo eliminar auth user ${emp.id}:`, errAuth);
       }
     }
-    console.log(`Usuarios de Auth para lavandería ${id} procesados.`);
   } catch (e) {
-    console.error("Error al limpiar usuarios de Auth:", e);
+    console.warn("Aviso al limpiar usuarios de Auth:", e);
   }
 
-  // 3. Limpiar manualmente tablas relacionadas para evitar bloqueos por Foreign Key
   const relatedTables = [
-    "mensajes",
-    "conversations",
-    "movimientos_caja",
-    "caja_turnos",
-    "gastos",
     "orden_items",
+    "abonos_credito",
+    "movimientos_caja",
+    "cajas",
+    "gastos",
+    "messages",
+    "conversations",
+    "notificaciones",
+    "ecf_api_logs",
+    "ecf_documentos_recibidos",
+    "ecf_documents",
+    "ecf_sequences",
+    "ecf_config",
     "ordenes",
     "clientes",
-    "prendas",
+    "catalogo_items",
     "servicios",
-    "sucursales",
-    "empleados",
-    "notificaciones",
-    "auditoria",
-    "configuracion",
-    "ecf_configs"
+    "empleados"
   ];
 
   for (const table of relatedTables) {
     try {
       await supabase.from(table).delete().eq("tenant_id", id);
     } catch (_tblErr) {
-      // Ignorar si la tabla no existe o no tiene tenant_id
+      // Ignorar si la tabla no existe
     }
   }
 
-  // 4. Eliminar la lavandería de la tabla tenants
   const { error } = await supabase.from("tenants").delete().eq("id", id);
   if (error) {
     console.error("Error al eliminar tenant de la tabla tenants:", error);
@@ -1411,7 +1413,7 @@ export async function updateTenantTrialHasta(tenantId: string, trialHasta: strin
 
 export async function updateTenantModulosOverride(
   tenantId: string,
-  overrides: TenantConfig["modulos_override"],
+  overrides?: TenantConfig["modulos_override"] | null,
   mesesPagadosOverride?: number
 ): Promise<boolean> {
   const { data: tenant, error: fetchError } = await supabase
@@ -1426,11 +1428,16 @@ export async function updateTenantModulosOverride(
   }
 
   const currentConfig = tenant?.config || {};
-  const nextConfig = {
+  const nextConfig: TenantConfig = {
     ...currentConfig,
-    modulos_override: overrides,
     meses_pagados_override: mesesPagadosOverride !== undefined ? mesesPagadosOverride : currentConfig.meses_pagados_override,
   };
+
+  if (overrides === undefined || overrides === null) {
+    delete nextConfig.modulos_override;
+  } else {
+    nextConfig.modulos_override = overrides;
+  }
 
   const { error } = await supabase
     .from("tenants")
@@ -2351,10 +2358,10 @@ export async function deletePlan(id: PlanId) {
 export function setActiveTenant(slug: string) {
   if (isBrowser()) localStorage.setItem(KEY.active, slug);
 }
-export function getActiveTenant(): Tenant | undefined {
+export async function getActiveTenant(): Promise<Tenant | undefined> {
   if (!isBrowser()) return undefined;
   const slug = localStorage.getItem(KEY.active);
-  return slug ? getTenantBySlug(slug) : undefined;
+  return slug ? await getTenantBySlug(slug) : undefined;
 }
 
 export interface Session {

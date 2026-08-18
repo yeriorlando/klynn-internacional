@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase";
+import { createServerFn } from "@tanstack/react-start";
 
 export interface SendWelcomeEmailParams {
   to: string;
@@ -7,17 +7,16 @@ export interface SendWelcomeEmailParams {
   tenantSlug: string;
 }
 
-export async function sendWelcomeEmail({
-  to,
-  adminNombre,
-  nombreLavanderia,
-  tenantSlug,
-}: SendWelcomeEmailParams): Promise<boolean> {
-  try {
-    const tenantUrl = `https://${tenantSlug}.klynn.app`;
-    const appUrl = `https://klynn.com.do/t/${tenantSlug}`;
+export const sendWelcomeEmailServer = createServerFn({ method: "POST" })
+  .inputValidator((data: SendWelcomeEmailParams) => data)
+  .handler(async ({ data }) => {
+    try {
+      const { to, adminNombre, nombreLavanderia, tenantSlug } = data;
+      const resendApiKey = process.env.RESEND_API_KEY || (import.meta as any).env?.VITE_RESEND_API_KEY || "";
+      const tenantUrl = `https://${tenantSlug}.klynn.app`;
+      const appUrl = `https://klynn.com.do/t/${tenantSlug}`;
 
-    const htmlContent = `<!DOCTYPE html>
+      const htmlContent = `<!DOCTYPE html>
 <html lang="es" xmlns="http://www.w3.org/1999/xhtml">
 <head>
   <meta charset="utf-8">
@@ -167,23 +166,41 @@ export async function sendWelcomeEmail({
 </body>
 </html>`;
 
-    // Disparar vía Supabase Functions si está disponible, o fallback silencioso
-    const { error } = await supabase.functions.invoke("resend-proxy", {
-      body: {
-        to,
-        subject: `¡Bienvenido a Klynn Cloud, ${nombreLavanderia}!`,
-        html: htmlContent,
-      },
-    });
+      const res = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${resendApiKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from: "Klynn <soporte@klynn.com.do>",
+          to: [to],
+          subject: `¡Bienvenido a Klynn Cloud, ${nombreLavanderia}!`,
+          html: htmlContent,
+        }),
+      });
 
-    if (error) {
-      console.warn("[Resend] Aviso al enviar bienvenida:", error);
-      return false;
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        console.warn("[Resend] Error al enviar email de bienvenida:", errData);
+        return { success: false, error: errData };
+      }
+
+      const resData = await res.json();
+      console.log("[Resend] ✅ Email de bienvenida enviado exitosamente:", resData?.id);
+      return { success: true, id: resData?.id };
+    } catch (err: any) {
+      console.warn("[Resend] Error en sendWelcomeEmailServer:", err);
+      return { success: false, error: err?.message || String(err) };
     }
+  });
 
-    return true;
+export async function sendWelcomeEmail(params: SendWelcomeEmailParams) {
+  try {
+    const result = await sendWelcomeEmailServer({ data: params });
+    return result.success;
   } catch (err) {
-    console.warn("[Resend] Excepción en sendWelcomeEmail:", err);
+    console.warn("[Resend] Error invocando server function sendWelcomeEmail:", err);
     return false;
   }
 }
