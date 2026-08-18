@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -129,6 +130,7 @@ function AdminPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
   const [openBatchDeleteDialog, setOpenBatchDeleteDialog] = useState(false);
@@ -167,6 +169,7 @@ function AdminPage() {
   const [pronesoftCompanies, setPronesoftCompanies] = useState<any[]>([]);
   const [ecfConfigsMap, setEcfConfigsMap] = useState<Record<string, any>>({});
   const [loadingPronesoft, setLoadingPronesoft] = useState(false);
+  const [fiscalEnvFilter, setFiscalEnvFilter] = useState<'all' | 'sandbox' | 'production'>('sandbox');
 
   const isTenantAbandoned = (t: Tenant) => {
     const ords = ordenesByTenant[t.id]?.count || 0;
@@ -214,16 +217,40 @@ function AdminPage() {
     }
   }
 
-  async function loadPronesoftData() {
+  async function loadPronesoftData(selectedEnv?: 'all' | 'sandbox' | 'production') {
+    const targetEnv = selectedEnv || fiscalEnvFilter;
     setLoadingPronesoft(true);
     try {
-      const res = await listAssociatedCompaniesPronesoft(undefined, 'production');
+      // 1. Cargar mapa de configuraciones ECF locales desde Supabase
+      const { data: ecfList } = await supabase.from('ecf_config').select('*');
+      if (ecfList) {
+        const map: Record<string, any> = {};
+        for (const cfg of ecfList) {
+          if (cfg.rnc_emisor) map[cfg.rnc_emisor.trim().toUpperCase()] = cfg;
+          if (cfg.pronesoft_tenant_id) map[cfg.pronesoft_tenant_id.trim()] = cfg;
+          if (cfg.tenant_id) map[cfg.tenant_id] = cfg;
+        }
+        setEcfConfigsMap(map);
+      }
+
+      // 2. Consultar empresas asociadas en la API de Pronesoft
+      const res = await listAssociatedCompaniesPronesoft(undefined, targetEnv);
       console.log("[Pronesoft API] Empresas asociadas recibidas:", res);
-      const apiItems: any[] = res?.data || (Array.isArray(res) ? res : []);
+      const apiItems: any[] = Array.isArray(res) ? res : (res?.data || []);
       setPronesoftCompanies(apiItems);
     } catch (err: any) {
       console.warn("Aviso al cargar empresas de Pronesoft:", err.message);
-      toast.error("Error al consultar Pronesoft: " + err.message);
+      const errMsg = err?.message || String(err);
+      if (errMsg.includes('401') || errMsg.includes('Invalid client credentials')) {
+        if (targetEnv === 'production') {
+          toast.info("Ambiente Producción: Tus credenciales actuales son de Pruebas (Sandbox). Para Producción se activarán tras certificar ante DGII.");
+        } else {
+          toast.error("Credenciales de Pronesoft no autorizadas en Sandbox. Revisa tu Client ID y Secret.");
+        }
+        setPronesoftCompanies([]);
+      } else {
+        toast.error("Error al consultar Pronesoft: " + errMsg);
+      }
     } finally {
       setLoadingPronesoft(false);
     }
@@ -236,7 +263,7 @@ function AdminPage() {
       setPlans(p);
       setGlobalConfig(cfg);
       setLicencias(lics);
-      loadPronesoftData(t);
+      loadPronesoftData();
       const ordsMap: Record<string, { count: number; total: number }> = {};
       let grandTotal = 0;
       for (const tenant of t) {
@@ -390,9 +417,24 @@ function AdminPage() {
     }
   }
 
-  function handleLogout() {
-    logout();
-    window.location.assign("/login");
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    await logout();
+    setTimeout(() => {
+      window.location.assign("/login");
+    }, 450);
+  }
+
+  if (isLoggingOut) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
+      </div>
+    );
+  }
+
+  if (!user || user.empleado.id === '__loading__') {
+    return <GlobalPageLoader text="Cargando panel de administración..." />;
   }
 
   return (
@@ -1198,7 +1240,7 @@ function AdminPage() {
             </AlertDialog>
           </TabsContent>
 
-          <TabsContent value="plans">
+          <TabsContent value="plans" className="mt-6 sm:mt-8 space-y-6">
             <div className="mb-6 rounded-2xl border border-border/50 bg-surface p-6 shadow-sm">
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -1334,7 +1376,7 @@ function AdminPage() {
             </div>
           </TabsContent>
 
-          <TabsContent value="licencias">
+          <TabsContent value="licencias" className="mt-6 sm:mt-8 space-y-6">
             <div className="mb-4 flex items-center justify-between">
               <div>
                 <h2 className="font-display text-xl">Licencias de Software</h2>
@@ -1410,8 +1452,8 @@ function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="fiscal-companies">
-            <div className="mb-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <TabsContent value="fiscal-companies" className="mt-6 sm:mt-8 space-y-6">
+            <div className="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <div>
                 <h2 className="font-display text-xl font-bold flex items-center gap-2">
                   <Shield className="h-5 w-5 text-emerald-600" /> Empresas Fiscales Asociadas (Pronesoft / DGII)
@@ -1420,15 +1462,52 @@ function AdminPage() {
                   Directorio maestro de lavanderías registradas como empresas emisoras e-CF en la API de Pronesoft.
                 </p>
               </div>
-              <Button 
-                onClick={loadPronesoftData} 
-                disabled={loadingPronesoft}
-                variant="outline"
-                className="h-9 px-4 rounded-xl font-bold border-primary/20 text-primary hover:bg-primary/5 gap-1.5 shrink-0"
-              >
-                <RefreshCw className={`h-4 w-4 ${loadingPronesoft ? "animate-spin" : ""}`} /> 
-                {loadingPronesoft ? "Cargando..." : "Refrescar Pronesoft"}
-              </Button>
+              
+              <div className="flex flex-wrap items-center gap-2.5">
+                {/* Selector de Ambiente */}
+                <div className="flex items-center gap-1 bg-muted/60 border border-border/70 rounded-xl p-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFiscalEnvFilter('all');
+                      loadPronesoftData('all');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'all' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Todos ({pronesoftCompanies.length})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFiscalEnvFilter('sandbox');
+                      loadPronesoftData('sandbox');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'sandbox' ? 'bg-amber-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Pruebas / Sandbox
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFiscalEnvFilter('production');
+                      loadPronesoftData('production');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'production' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                  >
+                    Producción (Live)
+                  </button>
+                </div>
+
+                <Button 
+                  onClick={() => loadPronesoftData(fiscalEnvFilter)} 
+                  disabled={loadingPronesoft}
+                  variant="outline"
+                  className="h-9 px-4 rounded-xl font-bold border-primary/20 text-primary hover:bg-primary/5 gap-1.5 shrink-0"
+                >
+                  <RefreshCw className={`h-4 w-4 ${loadingPronesoft ? "animate-spin" : ""}`} /> 
+                  {loadingPronesoft ? "Consultando..." : "Refrescar"}
+                </Button>
+              </div>
             </div>
 
             <Card className="overflow-hidden border-none shadow-card">
@@ -1439,28 +1518,29 @@ function AdminPage() {
                       <th className="px-6 py-4 text-left font-bold">Empresa / Razón Social</th>
                       <th className="px-6 py-4 text-center font-bold">RNC / Cédula</th>
                       <th className="px-6 py-4 text-center font-bold">Pronesoft Tenant ID</th>
-                      <th className="px-6 py-4 text-center font-bold">Ambiente</th>
+                      <th className="px-6 py-4 text-center font-bold">Ambiente DGII</th>
                       <th className="px-6 py-4 text-center font-bold">Lavandería Klynn</th>
                     </tr>
                   </thead>
                   <tbody>
                     {pronesoftCompanies.map((c: any) => {
-                      const rnc = c.rnc || c.taxId || c.identification || "";
-                      const tenantId = c.id || c.tenantId || c.pronesoft_tenant_id || "";
+                      const rnc = (c.rnc || c.taxId || c.identification || "").trim();
+                      const tenantId = (c.id || c.tenantId || c.pronesoft_tenant_id || "").trim();
                       const name = c.name || c.companyName || c.razon_social || "Lavandería Registrada";
                       
-                      const matchedConfig = ecfConfigsMap[rnc] || ecfConfigsMap[tenantId];
+                      const cleanRnc = rnc.replace(/^SBX/i, '').replace(/\D/g, '');
+                      const matchedConfig = ecfConfigsMap[rnc.toUpperCase()] || ecfConfigsMap[tenantId] || (cleanRnc ? ecfConfigsMap[cleanRnc] : null);
                       const matchedTenant = matchedConfig 
                         ? tenants.find(t => t.id === matchedConfig.tenant_id) 
-                        : tenants.find(t => t.rnc === rnc || (rnc && t.rnc?.replace(/\D/g, '') === rnc.replace(/\D/g, '')));
+                        : tenants.find(t => t.rnc === rnc || (cleanRnc && t.rnc?.replace(/\D/g, '') === cleanRnc));
 
-                      const isProd = c.ambiente === 'produccion' || matchedConfig?.ambiente === 'produccion';
+                      const isProd = c._ambiente === 'production' || c.ambiente === 'produccion' || matchedConfig?.ambiente === 'produccion';
 
                       return (
-                        <tr key={tenantId || rnc} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                        <tr key={`${tenantId || rnc}-${c._ambiente || 'env'}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
                           <td className="px-6 py-4 font-bold text-foreground">
                             <div className="flex items-center gap-2">
-                              <Building2 className="h-4 w-4 text-emerald-600 shrink-0" />
+                              <Building2 className={`h-4 w-4 shrink-0 ${isProd ? "text-emerald-600" : "text-amber-600"}`} />
                               <span>{name}</span>
                             </div>
                           </td>
@@ -1468,14 +1548,22 @@ function AdminPage() {
                             {rnc || "N/A"}
                           </td>
                           <td className="px-6 py-4 text-center font-mono text-xs text-muted-foreground">
-                            <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700">
+                            <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 select-all">
                               {tenantId || "Automático"}
                             </span>
                           </td>
                           <td className="px-6 py-4 text-center">
-                            <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase">
-                              {isProd ? 'Producción' : 'Pruebas / SBX'}
-                            </Badge>
+                            {isProd ? (
+                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Producción (Live)
+                              </Badge>
+                            ) : (
+                              <Badge className="bg-amber-50 text-amber-800 hover:bg-amber-50 border-amber-300 text-[10px] font-bold uppercase gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                Pruebas (Sandbox)
+                              </Badge>
+                            )}
                           </td>
                           <td className="px-6 py-4 text-center">
                             {matchedTenant ? (
@@ -1492,7 +1580,7 @@ function AdminPage() {
                     {pronesoftCompanies.length === 0 && !loadingPronesoft && (
                       <tr>
                         <td colSpan={5} className="py-12 text-center text-muted-foreground font-medium">
-                          No se encontraron empresas asociadas en la API de Pronesoft.
+                          No se encontraron empresas asociadas en la API de Pronesoft {fiscalEnvFilter === 'all' ? '' : `para ${fiscalEnvFilter}`}.
                         </td>
                       </tr>
                     )}

@@ -8,6 +8,7 @@ import {
   Wallet, Truck, Receipt, MessageSquare, Layers
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -33,6 +34,7 @@ function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [matchingAccounts, setMatchingAccounts] = useState<{ emp: any; tenant: any }[]>([]);
+  const [isEntering, setIsEntering] = useState(false);
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -67,6 +69,7 @@ function LoginPage() {
           iniciado_en: new Date().toISOString(),
         });
         setLoading(false);
+        setIsEntering(true);
         navigate({ to: "/admin" });
         return;
       }
@@ -105,6 +108,7 @@ function LoginPage() {
         });
         setActiveTenant(tenant.slug);
         setLoading(false);
+        setIsEntering(true);
         navigate({ to: "/t/$slug", params: { slug: tenant.slug } });
       } else {
         const accounts = tenants.map((t) => {
@@ -127,8 +131,17 @@ function LoginPage() {
       iniciado_en: new Date().toISOString(),
     });
     setActiveTenant(acc.tenant.slug);
+    setIsEntering(true);
     navigate({ to: "/t/$slug", params: { slug: acc.tenant.slug } });
   };
+
+  if (isEntering) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader text="Cargando tu lavandería..." minHeight="min-h-screen" />
+      </div>
+    );
+  }
 
   return (
     <div className="h-screen w-full grid lg:grid-cols-12 bg-slate-950 overflow-hidden font-sans antialiased selection:bg-[#F0B900] selection:text-slate-950">

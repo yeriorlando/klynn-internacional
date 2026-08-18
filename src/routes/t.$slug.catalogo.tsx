@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -154,7 +155,9 @@ function CatalogoPage() {
 
   const loading = loadingItems || loadingServicios;
 
-  if (!user || user.tenant.id === "__loading__") return null;
+  if (!user || user.tenant.id === "__loading__" || (loading && items.length === 0)) {
+    return <GlobalPageLoader text="Cargando catálogo..." />;
+  }
 
   const filteredItems = items.filter(
     (i) =>

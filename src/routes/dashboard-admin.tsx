@@ -1,5 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { 
   Building2, 
   TrendingUp, 
@@ -114,6 +115,7 @@ function DashboardAdminPage() {
   const [tenantStats, setTenantStats] = useState<Record<string, { count: number; total: number }>>({}); 
   const [stats, setStats] = useState({ totalIngresos: 0, totalOrdenesCount: 0, activasCount: 0 });
   const [loading, setLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const filteredTenants = useMemo(() => {
     return myTenants.filter((t) => {
@@ -448,12 +450,25 @@ function DashboardAdminPage() {
     setTimeout(() => window.location.assign(`/t/${slug}`), 500);
   }
 
-  function handleLogout() {
-    logout();
-    navigate({ to: "/login" });
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    await logout();
+    setTimeout(() => {
+      navigate({ to: "/login" });
+    }, 450);
   }
 
-  if (!auth || auth.empleado.id === '__loading__') return null;
+  if (isLoggingOut) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
+      </div>
+    );
+  }
+
+  if (!auth || auth.empleado.id === '__loading__') {
+    return <GlobalPageLoader text="Cargando panel de administración..." />;
+  }
 
   return (
     <div className="min-h-screen bg-background">

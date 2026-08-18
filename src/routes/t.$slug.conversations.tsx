@@ -5,6 +5,7 @@ import { es } from "date-fns/locale";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import {
   Sparkles, ShieldCheck, ArrowRightLeft, Plus, Mic, Image, FileText, Paperclip,
   Trash2, StopCircle, Search, Bot, User, Clock, Send, AlertTriangle, Check, 
@@ -469,11 +470,7 @@ function ConversationsPage() {
 
   // Loading indicator for auth
   if (!user || user.tenant.id === '__loading__') {
-    return (
-      <div className="flex h-[calc(100vh-5rem)] items-center justify-center">
-        <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      </div>
-    );
+    return <GlobalPageLoader text="Cargando centro de mensajes WhatsApp..." minHeight="h-[calc(100vh-6rem)] min-h-[550px]" />;
   }
 
   // --- AUDIO RECORDING LOGIC ---

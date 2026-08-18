@@ -87,16 +87,16 @@ const features = [
   { icon: Users, title: "CRM dominicano", desc: "Historial por cliente, deudas, abonos, clientes VIP y crédito autorizado. Cumpleaños y avisos automáticos por WhatsApp." },
   { icon: Truck, title: "Entregas a domicilio", desc: "Asigna repartidores, rutas por sector (Naco, Piantini, Bella Vista, Los Jardinesâ€¦) y notifica al cliente al salir y al llegar." },
   { icon: BarChart3, title: "Reportes para la DGII", desc: "606, 607 y resumen de ITBIS exportable en CSV y XLSX. Llega listo a tu contador cada mes." },
-  { icon: Scissors, title: "Módulo de sastrería", desc: "Ajustes, ruedos, cierres y composturas con medidas, fotos y entrega coordinada con el lavado." },
+  { icon: Scissors, title: "Módulo de sastrería", desc: "Ajustes, ruedos, cierres y composturas con medidas y entrega coordinada con el lavado." },
   { icon: Package, title: "Lavado por libra y prendas", desc: "Cobra por peso (lb/kg) o por prenda. Combina ambos en la misma orden con cargos de planchado, suavizante o rapidez." },
   { icon: Smartphone, title: "WhatsApp integrado", desc: "Envía recibos, recordatorios de retiro y promociones desde el sistema. Tu cliente recibe el ticket en su celular." },
 ];
 
 const testimonios = [
   {
-    nombre: "Yessica Rodríguez",
-    negocio: "Lavandería La Burbuja, Santo Domingo Este",
-    texto: "Antes anotaba todo en libreta y se me perdían órdenes. Con Klynn cuadro la caja en 2 minutos y los clientes reciben el ticket por WhatsApp. Subí 30% las ventas en 3 meses.",
+    nombre: "Rosa Guzmán",
+    negocio: "MR Lavandería Express, Haina, San Cristóbal",
+    texto: "Klynn marcó un antes y un después en mi lavandería. Hoy mantengo mi CXC organizada, no pierdo facturas y tengo control total de la operación. Es ahorro de tiempo y atención al cliente más eficiente gracias a la automatización. La plataforma es intuitiva y el soporte técnico vía WhatsApp brinda respuesta inmediata. Gracias Klynn por facilitarme la gestión.",
   },
   {
     nombre: "Manuel Tavárez",

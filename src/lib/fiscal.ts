@@ -357,6 +357,8 @@ export async function registerTenantInPronesoft(
       const digitsOnly = rncToRegister.replace(/\D/g, '') || '987654321';
       rncToRegister = `SBX${digitsOnly}`;
     }
+  } else if (proneSoftEnv === 'production') {
+    rncToRegister = rncToRegister.replace(/^SBX/i, '').replace(/\D/g, '');
   }
 
   // 2. Registrar en Pronesoft (Tanto en Sandbox como en Producción)
@@ -455,28 +457,43 @@ export async function createSequencePronesoft(
 
 export async function listAssociatedCompaniesPronesoft(
   params?: { page?: number; limit?: number },
-  env?: 'sandbox' | 'production'
-): Promise<any> {
-  const targetEnv = env || 'production';
-  const client = getProneSoftClient(undefined, targetEnv);
-  try {
-    const res = await client.listAssociatedCompanies(params);
-    if (res && (res.data || Array.isArray(res))) return res;
-  } catch (e) {
-    console.warn("Aviso al consultar empresas en " + targetEnv, e);
-  }
+  env?: 'sandbox' | 'production' | 'all'
+): Promise<any[]> {
+  if (env === 'all') {
+    const [sbxRes, prodRes] = await Promise.allSettled([
+      getProneSoftClient(undefined, 'sandbox').listAssociatedCompanies(params),
+      getProneSoftClient(undefined, 'production').listAssociatedCompanies(params),
+    ]);
 
-  // Fallback al otro entorno si no se especificó uno fijo
-  if (!env) {
-    try {
-      const sandboxClient = getProneSoftClient(undefined, 'sandbox');
-      return await sandboxClient.listAssociatedCompanies(params);
-    } catch {
-      // silencioso
+    const sbxItems = sbxRes.status === 'fulfilled' ? (sbxRes.value?.data || (Array.isArray(sbxRes.value) ? sbxRes.value : [])) : [];
+    const prodItems = prodRes.status === 'fulfilled' ? (prodRes.value?.data || (Array.isArray(prodRes.value) ? prodRes.value : [])) : [];
+
+    const taggedSbx = (Array.isArray(sbxItems) ? sbxItems : []).map((c: any) => ({ ...c, _ambiente: 'sandbox' }));
+    const taggedProd = (Array.isArray(prodItems) ? prodItems : []).map((c: any) => ({ ...c, _ambiente: 'production' }));
+
+    // Unificar evitando duplicados por ID
+    const seen = new Set<string>();
+    const combined: any[] = [];
+    for (const item of [...taggedProd, ...taggedSbx]) {
+      const key = `${item.id || item.rnc}-${item._ambiente}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        combined.push(item);
+      }
     }
+    return combined;
   }
 
-  return { data: [] };
+  const targetEnv = env || 'production';
+  try {
+    const client = getProneSoftClient(undefined, targetEnv);
+    const res = await client.listAssociatedCompanies(params);
+    const items = res?.data || (Array.isArray(res) ? res : []);
+    return (Array.isArray(items) ? items : []).map((c: any) => ({ ...c, _ambiente: targetEnv }));
+  } catch (err: any) {
+    console.warn(`[Pronesoft API] Aviso al listar empresas asociadas en ${targetEnv}:`, err?.message || err);
+    throw err;
+  }
 }
 
 export async function listSequencesPronesoft(

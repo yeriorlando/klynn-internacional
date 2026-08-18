@@ -3,6 +3,7 @@ import { compressImage } from "@/lib/compressImage";
 import { useState, useEffect, useRef } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -419,7 +420,9 @@ Característica escritura: —
     }
   }, []);
 
-  if (!auth || auth.tenant.id === '__loading__' || !tenant) return null;
+  if (!auth || auth.tenant.id === '__loading__' || !tenant) {
+    return <GlobalPageLoader text="Cargando configuración..." />;
+  }
 
   const cfg: TenantConfig = tenant.config || DEFAULT_CONFIG;
   const plan = plans.find(p => p.id === tenant.plan_id);
@@ -2985,7 +2988,8 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     setDraft(d => ({ ...d, is_active: activeValue }));
 
     try {
-      // En pruebas, asegurar el formato SBX para el mock sandbox de Pronesoft
+      // 1. En pruebas, asegurar el formato SBX para el mock sandbox de Pronesoft.
+      // En producción, limpiar a dígitos reales y validar obligatoriedad de Certificado Digital.
       let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').trim().toUpperCase();
       if (draft.ambiente === 'pruebas') {
         if (!cleanRNC.startsWith('SBX')) {
@@ -2994,6 +2998,33 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
         }
       } else {
         cleanRNC = cleanRNC.replace(/\D/g, '');
+      }
+
+      // VALIDACIÓN ESTRICTA: El modo PRODUCCIÓN exige Certificado Digital y RNC real
+      if (activeValue && draft.ambiente === 'produccion') {
+        if (!cleanRNC || (cleanRNC.length !== 9 && cleanRNC.length !== 11)) {
+          toast.error("Para operar en PRODUCCIÓN debes ingresar un RNC o Cédula oficial válido (9 u 11 dígitos).");
+          setLoading(false);
+          return;
+        }
+
+        const hasCert = !!(draft.certificate_data || config?.certificate_data);
+        if (!hasCert) {
+          toast.error("⚠️ En modo PRODUCCIÓN es obligatorio subir tu Certificado Digital (.p12 / .pfx) para la firma electrónica ante la DGII.", {
+            duration: 6000,
+          });
+          setLoading(false);
+          return;
+        }
+
+        const hasPassword = !!(draft.certificate_password || config?.certificate_password);
+        if (!hasPassword) {
+          toast.error("Debes ingresar la contraseña de tu Certificado Digital (.p12).", {
+            duration: 5000,
+          });
+          setLoading(false);
+          return;
+        }
       }
       
       const configPayload: ECFConfig = {
@@ -3021,9 +3052,9 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
       }
 
       // 3. Si hay un certificado nuevo para subir (Solo en producción, Sandbox no lo requiere)
-      if (activeValue && draft.ambiente === 'produccion' && draft.certificate_data && draft.certificate_password) {
-        await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, draft.certificate_password, configPayload);
-        setDraft(d => ({ ...d, certificate_data: undefined }));
+      if (activeValue && draft.ambiente === 'produccion' && draft.certificate_data && (draft.certificate_password || config?.certificate_password)) {
+        const certPass = draft.certificate_password || config?.certificate_password || "";
+        await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, certPass, configPayload);
       }
 
       // 4. IMPORTANTÍSIMO: Guardar también el RNC y el modo fiscal en el tenant
@@ -3399,15 +3430,21 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/20">
                         <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300 font-bold mb-1">
                           <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                          <span>Cargado y Listo</span>
+                          <span>Certificado Digital Cargado</span>
                         </div>
                         <p className="text-xs text-emerald-800 dark:text-emerald-400 font-medium">
-                          {certFileName ? `Archivo: ${certFileName}` : "Certificado P12 digital adjunto y activo."}
+                          {certFileName ? `Archivo: ${certFileName}` : "Certificado P12 digital adjunto y listo para firmar."}
                         </p>
                       </div>
                     ) : (
-                      <div className="p-4 rounded-2xl border border-dashed border-amber-300 bg-amber-50/70 dark:bg-amber-950/20 text-center">
-                        <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">Pendiente de subir certificado.</p>
+                      <div className="p-4.5 rounded-2xl border-2 border-dashed border-rose-300 dark:border-rose-800/80 bg-rose-50/70 dark:bg-rose-950/20 text-center space-y-1.5">
+                        <div className="flex items-center justify-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs uppercase tracking-wide">
+                          <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
+                          <span>Obligatorio en Modo Producción</span>
+                        </div>
+                        <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
+                          La DGII exige un certificado de firma digital (<strong>.p12</strong> o <strong>.pfx</strong>). Sin este archivo no se puede guardar la configuración en Producción.
+                        </p>
                       </div>
                     )}
                     <Field label="Contraseña del .p12" icon={Key}>
@@ -3433,12 +3470,12 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       }
                     }} />
                     <Button 
-                      variant="outline" 
-                      className="w-full h-10 rounded-xl font-bold border-border hover:bg-accent cursor-pointer gap-2" 
+                      variant={draft.certificate_data || config?.certificate_data ? "outline" : "default"} 
+                      className={`w-full h-10 rounded-xl font-bold cursor-pointer gap-2 ${!(draft.certificate_data || config?.certificate_data) ? "bg-[#1B4B73] hover:bg-[#1B4B73]/90 text-white shadow-md" : "border-border hover:bg-accent"}`} 
                       onClick={() => document.getElementById('cert-upload')?.click()}
                     >
                       <Upload className="h-4 w-4" /> 
-                      <span>{draft.certificate_data ? "Reemplazar Certificado (.p12)" : "Subir Archivo (.p12)"}</span>
+                      <span>{draft.certificate_data || config?.certificate_data ? "Reemplazar Certificado (.p12)" : "Seleccionar y Subir Certificado (.p12 / .pfx)"}</span>
                     </Button>
                   </div>
                 )}

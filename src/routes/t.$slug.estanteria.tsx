@@ -36,6 +36,7 @@ import { useRequireAuth } from "@/lib/useRequireAuth";
 import { useOrdenes, useClientes, usePlans } from "@/hooks/use-queries";
 import { queryClient } from "@/router";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -86,13 +87,14 @@ export function EstanteriaPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
   const tenantId = tenant?.id || "";
+  const isAuthLoading = !user || user.tenant.id === "__loading__";
 
   // Queries
   const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
   const { data: clientes = [] } = useClientes(tenantId);
-  const { data: plans = [] } = usePlans();
+  const { data: plans = [], isLoading: loadingPlans } = usePlans();
   const activePlan = plans.find((p) => p.id === user?.tenant?.plan_id);
-  const hasEstanteriaModule = isModuleEnabled(user?.tenant || null, "estanteria", activePlan);
+  const hasEstanteriaModule = isAuthLoading ? true : isModuleEnabled(user?.tenant || null, "estanteria", activePlan);
 
   // States de Filtro
   const [selectedZoneId, setSelectedZoneId] = useState<string>("all");
@@ -399,6 +401,10 @@ export function EstanteriaPage() {
         return <Layers className="h-4 w-4" />;
     }
   };
+
+  if (isAuthLoading) {
+    return <GlobalPageLoader text="Cargando estantería virtual..." />;
+  }
 
   if (!hasEstanteriaModule) {
     return (

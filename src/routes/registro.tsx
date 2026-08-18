@@ -372,18 +372,30 @@ function RegistroPage() {
 
       // Guardar configuración inicial fiscal (ecf_config) vinculada al tenant
       try {
-        await saveECFConfig({
+        const rawRnc = form.rnc.trim();
+        const initialECFConfig: ECFConfig = {
           id: crypto.randomUUID(),
           tenant_id: tenant.id,
-          rnc_emisor: cleanRnc || "",
+          rnc_emisor: cleanRnc || rawRnc || "",
           razon_social: form.razon_social || form.nombre,
           nombre_comercial: form.nombre,
           ambiente: "pruebas",
           usar_credenciales_propias: false,
-          is_active: false,
+          is_active: !!cleanRnc || !!rawRnc,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
-        } as ECFConfig);
+        };
+        await saveECFConfig(initialECFConfig);
+
+        // Si el usuario ingresó un RNC o Cédula, auto-registrar la empresa asociada en Pronesoft de fondo
+        if (cleanRnc || rawRnc) {
+          try {
+            await registerTenantInPronesoft(tenant.id, initialECFConfig);
+            console.log(`[Registro] ✅ Empresa asociada registrada en Pronesoft para: ${tenant.nombre}`);
+          } catch (proneErr: any) {
+            console.warn("[Registro] Aviso en auto-registro de Pronesoft:", proneErr?.message || proneErr);
+          }
+        }
       } catch (ecfInitErr) {
         console.warn("Aviso al inicializar ecf_config:", ecfInitErr);
       }

@@ -1,6 +1,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect, useMemo } from "react";
 import { createPortal } from "react-dom";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { 
   Building2, 
   TrendingUp, 
@@ -78,6 +79,7 @@ function ReportesPage() {
   const [selectedInspectTenant, setSelectedInspectTenant] = useState<Tenant | null>(null);
   const [inspectLoading, setInspectLoading] = useState(true);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [inspectData, setInspectData] = useState<{
     ordenes: any[];
     gastos: any[];
@@ -365,12 +367,25 @@ function ReportesPage() {
     setTimeout(() => window.location.assign(`/t/${slug}`), 500);
   }
 
-  function handleLogout() {
-    logout();
-    navigate({ to: "/login" });
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    await logout();
+    setTimeout(() => {
+      navigate({ to: "/login" });
+    }, 450);
   }
 
-  if (!auth || auth.empleado.id === '__loading__') return null;
+  if (isLoggingOut) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
+      </div>
+    );
+  }
+
+  if (!auth || auth.empleado.id === '__loading__') {
+    return <GlobalPageLoader text="Cargando reportes generales..." />;
+  }
 
   return (
     <div className="min-h-screen bg-slate-50">

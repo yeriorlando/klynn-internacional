@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { createPortal } from "react-dom";
 import { exportToCsv } from "@/lib/export";
 import { 
@@ -418,13 +419,13 @@ function ReportesPage() {
           const header = `606|${rncEmisor.replace(/\D/g, "")}|${period}|${periodGastos.length}`;
           
           const rows = periodGastos.map(g => {
-            const rncProv = (g.rnc_proveedor || '101010101').replace(/\D/g, "");
+            const rncProv = ((g as any).rnc_proveedor || '101010101').replace(/\D/g, "");
             const tipoId = rncProv.length === 9 ? '1' : '2';
             const tipoGasto = '02'; // Gastos de Trabajos, Suministros y Servicios
-            const ncf = g.ncf || 'B0100000001';
+            const ncf = (g as any).ncf || 'B0100000001';
             const fechaComp = (g.fecha || new Date().toISOString().substring(0, 10)).replace(/\D/g, "").substring(0, 8);
             const monto = (g.monto || 0).toFixed(2);
-            const itbis = (g.itbis || 0).toFixed(2);
+            const itbis = ((g as any).itbis || 0).toFixed(2);
             
             return `${rncProv}|${tipoId}|${tipoGasto}|${ncf}||${fechaComp}|${fechaComp}|${monto}|${itbis}|0.00|0.00|0.00|0.00|0.00|0.00|0.00|01`;
           });
@@ -474,8 +475,8 @@ function ReportesPage() {
               o.numero,
               o.ncf || 'E320000000001',
               o.creado_en ? o.creado_en.substring(0, 10) : '',
-              o.cliente_rnc || 'Consumidor Final',
-              o.cliente_nombre || 'Cliente General',
+              (o as any).cliente_rnc || 'Consumidor Final',
+              (o as any).cliente_nombre || 'Cliente General',
               (o.subtotal || 0).toFixed(2),
               (o.itbis || 0).toFixed(2),
               (o.total || 0).toFixed(2),
@@ -497,15 +498,8 @@ function ReportesPage() {
     }
   };
 
-  if (!user || user.tenant.id === '__loading__') return null;
-
-  if (loading) {
-    return (
-      <div className="flex h-96 flex-col items-center justify-center gap-3">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary" style={{ color: primaryColor }} />
-        <p className="text-sm font-semibold text-muted-foreground animate-pulse">Cargando reportes en tiempo real...</p>
-      </div>
-    );
+  if (!user || user.tenant.id === '__loading__' || loading) {
+    return <GlobalPageLoader text="Cargando reportes en tiempo real..." />;
   }
 
   if (!stats) return null;

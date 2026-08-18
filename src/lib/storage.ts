@@ -561,16 +561,19 @@ export function isModuleEnabled(
   moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos" | "estanteria",
   plan?: Plan,
 ): boolean {
-  if (!tenant) return false;
+  if (!tenant || tenant.id === "__loading__") return true;
 
   // 1. Check if there is an override in tenant.config.modulos_override
   const override = tenant.config?.modulos_override?.[moduleKey];
   if (override !== undefined) {
-    return override;
+    return !!override;
   }
 
   // 2. Fallback to plan
   const activePlan = plan || getTenantPlan(tenant);
+  if (moduleKey === "estanteria") {
+    return activePlan?.modulos?.estanteria !== false;
+  }
   return !!activePlan?.modulos?.[moduleKey];
 }
 
@@ -865,10 +868,10 @@ export async function getPlans(): Promise<Plan[]> {
             logistica: !!p.logistica,
             procesos: p.procesos !== undefined && p.procesos !== null
               ? !!p.procesos
-              : (localMatch?.modulos?.procesos ?? staticMatch?.modulos?.procesos ?? true),
+              : (staticMatch?.modulos?.procesos ?? true),
             estanteria: p.estanteria !== undefined && p.estanteria !== null
               ? !!p.estanteria
-              : (localMatch?.modulos?.estanteria ?? staticMatch?.modulos?.estanteria ?? true),
+              : (staticMatch?.modulos?.estanteria ?? true),
           },
           limite_whatsapp_mes: p.limite_whatsapp_mes ?? 0,
           destacado: !!p.destacado,

@@ -5,6 +5,7 @@ import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVer
 import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { exportToCsv } from "@/lib/export";
 import { EstadoBadge } from "@/components/klynn/TenantShell";
 import { Ticket } from "@/components/klynn/Ticket";
@@ -328,7 +329,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     };
   }, [filt, clientes]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || user.tenant.id === '__loading__' || (loading && ordenes.length === 0)) {
+    return <GlobalPageLoader text="Cargando órdenes..." />;
+  }
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
     if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
@@ -695,6 +698,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       console.error("Error NC:", err);
       toast.error("Error al generar Nota de Crédito");
     }
+  }
+
+  if (loading && ordenes.length === 0) {
+    return <GlobalPageLoader text="Cargando órdenes..." />;
   }
 
   if (showPendientes) {

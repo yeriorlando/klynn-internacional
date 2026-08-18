@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -125,7 +126,9 @@ function PersonalPage() {
     load();
   }, [tenantId, refresh]);
 
-  if (!user || user.tenant.id === "__loading__") return null;
+  if (!user || user.tenant.id === "__loading__" || (loading && emps.length === 0)) {
+    return <GlobalPageLoader text="Cargando personal..." />;
+  }
 
   if (!can(user.empleado, "personal")) {
     return <NoAccess />;

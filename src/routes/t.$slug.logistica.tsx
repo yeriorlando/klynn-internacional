@@ -35,6 +35,7 @@ import {
   MessageSquare,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { 
   getOrdenes, getClientes, getEmpleados, saveOrden, formatRD, formatDateRD, 
   type Orden, type Cliente, type Empleado, type EstadoOrden 
@@ -235,7 +236,9 @@ function LogisticaPage() {
   const selectedClient = useMemo(() => clientes.find(c => c.id === selectedOrder?.cliente_id), [clientes, selectedOrder]);
   const selectedDriver = useMemo(() => empleados.find(e => e.id === selectedOrder?.repartidor_id), [empleados, selectedOrder]);
 
-  if (!user || !user.tenant || user.tenant.id === '__loading__') return null;
+  if (!user || !user.tenant || user.tenant.id === '__loading__' || (loading && ordenesRaw.length === 0)) {
+    return <GlobalPageLoader text="Cargando logística..." />;
+  }
   const tenant = user.tenant;
 
   return (
@@ -742,7 +745,7 @@ function DeliveryCard({
 }) {
   const totalPrendas = orden.items?.reduce((acc, it) => acc + it.cantidad, 0) || 0;
   const sector = orden.sector_entrega || cliente?.sector;
-  const edificioApto = orden.edificio_apto_entrega || cliente?.edificio_apto;
+  const edificioApto = (orden as any).edificio_apto_entrega || cliente?.edificio_apto;
   const referencia = orden.referencia_entrega || cliente?.referencia;
   const lat = orden.lat_entrega || cliente?.lat;
   const lng = orden.lng_entrega || cliente?.lng;

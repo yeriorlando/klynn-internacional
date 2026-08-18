@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import { ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff } from "lucide-react";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -33,6 +34,7 @@ function TenantLoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isEntering, setIsEntering] = useState(false);
 
   // Inyectar colores del tenant en CSS variables locales
   const brandStyle = useMemo(() => {
@@ -59,12 +61,21 @@ function TenantLoginPage() {
       setLoading(false);
       if (!r.ok) setError(r.error);
       else {
+        setIsEntering(true);
         navigate({ to: "/t/$slug", params: { slug } });
       }
     } catch (err: any) {
       setLoading(false);
       setError("Error de conexión: " + (err.message || "Intente de nuevo"));
     }
+  }
+
+  if (isEntering) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader text="Cargando tu lavandería..." minHeight="min-h-screen" />
+      </div>
+    );
   }
 
   if (!tenant) {

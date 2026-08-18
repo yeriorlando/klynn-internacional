@@ -1,5 +1,7 @@
 {
-  "name": "tanstack_start_ts",
+  "name": "klynn-saas",
+  "version": "1.0.0",
+  "description": "Klynn Cloud SaaS - Software de Gestión para Lavanderías y Tintorerías",
   "private": true,
   "sideEffects": false,
   "type": "module",
@@ -8,12 +10,15 @@
   },
   "scripts": {
     "dev": "vite dev",
+    "dev:clean": "vite dev --force",
+    "clean": "node -e \"const fs = require('fs'); ['.output', '.tanstack', 'node_modules/.vite'].forEach(p => { if (fs.existsSync(p)) fs.rmSync(p, { recursive: true, force: true }); }); console.log('✓ Cache eliminada');\"",
     "build": "vite build",
     "build:dev": "vite build --mode development",
     "preview": "vite preview",
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

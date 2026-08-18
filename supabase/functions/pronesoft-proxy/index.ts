@@ -144,12 +144,48 @@ serve(async (req) => {
       result = JSON.parse(text);
 
     } else if (action === 'list-associated-companies') {
-      console.log("[pronesoft-proxy] 🏢 Listando empresas asociadas con el SDK...");
-      const res = await client.companies.listCompanies({
-        page: payload?.page || 1,
-        limit: payload?.limit || 50,
-      });
-      result = res;
+      console.log("[pronesoft-proxy] 🏢 Listando empresas asociadas...");
+      try {
+        let res: any;
+        if (sdk.associatedCompanies && typeof (sdk.associatedCompanies as any).listAssociatedCompanies === 'function') {
+          res = await (sdk.associatedCompanies as any).listAssociatedCompanies({
+            page: payload?.page || 1,
+            limit: payload?.limit || 50,
+          });
+        } else if (client.companies && typeof (client.companies as any).listCompanies === 'function') {
+          res = await client.companies.listCompanies({
+            page: payload?.page || 1,
+            limit: payload?.limit || 50,
+          });
+        }
+        if (res) {
+          result = res;
+        } else {
+          throw new Error("SDK method listAssociatedCompanies no disponible, ejecutando REST");
+        }
+      } catch (sdkErr: any) {
+        console.warn("[pronesoft-proxy] ⚠️ Fallback a REST para list-associated-companies:", sdkErr?.message);
+        const token = await sdk.getValidToken(false);
+        const headers: any = {
+          "Authorization": `Bearer ${token}`,
+          "Content-Type": "application/json",
+        };
+        if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
+
+        const page = payload?.page || 1;
+        const limit = payload?.limit || 50;
+        const res = await fetch(`${baseUrl}/associated-companies?page=${page}&limit=${limit}`, {
+          method: "GET",
+          headers,
+        });
+
+        const text = await res.text();
+        if (!res.ok) {
+          console.warn("[pronesoft-proxy] Fallback REST retornó código:", res.status, text);
+          throw new Error(`Error en API Pronesoft (${res.status}): ${text}`);
+        }
+        result = text ? JSON.parse(text) : [];
+      }
 
     } else if (action === 'list-sequences') {
       console.log("[pronesoft-proxy] 📋 Listando secuencias fiscales con el SDK...");

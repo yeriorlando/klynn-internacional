@@ -9,6 +9,7 @@ import {
   Layers, Truck, Wallet, Receipt, MessageCircle,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -355,7 +356,9 @@ function NuevaSucursalPage() {
     setStep((s) => Math.max(1, s - 1)); 
   }
 
-  if (!auth || auth.empleado.id === '__loading__') return null;
+  if (!auth || auth.empleado.id === '__loading__') {
+    return <GlobalPageLoader text="Cargando configuración de sucursales..." />;
+  }
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-gradient-to-b from-[#B8E2FD] via-[#CEEBFE] to-[#A8DAFC] text-slate-800">

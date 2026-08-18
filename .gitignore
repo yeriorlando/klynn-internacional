@@ -7,17 +7,23 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-# Environment variables
+# Environment variables & Secrets
 .env
 .env.local
 .env.*.local
 *.local
+certs/
+*.p12
+*.pem
+*.key
+*.crt
 
 # Production
 dist
 dist-ssr
 .output
 .vercel
+.tanstack
 
 # Wrangler / Cloudflare
 .wrangler/

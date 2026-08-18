@@ -1,0 +1,277 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 520" width="100%" height="100%" preserveAspectRatio="xMidYMid meet">
+  <defs>
+    <!-- Paleta oficial Klynn -->
+    <!-- Azul Añil (#1B4B73) -->
+    <linearGradient id="klynn-anil" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#245A8A"/>
+      <stop offset="50%" stop-color="#1B4B73"/>
+      <stop offset="100%" stop-color="#133857"/>
+    </linearGradient>
+
+    <!-- Amarillo Jabón (#F0B900) para la Factura y Progreso Interno -->
+    <linearGradient id="klynn-jabon" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#FFCE2B"/>
+      <stop offset="50%" stop-color="#F0B900"/>
+      <stop offset="100%" stop-color="#D9A300"/>
+    </linearGradient>
+
+    <!-- Gradiente de Progreso Interno Amarillo Jabón con Brillo -->
+    <linearGradient id="klynn-prog-jabon" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#E5A600"/>
+      <stop offset="40%" stop-color="#F0B900"/>
+      <stop offset="70%" stop-color="#FFD447"/>
+      <stop offset="100%" stop-color="#F0B900"/>
+    </linearGradient>
+
+    <!-- Shimmer de Luz para el Progreso Interno -->
+    <linearGradient id="klynn-jabon-shimmer" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#FFFFFF" stop-opacity="0.75"/>
+      <stop offset="100%" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Destellos Celestes de Frescura -->
+    <linearGradient id="klynn-sparkle-v8" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#93C5FD"/>
+      <stop offset="100%" stop-color="#3B82F6"/>
+    </linearGradient>
+
+    <!-- Burbujas de jabón transparentes dinámicas -->
+    <radialGradient id="klynn-soap-bubble-v8" cx="35%" cy="35%" r="65%">
+      <stop offset="0%" stop-color="#FFFFFF" stop-opacity="0.85"/>
+      <stop offset="40%" stop-color="#BAE6FD" stop-opacity="0.45"/>
+      <stop offset="85%" stop-color="#38BDF8" stop-opacity="0.3"/>
+      <stop offset="100%" stop-color="#0284C7" stop-opacity="0.55"/>
+    </radialGradient>
+
+    <!-- Sombra ultra suave para fondos blancos formales -->
+    <filter id="klynn-shadow-v8" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="10" stdDeviation="16" flood-color="#1B4B73" flood-opacity="0.09"/>
+    </filter>
+
+    <!-- Clip path para el relleno interno de la barra de progreso -->
+    <clipPath id="klynn-progress-clip-v8">
+      <rect x="133" y="473" width="234" height="14" rx="7"/>
+    </clipPath>
+  </defs>
+
+  <style>
+    <![CDATA[
+    /* 1. Flotación elástica y viva del isotipo completo */
+    @keyframes kl-bounce-v8 {
+      0%, 100% { transform: translateY(0px) scale(1); }
+      30% { transform: translateY(-12px) scale(0.99, 1.01); }
+      60% { transform: translateY(-4px) scale(1.01, 0.99); }
+      80% { transform: translateY(-9px) scale(1); }
+    }
+
+    /* 2. Balanceo alegre y pendular de la percha */
+    @keyframes kl-hanger-sway-v8 {
+      0%, 100% { transform: rotate(-6deg); }
+      50% { transform: rotate(6deg); }
+    }
+
+    /* 3. Aleteo elástico y divertido de la factura */
+    @keyframes kl-ticket-wiggle-v8 {
+      0%, 100% { transform: rotate(0deg) translateY(0px); }
+      25% { transform: rotate(-2.5deg) translateY(2.5px); }
+      75% { transform: rotate(2.5deg) translateY(1px); }
+    }
+
+    /* 4. Escaneo de las 3 líneas interiores */
+    @keyframes kl-scan-v8-1 {
+      0%, 100% { opacity: 0.7; }
+      30% { opacity: 1; }
+    }
+    @keyframes kl-scan-v8-2 {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
+    @keyframes kl-scan-v8-3 {
+      0%, 100% { opacity: 0.7; }
+      70% { opacity: 1; }
+    }
+
+    /* 5. Destellos de limpieza */
+    @keyframes kl-sparkle-v8-1 {
+      0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+      45% { transform: scale(1.2) rotate(90deg); opacity: 1; }
+      75% { transform: scale(0) rotate(180deg); opacity: 0; }
+    }
+    @keyframes kl-sparkle-v8-2 {
+      0%, 100% { transform: scale(0) rotate(0deg); opacity: 0; }
+      40% { transform: scale(1.3) rotate(90deg); opacity: 1; }
+      75% { transform: scale(0) rotate(180deg); opacity: 0; }
+    }
+
+    /* 6. Burbujas de jabón flotando hacia arriba */
+    @keyframes kl-b-float-v8-1 {
+      0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+      20% { opacity: 0.85; transform: translate(-6px, -20px) scale(1); }
+      80% { opacity: 0.7; transform: translate(8px, -70px) scale(0.9); }
+      100% { transform: translate(-4px, -100px) scale(0.3); opacity: 0; }
+    }
+    @keyframes kl-b-float-v8-2 {
+      0% { transform: translate(0, 0) scale(0.4); opacity: 0; }
+      25% { opacity: 0.8; transform: translate(8px, -25px) scale(1); }
+      75% { opacity: 0.65; transform: translate(-10px, -75px) scale(0.95); }
+      100% { transform: translate(6px, -110px) scale(0.3); opacity: 0; }
+    }
+
+    /* 7. Animación fluida de la Barra de Carga Amarillo Jabón (#F0B900) */
+    @keyframes kl-progress-slide-v8 {
+      0% {
+        transform: translateX(-180px) scaleX(0.25);
+      }
+      45% {
+        transform: translateX(40px) scaleX(0.75);
+      }
+      100% {
+        transform: translateX(250px) scaleX(0.25);
+      }
+    }
+
+    /* Brillo deslizante sobre la carga interna */
+    @keyframes kl-shimmer-sweep-v8 {
+      0% { transform: translateX(-120px); }
+      100% { transform: translateX(260px); }
+    }
+
+    .kl-main-v8 { animation: kl-bounce-v8 2.8s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite; transform-origin: 250px 240px; }
+    .kl-hanger-v8 { animation: kl-hanger-sway-v8 2.4s ease-in-out infinite; transform-origin: 250px 145px; }
+    .kl-ticket-v8 { animation: kl-ticket-wiggle-v8 2.8s ease-in-out infinite; transform-origin: 250px 300px; }
+    .kl-line-v8-1 { animation: kl-scan-v8-1 1.8s ease-in-out infinite; }
+    .kl-line-v8-2 { animation: kl-scan-v8-2 1.8s ease-in-out infinite; }
+    .kl-line-v8-3 { animation: kl-scan-v8-3 1.8s ease-in-out infinite; }
+    .kl-sp-v8-1 { animation: kl-sparkle-v8-1 2.2s ease-in-out infinite; transform-origin: 94px 124px; }
+    .kl-sp-v8-2 { animation: kl-sparkle-v8-2 2.6s ease-in-out infinite 0.9s; transform-origin: 406px 134px; }
+    .kl-sp-v8-3 { animation: kl-sparkle-v8-1 2.4s ease-in-out infinite 0.4s; transform-origin: 345px 320px; }
+    .kl-bf-v8-1 { animation: kl-b-float-v8-1 3.2s ease-in-out infinite 0.2s; }
+    .kl-bf-v8-2 { animation: kl-b-float-v8-2 3.6s ease-in-out infinite 1.4s; }
+
+    .kl-bar-fill-v8 {
+      animation: kl-progress-slide-v8 2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      transform-origin: 133px 480px;
+    }
+    .kl-bar-shimmer-v8 {
+      animation: kl-shimmer-sweep-v8 2s ease-in-out infinite;
+    }
+    ]]>
+  </style>
+
+  <!-- ==================== ISOTIPO FLOTANTE DINÁMICO ==================== -->
+  <g class="kl-main-v8" filter="url(#klynn-shadow-v8)">
+
+    <!-- Burbujas de jabón flotantes dinámicas -->
+    <g class="kl-bf-v8-1">
+      <circle cx="78" cy="270" r="11" fill="url(#klynn-soap-bubble-v8)" stroke="#38BDF8" stroke-width="0.8"/>
+      <ellipse cx="75" cy="266" rx="3.5" ry="2" fill="#FFFFFF" opacity="0.8"/>
+    </g>
+    <g class="kl-bf-v8-2">
+      <circle cx="422" cy="285" r="13" fill="url(#klynn-soap-bubble-v8)" stroke="#38BDF8" stroke-width="0.8"/>
+      <ellipse cx="418" cy="280" rx="4" ry="2.5" fill="#FFFFFF" opacity="0.8"/>
+    </g>
+
+    <!-- Destellos de limpieza -->
+    <g class="kl-sp-v8-1">
+      <path d="M 94 110 Q 94 124 80 124 Q 94 124 94 138 Q 94 124 108 124 Q 94 124 94 110 Z" fill="url(#klynn-sparkle-v8)"/>
+      <circle cx="94" cy="124" r="2.5" fill="#FFFFFF"/>
+    </g>
+    <g class="kl-sp-v8-2">
+      <path d="M 406 121 Q 406 134 393 134 Q 406 134 406 147 Q 406 134 419 134 Q 406 134 406 121 Z" fill="url(#klynn-sparkle-v8)"/>
+      <circle cx="406" cy="134" r="2.2" fill="#FFFFFF"/>
+    </g>
+    <g class="kl-sp-v8-3">
+      <path d="M 345 308 Q 345 320 333 320 Q 345 320 345 332 Q 345 320 357 320 Q 345 320 345 308 Z" fill="url(#klynn-jabon)"/>
+      <circle cx="345" cy="320" r="2" fill="#FFFFFF"/>
+    </g>
+
+    <!-- 1. NUBE AZUL AÑIL (#1B4B73) -->
+    <path d="M 160 338 
+             C 108 338, 62 296, 62 236 
+             C 62 178, 106 140, 156 136 
+             C 170 86, 206 60, 250 60 
+             C 294 60, 330 86, 344 136 
+             C 394 140, 438 178, 438 236 
+             C 438 296, 392 338, 340 338"
+          fill="none"
+          stroke="url(#klynn-anil)"
+          stroke-width="24"
+          stroke-linecap="round"
+          stroke-linejoin="round"/>
+
+    <!-- 2. GANCHO / PERCHA -->
+    <g class="kl-hanger-v8">
+      <path d="M 233 174
+               C 221 159, 225 137, 246 131
+               C 264 126, 277 140, 274 157
+               C 272 171, 258 183, 250 195
+               L 250 225"
+            fill="none"
+            stroke="url(#klynn-anil)"
+            stroke-width="22"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+
+      <path d="M 136 292 
+               L 250 225 
+               L 364 292"
+            fill="none"
+            stroke="url(#klynn-anil)"
+            stroke-width="22"
+            stroke-linecap="round"
+            stroke-linejoin="round"/>
+    </g>
+
+    <!-- 3. FACTURA / TICKET (EN AMARILLO JABÓN #F0B900) -->
+    <g class="kl-ticket-v8">
+      <path d="M 196 300 
+               L 304 300 
+               L 304 418 
+               L 286 436 
+               L 268 418 
+               L 250 436 
+               L 232 418 
+               L 214 436 
+               L 196 418 Z"
+            fill="#FFFFFF"
+            stroke="url(#klynn-jabon)"
+            stroke-width="17"
+            stroke-linejoin="round"
+            stroke-linecap="round"/>
+
+      <!-- 3 LÍNEAS HORIZONTALES EN AMARILLO JABÓN -->
+      <rect class="kl-line-v8-1" x="220" y="326" width="60" height="13" rx="6.5" fill="url(#klynn-jabon)"/>
+      <rect class="kl-line-v8-2" x="220" y="354" width="60" height="13" rx="6.5" fill="url(#klynn-jabon)"/>
+      <rect class="kl-line-v8-3" x="220" y="382" width="60" height="13" rx="6.5" fill="url(#klynn-jabon)"/>
+    </g>
+
+  </g>
+
+  <!-- ==================== BARRA DE PROGRESO CON BORDE AZUL AÑIL (#1B4B73) Y RELLENO AMARILLO JABÓN (#F0B900) ==================== -->
+  <g>
+    <!-- 1. Pista de Fondo con Borde Azul Añil (#1B4B73) Más Grueso y Prominente (stroke-width: 3.5) -->
+    <rect x="130" y="470" width="240" height="20" rx="10"
+          fill="#F8FAFC"
+          stroke="#1B4B73"
+          stroke-width="3.5"/>
+
+    <!-- 2. Relleno Interno en Amarillo Jabón (#F0B900) con Animación Dinámica -->
+    <g clip-path="url(#klynn-progress-clip-v8)">
+      <!-- Barra activa Amarillo Jabón -->
+      <rect class="kl-bar-fill-v8"
+            x="133" y="473" width="234" height="14" rx="7"
+            fill="url(#klynn-prog-jabon)"/>
+
+      <!-- Brillo Shimmer sobre la carga interna -->
+      <rect class="kl-bar-shimmer-v8"
+            x="133" y="473" width="80" height="14"
+            fill="url(#klynn-jabon-shimmer)"/>
+    </g>
+
+    <!-- 3. Puntos de Acabado Premium en los Extremos -->
+    <circle cx="140" cy="480" r="2.5" fill="#1B4B73" opacity="0.35"/>
+    <circle cx="360" cy="480" r="2.5" fill="#F0B900" opacity="0.5"/>
+  </g>
+
+</svg>

@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -188,7 +189,9 @@ function CajaPage() {
     }
   }
 
-  if (!user || user.tenant.id === "__loading__") return null;
+  if (!user || user.tenant.id === "__loading__" || loadingCaja) {
+    return <GlobalPageLoader text="Cargando caja..." />;
+  }
 
   if (selectedPrintCaja) {
     const targetEmp = empleados.find((e) => e.id === selectedPrintCaja.empleado_id);

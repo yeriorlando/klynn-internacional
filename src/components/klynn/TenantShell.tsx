@@ -1,7 +1,8 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useMemo, useState, useRef, useEffect } from "react";
+import React, { Suspense, useMemo, useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase";
 import { playNotificationSoundDebounced, playOrderDeliveredSoundDebounced, unlockAudioContext } from "@/lib/notificationSound";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import {
   LayoutDashboard,
   Wallet,
@@ -155,6 +156,8 @@ export function TenantShell() {
   const user = useRequireAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isRouterLoading = useRouterState({ select: (s) => s.status === "pending" || s.isLoading });
+  const isTenantLoading = !user || user.tenant.id === "__loading__";
   const [mobileOpen, setMobileOpen] = useState(false);
   const [showSoporteModal, setShowSoporteModal] = useState(false);
   const [showAtajosModal, setShowAtajosModal] = useState(false);
@@ -171,6 +174,7 @@ export function TenantShell() {
   const tenantId = user?.tenant?.id;
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -687,15 +691,18 @@ export function TenantShell() {
     };
   }, [user?.tenant?.slug, navigate]);
 
+  if (isLoggingOut) {
+    return (
+      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
+        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
+      </div>
+    );
+  }
+
   if (!user || user.tenant.id === "__loading__") {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <div className="flex flex-col items-center gap-3">
-          <Droplets className="h-16 w-16 text-primary animate-pulse" />
-          <div className="font-display text-2xl font-bold tracking-tight text-foreground/40 animate-pulse">
-            Cargando...
-          </div>
-        </div>
+        <GlobalPageLoader text="Cargando tu lavandería..." minHeight="min-h-screen" />
       </div>
     );
   }
@@ -708,9 +715,12 @@ export function TenantShell() {
   const isTrialExpired =
     tenant.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now();
 
-  function onLogout() {
-    logout();
-    navigate({ to: "/t/$slug/login", params: { slug: tenant.slug } });
+  async function onLogout() {
+    setIsLoggingOut(true);
+    await logout();
+    setTimeout(() => {
+      navigate({ to: "/login" });
+    }, 450);
   }
 
   const isActive = (to: string, exact?: boolean) => {
@@ -1522,6 +1532,13 @@ export function TenantShell() {
           <UserMenu empleado={empleado} onLogout={onLogout} />
         </header>
 
+        {/* Barra de progreso de navegación superior ultra suave */}
+        {isRouterLoading && (
+          <div className="fixed top-0 left-0 right-0 h-1 z-[9999] overflow-hidden bg-primary/15 pointer-events-none">
+            <div className="h-full bg-gradient-to-r from-primary via-indigo-500 to-primary animate-pulse w-full duration-300" />
+          </div>
+        )}
+
         <main
           className={`flex flex-col ${
             pathname.endsWith("/conversations")
@@ -1531,7 +1548,13 @@ export function TenantShell() {
                 : "min-h-[calc(100vh-4rem)] p-4 md:p-6 lg:p-8"
           }`}
         >
-          <Outlet />
+          {isTenantLoading ? (
+            <GlobalPageLoader text="Cargando panel de control..." />
+          ) : (
+            <Suspense fallback={<GlobalPageLoader text="Cargando vista..." />}>
+              <Outlet />
+            </Suspense>
+          )}
         </main>
       </div>
     </div>

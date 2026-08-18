@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Plus, Trash2, Download, Printer, FileSpreadsheet } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { createPortal } from "react-dom";
 import { exportToCsv } from "@/lib/export";
 import { 
@@ -127,7 +128,9 @@ function GastosPage() {
     }
   }, [activeTab, manualGastos, cajaChicaGastos, recibidos]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || user.tenant.id === '__loading__' || (loading && gastos.length === 0)) {
+    return <GlobalPageLoader text="Cargando gastos..." />;
+  }
 
   const total = gastos.reduce((s, g) => s + g.monto, 0);
 
@@ -557,8 +560,8 @@ function GastosPrintPortal({
                       acc[curr.metodo_pago] = (acc[curr.metodo_pago] || 0) + curr.monto;
                       return acc;
                     }, {} as Record<string, number>);
-                    const top = Object.entries(counts).sort((a,b) => b[1] - a[1])[0];
-                    return top ? `${top[0]} (${formatRD(top[1])})` : "—";
+                    const top = Object.entries(counts).sort((a, b) => (b[1] as number) - (a[1] as number))[0];
+                    return top ? `${top[0]} (${formatRD(top[1] as number)})` : "—";
                   })()}
                 </div>
               </div>

@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -327,12 +328,7 @@ function CentroFiscalPage() {
   }
 
   if (!user || user.tenant.id === "__loading__" || loading) {
-    return (
-      <div className="flex h-96 flex-col items-center justify-center gap-3">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary" style={{ color: primaryColor }} />
-        <p className="text-sm font-semibold text-muted-foreground animate-pulse">Cargando Centro Fiscal e-CF...</p>
-      </div>
-    );
+    return <GlobalPageLoader text="Cargando Centro Fiscal e-CF..." />;
   }
 
   if (!hasFiscalModule) {

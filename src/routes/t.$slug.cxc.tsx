@@ -3,6 +3,7 @@ import { useState, useEffect } from "react";
 import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle, Trash2, Building2, Banknote, Receipt } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -437,7 +438,9 @@ export default function CuentasPorCobrarPage() {
     }
   }
 
-  if (!user || tenantId === "__loading__") return null;
+  if (!user || tenantId === "__loading__" || (loading && clientes.length === 0)) {
+    return <GlobalPageLoader text="Cargando cuentas por cobrar..." />;
+  }
 
   return (
     <>

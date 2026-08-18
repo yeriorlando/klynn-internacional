@@ -24,6 +24,7 @@ import {
   Tag,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import {
   getOrdenes,
   getClientes,
@@ -445,6 +446,10 @@ export function ProcesosPage() {
     const listas = ordenes.filter((o) => o.estado === "LISTA").length;
     return { total, urgentes, enProceso, listas };
   }, [ordenes]);
+
+  if (loading && ordenes.length === 0) {
+    return <GlobalPageLoader text="Cargando operaciones..." />;
+  }
 
   if (!loading && user?.empleado && !can(user.empleado, "procesos")) {
     return (

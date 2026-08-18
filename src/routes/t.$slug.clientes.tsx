@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Search, UserPlus, Phone, Mail, MapPin, Trash2, Users, Download, Printer, FileSpreadsheet } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { createPortal } from "react-dom";
 import { exportToCsv } from "@/lib/export";
 import { 
@@ -82,7 +83,9 @@ function ClientesPage() {
     };
   }, [filt, ordenes]);
 
-  if (!user || user.tenant.id === '__loading__') return null;
+  if (!user || user.tenant.id === '__loading__' || (loading && clientes.length === 0)) {
+    return <GlobalPageLoader text="Cargando clientes..." />;
+  }
 
   return (
     <div>

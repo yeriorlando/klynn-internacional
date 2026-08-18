@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { EstadoBadge } from "@/components/klynn/TenantShell";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import {
   formatRD,
   formatDateTimeRD,
   saveOrden,
+  updateOrdenEstado,
   crearNotificacion,
   type Orden,
   type Gasto,
@@ -407,14 +409,9 @@ function DashboardPage() {
     return sortedOrdenes.slice(startIndex, startIndex + ordersPerPage);
   }, [sortedOrdenes, currentPage]);
 
-  if (!user || user.tenant.id === "__loading__") return null;
-
-  if (loading)
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <p className="text-muted-foreground animate-pulse">Cargando dashboard...</p>
-      </div>
-    );
+  if (!user || user.tenant.id === "__loading__" || loading) {
+    return <GlobalPageLoader text="Cargando panel de control..." />;
+  }
 
   return (
     <div>

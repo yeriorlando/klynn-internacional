@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
+import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import {
   ArrowLeft,
   ArrowRight,
@@ -115,6 +116,7 @@ import {
   type ECFSequence,
   type ECFDocument,
   type Empleado,
+  type Tenant,
   NCF_NOMBRES,
 } from "@/lib/storage";
 import { emitirECF } from "@/lib/fiscal";
@@ -156,7 +158,7 @@ function NuevaOrdenPage() {
   const queryClient = useQueryClient();
   const { data: plansData } = usePlans();
   const plans = plansData || [];
-  const tenant = user?.tenant;
+  const tenant = (user?.tenant || {}) as Tenant;
   const tenantId = tenant?.id ?? "";
 
   const cfg = tenant?.config || DEFAULT_CONFIG;
@@ -914,7 +916,9 @@ function NuevaOrdenPage() {
     };
   }, [isPosMode]);
 
-  if (!user || user.tenant.id === "__loading__") return null;
+  if (!user || user.tenant.id === "__loading__" || loadingCatalog || loadingServicios) {
+    return <GlobalPageLoader text="Cargando punto de venta POS..." />;
+  }
   const { empleado } = user;
 
   const filtrados = clientes.filter(
