@@ -329,9 +329,9 @@ export function encodeEscPos(
     });
 
     writeLine("-".repeat(columns));
-    writeLine("ATENDIDO POR:");
+    writeLine("Atendido por:");
     bytes.push(...BOLD_ON);
-    writeLine(empleado.nombre.toUpperCase());
+    writeLine(empleado.nombre);
     bytes.push(...BOLD_OFF);
   } else {
     // =========================================================
@@ -355,9 +355,9 @@ export function encodeEscPos(
     writeLine(`Fecha: ${new Date(orden.creado_en).toLocaleString("es-DO")}`);
     writeLine(`Entrega: ${orden.fecha_entrega}`);
     writeLine("-".repeat(columns));
-    writeLine("ATENDIDO POR:");
+    writeLine("Atendido por:");
     bytes.push(...BOLD_ON);
-    writeLine(empleado.nombre.toUpperCase());
+    writeLine(empleado.nombre);
     bytes.push(...BOLD_OFF);
     writeLine("-".repeat(columns));
 
