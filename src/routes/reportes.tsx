@@ -72,7 +72,9 @@ import {
   PiggyBank,
   X as XIcon,
   SlidersHorizontal,
-  ChevronDown
+  ChevronDown,
+  List,
+  BarChart2
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
@@ -355,6 +357,7 @@ export function ReportesPage() {
   // Estados para Filtros y Paginación de Prendas & Servicios
   const [prendaSearch, setPrendaSearch] = useState<string>("");
   const [prendaCategory, setPrendaCategory] = useState<string>("all");
+  const [prendaView, setPrendaView] = useState<"grid" | "chart" | "list">("grid");
   const [prendaPage, setPrendaPage] = useState<number>(1);
   const PRENDA_PAGE_SIZE = 8;
   const [serviceSearch, setServiceSearch] = useState<string>("");
@@ -1504,10 +1507,11 @@ export function ReportesPage() {
           <div className="flex items-center gap-2.5 w-full sm:w-auto justify-center">
             <Button 
               onClick={() => handleManage(selectedInspectTenant.id, selectedInspectTenant.slug)}
-              className="gap-2 bg-slate-900 hover:bg-slate-800 dark:bg-slate-100 dark:hover:bg-white text-white dark:text-slate-900 h-10 px-5 rounded-xl font-bold shadow-xs cursor-pointer active:scale-95 transition-all text-xs sm:text-sm"
+              className="gap-2 bg-[#1B4B73] hover:bg-[#143755] text-white h-10 px-5 rounded-xl font-bold shadow-md cursor-pointer active:scale-95 transition-all text-xs sm:text-sm border border-[#1B4B73]/20"
             >
-              <span>Gestionar Sistema</span>
-              <ArrowRight className="h-4 w-4" />
+              <Building2 className="h-4 w-4 text-[#F0B900]" />
+              <span>Gestionar Sucursal</span>
+              <ArrowRight className="h-3.5 w-3.5 opacity-80" />
             </Button>
           </div>
         </div>
@@ -2638,31 +2642,129 @@ export function ReportesPage() {
                 </Card>
               </div>
 
-              {/* Barra de Distribución por Formato */}
-              <Card className="p-4 sm:p-5 bg-surface border border-border/80 rounded-2xl shadow-2xs space-y-3">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs font-bold">
-                  <div className="flex items-center gap-2 text-foreground">
-                    <span className="p-1.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400">
-                      <Percent className="h-4 w-4" />
-                    </span>
-                    <span>Distribución de Procesamiento por Formato</span>
+              {/* Barra de Distribución por Formato (Rediseño Visual Premium) */}
+              <Card className="p-5 sm:p-6 bg-surface border border-border/80 rounded-3xl shadow-card space-y-4">
+                {/* Header de la Comparativa */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-2xl bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/60 dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/20 shrink-0 shadow-2xs">
+                      <Percent className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <h4 className="font-display font-bold text-sm sm:text-base text-foreground leading-tight">
+                        Distribución de Carga: Piezas vs. Libras
+                      </h4>
+                      <p className="text-xs text-muted-foreground">
+                        Proporción del volumen de trabajo procesado por unidad individual vs. por peso
+                      </p>
+                    </div>
                   </div>
-                  <span className="text-primary font-black text-xs sm:text-sm">
-                    {stats.totalPiezas + stats.totalLibras > 0 ? Math.round((stats.totalPiezas / (stats.totalPiezas + stats.totalLibras)) * 100) : 0}% Piezas ({stats.totalPiezas} pz) vs {stats.totalPiezas + stats.totalLibras > 0 ? Math.round((stats.totalLibras / (stats.totalPiezas + stats.totalLibras)) * 100) : 0}% Libras ({stats.totalLibras} lbs)
-                  </span>
+
+                  {/* Badge de Modelo Predominante */}
+                  {stats.totalPiezas + stats.totalLibras > 0 && (
+                    <div className="self-start sm:self-auto">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/60 dark:text-sky-300 border border-[#1B4B73]/20 shadow-2xs">
+                        <Sparkles className="h-3.5 w-3.5 text-[#F0B900]" />
+                        Predominante: {stats.totalPiezas >= stats.totalLibras ? "Por Piezas" : "Por Libras"}
+                      </span>
+                    </div>
+                  )}
                 </div>
-                <div className="h-3 rounded-full bg-slate-100 dark:bg-slate-800 overflow-hidden flex shadow-inner">
-                  <div 
-                    className="bg-indigo-600 h-full transition-all duration-700" 
-                    style={{ width: `${stats.totalPiezas + stats.totalLibras > 0 ? (stats.totalPiezas / (stats.totalPiezas + stats.totalLibras)) * 100 : 50}%` }} 
-                    title={`Piezas: ${stats.totalPiezas}`}
-                  />
-                  <div 
-                    className="bg-sky-400 h-full transition-all duration-700" 
-                    style={{ width: `${stats.totalPiezas + stats.totalLibras > 0 ? (stats.totalLibras / (stats.totalPiezas + stats.totalLibras)) * 100 : 50}%` }} 
-                    title={`Libras: ${stats.totalLibras}`}
-                  />
-                </div>
+
+                {/* Barra Visual Segmentada de Alto Impacto */}
+                {(() => {
+                  const totalCarga = stats.totalPiezas + stats.totalLibras;
+                  const pctPiezas = totalCarga > 0 ? Math.round((stats.totalPiezas / totalCarga) * 100) : 50;
+                  const pctLibras = totalCarga > 0 ? Math.round((stats.totalLibras / totalCarga) * 100) : 50;
+
+                  return (
+                    <div className="space-y-3">
+                      {/* Barra Segmentada */}
+                      <div className="relative h-6 sm:h-7 rounded-2xl bg-slate-100 dark:bg-slate-800/80 p-1 flex overflow-hidden border border-slate-200/80 dark:border-slate-700/80 shadow-inner">
+                        {/* Segmento Piezas (Azul Añil #1B4B73) */}
+                        <div
+                          className="h-full bg-gradient-to-r from-[#143755] to-[#1B4B73] rounded-xl flex items-center justify-center text-white text-[11px] font-black transition-all duration-700 shadow-xs relative overflow-hidden"
+                          style={{ width: `${pctPiezas}%` }}
+                          title={`Piezas: ${stats.totalPiezas} (${pctPiezas}%)`}
+                        >
+                          {pctPiezas >= 15 && (
+                            <span className="truncate px-2 flex items-center gap-1.5 tracking-wider">
+                              <Shirt className="h-3 w-3 shrink-0" />
+                              {pctPiezas}% Piezas
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Segmento Libras (Amarillo Jabón #F0B900) */}
+                        <div
+                          className="h-full bg-gradient-to-r from-[#D9A600] to-[#F0B900] rounded-xl flex items-center justify-center text-slate-900 text-[11px] font-black transition-all duration-700 shadow-xs relative overflow-hidden ml-1"
+                          style={{ width: `${pctLibras}%` }}
+                          title={`Libras: ${stats.totalLibras} lbs (${pctLibras}%)`}
+                        >
+                          {pctLibras >= 10 && (
+                            <span className="truncate px-2 flex items-center gap-1.5 tracking-wider font-extrabold">
+                              <Layers className="h-3 w-3 shrink-0" />
+                              {pctLibras}% Libras
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Tarjetas de Detalle Inferiores (Leyendas Estructuradas) */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                        {/* Detalle Piezas */}
+                        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-4 w-4 rounded-full bg-[#1B4B73] flex items-center justify-center shrink-0">
+                              <div className="h-1.5 w-1.5 rounded-full bg-white" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-extrabold text-foreground block">
+                                Procesamiento por Piezas
+                              </span>
+                              <span className="text-[11px] text-muted-foreground font-medium">
+                                Prendas del catálogo individual
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-display font-black text-sm sm:text-base text-[#1B4B73] dark:text-sky-400 block">
+                              {stats.totalPiezas} pz
+                            </span>
+                            <span className="text-[10.5px] font-bold text-muted-foreground">
+                              {pctPiezas}% del total
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Detalle Libras */}
+                        <div className="flex items-center justify-between p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-800">
+                          <div className="flex items-center gap-2.5">
+                            <div className="h-4 w-4 rounded-full bg-[#F0B900] flex items-center justify-center shrink-0">
+                              <div className="h-1.5 w-1.5 rounded-full bg-slate-900" />
+                            </div>
+                            <div>
+                              <span className="text-xs font-extrabold text-foreground block">
+                                Procesamiento por Libras
+                              </span>
+                              <span className="text-[11px] text-muted-foreground font-medium">
+                                Lavado y secado pesado
+                              </span>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span className="font-display font-black text-sm sm:text-base text-amber-600 dark:text-amber-400 block">
+                              {stats.totalLibras} lbs
+                            </span>
+                            <span className="text-[10.5px] font-bold text-muted-foreground">
+                              {pctLibras}% del total
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </Card>
 
               {/* ========================================================= */}
@@ -2680,24 +2782,72 @@ export function ReportesPage() {
                     </div>
                   </div>
 
-                  {/* Barra de Búsqueda de Prendas */}
-                  <div className="relative w-full md:w-72">
-                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      placeholder="Buscar por prenda o categoría..."
-                      value={prendaSearch}
-                      onChange={(e) => setPrendaSearch(e.target.value)}
-                      className="pl-9 pr-8 h-10 rounded-xl bg-background border-border/70 text-xs shadow-2xs focus-visible:ring-primary/20"
-                    />
-                    {prendaSearch && (
+                  {/* Selector de Vistas y Barra de Búsqueda */}
+                  <div className="flex flex-wrap items-center gap-2.5">
+                    {/* View Toggle Tabs (Tarjetas / Gráfico / Lista) */}
+                    <div className="inline-flex items-center p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 border border-slate-300/50 dark:border-slate-700/60">
                       <button
                         type="button"
-                        onClick={() => setPrendaSearch("")}
-                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-1"
+                        onClick={() => setPrendaView("grid")}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          prendaView === "grid"
+                            ? "bg-[#1B4B73] text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                        }`}
+                        title="Vista en Tarjetas"
                       >
-                        ×
+                        <LayoutGrid className="h-3.5 w-3.5" />
+                        <span>Tarjetas</span>
                       </button>
-                    )}
+
+                      <button
+                        type="button"
+                        onClick={() => setPrendaView("chart")}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          prendaView === "chart"
+                            ? "bg-[#1B4B73] text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                        }`}
+                        title="Vista en Gráfico"
+                      >
+                        <BarChart2 className="h-3.5 w-3.5" />
+                        <span>Gráfico</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => setPrendaView("list")}
+                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                          prendaView === "list"
+                            ? "bg-[#1B4B73] text-white shadow-xs"
+                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                        }`}
+                        title="Vista en Lista / Tabla"
+                      >
+                        <List className="h-3.5 w-3.5" />
+                        <span>Lista</span>
+                      </button>
+                    </div>
+
+                    {/* Barra de Búsqueda de Prendas */}
+                    <div className="relative w-full sm:w-64">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar por prenda o categoría..."
+                        value={prendaSearch}
+                        onChange={(e) => setPrendaSearch(e.target.value)}
+                        className="pl-9 pr-8 h-9.5 rounded-xl bg-background border-border/70 text-xs shadow-2xs focus-visible:ring-primary/20"
+                      />
+                      {prendaSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setPrendaSearch("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-1"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
 
@@ -2709,7 +2859,7 @@ export function ReportesPage() {
                       onClick={() => setPrendaCategory("all")}
                       className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
                         prendaCategory === "all"
-                          ? "bg-primary text-white shadow-xs"
+                          ? "bg-[#1B4B73] text-white shadow-xs"
                           : "bg-muted/40 border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/70"
                       }`}
                     >
@@ -2724,7 +2874,7 @@ export function ReportesPage() {
                           onClick={() => setPrendaCategory(cat)}
                           className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
                             prendaCategory === cat
-                              ? "bg-primary text-white shadow-xs"
+                              ? "bg-[#1B4B73] text-white shadow-xs"
                               : "bg-muted/40 border border-border/60 text-muted-foreground hover:text-foreground hover:bg-muted/70"
                           }`}
                         >
@@ -2735,10 +2885,149 @@ export function ReportesPage() {
                   </div>
                 )}
 
-                {/* Grid de Tarjetas de Prendas */}
+                {/* Visualización Según Vista Seleccionada (Tarjetas / Gráfico / Lista) */}
                 {paginatedPrendas.length > 0 ? (
                   (() => {
                     const maxQ = Math.max(...stats.topPrendas.map(p => p.count), 1);
+
+                    if (prendaView === "chart") {
+                      /* ================= VISTA GRÁFICO (BARRAS HORIZONTALES) ================= */
+                      return (
+                        <div className="space-y-3">
+                          {paginatedPrendas.map((p, idx) => {
+                            const rank = (prendaPage - 1) * PRENDA_PAGE_SIZE + idx + 1;
+                            const pct = Math.round((p.count / maxQ) * 100);
+                            return (
+                              <div
+                                key={p.name}
+                                className="p-3.5 rounded-2xl bg-surface border border-border/70 hover:border-primary/40 shadow-2xs transition-all space-y-2"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="flex items-center gap-3 min-w-0">
+                                    <span className="flex items-center justify-center h-6 w-6 rounded-full bg-muted font-black text-xs text-muted-foreground shrink-0">
+                                      #{rank}
+                                    </span>
+                                    <div className="h-9 w-9 rounded-xl bg-muted/40 overflow-hidden border border-border/40 shrink-0 flex items-center justify-center">
+                                      {p.imagen_url ? (
+                                        <img src={p.imagen_url} alt={p.name} className="h-full w-full object-cover" />
+                                      ) : (
+                                        <Shirt className="h-4 w-4 text-indigo-500" />
+                                      )}
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="flex items-center gap-2">
+                                        <span className="font-bold text-sm text-foreground truncate">{p.name}</span>
+                                        <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold">
+                                          {p.categoria}
+                                        </Badge>
+                                      </div>
+                                      <span className="text-[11px] text-muted-foreground">
+                                        Catálogo: {formatRD(p.precio_base)}{p.es_libra ? '/lb' : ''}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  <div className="flex items-center gap-4 shrink-0 text-right">
+                                    <div>
+                                      <span className="text-[10px] text-muted-foreground uppercase font-bold block">Volumen</span>
+                                      <span className="font-extrabold text-foreground text-xs sm:text-sm">
+                                        {p.count} {p.es_libra ? 'lbs' : 'pz'}
+                                      </span>
+                                    </div>
+                                    <div className="w-24 sm:w-28 text-right">
+                                      <span className="text-[10px] text-muted-foreground uppercase font-bold block">Facturado</span>
+                                      <span className="font-black font-display text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm">
+                                        {formatRD(p.total)}
+                                      </span>
+                                    </div>
+                                  </div>
+                                </div>
+
+                                <div className="flex items-center gap-3">
+                                  <div className="flex-1 h-2 rounded-full bg-muted overflow-hidden">
+                                    <div
+                                      className="h-full rounded-full bg-indigo-500 transition-all duration-500"
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                  <span className="text-[10px] font-bold text-muted-foreground shrink-0 w-10 text-right">
+                                    {pct}%
+                                  </span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    }
+
+                    if (prendaView === "list") {
+                      /* ================= VISTA LISTA / TABLA ================= */
+                      return (
+                        <div className="overflow-x-auto rounded-2xl border border-border/80 bg-surface shadow-2xs">
+                          <table className="w-full text-left text-xs">
+                            <thead className="bg-muted/40 text-muted-foreground font-bold uppercase text-[10px] border-b border-border/60">
+                              <tr>
+                                <th className="px-4 py-3 w-12 text-center">#</th>
+                                <th className="px-4 py-3">Prenda</th>
+                                <th className="px-4 py-3">Categoría</th>
+                                <th className="px-4 py-3 text-center">Formato</th>
+                                <th className="px-4 py-3 text-right">Precio Base</th>
+                                <th className="px-4 py-3 text-center">Volumen</th>
+                                <th className="px-4 py-3 text-right">Facturación</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-border/40">
+                              {paginatedPrendas.map((p, idx) => {
+                                const rank = (prendaPage - 1) * PRENDA_PAGE_SIZE + idx + 1;
+                                return (
+                                  <tr key={p.name} className="hover:bg-muted/20 transition-colors">
+                                    <td className="px-4 py-3 text-center font-black text-muted-foreground">
+                                      #{rank}
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <div className="flex items-center gap-2.5">
+                                        <div className="h-8 w-8 rounded-lg bg-muted/40 overflow-hidden border border-border/40 shrink-0 flex items-center justify-center">
+                                          {p.imagen_url ? (
+                                            <img src={p.imagen_url} alt={p.name} className="h-full w-full object-cover" />
+                                          ) : (
+                                            <Shirt className="h-4 w-4 text-indigo-500" />
+                                          )}
+                                        </div>
+                                        <span className="font-bold text-foreground">{p.name}</span>
+                                      </div>
+                                    </td>
+                                    <td className="px-4 py-3">
+                                      <Badge variant="outline" className="text-[10.5px] py-0.5 px-2 font-bold">
+                                        {p.categoria}
+                                      </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="text-[11px] font-semibold text-muted-foreground">
+                                        {p.es_libra ? 'Por Libra' : 'Por Pieza'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-bold text-foreground">
+                                      {formatRD(p.precio_base)}{p.es_libra ? '/lb' : ''}
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      <span className="font-extrabold text-foreground bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md">
+                                        {p.count} {p.es_libra ? 'lbs' : 'pz'}
+                                      </span>
+                                    </td>
+                                    <td className="px-4 py-3 text-right font-black font-display text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm">
+                                      {formatRD(p.total)}
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      );
+                    }
+
+                    /* ================= VISTA GRID (TARJETAS) ================= */
                     return (
                       <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                         {paginatedPrendas.map((p) => {
@@ -2756,7 +3045,6 @@ export function ReportesPage() {
                                     alt={p.name}
                                     className="h-full w-full object-cover group-hover:scale-105 transition-transform duration-300"
                                     onError={(e) => {
-                                      // Fallback suave si la URL no carga
                                       (e.target as HTMLElement).style.display = "none";
                                     }}
                                   />
