@@ -1306,8 +1306,9 @@ function AdminPage() {
               </div>
             </div>
 
+            {/* 3 COLUMNAS DE PLANES PRINCIPALES */}
             <div className="grid gap-6 md:grid-cols-3 items-stretch pt-3">
-              {plans.map((p) => (
+              {plans.filter(p => !p.es_especial).map((p) => (
                 <div
                   key={p.id}
                   style={{
@@ -1405,6 +1406,19 @@ function AdminPage() {
                     <Button size="sm" variant="outline" className="flex-1 cursor-pointer" onClick={() => { setEditingPlan(p); setOpenPlan(true); }}>
                       <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
                     </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      title="Mover a Plan Especial (barra inferior)"
+                      className="cursor-pointer px-2 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/50"
+                      onClick={async () => {
+                        await savePlan({ ...p, es_especial: true, titulo_especial: p.titulo_especial || "Plan especial" });
+                        toast.success(`Plan "${p.nombre}" fijado como Plan Especial inferior`);
+                        setTick((r) => r + 1);
+                      }}
+                    >
+                      <Sparkles className="h-3.5 w-3.5" />
+                    </Button>
                     <Button size="sm" variant="outline" className="cursor-pointer" onClick={async () => {
                       if (confirm(`¿Eliminar plan ${p.nombre}?`)) {
                         await deletePlan(p.id);
@@ -1417,6 +1431,196 @@ function AdminPage() {
                 </div>
               ))}
             </div>
+
+            {/* SECCIÓN DE PLANES ESPECIALES (BARRA SUTIL INFERIOR) */}
+            {plans.filter(p => !!p.es_especial).length > 0 && (
+              <div className="mt-8 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                    <h3 className="font-display text-base font-bold text-foreground">Planes Especiales (Barra inferior sutil)</h3>
+                    <Badge variant="outline" className="text-[10px] font-bold text-sky-700 bg-sky-50 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300">
+                      {plans.filter(p => !!p.es_especial).length} plan{plans.filter(p => !!p.es_especial).length > 1 ? "es" : ""}
+                    </Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground hidden sm:block">
+                    Se muestran sutilmente debajo de las 3 columnas sin alterar la cuadrícula superior
+                  </p>
+                </div>
+
+                {plans.filter(p => !!p.es_especial).map((p) => {
+                  const specialLabel = p.titulo_especial?.trim() || "Plan especial";
+                  return (
+                    <div
+                      key={p.id}
+                      className="relative rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 bg-gradient-to-r from-slate-50/90 via-card to-sky-50/30 dark:from-slate-900/70 dark:via-slate-900/50 dark:to-sky-950/20 shadow-xs hover:shadow-sm transition-all"
+                    >
+                      {/* FILA SUPERIOR: INFORMACIÓN, LÍMITES Y ACCIONES */}
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-border/60">
+                        
+                        {/* Izquierda: Indicador, Nombre y Precio */}
+                        <div className="min-w-[200px]">
+                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 mb-1">
+                            <Sparkles className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                            <span>{specialLabel}</span>
+                          </div>
+                          <div className="font-display text-xl font-bold text-foreground leading-tight">{p.nombre}</div>
+                          <div className="mt-0.5 text-2xl font-black text-primary leading-tight">
+                            {formatRD(p.precio_mensual)}<span className="text-[11px] font-medium text-muted-foreground">/mes</span>
+                          </div>
+                          {p.precio_anual && (
+                            <div className="text-[10.5px] text-muted-foreground font-medium">o {formatRD(p.precio_anual)}/año</div>
+                          )}
+                        </div>
+
+                        {/* Centro: Límites Clave */}
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-2 lg:py-0 border-y lg:border-y-0 lg:border-x border-border/60 lg:px-5 flex-1">
+                          <div className="space-y-0.5">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                              <Users className="h-3 w-3 text-slate-500 shrink-0" />
+                              <span>Equipo</span>
+                            </div>
+                            <div className="text-xs font-bold text-foreground">
+                              {p.limite_empleados} {p.limite_empleados === 1 ? "Empleado" : "Empleados"}
+                            </div>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                              <Package className="h-3 w-3 text-slate-500 shrink-0" />
+                              <span>Facturación</span>
+                            </div>
+                            <div className="text-xs font-bold text-foreground">
+                              {p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes ilimitadas"}
+                            </div>
+                          </div>
+
+                          <div className="space-y-0.5">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                              <MessageSquare className="h-3 w-3 text-blue-500 shrink-0" />
+                              <span>WhatsApp</span>
+                            </div>
+                            <div className="text-xs font-bold text-foreground">
+                              {p.modulos?.whatsapp
+                                ? (p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} msgs/mes` : "Ilimitados")
+                                : "No incluido"}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Derecha: Acciones de Administración */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Button size="sm" variant="outline" className="h-8 px-3 text-xs cursor-pointer" onClick={() => { setEditingPlan(p); setOpenPlan(true); }}>
+                            <Pencil className="mr-1 h-3 w-3" /> Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Mover a 3 columnas principales"
+                            className="h-8 px-3 text-xs cursor-pointer text-slate-600 hover:text-slate-900"
+                            onClick={async () => {
+                              await savePlan({ ...p, es_especial: false });
+                              toast.success(`Plan "${p.nombre}" movido a las 3 columnas principales`);
+                              setTick((r) => r + 1);
+                            }}
+                          >
+                            Mover a columnas
+                          </Button>
+                          <Button size="sm" variant="outline" className="h-8 px-2.5 cursor-pointer" onClick={async () => {
+                            if (confirm(`¿Eliminar plan ${p.nombre}?`)) {
+                              await deletePlan(p.id);
+                              setTick((r) => r + 1);
+                            }
+                          }}>
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </div>
+
+                      </div>
+
+                      {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
+                        
+                        {/* Desglose de Módulos */}
+                        <div>
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            MÓDULOS HABILITADOS
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                              { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
+                              { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
+                              { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
+                              { key: "logistica", label: "Envío a domicilio" },
+                              { key: "procesos", label: "Tablero de Procesos" },
+                              { key: "estanteria", label: "Estantería virtual" },
+                            ].map(({ key, label, extra }) => {
+                              const v = !!p.modulos?.[key as keyof typeof p.modulos];
+                              return (
+                                <div 
+                                  key={key} 
+                                  className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                    v 
+                                      ? "text-green-700 dark:text-green-400" 
+                                      : "text-slate-400 line-through opacity-70"
+                                  }`}
+                                >
+                                  {v ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m9 12 2 2 4-4" />
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m15 9-6 6" />
+                                      <path d="m9 9 6 6" />
+                                    </svg>
+                                  )}
+                                  <span className="flex items-center flex-wrap gap-1">
+                                    <span>{label}</span>
+                                    {extra && (
+                                      <span className={`text-[9px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                                        {extra}
+                                      </span>
+                                    )}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+
+                        {/* Características Generales */}
+                        <div className="border-t md:border-t-0 md:border-l border-border/50 md:pl-5 pt-3 md:pt-0">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            CARACTERÍSTICAS INCLUIDAS
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                              "Clientes ilimitados",
+                              "Generación de reportes",
+                              "Actualizaciones de software",
+                              "Cuentas x cobrar",
+                              "Impresión A4/80mm"
+                            ].map((feat) => (
+                              <div key={feat} className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-400 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="m9 12 2 2 4-4" />
+                                </svg>
+                                <span>{feat}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </TabsContent>
 
           <TabsContent value="licencias" className="mt-6 sm:mt-8 space-y-6">
@@ -2137,6 +2341,8 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         estanteria: f.modulos?.estanteria !== undefined ? !!f.modulos?.estanteria : true,
       },
       destacado: f.destacado,
+      es_especial: !!f.es_especial,
+      titulo_especial: f.titulo_especial?.trim() || "Plan especial",
       polar_product_monthly_url: f.polar_product_monthly_url?.trim() || undefined,
       polar_product_yearly_url: f.polar_product_yearly_url?.trim() || undefined,
       precio_sucursal_adicional: Number(f.precio_sucursal_adicional) || 0,
@@ -2344,6 +2550,37 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                 </div>
                 <Switch checked={!!f.destacado} onCheckedChange={(v) => setF({ ...f, destacado: v })} />
               </label>
+
+              {/* PLAN ESPECIAL SWITCH (INFERIOR SUTIL) */}
+              <div className="rounded-xl border border-sky-200/80 dark:border-sky-800/60 bg-sky-50/40 dark:bg-sky-950/20 p-2.5 space-y-2">
+                <label className="flex items-center justify-between cursor-pointer">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />
+                    <div className="leading-tight">
+                      <span className="text-xs font-bold text-foreground">Mostrar como Plan Especial / Barra inferior</span>
+                      <p className="text-[9.5px] text-muted-foreground">Se mostrará sutilmente debajo de las 3 columnas principales sin alterar el diseño</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={!!f.es_especial} 
+                    onCheckedChange={(v) => setF({ ...f, es_especial: v, titulo_especial: v ? (f.titulo_especial || "Plan especial") : f.titulo_especial })} 
+                  />
+                </label>
+
+                {f.es_especial && (
+                  <div className="pt-2 border-t border-sky-200/60 dark:border-sky-800/40 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                    <Label className="text-[9.5px] font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300">
+                      Título / Indicador de la barra (ej: Plan especial, Plan Inicial, Edición Limitada)
+                    </Label>
+                    <Input
+                      value={f.titulo_especial ?? "Plan especial"}
+                      onChange={(e) => setF({ ...f, titulo_especial: e.target.value })}
+                      placeholder="Plan especial"
+                      className="h-8 rounded-lg bg-background border-sky-300 dark:border-sky-700 text-xs font-semibold"
+                    />
+                  </div>
+                )}
+              </div>
 
               {/* SUCURSALES ADICIONALES (COMPACT) */}
               <div className="rounded-xl border border-border/70 p-2.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">

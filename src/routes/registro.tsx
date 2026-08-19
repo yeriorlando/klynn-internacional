@@ -988,9 +988,14 @@ function RegistroPage() {
                             <div className="flex-1 min-w-0">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-sm font-bold text-slate-900">{p.nombre}</span>
-                                {p.id === "pro" && (
+                                {p.id === "pro" && !p.es_especial && (
                                   <span className="rounded bg-orange-100 px-1.5 py-0.2 text-[9px] font-bold text-orange-600 uppercase tracking-tight">
                                     Popular
+                                  </span>
+                                )}
+                                {p.es_especial && (
+                                  <span className="rounded bg-sky-100 text-sky-700 border border-sky-200 px-1.5 py-0.2 text-[9px] font-bold uppercase tracking-tight">
+                                    {p.titulo_especial || "Especial"}
                                   </span>
                                 )}
                               </div>

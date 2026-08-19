@@ -405,26 +405,25 @@ function CentroFiscalPage() {
               loadSentDocuments();
               loadReceivedDocuments();
             }}
-            variant="outline"
-            className="h-9 px-4 rounded-xl font-bold text-xs gap-1.5"
+            className="h-10 px-5 rounded-xl font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer text-xs sm:text-sm shrink-0"
           >
-            <RefreshCw className={`h-4 w-4 ${loadingSent || loadingReceived ? "animate-spin" : ""}`} />
-            Sincronizar Pronesoft
+            <RefreshCw className={`h-4 w-4 text-[#F0B900] shrink-0 ${loadingSent || loadingReceived ? "animate-spin" : ""}`} />
+            <span>Sincronizar Pronesoft</span>
           </Button>
 
-          {/* BOTÓN DE PANTALLA COMPLETA ESTILO PILL */}
+          {/* BOTÓN DE PANTALLA COMPLETA ESTANDARIZADO */}
           <Button
             onClick={toggleFullscreen}
-            className="h-9 px-5 rounded-full font-bold text-xs bg-[#1B4B73] hover:bg-[#1B4B73]/90 text-white flex items-center gap-2 shadow-sm transition-all active:scale-95 border-0 cursor-pointer"
+            className="h-10 px-5 rounded-xl font-black bg-[#F0B900] hover:bg-[#dfac00] text-[#1B4B73] border border-[#F0B900] shadow-xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer text-xs sm:text-sm shrink-0"
           >
             {isFullscreen ? (
               <>
-                <Minimize2 className="h-4 w-4 text-white" />
+                <Minimize2 className="h-4 w-4 text-[#1B4B73] shrink-0" />
                 <span>Salir Pantalla Completa</span>
               </>
             ) : (
               <>
-                <Maximize2 className="h-4 w-4 text-white" />
+                <Maximize2 className="h-4 w-4 text-[#1B4B73] shrink-0" />
                 <span>Pantalla Completa</span>
               </>
             )}

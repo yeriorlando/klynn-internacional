@@ -486,11 +486,9 @@ export function encodeEscPos(
   writeLine();
   writeLine();
 
-  // COMANDO DE CORTE DE PAPEL
-  if (perfil === "completa") {
-    const CUT = [0x1D, 0x56, 66, 0]; // GS V 66 0
-    bytes.push(...CUT);
-  }
+  // COMANDO DE CORTE DE PAPEL AUTOMÁTICO (GS V 66 0)
+  const CUT = [0x1D, 0x56, 66, 0]; // GS V 66 0
+  bytes.push(...CUT);
 
   return new Uint8Array(bytes);
 }

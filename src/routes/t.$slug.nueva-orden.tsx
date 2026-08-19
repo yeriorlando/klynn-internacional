@@ -1906,6 +1906,7 @@ function NuevaOrdenPage() {
                                   </div>
                                   <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
                                     {formatRD(s.precio)}
+                                    {s.por_libra ? <span className="text-xs font-bold opacity-85">/lb</span> : ""}
                                   </div>
                                 </div>
                                 {srvCount > 0 && (
@@ -5463,18 +5464,20 @@ function TicketPrintPortal({
         </div>
 
         {/* 1. TICKET CLIENTE (ORIGINAL) */}
-        <Ticket
-          orden={orden}
-          tenant={tenant}
-          empleado={empleado}
-          cliente={cliente}
-          formato={tenant.config?.formato_ticket || "80mm"}
-          serviciosList={serviciosList}
-        />
+        <div className="ticket-page">
+          <Ticket
+            orden={orden}
+            tenant={tenant}
+            empleado={empleado}
+            cliente={cliente}
+            formato={tenant.config?.formato_ticket || "80mm"}
+            serviciosList={serviciosList}
+          />
+        </div>
 
         {/* 2. TICKET COPIA DE CAJA / NEGOCIO */}
         {imprimirCopiaCaja && (
-          <div className="pt-6 print:pt-0" style={{ pageBreakBefore: "always", breakBefore: "page" }}>
+          <div className="ticket-page pt-6 print:pt-0">
             <Ticket
               orden={orden}
               tenant={tenant}
@@ -5489,7 +5492,7 @@ function TicketPrintPortal({
 
         {/* 3. TICKET TALLER / USO INTERNO */}
         {imprimirTaller && (
-          <div className="pt-6 print:pt-0" style={{ pageBreakBefore: "always", breakBefore: "page" }}>
+          <div className="ticket-page pt-6 print:pt-0">
             <Ticket
               orden={orden}
               tenant={tenant}
@@ -5530,7 +5533,7 @@ function TicketPrintPortal({
             display: block !important;
             visibility: visible !important;
             position: relative !important;
-            left: -2mm !important;
+            left: 0 !important;
             width: 100% !important;
             max-width: ${tenant.config?.formato_ticket === "57mm" ? "52mm" : "72mm"} !important;
             padding: ${tenant.config?.formato_ticket === "57mm" ? "1.5mm" : "2mm"} !important;
@@ -5539,6 +5542,22 @@ function TicketPrintPortal({
             font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};
             line-height: ${tenant.config?.formato_ticket === "57mm" ? "1.2" : "1.3"};
             box-sizing: border-box !important;
+          }
+
+          .ticket-page {
+            display: block !important;
+            width: 100% !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .ticket-page:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
           }
 
           .no-print, nav, aside, header, footer, button {

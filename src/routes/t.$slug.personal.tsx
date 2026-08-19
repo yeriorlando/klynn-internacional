@@ -8,6 +8,7 @@ import {
   EyeOff,
   Loader2,
   User,
+  Mail,
   ShieldCheck,
   ArrowRight,
   ArrowLeft,
@@ -17,6 +18,25 @@ import {
   Lock,
   KeyRound,
   Sparkles,
+  Pencil,
+  ShoppingCart,
+  DollarSign,
+  LayoutDashboard,
+  ShoppingBag,
+  PlusCircle,
+  Wrench,
+  Wallet,
+  Users,
+  Layers,
+  UserCheck,
+  Truck,
+  Receipt,
+  BarChart3,
+  Settings,
+  FileMinus,
+  FilePlus,
+  Ban,
+  BadgePercent,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -73,6 +93,25 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+const PERMISOS_CONFIG: Record<string, { icon: any; color: string; bg: string; border: string }> = {
+  dashboard: { icon: LayoutDashboard, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950/60", border: "border-sky-200 dark:border-sky-800" },
+  "nueva-orden": { icon: PlusCircle, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/60", border: "border-emerald-200 dark:border-emerald-800" },
+  ordenes: { icon: ShoppingBag, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/60", border: "border-blue-200 dark:border-blue-800" },
+  procesos: { icon: Wrench, color: "text-teal-600 dark:text-teal-400", bg: "bg-teal-50 dark:bg-teal-950/60", border: "border-teal-200 dark:border-teal-800" },
+  caja: { icon: Wallet, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-200 dark:border-amber-800" },
+  clientes: { icon: Users, color: "text-purple-600 dark:text-purple-400", bg: "bg-purple-50 dark:bg-purple-950/60", border: "border-purple-200 dark:border-purple-800" },
+  catalogo: { icon: Layers, color: "text-indigo-600 dark:text-indigo-400", bg: "bg-indigo-50 dark:bg-indigo-950/60", border: "border-indigo-200 dark:border-indigo-800" },
+  personal: { icon: UserCheck, color: "text-pink-600 dark:text-pink-400", bg: "bg-pink-50 dark:bg-pink-950/60", border: "border-pink-200 dark:border-pink-800" },
+  logistica: { icon: Truck, color: "text-orange-600 dark:text-orange-400", bg: "bg-orange-50 dark:bg-orange-950/60", border: "border-orange-200 dark:border-orange-800" },
+  gastos: { icon: Receipt, color: "text-red-600 dark:text-red-400", bg: "bg-red-50 dark:bg-red-950/60", border: "border-red-200 dark:border-red-800" },
+  reportes: { icon: BarChart3, color: "text-fuchsia-600 dark:text-fuchsia-400", bg: "bg-fuchsia-50 dark:bg-fuchsia-950/60", border: "border-fuchsia-200 dark:border-fuchsia-800" },
+  configuracion: { icon: Settings, color: "text-slate-700 dark:text-slate-300", bg: "bg-slate-100 dark:bg-slate-800", border: "border-slate-300 dark:border-slate-700" },
+  "anular-orden": { icon: Ban, color: "text-rose-600 dark:text-rose-400", bg: "bg-rose-50 dark:bg-rose-950/60", border: "border-rose-200 dark:border-rose-800" },
+  "condonar-deuda": { icon: BadgePercent, color: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-300 dark:border-amber-700" },
+  "nota-credito": { icon: FileMinus, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/60", border: "border-cyan-200 dark:border-cyan-800" },
+  "nota-debito": { icon: FilePlus, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/60", border: "border-violet-200 dark:border-violet-800" },
+};
 
 function getRoleBadgeClass(rol: RolEmpleado) {
   switch (rol) {
@@ -146,51 +185,129 @@ function PersonalPage() {
 
   return (
     <div>
-      <PageHeader
-        title="Personal"
-        description={`${staffCount} empleados (excluyendo administradores)`}
-      >
-        <Button onClick={handleAdd} className="bg-gradient-primary text-white">
-          <UserPlus className="mr-1.5 h-4 w-4" /> Nuevo empleado
-        </Button>
-      </PageHeader>
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+      {/* HEADER DE PÁGINA */}
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">Personal</h1>
+          <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 font-medium">
+            {staffCount} empleados (excluyendo administradores)
+          </p>
+        </div>
+
+        <div className="flex items-center gap-2.5 shrink-0">
+          <Button 
+            onClick={handleAdd} 
+            className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+          >
+            <UserPlus className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Nuevo empleado</span>
+          </Button>
+        </div>
+      </div>
+
+      {/* GRID DE 3 COLUMNAS DE TARJETAS */}
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {emps.map((e) => {
           const stats = ordenes.filter((o) => o.empleado_id === e.id && o.estado !== "ANULADA");
           const total = stats.reduce((s, o) => s + o.total, 0);
+          const approvedPerms = e.rol === "ADMIN"
+            ? PERMISOS_SISTEMA
+            : PERMISOS_SISTEMA.filter((p) =>
+                (e.permisos && e.permisos.length > 0 ? e.permisos : getPermisosPorRol(e.rol)).includes(p.id)
+              );
+
           return (
             <Card
               key={e.id}
-              className="cursor-pointer p-5 hover:shadow-elegant"
               onClick={() => setEdit(e)}
+              className="group relative cursor-pointer overflow-hidden rounded-2xl border border-border/80 bg-surface p-5 shadow-2xs transition-all duration-200 hover:shadow-md hover:border-[#1B4B73]/40 active:scale-[0.99] flex flex-col justify-between gap-3.5"
             >
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex items-center gap-3">
+              {/* Header: Avatar, Name, Email (1 sola línea), Role & Pencil */}
+              <div className="flex items-center justify-between gap-2.5 min-w-0">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
                   <UserAvatar
                     name={[e.nombre, e.apellido].filter(Boolean).join(" ")}
                     avatarUrl={e.avatar_url}
-                    size={40}
-                    className="border border-border shadow-sm shrink-0"
+                    size={44}
+                    className="border border-border/80 shadow-2xs ring-2 ring-[#1B4B73]/15 shrink-0"
                   />
-                  <div>
-                    <div className="font-display text-base font-bold text-slate-900 dark:text-white leading-tight">
+                  <div className="min-w-0 flex-1">
+                    <div className="font-display text-[15px] font-bold text-foreground group-hover:text-[#1B4B73] dark:group-hover:text-sky-300 transition-colors truncate">
                       {e.nombre} {e.apellido || ""}
                     </div>
-                    <div className="text-xs text-muted-foreground mt-0.5">{e.email}</div>
+                    <div className="text-xs text-muted-foreground font-medium truncate block mt-0.5" title={e.email}>
+                      {e.email}
+                    </div>
                   </div>
                 </div>
-                <Badge className={`border-none text-[10px] ${getRoleBadgeClass(e.rol)}`}>
-                  {e.rol}
-                </Badge>
-              </div>
-              <div className="mt-3 grid grid-cols-2 gap-2 border-t border-border pt-3 text-xs">
-                <div>
-                  <div className="text-muted-foreground">Órdenes</div>
-                  <div className="font-display text-base">{stats.length}</div>
+
+                <div className="shrink-0">
+                  <Badge className={`border-none text-[10px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-full shadow-2xs ${getRoleBadgeClass(e.rol)}`}>
+                    {e.rol}
+                  </Badge>
                 </div>
-                <div>
-                  <div className="text-muted-foreground">Ventas</div>
-                  <div className="font-display text-base">{formatRD(total)}</div>
+              </div>
+
+              {/* Permisos Activos con Iconos Circulares */}
+              <div className="space-y-2 pt-2 border-t border-border/50">
+                <div className="flex items-center justify-between text-[11px] font-bold">
+                  <span className="flex items-center gap-1.5 text-slate-800 dark:text-slate-200 font-extrabold uppercase tracking-wide text-[10px]">
+                    <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Permisos activos</span>
+                  </span>
+                  {e.rol === "ADMIN" ? (
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-rose-500/15 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-500/30 font-black shadow-2xs">
+                      Acceso Total
+                    </span>
+                  ) : (
+                    <span className="text-[10px] px-2.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-500/30 font-black shadow-2xs">
+                      {approvedPerms.length} activos
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex flex-wrap items-center gap-1.5 min-h-[30px]">
+                  {approvedPerms.length > 0 ? (
+                    approvedPerms.map((p) => {
+                      const conf = PERMISOS_CONFIG[p.id] || { icon: Shield, color: "text-primary", bg: "bg-primary/10", border: "border-primary/20" };
+                      const Icon = conf.icon;
+
+                      return (
+                        <div
+                          key={p.id}
+                          title={`${p.nombre}: ${p.descripcion}`}
+                          className={`h-7 w-7 rounded-full flex items-center justify-center border shadow-2xs transition-transform hover:scale-115 cursor-help ${conf.bg} ${conf.border} ${conf.color}`}
+                        >
+                          <Icon className="h-3.5 w-3.5" strokeWidth={2.2} />
+                        </div>
+                      );
+                    })
+                  ) : (
+                    <span className="text-xs text-muted-foreground italic py-1">Sin permisos asignados</span>
+                  )}
+                </div>
+              </div>
+
+              {/* KPI Mini-Boxes: Órdenes & Ventas Realizadas */}
+              <div className="flex items-center gap-2 pt-2 border-t border-border/60">
+                <div className="rounded-xl bg-muted/40 dark:bg-muted/20 px-3 py-2 border border-border/40 shrink-0 min-w-[80px]">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
+                    <ShoppingCart className="h-3 w-3 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                    <span>Órdenes</span>
+                  </div>
+                  <div className="font-display text-base font-black text-foreground mt-0.5">
+                    {stats.length}
+                  </div>
+                </div>
+
+                <div className="rounded-xl bg-muted/40 dark:bg-muted/20 px-3 py-2 border border-border/40 flex-1 min-w-0">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-muted-foreground flex items-center gap-1">
+                    <DollarSign className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                    <span>Ventas Realizadas</span>
+                  </div>
+                  <div className="font-display text-[15px] sm:text-base font-black text-emerald-600 dark:text-emerald-400 mt-0.5 whitespace-nowrap overflow-x-auto scrollbar-none">
+                    {formatRD(total)}
+                  </div>
                 </div>
               </div>
             </Card>
@@ -379,16 +496,16 @@ function EmpleadoDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
-        {/* STEPPER HEADER (PREMIUM LIGHT REDESIGN) */}
-        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-1.5 relative">
+        {/* STEPPER HEADER */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/70 p-4 pb-2.5 relative border-b border-slate-100 dark:border-slate-800">
           {/* Title row with right padding to clear the close icon */}
-          <div className="flex items-center justify-between mb-2 pr-10">
+          <div className="flex items-center justify-between mb-2.5 pr-10">
             <div className="flex items-center gap-2.5">
               <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
-                {step === 1 ? <User className="h-4 w-4" /> : <ShieldCheck className="h-4 w-4" />}
+                {step === 1 ? <User className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
               </div>
               <div>
-                <DialogTitle className="text-base font-display text-foreground">
+                <DialogTitle className="text-base font-display font-bold text-foreground">
                   {empleado ? "Editar empleado" : "Nuevo empleado"}
                 </DialogTitle>
                 <p className="text-xs text-muted-foreground">
@@ -400,19 +517,19 @@ function EmpleadoDialog({
             </div>
           </div>
 
-          {/* Stepper Buttons (Perfectly Centered across full width) */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+          {/* Stepper Buttons */}
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
             <button
               type="button"
               onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 step === 1
-                  ? "bg-primary text-white shadow-md font-bold"
+                  ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
                   step === 1
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -426,14 +543,14 @@ function EmpleadoDialog({
             <button
               type="button"
               onClick={handleNext}
-              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 step === 2
-                  ? "bg-primary text-white shadow-md font-bold"
+                  ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
                   step === 2
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -446,93 +563,106 @@ function EmpleadoDialog({
           </div>
         </div>
 
-        {/* DIALOG BODY (ULTRA COMPACT NO GAP) */}
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-1.5">
+        {/* DIALOG BODY - TIGHT SEAMLESS ATTACHMENT */}
+        <div className="px-4 sm:px-5 pt-2 pb-4">
           {step === 1 ? (
             /* STEP 1: INFORMACIÓN Y ACCESO */
-            <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
-              <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2.5 animate-in fade-in slide-in-from-left-3 duration-200">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Nombre *
                   </Label>
-                  <Input
-                    value={f.nombre}
-                    onChange={(e) => setF({ ...f, nombre: e.target.value })}
-                    placeholder="Ej. Juan"
-                    className="h-9 rounded-xl bg-surface border-border/60 text-xs focus:ring-1 focus:ring-primary/20"
-                  />
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input
+                      value={f.nombre}
+                      onChange={(e) => setF({ ...f, nombre: e.target.value })}
+                      placeholder="Ej. Juan"
+                      className="h-10 pl-9.5 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20"
+                    />
+                  </div>
                 </div>
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Apellido *
                   </Label>
-                  <Input
-                    value={f.apellido}
-                    onChange={(e) => setF({ ...f, apellido: e.target.value })}
-                    placeholder="Ej. Pérez"
-                    className="h-9 rounded-xl bg-surface border-border/60 text-xs focus:ring-1 focus:ring-primary/20"
-                  />
+                  <div className="relative">
+                    <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input
+                      value={f.apellido}
+                      onChange={(e) => setF({ ...f, apellido: e.target.value })}
+                      placeholder="Ej. Pérez"
+                      className="h-10 pl-9.5 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20"
+                    />
+                  </div>
                 </div>
               </div>
 
               <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                   Correo Electrónico *
                 </Label>
-                <Input
-                  type="email"
-                  value={f.email}
-                  onChange={(e) => setF({ ...f, email: e.target.value })}
-                  placeholder="empleado@klynn.do"
-                  className="h-9 rounded-xl bg-surface border-border/60 text-xs focus:ring-1 focus:ring-primary/20"
-                />
+                <div className="relative">
+                  <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                  <Input
+                    type="email"
+                    value={f.email}
+                    onChange={(e) => setF({ ...f, email: e.target.value })}
+                    placeholder="empleado@klynn.do"
+                    className="h-10 pl-9.5 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20"
+                  />
+                </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
+              <div className="grid gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     {empleado ? "Cambiar contraseña" : "Contraseña *"}
                   </Label>
                   <div className="relative">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                     <Input
                       type={showPassword ? "text" : "password"}
                       value={f.password}
                       onChange={(e) => setF({ ...f, password: e.target.value })}
                       placeholder={empleado ? "••••••••" : "Mín. 8 caracteres"}
-                      className="h-9 rounded-xl bg-surface border-border/60 pr-8 text-xs focus:ring-1 focus:ring-primary/20"
+                      className="h-10 pl-9.5 pr-10 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20"
                     />
                     <button
                       type="button"
                       onClick={() => setShowPassword(!showPassword)}
-                      className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors p-0.5"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-primary transition-colors p-0.5 cursor-pointer"
                     >
                       {showPassword ? (
-                        <EyeOff className="h-3.5 w-3.5" />
+                        <EyeOff className="h-4 w-4" />
                       ) : (
-                        <Eye className="h-3.5 w-3.5" />
+                        <Eye className="h-4 w-4" />
                       )}
                     </button>
                   </div>
                 </div>
 
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     PIN Acceso Rápido (POS)
                   </Label>
-                  <Input
-                    value={f.pin}
-                    onChange={(e) => setF({ ...f, pin: e.target.value.slice(0, 4) })}
-                    placeholder="4 dígitos"
-                    maxLength={4}
-                    className="h-9 rounded-xl bg-surface border-border/60 tracking-widest font-mono text-center text-xs focus:ring-1 focus:ring-primary/20"
-                  />
+                  <div className="relative">
+                    <KeyRound className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input
+                      value={f.pin}
+                      onChange={(e) => setF({ ...f, pin: e.target.value.slice(0, 4) })}
+                      placeholder="4 dígitos"
+                      maxLength={4}
+                      className="h-10 pl-9.5 rounded-xl bg-surface border-border/60 tracking-widest font-mono text-center text-xs sm:text-sm font-bold focus:ring-1 focus:ring-primary/20"
+                    />
+                  </div>
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 items-center">
+              <div className="grid gap-2.5 sm:grid-cols-2 items-center">
                 <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
                     Rol en el negocio
                   </Label>
                   <Select
@@ -542,7 +672,7 @@ function EmpleadoDialog({
                       setF({ ...f, rol, permisos: getPermisosPorRol(rol) });
                     }}
                   >
-                    <SelectTrigger className="h-9 rounded-xl bg-surface border-border/60 text-xs">
+                    <SelectTrigger className="h-10 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent className="rounded-xl">
@@ -556,7 +686,7 @@ function EmpleadoDialog({
                           "OPERARIO",
                         ] as RolEmpleado[]
                       ).map((r) => (
-                        <SelectItem key={r} value={r} className="rounded-lg text-xs">
+                        <SelectItem key={r} value={r} className="rounded-lg text-xs sm:text-sm">
                           {r}
                         </SelectItem>
                       ))}
@@ -564,7 +694,7 @@ function EmpleadoDialog({
                   </Select>
                 </div>
 
-                <div className="flex items-center justify-between h-9 px-3 rounded-xl border border-border/60 bg-surface/50 mt-4 sm:mt-4">
+                <div className="flex items-center justify-between h-10 px-3 rounded-xl border border-border/60 bg-surface/50 mt-4 sm:mt-4">
                   <div className="flex items-center gap-2">
                     <Checkbox
                       id="activo"
@@ -579,8 +709,8 @@ function EmpleadoDialog({
                     variant={f.activo ? "default" : "outline"}
                     className={
                       f.activo
-                        ? "bg-emerald-600 text-white text-[9px] px-1.5 py-0"
-                        : "text-[9px] px-1.5 py-0"
+                        ? "bg-emerald-600 text-white text-[10px] px-2 py-0.5 font-bold"
+                        : "text-[10px] px-2 py-0.5"
                     }
                   >
                     {f.activo ? "Activo" : "Inactivo"}
@@ -594,12 +724,12 @@ function EmpleadoDialog({
             </div>
           ) : (
             /* STEP 2: PERMISOS DE ACCESO */
-            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
+            <div className="space-y-2.5 animate-in fade-in slide-in-from-right-3 duration-200">
               {/* Toolbar Actions (Primary Brand Background Card) */}
               <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
                 <div className="flex items-center gap-1.5">
                   <Badge
-                    className={`font-semibold text-[10px] px-2.5 py-0.5 border-none ${getRoleBadgeClass(f.rol)}`}
+                    className={`font-semibold text-[10px] px-2 py-0.5 border-none ${getRoleBadgeClass(f.rol)}`}
                   >
                     Rol: {f.rol}
                   </Badge>
@@ -614,7 +744,7 @@ function EmpleadoDialog({
                     size="sm"
                     onClick={resetRoleDefaults}
                     disabled={f.rol === "ADMIN"}
-                    className="h-7 rounded-lg text-[10px] text-primary hover:bg-primary/10 gap-1 px-2"
+                    className="h-7.5 rounded-lg text-[10px] text-primary hover:bg-primary/10 gap-1 px-2 font-bold cursor-pointer"
                   >
                     <RotateCcw className="h-3 w-3" />
                     Valores del Rol
@@ -625,7 +755,7 @@ function EmpleadoDialog({
                     size="sm"
                     onClick={selectAllPermisos}
                     disabled={f.rol === "ADMIN"}
-                    className="h-7 rounded-lg text-[10px] text-slate-700 hover:bg-slate-200 dark:text-slate-300 px-2"
+                    className="h-7.5 rounded-lg text-[10px] text-slate-700 hover:bg-slate-200 dark:text-slate-300 px-2 font-bold cursor-pointer"
                   >
                     Todos
                   </Button>
@@ -635,7 +765,7 @@ function EmpleadoDialog({
                     size="sm"
                     onClick={deselectAllPermisos}
                     disabled={f.rol === "ADMIN"}
-                    className="h-7 rounded-lg text-[10px] text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-800 px-2"
+                    className="h-7.5 rounded-lg text-[10px] text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-800 px-2 font-bold cursor-pointer"
                   >
                     Ninguno
                   </Button>
@@ -674,7 +804,7 @@ function EmpleadoDialog({
                       const num = Math.min(100, Math.max(0, Number(e.target.value) || 0));
                       setF({ ...f, max_descuento_porcentaje: num });
                     }}
-                    className="h-8 text-center font-black text-xs rounded-xl bg-white dark:bg-slate-900 border-amber-300/80 dark:border-amber-700/80 pr-6"
+                    className="h-8.5 text-center font-black text-xs rounded-xl bg-white dark:bg-slate-900 border-amber-300/80 dark:border-amber-700/80 pr-6"
                   />
                   <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-amber-600 dark:text-amber-400 pointer-events-none">
                     %
@@ -691,7 +821,7 @@ function EmpleadoDialog({
                       <div
                         key={p.id}
                         onClick={() => f.rol !== "ADMIN" && togglePermiso(p.id)}
-                        className={`flex items-start gap-2.5 p-2.5 rounded-xl border transition-all cursor-pointer ${
+                        className={`flex items-start gap-2 p-2.5 rounded-xl border transition-all cursor-pointer ${
                           isChecked
                             ? "bg-white dark:bg-slate-900 border-primary/40 shadow-xs ring-1 ring-primary/20"
                             : "bg-surface/50 border-border/50 hover:bg-white hover:border-border"
@@ -702,7 +832,7 @@ function EmpleadoDialog({
                           checked={isChecked}
                           onCheckedChange={() => togglePermiso(p.id)}
                           disabled={f.rol === "ADMIN"}
-                          className="mt-0.5 rounded-md h-3.5 w-3.5"
+                          className="mt-0.5 rounded-md h-3.5 w-3.5 cursor-pointer"
                         />
                         <div className="grid gap-0.5">
                           <Label
@@ -723,7 +853,7 @@ function EmpleadoDialog({
             </div>
           )}
 
-          {/* FOOTER ACTIONS (COMPACT) */}
+          {/* FOOTER ACTIONS */}
           <div className="pt-3 mt-3 border-t border-border/50 flex items-center justify-between gap-2">
             <div>
               {empleado && step === 1 ? (
@@ -732,12 +862,12 @@ function EmpleadoDialog({
                     <Button
                       variant="destructive"
                       size="sm"
-                      className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-3 text-xs h-8.5 gap-1 transition-all active:scale-95 border-none shadow-sm"
+                      className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl px-3.5 text-xs h-9.5 gap-1.5 transition-all active:scale-95 border-none shadow-xs font-bold cursor-pointer"
                     >
                       <Trash2 className="h-3.5 w-3.5 text-white" /> Eliminar
                     </Button>
                   </AlertDialogTrigger>
-                  <AlertDialogContent className="rounded-3xl border-none shadow-2xl">
+                  <AlertDialogContent className="rounded-2xl border-none shadow-2xl">
                     <AlertDialogHeader>
                       <AlertDialogTitle className="text-lg">
                         ¿Eliminar a {empleado.nombre}?
@@ -747,12 +877,12 @@ function EmpleadoDialog({
                       </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter className="gap-2">
-                      <AlertDialogCancel className="rounded-xl h-9 text-xs">
+                      <AlertDialogCancel className="rounded-xl h-9 text-xs font-medium">
                         Cancelar
                       </AlertDialogCancel>
                       <AlertDialogAction
                         onClick={remove}
-                        className="bg-destructive text-white rounded-xl h-9 text-xs hover:bg-destructive/90"
+                        className="bg-destructive text-white rounded-xl h-9 text-xs font-bold hover:bg-destructive/90"
                       >
                         Confirmar eliminación
                       </AlertDialogAction>
@@ -764,19 +894,19 @@ function EmpleadoDialog({
                   type="button"
                   variant="outline"
                   onClick={() => setStep(1)}
-                  className="rounded-xl h-8.5 px-3 text-xs font-bold gap-1 border-slate-300"
+                  className="rounded-xl h-9.5 px-4 text-xs font-semibold gap-1.5 border-slate-300 cursor-pointer"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" /> Anterior
                 </Button>
               ) : null}
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 ml-auto">
               <Button
                 type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                className="rounded-xl h-8.5 px-3 text-xs font-medium border-slate-200"
+                className="rounded-xl h-9.5 px-4 text-xs font-medium border-slate-200 cursor-pointer"
               >
                 Cancelar
               </Button>
@@ -785,7 +915,7 @@ function EmpleadoDialog({
                 <Button
                   type="button"
                   onClick={handleNext}
-                  className="bg-primary hover:bg-primary/95 text-white rounded-xl h-8.5 px-4 text-xs font-bold shadow-sm gap-1 transition-all active:scale-95"
+                  className="bg-primary hover:bg-primary/95 text-white rounded-xl h-9.5 px-5 text-xs font-bold shadow-md gap-1.5 transition-all cursor-pointer"
                 >
                   Siguiente: Permisos <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
@@ -794,15 +924,14 @@ function EmpleadoDialog({
                   type="button"
                   onClick={submit}
                   disabled={loading}
-                  className="bg-gradient-primary text-white rounded-xl h-8.5 px-5 text-xs font-bold shadow-glow hover:opacity-95 disabled:opacity-50 transition-all active:scale-95 gap-1"
+                  className="bg-gradient-primary text-white rounded-xl h-9.5 px-5 text-xs font-bold shadow-glow hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer gap-1.5"
                 >
                   {loading ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                   ) : (
-                    <>
-                      Guardar Empleado <CheckCircle2 className="h-3.5 w-3.5" />
-                    </>
+                    <Check className="h-3.5 w-3.5" />
                   )}
+                  <span>{empleado ? "Guardar cambios" : "Crear empleado"}</span>
                 </Button>
               )}
             </div>

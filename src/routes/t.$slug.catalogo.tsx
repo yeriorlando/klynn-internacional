@@ -181,27 +181,33 @@ function CatalogoPage() {
       />
 
       <Tabs value={tab} onValueChange={handleTabChange} className="mt-2">
-        <TabsList className="mb-6 bg-muted/30 p-1 rounded-2xl border border-primary/5 shadow-sm inline-flex h-auto">
+        <TabsList className="flex items-center gap-2 sm:gap-2.5 bg-transparent p-0 border-none h-auto justify-start mb-6">
           <TabsTrigger
             value="prendas"
-            className="rounded-xl px-6 py-1.5 transition-all data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md"
+            className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
           >
-            <Shirt className="mr-2 h-4 w-4" />
-            <span className="font-display font-bold">Prendas</span>
+            <Shirt className={`h-4 w-4 shrink-0 transition-colors ${tab === "prendas" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
+            <span>Prendas</span>
+            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "prendas" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
+              {items.length}
+            </span>
           </TabsTrigger>
           <TabsTrigger
             value="servicios"
-            className="rounded-xl px-6 py-1.5 transition-all data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:shadow-md"
+            className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
           >
-            <Sparkles className="mr-2 h-4 w-4" />
-            <span className="font-display font-bold">Servicios</span>
+            <Sparkles className={`h-4 w-4 shrink-0 transition-colors ${tab === "servicios" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
+            <span>Servicios</span>
+            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "servicios" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
+              {servicios.length}
+            </span>
           </TabsTrigger>
         </TabsList>
 
         {/* PRENDAS */}
         <TabsContent value="prendas">
-          <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm text-muted-foreground">
+          <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">
               {items.length} prendas · {categorias.length} categorías
             </p>
             <div className="flex flex-1 items-center gap-2 max-w-md">
@@ -209,41 +215,41 @@ function CatalogoPage() {
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Buscar prendas o categorías..."
-                  className="pl-9 rounded-xl border-primary/10"
+                  className="pl-9 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium focus-visible:ring-primary shadow-2xs"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <Button
                 type="button"
-                size="sm"
                 onClick={() => exportCatalogToExcel(items, servicios, user.tenant.nombre)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl h-9 px-3.5 gap-1.5 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
+                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 title="Descargar catálogo actual en Excel"
               >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Exportar Excel</span>
+                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Exportar Excel</span>
               </Button>
               <Button
                 type="button"
-                size="sm"
                 onClick={() => setOpenExcelImport(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl h-9 px-3.5 gap-1.5 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
+                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 title="Importar o actualizar catálogo desde archivo Excel"
               >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Importar Excel</span>
+                <Upload className="h-4 w-4 text-white shrink-0" />
+                <span>Importar Excel</span>
               </Button>
               <Button
+                type="button"
                 onClick={() => {
                   setEditItem(null);
                   setOpenItem(true);
                 }}
-                className="bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-xl h-9 px-3.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
               >
-                <Plus className="mr-1 h-4 w-4" /> Nueva prenda
+                <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Nueva prenda</span>
               </Button>
             </div>
           </div>
@@ -373,55 +379,55 @@ function CatalogoPage() {
 
         {/* SERVICIOS */}
         <TabsContent value="servicios">
-          <div className="mb-4 flex items-center justify-between gap-2 flex-wrap">
-            <p className="text-sm text-muted-foreground">
+          <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs sm:text-sm font-medium text-muted-foreground">
               {filteredServicios.length} servicios disponibles
             </p>
-            <div className="flex flex-1 items-center gap-2 max-w-md ml-4">
+            <div className="flex flex-1 items-center gap-2 max-w-md">
               <div className="relative flex-1">
                 <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder="Buscar servicios..."
-                  className="pl-9 rounded-xl border-primary/10"
+                  className="pl-9 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium focus-visible:ring-primary shadow-2xs"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5 flex-wrap">
               <Button
                 type="button"
-                size="sm"
                 onClick={() => exportCatalogToExcel(items, servicios, user.tenant.nombre)}
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl h-9 px-3.5 gap-1.5 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
+                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 title="Descargar catálogo actual en Excel"
               >
-                <Download className="h-4 w-4" />
-                <span className="hidden sm:inline">Exportar Excel</span>
+                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Exportar Excel</span>
               </Button>
               <Button
                 type="button"
-                size="sm"
                 onClick={() => setOpenExcelImport(true)}
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl h-9 px-3.5 gap-1.5 shadow-sm transition-all active:scale-95 border-none cursor-pointer"
+                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 title="Importar o actualizar catálogo desde archivo Excel"
               >
-                <Upload className="h-4 w-4" />
-                <span className="hidden sm:inline">Importar Excel</span>
+                <Upload className="h-4 w-4 text-white shrink-0" />
+                <span>Importar Excel</span>
               </Button>
               <Button
+                type="button"
                 onClick={() => {
                   setEditServ(null);
                   setOpenServ(true);
                 }}
-                className="bg-primary hover:bg-primary/90 text-white text-xs font-bold rounded-xl h-9 px-3.5 shadow-sm transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
               >
-                <Plus className="mr-1 h-4 w-4" /> Nuevo servicio
+                <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Nuevo servicio</span>
               </Button>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
             {filteredServicios.map((s) => (
               <Card
                 key={s.id}
@@ -468,7 +474,14 @@ function CatalogoPage() {
                       )}
                     </div>
                     <div className="mt-1 font-display text-2xl font-black text-white drop-shadow-lg">
-                      {s.precio > 0 ? formatRD(s.precio) : "Sin costo"}
+                      {s.precio > 0 ? (
+                        <>
+                          {formatRD(s.precio)}
+                          {s.por_libra ? <span className="text-base font-bold opacity-90">/lb</span> : ""}
+                        </>
+                      ) : (
+                        "Sin costo"
+                      )}
                     </div>
                   </div>
 
@@ -683,7 +696,7 @@ function ItemDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
         {/* STEPPER HEADER */}
-        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-1.5 relative">
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 pt-4 pb-2.5 relative border-b border-border/40">
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2.5">
               <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
@@ -703,18 +716,18 @@ function ItemDialog({
           </div>
 
           {/* Stepper Buttons (Centered) */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
             <button
               type="button"
               onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                 step === 1
                   ? "bg-primary text-white shadow-md font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
                   step === 1
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -728,14 +741,14 @@ function ItemDialog({
             <button
               type="button"
               onClick={handleNextStep}
-              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                 step === 2
                   ? "bg-primary text-white shadow-md font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
                   step === 2
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -749,7 +762,7 @@ function ItemDialog({
         </div>
 
         {/* DIALOG BODY */}
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-1.5">
+        <div className="px-4 sm:px-5 pt-3 pb-4 sm:pb-5">
           {step === 1 ? (
             /* STEP 1: INFORMACIÓN Y PRECIO */
             <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
@@ -762,7 +775,7 @@ function ItemDialog({
                     value={f.categoria || ""}
                     onChange={(e) => setF({ ...f, categoria: e.target.value })}
                     placeholder="Ej: Camisas"
-                    className="h-9 rounded-xl text-xs"
+                    className="h-9.5 rounded-xl text-xs"
                   />
                 </div>
                 <div className="space-y-1">
@@ -773,7 +786,7 @@ function ItemDialog({
                     value={f.nombre || ""}
                     onChange={(e) => setF({ ...f, nombre: e.target.value })}
                     placeholder="Ej: Camisa Manga Larga"
-                    className="h-9 rounded-xl text-xs"
+                    className="h-9.5 rounded-xl text-xs"
                   />
                 </div>
               </div>
@@ -787,7 +800,7 @@ function ItemDialog({
                     type="number"
                     value={f.precio ?? 0}
                     onChange={(e) => setF({ ...f, precio: Number(e.target.value) })}
-                    className="h-9 rounded-xl text-xs font-bold text-base"
+                    className="h-9.5 rounded-xl text-xs font-bold text-base"
                   />
                 </div>
                 <div className="flex items-center gap-2 pt-4">
@@ -849,19 +862,19 @@ function ItemDialog({
               </div>
 
               {/* Step 1 Footer */}
-              <div className="pt-2 flex justify-between items-center">
+              <div className="pt-2.5 flex justify-between items-center">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => onOpenChange(false)}
-                  className="rounded-xl h-8.5 px-4 text-xs font-medium"
+                  className="rounded-xl h-10 px-5 text-xs font-medium cursor-pointer"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="button"
                   onClick={handleNextStep}
-                  className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                  className="rounded-xl h-10 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
                 >
                   Siguiente: Identificador <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
@@ -932,7 +945,7 @@ function ItemDialog({
                       value={f.imagen_url || ""}
                       onChange={(e) => setF({ ...f, imagen_url: e.target.value })}
                       placeholder="Pegar URL de la imagen..."
-                      className="flex-1 h-9 rounded-xl text-xs"
+                      className="flex-1 h-9.5 rounded-xl text-xs"
                     />
                     <div className="relative">
                       <input
@@ -945,7 +958,7 @@ function ItemDialog({
                       />
                       <Button
                         type="button"
-                        className="h-9 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95"
+                        className="h-9.5 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95 cursor-pointer"
                         disabled={uploading}
                         onClick={() => document.getElementById("item-upload")?.click()}
                       >
@@ -981,18 +994,18 @@ function ItemDialog({
                     {f.nombre || "Nombre de Prenda"}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    {f.categoria || "Categoría"} · {formatRD(f.precio || 0)}
+                    {f.categoria || "Categoría"} · {formatRD(f.precio || 0)} {f.por_libra ? "/lb" : ""}
                   </span>
                 </div>
               </div>
 
               {/* Step 2 Footer */}
-              <div className="pt-2 flex justify-between items-center border-t border-border/50">
+              <div className="pt-2.5 flex justify-between items-center border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setStep(1)}
-                  className="rounded-xl h-8.5 px-4 text-xs font-medium gap-1"
+                  className="rounded-xl h-10 px-5 text-xs font-medium gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" /> Anterior
                 </Button>
@@ -1002,7 +1015,7 @@ function ItemDialog({
                     type="button"
                     variant="outline"
                     onClick={() => onOpenChange(false)}
-                    className="rounded-xl h-8.5 px-4 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                    className="rounded-xl h-10 px-5 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
                   >
                     Cancelar
                   </Button>
@@ -1010,7 +1023,7 @@ function ItemDialog({
                   <Button
                     type="button"
                     onClick={submit}
-                    className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                    className="rounded-xl h-10 px-6 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
                   >
                     Guardar Prenda <CheckCircle2 className="h-3.5 w-3.5" />
                   </Button>
@@ -1056,6 +1069,7 @@ function ServDialog({
               icono: "🧺",
               activo: true,
               precio: 0,
+              por_libra: false,
               is_exento: false,
               es_muestra: false,
               permitir_desglose: false,
@@ -1129,6 +1143,7 @@ function ServDialog({
       imagen_url: mode === "image" ? f.imagen_url : undefined,
       activo: f.activo ?? true,
       precio: Number(f.precio) || 0,
+      por_libra: !!f.por_libra,
       is_exento: !!f.is_exento,
       permitir_desglose: !!f.permitir_desglose,
       permitir_editar_precio: !!f.permitir_editar_precio,
@@ -1148,7 +1163,7 @@ function ServDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
         {/* STEPPER HEADER */}
-        <div className="bg-slate-50/70 dark:bg-slate-900/60 p-4 sm:p-5 pb-1.5 relative">
+        <div className="bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 pt-4 pb-2.5 relative border-b border-border/40">
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2.5">
               <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
@@ -1168,18 +1183,18 @@ function ServDialog({
           </div>
 
           {/* Stepper Buttons (Centered) */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
             <button
               type="button"
               onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                 step === 1
                   ? "bg-primary text-white shadow-md font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
                   step === 1
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -1193,14 +1208,14 @@ function ServDialog({
             <button
               type="button"
               onClick={handleNextStep}
-              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
                 step === 2
                   ? "bg-primary text-white shadow-md font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
                   step === 2
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -1214,7 +1229,7 @@ function ServDialog({
         </div>
 
         {/* DIALOG BODY */}
-        <div className="px-4 sm:px-5 pb-4 sm:pb-5 pt-1.5">
+        <div className="px-4 sm:px-5 pt-3 pb-4 sm:pb-5">
           {step === 1 ? (
             /* STEP 1: INFORMACIÓN SERVICIO */
             <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
@@ -1227,21 +1242,30 @@ function ServDialog({
                     value={f.nombre || ""}
                     onChange={(e) => setF({ ...f, nombre: e.target.value })}
                     placeholder="Ej: Lavado y Secado"
-                    className="h-9 rounded-xl text-xs"
+                    className="h-9.5 rounded-xl text-xs"
                   />
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  Precio (RD$)
-                </Label>
-                <Input
-                  type="number"
-                  value={f.precio ?? 0}
-                  onChange={(e) => setF({ ...f, precio: Number(e.target.value) })}
-                  className="h-9 rounded-xl text-xs font-bold text-base"
-                />
+              <div className="grid gap-3 sm:grid-cols-2 items-center">
+                <div className="space-y-1">
+                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Precio (RD$)
+                  </Label>
+                  <Input
+                    type="number"
+                    value={f.precio ?? 0}
+                    onChange={(e) => setF({ ...f, precio: Number(e.target.value) })}
+                    className="h-9.5 rounded-xl text-xs font-bold text-base"
+                  />
+                </div>
+                <div className="flex items-center gap-2 pt-4">
+                  <Switch
+                    checked={!!f.por_libra}
+                    onCheckedChange={(v) => setF({ ...f, por_libra: v })}
+                  />
+                  <Label className="text-xs font-medium cursor-pointer">Cobrar por libra</Label>
+                </div>
               </div>
 
               {/* Switches Grid */}
@@ -1294,19 +1318,19 @@ function ServDialog({
               </div>
 
               {/* Step 1 Footer */}
-              <div className="pt-2 flex justify-between items-center">
+              <div className="pt-2.5 flex justify-between items-center">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => onOpenChange(false)}
-                  className="rounded-xl h-8.5 px-4 text-xs font-medium"
+                  className="rounded-xl h-10 px-5 text-xs font-medium cursor-pointer"
                 >
                   Cancelar
                 </Button>
                 <Button
                   type="button"
                   onClick={handleNextStep}
-                  className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                  className="rounded-xl h-10 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
                 >
                   Siguiente: Identificador <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
@@ -1377,7 +1401,7 @@ function ServDialog({
                       value={f.imagen_url || ""}
                       onChange={(e) => setF({ ...f, imagen_url: e.target.value })}
                       placeholder="Pegar URL de la imagen..."
-                      className="flex-1 h-9 rounded-xl text-xs"
+                      className="flex-1 h-9.5 rounded-xl text-xs"
                     />
                     <div className="relative">
                       <input
@@ -1390,7 +1414,7 @@ function ServDialog({
                       />
                       <Button
                         type="button"
-                        className="h-9 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95"
+                        className="h-9.5 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95 cursor-pointer"
                         disabled={uploading}
                         onClick={() => document.getElementById("serv-upload")?.click()}
                       >
@@ -1426,18 +1450,18 @@ function ServDialog({
                     {f.nombre || "Nombre de Servicio"}
                   </span>
                   <span className="text-[11px] text-muted-foreground">
-                    {formatRD(f.precio || 0)}
+                    {formatRD(f.precio || 0)} {f.por_libra ? "/lb" : ""}
                   </span>
                 </div>
               </div>
 
               {/* Step 2 Footer */}
-              <div className="pt-2 flex justify-between items-center border-t border-border/50">
+              <div className="pt-2.5 flex justify-between items-center border-t border-border/50">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setStep(1)}
-                  className="rounded-xl h-8.5 px-4 text-xs font-medium gap-1"
+                  className="rounded-xl h-10 px-5 text-xs font-medium gap-1 cursor-pointer"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" /> Anterior
                 </Button>
@@ -1447,7 +1471,7 @@ function ServDialog({
                     type="button"
                     variant="outline"
                     onClick={() => onOpenChange(false)}
-                    className="rounded-xl h-8.5 px-4 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+                    className="rounded-xl h-10 px-5 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
                   >
                     Cancelar
                   </Button>
@@ -1455,7 +1479,7 @@ function ServDialog({
                   <Button
                     type="button"
                     onClick={submit}
-                    className="rounded-xl h-8.5 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md"
+                    className="rounded-xl h-10 px-6 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
                   >
                     Guardar Servicio <CheckCircle2 className="h-3.5 w-3.5" />
                   </Button>

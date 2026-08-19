@@ -278,19 +278,19 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+      <DialogContent className="rounded-3xl max-w-xl p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
         {/* STEPPER HEADER */}
         <div className="bg-slate-50/70 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-2 relative border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2.5">
-              <div className="h-8.5 w-8.5 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
-                {f.tipo === "Empresa" ? <Building2 className="h-4 w-4" /> : <User className="h-4 w-4" />}
+              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
+                {f.tipo === "Empresa" ? <Building2 className="h-4.5 w-4.5" /> : <User className="h-4.5 w-4.5" />}
               </div>
               <div>
-                <DialogTitle className="text-sm sm:text-base font-display font-bold text-foreground">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
                   {cliente ? "Editar Perfil de Cliente" : "Nuevo Perfil de Cliente"}
                 </DialogTitle>
-                <p className="text-[11px] text-muted-foreground">
+                <p className="text-xs text-muted-foreground">
                   {step === 1
                     ? "Paso 1: Información personal y contacto"
                     : "Paso 2: Dirección de entrega y preferencias"}
@@ -300,18 +300,18 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
           </div>
 
           {/* Stepper Buttons (Centered Pills) */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-2xl bg-slate-200/60 dark:bg-slate-800/80">
+          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
             <button
               type="button"
               onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-1 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 step === 1
-                  ? "bg-primary text-white shadow-md font-bold"
+                  ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-extrabold ${
                   step === 1
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -325,14 +325,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
             <button
               type="button"
               onClick={handleNextStep}
-              className={`flex items-center justify-center gap-2 py-1 px-3 rounded-xl text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-2 py-1.5 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
                 step === 2
-                  ? "bg-primary text-white shadow-md font-bold"
+                  ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
               }`}
             >
               <span
-                className={`h-4 w-4 rounded-full flex items-center justify-center text-[10px] font-extrabold ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-extrabold ${
                   step === 2
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -346,27 +346,27 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
         </div>
 
         {/* DIALOG BODY */}
-        <div className="px-4 sm:px-5 pt-2.5 pb-3.5">
+        <div className="px-4 sm:px-5 pt-2 pb-3.5">
           {step === 1 ? (
             /* STEP 1: DATOS DE CONTACTO */
             <div className="space-y-2.5 animate-in fade-in slide-in-from-left-3 duration-200">
-              <div className="grid gap-2.5 grid-cols-2">
+              <div className="grid gap-3 grid-cols-2">
                 {/* Tipo de cliente */}
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Tipo de Cliente</Label>
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Tipo de Cliente</Label>
                   <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
-                    <SelectTrigger className="h-8.5 rounded-xl text-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm font-medium"><SelectValue /></SelectTrigger>
                     <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
                       <SelectItem value="Consumidor Final">
                         <span className="flex items-center gap-2">
-                          <User className="h-3.5 w-3.5 text-teal-600" />
+                          <User className="h-4 w-4 text-teal-600" />
                           <span>Consumidor Final</span>
                         </span>
                       </SelectItem>
                       {tenant.config?.ncf_facturacion_activa && (
                         <SelectItem value="Empresa">
                           <span className="flex items-center gap-2">
-                            <Building2 className="h-3.5 w-3.5 text-purple-600" />
+                            <Building2 className="h-4 w-4 text-purple-600" />
                             <span>Empresa</span>
                           </span>
                         </SelectItem>
@@ -376,45 +376,54 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                 </div>
 
                 {/* Teléfono */}
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Teléfono / WhatsApp *</Label>
-                  <Input 
-                    value={f.telefono} 
-                    onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
-                    placeholder="809-000-0000" 
-                    className="h-8.5 rounded-xl text-xs"
-                  />
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Teléfono / WhatsApp *</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input 
+                      value={f.telefono} 
+                      onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
+                      placeholder="809-000-0000" 
+                      className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium"
+                    />
+                  </div>
                 </div>
               </div>
 
               {/* Nombre / Apellido / Empresa / RNC */}
               {f.tipo === "Empresa" ? (
-                <div className="grid gap-2.5 grid-cols-2 animate-in fade-in duration-150">
-                  <div className="space-y-1">
-                    <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Nombre de la Empresa *</Label>
-                    <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-8.5 rounded-xl text-xs" />
+                <div className="grid gap-3 grid-cols-2 animate-in fade-in duration-150">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre de la Empresa *</Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                    </div>
                   </div>
                   {tenant.config?.ncf_facturacion_activa ? (
-                    <div className="space-y-1">
-                      <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">RNC de la Empresa</Label>
-                      <div className="flex gap-1.5">
-                        <Input 
-                          value={f.cedula} 
-                          onChange={(e) => setF({ ...f, cedula: e.target.value })} 
-                          placeholder="131-12345-6"
-                          className="h-8.5 rounded-xl text-xs flex-1"
-                        />
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">RNC de la Empresa</Label>
+                      <div className="flex gap-2">
+                        <div className="relative flex-1">
+                          <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                          <Input 
+                            value={f.cedula} 
+                            onChange={(e) => setF({ ...f, cedula: e.target.value })} 
+                            placeholder="131-12345-6"
+                            className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium w-full"
+                          />
+                        </div>
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-8.5 rounded-xl px-2.5 text-xs gap-1 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-semibold shrink-0"
+                          className="h-10 rounded-xl px-3 text-xs sm:text-sm gap-1.5 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-bold shrink-0 cursor-pointer"
                           onClick={handleSearchRNC}
                           disabled={loadingRNC}
                         >
                           {loadingRNC ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                            <Loader2 className="h-4 w-4 animate-spin" />
                           ) : (
-                            <Search className="h-3.5 w-3.5" />
+                            <Search className="h-4 w-4" />
                           )}
                           <span>Buscar</span>
                         </Button>
@@ -425,46 +434,55 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                   )}
                 </div>
               ) : (
-                <div className="grid gap-2.5 grid-cols-2 animate-in fade-in duration-150">
-                  <div className="space-y-1">
-                    <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Nombre *</Label>
-                    <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-8.5 rounded-xl text-xs" />
+                <div className="grid gap-3 grid-cols-2 animate-in fade-in duration-150">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre *</Label>
+                    <div className="relative">
+                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                    </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Apellido *</Label>
-                    <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-8.5 rounded-xl text-xs" />
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Apellido *</Label>
+                    <div className="relative">
+                      <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                    </div>
                   </div>
                 </div>
               )}
 
               {/* Email & Línea de Crédito */}
-              <div className="grid gap-2.5 grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Email (Opcional)</Label>
-                  <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-8.5 rounded-xl text-xs" />
+              <div className="grid gap-3 grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Email (Opcional)</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                  </div>
                 </div>
 
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Línea de Crédito</Label>
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Línea de Crédito</Label>
                     <Switch 
                       checked={f.limite_credito > 0} 
                       onCheckedChange={(checked) => setF({ ...f, limite_credito: checked ? 5000 : 0 })} 
-                      className="scale-75 origin-right"
+                      className="scale-85 origin-right cursor-pointer"
                     />
                   </div>
                   {f.limite_credito > 0 ? (
                     <div className="relative animate-in fade-in duration-150">
-                      <CreditCard className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground/50" />
+                      <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                       <Input 
                         type="number" 
                         value={f.limite_credito} 
                         onChange={(e) => setF({ ...f, limite_credito: Number(e.target.value) || 0 })} 
-                        className="h-8.5 pl-8 rounded-xl font-bold text-xs"
+                        className="h-10 pl-9.5 rounded-xl font-bold text-xs sm:text-sm"
                       />
                     </div>
                   ) : (
-                    <div className="h-8.5 flex items-center px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-[11px] text-muted-foreground">
+                    <div className="h-10 flex items-center px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-xs text-muted-foreground">
                       Sin crédito habilitado
                     </div>
                   )}
@@ -472,13 +490,13 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
               </div>
 
               {/* Step 1 Footer */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between pt-2.5 mt-1.5 border-t border-slate-100 dark:border-slate-800">
                 <div>
                   {cliente && (
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button type="button" className="bg-red-500 hover:bg-red-600 text-white border-none rounded-xl h-8 text-xs px-3 font-bold shadow-xs transition-colors">
-                          <Trash2 className="mr-1 h-3.5 w-3.5" /> Eliminar
+                        <Button type="button" className="bg-red-500 hover:bg-red-600 text-white border-none rounded-xl h-10 text-xs sm:text-sm px-4 font-bold shadow-xs transition-colors cursor-pointer">
+                          <Trash2 className="mr-1.5 h-4 w-4" /> Eliminar
                         </Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent className="rounded-2xl border-none shadow-card">
@@ -497,12 +515,12 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                   )}
                 </div>
 
-                <div className="flex gap-2 ml-auto">
-                  <Button type="button" variant="outline" className="rounded-xl h-8 px-4 text-xs font-medium" onClick={() => onOpenChange(false)}>
+                <div className="flex gap-2.5 ml-auto">
+                  <Button type="button" variant="outline" className="rounded-xl h-10 px-5 text-xs sm:text-sm font-semibold cursor-pointer" onClick={() => onOpenChange(false)}>
                     Cancelar
                   </Button>
-                  <Button type="button" onClick={handleNextStep} className="rounded-xl h-8 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md">
-                    Siguiente: Entrega <ArrowRight className="h-3.5 w-3.5" />
+                  <Button type="button" onClick={handleNextStep} className="rounded-xl h-10 px-6 text-xs sm:text-sm font-bold bg-primary text-white gap-2 shadow-md cursor-pointer hover:bg-primary/90">
+                    Siguiente: Entrega <ArrowRight className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
@@ -511,14 +529,14 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
             /* STEP 2: DIRECCIÓN DE ENTREGA Y PREFERENCIAS */
             <div className="space-y-2 animate-in fade-in slide-in-from-right-3 duration-200">
               {/* Delivery Toggle Card */}
-              <div className="flex items-center justify-between py-1.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+              <div className="flex items-center justify-between py-2 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
                 <div className="flex items-center gap-2">
-                  <div className="h-6.5 w-6.5 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                  <div className="h-7.5 w-7.5 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
                     <Truck className="h-3.5 w-3.5" />
                   </div>
                   <div>
-                    <span className="text-xs font-bold text-foreground block">Envío a Domicilio</span>
-                    <span className="text-[10px] text-muted-foreground">¿Este cliente requiere delivery habitualmente?</span>
+                    <span className="text-xs sm:text-sm font-bold text-foreground block leading-tight">Envío a Domicilio</span>
+                    <span className="text-[10.5px] text-muted-foreground">¿Requiere delivery habitualmente?</span>
                   </div>
                 </div>
                 <Switch 
@@ -527,7 +545,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                     setHasDelivery(checked);
                     if (!checked) setF({ ...f, direccion: "" });
                   }} 
-                  className="scale-80 origin-right"
+                  className="scale-85 origin-right cursor-pointer"
                 />
               </div>
 
@@ -560,71 +578,77 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
 
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-500">Edificio / Apto / Nivel</Label>
+                      <Label className="text-xs font-bold text-slate-500">Edificio / Apto / Nivel</Label>
                       <div className="relative">
-                        <Building className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400" />
+                        <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                         <Input
                           value={f.edificio_apto || ""}
                           onChange={(e) => setF({ ...f, edificio_apto: e.target.value })}
                           placeholder="Torre / Apto 4B"
-                          className="h-8 pl-8 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                          className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                         />
                       </div>
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-[10px] font-bold text-slate-500">Sector / Barrio</Label>
-                      <Input
-                        value={f.sector || ""}
-                        onChange={(e) => setF({ ...f, sector: e.target.value })}
-                        placeholder="Ej. Piantini"
-                        className="h-8 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                      />
+                      <Label className="text-xs font-bold text-slate-500">Sector / Barrio</Label>
+                      <div className="relative">
+                        <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                        <Input
+                          value={f.sector || ""}
+                          onChange={(e) => setF({ ...f, sector: e.target.value })}
+                          placeholder="Ej. Piantini"
+                          className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                        />
+                      </div>
                     </div>
                   </div>
 
                   <div className="space-y-1">
-                    <Label className="text-[10px] font-bold text-slate-500">Punto de Referencia (Para el Repartidor)</Label>
-                    <Input
-                      value={f.referencia || ""}
-                      onChange={(e) => setF({ ...f, referencia: e.target.value })}
-                      placeholder="Ej. Portón negro frente al parque, timbre 4B..."
-                      className="h-8 text-xs rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                    />
+                    <Label className="text-xs font-bold text-slate-500">Punto de Referencia (Para el Repartidor)</Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Input
+                        value={f.referencia || ""}
+                        onChange={(e) => setF({ ...f, referencia: e.target.value })}
+                        placeholder="Ej. Portón negro frente al parque, timbre 4B..."
+                        className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                      />
+                    </div>
                   </div>
                 </div>
               ) : (
-                <div className="py-2 px-3 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800 text-center">
-                  <p className="text-[11px] text-muted-foreground">El cliente no tiene dirección de envío configurada. Retirará en el local.</p>
+                <div className="py-2.5 px-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800 text-center">
+                  <p className="text-xs text-muted-foreground">El cliente no tiene dirección de envío configurada. Retirará en el local.</p>
                 </div>
               )}
 
               {/* Notas */}
               <div className="space-y-1">
-                <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-400">Notas / Comentarios Internos</Label>
+                <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Notas / Comentarios Internos</Label>
                 <Textarea 
                   value={f.notas} 
                   onChange={(e) => setF({ ...f, notas: e.target.value })} 
                   placeholder="Preferencias de lavado, alergias, almidón, etc..." 
-                  className="h-11 min-h-[38px] max-h-[50px] resize-none rounded-xl text-xs py-1.5 px-3"
+                  className="h-14 min-h-[44px] max-h-[70px] resize-none rounded-xl text-xs sm:text-sm py-2 px-3 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 font-medium"
                 />
               </div>
 
               {/* Step 2 Footer */}
-              <div className="flex items-center justify-between pt-2 border-t border-slate-100 dark:border-slate-800">
+              <div className="flex items-center justify-between pt-2.5 mt-1.5 border-t border-slate-100 dark:border-slate-800">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={() => setStep(1)}
-                  className="rounded-xl h-8 px-4 text-xs font-medium gap-1"
+                  className="rounded-xl h-10 px-5 text-xs sm:text-sm font-semibold gap-1.5 cursor-pointer"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" /> Atrás
+                  <ArrowLeft className="h-4 w-4" /> Atrás
                 </Button>
-                <div className="flex gap-2">
-                  <Button type="button" variant="outline" className="rounded-xl h-8 text-xs px-4 border-slate-300 dark:border-slate-800 font-medium" onClick={() => onOpenChange(false)}>
+                <div className="flex gap-2.5">
+                  <Button type="button" variant="outline" className="rounded-xl h-10 text-xs sm:text-sm px-5 border-slate-300 dark:border-slate-800 font-semibold cursor-pointer" onClick={() => onOpenChange(false)}>
                     Cancelar
                   </Button>
-                  <Button type="button" onClick={submit} className="bg-primary text-primary-foreground rounded-xl h-8 text-xs px-5 font-bold shadow-md hover:bg-primary/90 transition-colors gap-1.5">
-                    <Check className="h-3.5 w-3.5" /> Guardar Cliente
+                  <Button type="button" onClick={submit} className="bg-primary text-primary-foreground rounded-xl h-10 text-xs sm:text-sm px-6 font-bold shadow-md hover:bg-primary/90 transition-colors gap-2 cursor-pointer">
+                    <Check className="h-4 w-4" /> Guardar Cliente
                   </Button>
                 </div>
               </div>

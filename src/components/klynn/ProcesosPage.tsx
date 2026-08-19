@@ -617,21 +617,20 @@ export function ProcesosPage() {
             </PopoverContent>
           </Popover>
 
-          {/* BOTÓN PANTALLA COMPLETA EN COLOR PRIMARIO Y MENOR ALTURA */}
+          {/* BOTÓN PANTALLA COMPLETA EN COLOR PRIMARIO Y ALTURA ESTÁNDAR H-10 */}
           <Button
-            size="sm"
             onClick={toggleFullscreen}
-            className="rounded-xl h-8.5 px-3.5 bg-primary hover:bg-primary/90 text-white font-extrabold text-xs flex items-center gap-2 shadow-xs transition-all active:scale-95 border-none cursor-pointer"
+            className="rounded-xl h-10 px-4 sm:px-5 bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-all active:scale-95 border border-[#1B4B73] cursor-pointer shrink-0"
             title={isFullscreen ? "Salir de Pantalla Completa" : "Modo Pantalla Completa"}
           >
             {isFullscreen ? (
               <>
-                <Minimize2 className="h-3.5 w-3.5 text-white shrink-0" />
+                <Minimize2 className="h-4 w-4 text-[#F0B900] shrink-0" />
                 <span>Salir Pantalla Completa</span>
               </>
             ) : (
               <>
-                <Maximize2 className="h-3.5 w-3.5 text-white shrink-0" />
+                <Maximize2 className="h-4 w-4 text-[#F0B900] shrink-0" />
                 <span>Pantalla Completa</span>
               </>
             )}
@@ -639,12 +638,11 @@ export function ProcesosPage() {
 
           <Button
             variant="outline"
-            size="sm"
             onClick={loadData}
-            className="rounded-xl h-8.5 w-8.5 p-0 border-slate-200 bg-white dark:bg-slate-900 dark:border-slate-800 shadow-2xs hover:bg-slate-100 shrink-0"
+            className="rounded-xl h-10 w-10 p-0 border border-border/80 bg-surface shadow-xs hover:bg-muted/60 text-foreground flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-all"
             title="Refrescar datos"
           >
-            <RefreshCw className={`h-3.5 w-3.5 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>
@@ -657,19 +655,19 @@ export function ProcesosPage() {
             isFullscreen ? "max-w-md xl:max-w-xl" : "max-w-[280px] lg:max-w-xs"
           }`}
         >
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-slate-400 shrink-0" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 shrink-0" />
           <Input
             type="text"
             placeholder="Buscar en Recibido (#orden o cliente)..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9 pr-7 h-9 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 text-xs font-medium focus:bg-white"
+            className="pl-9 pr-7 h-10 rounded-xl border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-950 text-xs font-medium focus:bg-white"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery("")}
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600"
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs text-slate-400 hover:text-slate-600 cursor-pointer"
             >
               ✕
             </button>
@@ -685,7 +683,7 @@ export function ProcesosPage() {
           <select
             value={servicioFilter}
             onChange={(e) => setServicioFilter(e.target.value)}
-            className="h-9 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3 text-xs font-bold text-slate-800 dark:text-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs transition-all cursor-pointer min-w-[160px] max-w-[210px]"
+            className="h-10 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-950 px-3 text-xs font-bold text-slate-800 dark:text-slate-200 focus:bg-white focus:outline-none focus:ring-2 focus:ring-primary/20 shadow-2xs transition-all cursor-pointer min-w-[160px] max-w-[210px]"
           >
             <option value="todos">Todos los Servicios ({ordenes.length})</option>
             {serviciosPresentes.map((srv) => {
@@ -709,14 +707,21 @@ export function ProcesosPage() {
         <button
           type="button"
           onClick={() => setSoloUrgentes((prev) => !prev)}
-          className={`rounded-xl px-3.5 h-9 text-xs font-semibold whitespace-nowrap transition-all flex items-center gap-1.5 border shrink-0 ${
+          className={`rounded-xl px-4 h-10 text-xs sm:text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 border shrink-0 cursor-pointer shadow-xs active:scale-95 ${
             soloUrgentes
-              ? "bg-rose-500 text-white border-rose-600 shadow-xs font-bold"
-              : "border-slate-200 bg-white text-slate-700 hover:bg-rose-50 hover:text-rose-600 dark:border-slate-800 dark:bg-slate-900"
+              ? "bg-rose-500 hover:bg-rose-600 text-white border-rose-500"
+              : "bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 text-rose-700 dark:text-rose-300 border border-rose-200 dark:border-rose-800"
           }`}
         >
-          <Flame className="h-3.5 w-3.5" />
-          Urgentes ({stats.urgentes})
+          <Flame className={`h-4 w-4 shrink-0 ${soloUrgentes ? "fill-white text-white" : "text-rose-500"}`} />
+          <span>Urgentes</span>
+          <span
+            className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none shadow-2xs ${
+              soloUrgentes ? "bg-white text-rose-600" : "bg-rose-500 text-white"
+            }`}
+          >
+            {stats.urgentes}
+          </span>
         </button>
 
         {/* TOGGLE AUTO-ENVÍO WHATSAPP */}
@@ -728,18 +733,18 @@ export function ProcesosPage() {
               ? "Auto-envío activo. Al pasar a Terminada se notifica por WhatsApp vía API."
               : "Auto-envío inactivo. Haz clic para activar el envío automático por WhatsApp."
           }
-          className={`rounded-xl px-3.5 h-9 text-xs font-bold whitespace-nowrap transition-all flex items-center gap-2 border shrink-0 cursor-pointer shadow-2xs active:scale-95 ${
+          className={`rounded-xl px-4 h-10 text-xs sm:text-sm font-bold whitespace-nowrap transition-all flex items-center gap-2 border shrink-0 cursor-pointer shadow-xs active:scale-95 ${
             autoSendWhatsApp
-              ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700"
-              : "border-slate-200 dark:border-slate-800 bg-slate-50 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:bg-slate-900"
+              ? "bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-600"
+              : "border border-border/80 bg-surface text-foreground hover:bg-muted/60"
           }`}
         >
           <MessageCircle
-            className={`h-3.5 w-3.5 ${autoSendWhatsApp ? "fill-white text-white" : ""}`}
+            className={`h-4 w-4 shrink-0 ${autoSendWhatsApp ? "fill-white text-white" : "text-emerald-600 dark:text-emerald-400"}`}
           />
           <span>{autoSendWhatsApp ? "WhatsApp Auto ON" : "WhatsApp Auto OFF"}</span>
           <span
-            className={`h-2 w-2 rounded-full ${
+            className={`h-2 w-2 rounded-full shrink-0 ${
               autoSendWhatsApp ? "bg-white animate-pulse" : "bg-slate-400"
             }`}
           />

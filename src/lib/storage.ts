@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
 
-export type PlanId = "basico" | "pro" | "enterprise";
+export type PlanId = "basico" | "pro" | "enterprise" | string;
 
 export interface Plan {
   id: PlanId;
@@ -22,6 +22,8 @@ export interface Plan {
     estanteria?: boolean;
   };
   destacado?: boolean;
+  es_especial?: boolean;
+  titulo_especial?: string;
   polar_product_monthly_url?: string;
   polar_product_yearly_url?: string;
   precio_sucursal_adicional?: number;
@@ -468,6 +470,7 @@ export interface Servicio {
   imagen_url?: string;
   activo: boolean;
   precio: number;
+  por_libra?: boolean;
   is_exento?: boolean;
   es_muestra?: boolean;
   permitir_desglose?: boolean;
@@ -763,7 +766,7 @@ export const PERMISOS_SISTEMA = [
   {
     id: "procesos",
     nombre: "Operaciones",
-    descripcion: "Control de producción y etapas de lavado",
+    descripcion: "Control de producción y etapas",
   },
   { id: "caja", nombre: "Caja", descripcion: "Apertura, cierre y movimientos" },
   { id: "clientes", nombre: "Clientes", descripcion: "Gestión de base de datos de clientes" },
@@ -875,6 +878,8 @@ export async function getPlans(): Promise<Plan[]> {
           },
           limite_whatsapp_mes: p.limite_whatsapp_mes ?? localMatch?.limite_whatsapp_mes ?? staticMatch?.limite_whatsapp_mes ?? 0,
           destacado: p.destacado !== undefined && p.destacado !== null ? !!p.destacado : (localMatch?.destacado ?? !!staticMatch?.destacado),
+          es_especial: p.es_especial !== undefined && p.es_especial !== null ? !!p.es_especial : (localMatch?.es_especial ?? staticMatch?.es_especial ?? false),
+          titulo_especial: p.titulo_especial ?? localMatch?.titulo_especial ?? staticMatch?.titulo_especial ?? "Plan especial",
           polar_product_monthly_url: p.polar_product_monthly_url ?? localMatch?.polar_product_monthly_url ?? staticMatch?.polar_product_monthly_url,
           polar_product_yearly_url: p.polar_product_yearly_url ?? localMatch?.polar_product_yearly_url ?? staticMatch?.polar_product_yearly_url,
           precio_sucursal_adicional:
@@ -2303,6 +2308,8 @@ export async function savePlan(p: Plan) {
       estanteria: p.modulos.estanteria !== undefined ? !!p.modulos.estanteria : true,
       limite_whatsapp_mes: p.limite_whatsapp_mes,
       destacado: p.destacado,
+      es_especial: !!p.es_especial,
+      titulo_especial: p.titulo_especial || "Plan especial",
       polar_product_monthly_url: p.polar_product_monthly_url,
       polar_product_yearly_url: p.polar_product_yearly_url,
       precio_sucursal_adicional: p.precio_sucursal_adicional,

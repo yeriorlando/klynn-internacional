@@ -30,6 +30,8 @@ import {
   Banknote,
   Check,
   Loader2,
+  ArrowLeftRight,
+  History,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -122,6 +124,7 @@ function CajaPage() {
   const [printOrders, setPrintOrders] = useState<Orden[]>([]);
   const [printMovs, setPrintMovs] = useState<MovimientoCaja[]>([]);
   const [cierrePage, setCierrePage] = useState(1);
+  const [movsPage, setMovsPage] = useState(1);
 
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
   const { data: todas = [], isLoading: loadingTodas } = useCajas(tenantId);
@@ -133,6 +136,13 @@ function CajaPage() {
   const { data: empleados = [] } = useEmpleados(tenantId);
   const fiscalConfig = fiscalConfigData || null;
   const loading = loadingCaja || loadingTodas || (!!caja && loadingMovs);
+
+  const reversedMovs = useMemo(() => [...movs].reverse(), [movs]);
+  const totalMovsPages = Math.ceil(reversedMovs.length / 10);
+  const currentMovs = useMemo(
+    () => reversedMovs.slice((movsPage - 1) * 10, movsPage * 10),
+    [reversedMovs, movsPage],
+  );
 
   const ventasEf = movs
     .filter((m) => m.tipo === "VENTA" && m.metodo === "EFECTIVO")
@@ -218,61 +228,122 @@ function CajaPage() {
   return (
     <div>
       <PageHeader title="Caja" description="Apertura, movimientos del turno y cierre con cuadre.">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Button
+            type="button"
             onClick={() => navigate({ to: "/t/$slug/cxc", params: { slug: user.tenant.slug } })}
-            className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold gap-1.5 shadow-sm"
+            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
           >
-            <CreditCard className="h-4 w-4" />
-            Cuentas x Cobrar
+            <CreditCard className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Cuentas x Cobrar</span>
           </Button>
+
           <Button
+            type="button"
             onClick={() => setShowCajaChica(true)}
-            className="bg-gradient-primary text-white font-bold gap-1.5"
+            className="flex items-center gap-2 rounded-xl h-10 px-4 font-extrabold bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
           >
-            <PiggyBank className="h-4 w-4" />
-            Caja Chica
+            <PiggyBank className="h-4 w-4 text-[#1B4B73] shrink-0" />
+            <span>Caja Chica</span>
           </Button>
+
           {!caja ? (
             <Button
+              type="button"
               onClick={() => setShowApertura(true)}
-              className="bg-green-600 hover:bg-green-700 text-white font-bold border-none"
+              className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
             >
-              <Wallet className="mr-1.5 h-4 w-4" /> Abrir caja
+              <Wallet className="h-4 w-4 text-white shrink-0" />
+              <span>Abrir caja</span>
             </Button>
           ) : (
             <Button
+              type="button"
               onClick={() => setShowCierre(true)}
-              className="bg-red-600 text-white hover:bg-red-700 border-none font-bold"
+              className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-rose-600 hover:bg-rose-700 text-white border border-rose-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
             >
-              <Lock className="mr-1.5 h-4 w-4" />
-              Cerrar caja
+              <Lock className="h-4 w-4 text-white shrink-0" />
+              <span>Cerrar caja</span>
             </Button>
           )}
         </div>
       </PageHeader>
 
       {!caja && (
-        <Card className="p-12 text-center">
-          <Wallet className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
-          <h3 className="font-display text-2xl">No hay caja abierta</h3>
+        <Card className="p-12 text-center rounded-3xl border bg-white dark:bg-slate-900 shadow-xs">
+          <Wallet className="mx-auto mb-3 h-12 w-12 text-muted-foreground/30" />
+          <h3 className="font-display text-2xl font-black text-slate-800 dark:text-slate-100">No hay caja abierta</h3>
           <p className="mt-1 text-sm text-muted-foreground">Abre la caja para comenzar el turno.</p>
           <Button
+            type="button"
             onClick={() => setShowApertura(true)}
-            className="mt-5 bg-green-600 hover:bg-green-700 text-white border-none px-8"
+            className="mt-5 inline-flex items-center gap-2 rounded-xl h-10 px-8 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm"
           >
-            Abrir caja ahora
+            <Wallet className="h-4 w-4 text-white shrink-0" />
+            <span>Abrir caja ahora</span>
           </Button>
         </Card>
       )}
 
       {caja && (
         <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <KPI t="Efectivo en caja" v={formatRD(efectivoEsperado)} accent />
-            <KPI t="Ventas efectivo" v={formatRD(ventasEf)} />
-            <KPI t="Ventas tarjeta" v={formatRD(ventasTar)} />
-            <KPI t="Ventas transferencia" v={formatRD(ventasTrans)} />
+          {/* 4 EXECUTIVE KPI CARDS EN CAJA */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            {/* 1. Efectivo en Caja (Variant: Solid Azul Añil #1B4B73) */}
+            <Card className="p-4 sm:p-4.5 rounded-2xl bg-[#1B4B73] text-white shadow-md border-0 flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs sm:text-[13px] uppercase tracking-wider text-white/90 font-black">Efectivo en Caja</span>
+                <Coins className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-[#F0B900]" />
+              </div>
+              <div className="my-1.5 font-display font-black tracking-tight text-white text-xl sm:text-2xl truncate" title={formatRD(efectivoEsperado)}>
+                {formatRD(efectivoEsperado)}
+              </div>
+              <div className="text-xs sm:text-[13px] font-semibold truncate text-white/90">
+                Total esperado en gaveta
+              </div>
+            </Card>
+
+            {/* 2. Ventas Efectivo (Variant: Emerald / Menta) */}
+            <Card className="p-4 sm:p-4.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs sm:text-[13px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-black">Ventas Efectivo</span>
+                <Banknote className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+              </div>
+              <div className="my-1.5 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl truncate" title={formatRD(ventasEf)}>
+                {formatRD(ventasEf)}
+              </div>
+              <div className="text-xs sm:text-[13px] font-bold truncate text-emerald-800 dark:text-emerald-300">
+                Cobrado en efectivo
+              </div>
+            </Card>
+
+            {/* 3. Ventas Tarjeta (Variant: Indigo / Azul) */}
+            <Card className="p-4 sm:p-4.5 rounded-2xl bg-indigo-500/10 border border-indigo-500/25 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs sm:text-[13px] uppercase tracking-wider text-indigo-800 dark:text-indigo-300 font-black">Ventas Tarjeta</span>
+                <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-indigo-600 dark:text-indigo-400" />
+              </div>
+              <div className="my-1.5 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl truncate" title={formatRD(ventasTar)}>
+                {formatRD(ventasTar)}
+              </div>
+              <div className="text-xs sm:text-[13px] font-bold truncate text-indigo-800 dark:text-indigo-300">
+                Cobrado con tarjeta
+              </div>
+            </Card>
+
+            {/* 4. Ventas Transferencia (Variant: Sky / Celeste) */}
+            <Card className="p-4 sm:p-4.5 rounded-2xl bg-sky-500/10 border border-sky-500/25 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-xs sm:text-[13px] uppercase tracking-wider text-sky-800 dark:text-sky-300 font-black">Ventas Transferencia</span>
+                <ArrowUpRight className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-sky-600 dark:text-sky-400" />
+              </div>
+              <div className="my-1.5 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl truncate" title={formatRD(ventasTrans)}>
+                {formatRD(ventasTrans)}
+              </div>
+              <div className="text-xs sm:text-[13px] font-bold truncate text-sky-800 dark:text-sky-300">
+                Transferencias y digital
+              </div>
+            </Card>
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -376,7 +447,10 @@ function CajaPage() {
 
           <Card className="mt-4 overflow-hidden">
             <div className="flex items-center justify-between border-b border-border p-4">
-              <h3 className="font-display text-lg">Movimientos del turno</h3>
+              <h3 className="font-display text-lg flex items-center gap-2 font-bold text-foreground">
+                <ArrowLeftRight className="h-5 w-5 text-primary shrink-0" />
+                <span>Movimientos del turno</span>
+              </h3>
               <Badge className="bg-primary text-white hover:bg-primary border-none font-bold">
                 {movs.length}
               </Badge>
@@ -393,7 +467,7 @@ function CajaPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {[...movs].reverse().map((m) => (
+                  {currentMovs.map((m) => (
                     <tr key={m.id} className="border-b border-border/50 hover:bg-accent/30">
                       <td className="px-4 py-2.5 text-xs text-muted-foreground">
                         {new Date(m.creado_en).toLocaleTimeString("es-DO", {
@@ -508,9 +582,45 @@ function CajaPage() {
                       </td>
                     </tr>
                   ))}
+                  {currentMovs.length === 0 && (
+                    <tr>
+                      <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                        Sin movimientos en este turno aún
+                      </td>
+                    </tr>
+                  )}
                 </tbody>
               </table>
             </div>
+
+            {totalMovsPages > 1 && (
+              <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-elevated">
+                <span className="text-xs text-muted-foreground">
+                  Mostrando {(movsPage - 1) * 10 + 1} al{" "}
+                  {Math.min(movsPage * 10, reversedMovs.length)} de {reversedMovs.length}
+                </span>
+                <div className="flex gap-1">
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setMovsPage((p) => Math.max(1, p - 1))}
+                    disabled={movsPage === 1}
+                    className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90 cursor-pointer"
+                  >
+                    <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
+                  </Button>
+                  <Button
+                    variant="default"
+                    size="sm"
+                    onClick={() => setMovsPage((p) => Math.min(totalMovsPages, p + 1))}
+                    disabled={movsPage === totalMovsPages}
+                    className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90 cursor-pointer"
+                  >
+                    Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            )}
           </Card>
         </>
       )}
@@ -518,7 +628,10 @@ function CajaPage() {
       {/* Histórico */}
       <Card className="mt-6 overflow-hidden">
         <div className="flex items-center justify-between border-b border-border p-4">
-          <h3 className="font-display text-lg">Histórico de cierres</h3>
+          <h3 className="font-display text-lg flex items-center gap-2 font-bold text-foreground">
+            <History className="h-5 w-5 text-primary shrink-0" />
+            <span>Histórico de cierres</span>
+          </h3>
           <div className="flex gap-2">
             <Button
               size="sm"

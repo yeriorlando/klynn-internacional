@@ -141,7 +141,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
-  { to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
+  { to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
   { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
   { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
@@ -1128,7 +1128,7 @@ export function TenantShell() {
       {/* Sidebar desktop */}
       <aside
         id="tour-sidebar"
-        className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-64 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out"
+        className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out"
       >
         <SidebarContent
           tenant={tenant}
@@ -1174,7 +1174,7 @@ export function TenantShell() {
       )}
 
       <div
-        className={`main-content-wrapper lg:pl-64 transition-all duration-500 ease-in-out ${pathname.endsWith("/conversations") ? "h-full flex flex-col overflow-hidden" : ""}`}
+        className={`main-content-wrapper lg:pl-72 transition-all duration-500 ease-in-out ${pathname.endsWith("/conversations") ? "h-full flex flex-col overflow-hidden" : ""}`}
       >
         {/* Header */}
         <header className="main-header sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-surface/80 px-4 backdrop-blur-xl md:px-6 transition-all duration-500 ease-in-out shrink-0">
@@ -1737,7 +1737,7 @@ function SidebarContent({
         title: "PERSONAS",
         items: [
           { id: "clientes", to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
-          { id: "personal", to: `/t/${slug}/personal`, label: "Usuarios", icon: Users, permission: "personal" },
+          { id: "personal", to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
         ],
       },
       {
@@ -1906,7 +1906,7 @@ function SidebarContent({
         {filteredCategories.map((category) => (
           <div key={category.title} className="space-y-1">
             {/* Category Header */}
-            <div className="px-3.5 pt-3 pb-1.5 text-[11.5px] font-bold uppercase tracking-wider text-muted-foreground/60 select-none">
+            <div className="px-3.5 pt-3.5 pb-1.5 text-[11.5px] font-black uppercase tracking-wider text-black dark:text-white select-none">
               {category.title}
             </div>
 
@@ -1924,10 +1924,10 @@ function SidebarContent({
                         setShowSoporteModal(true);
                         if (onNavigate) onNavigate();
                       }}
-                      className="w-full text-left relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition duration-200 text-black dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-black dark:hover:text-white cursor-pointer"
+                      className="w-full text-left relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-semibold transition-all duration-200 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 dark:hover:bg-sky-950/40 hover:text-[#1B4B73] dark:hover:text-sky-200 cursor-pointer group"
                     >
                       <div className="flex items-center gap-3">
-                        <item.icon className="h-5 w-5 shrink-0 text-primary" strokeWidth={1.8} />
+                        <item.icon className="h-5 w-5 shrink-0 text-[#1B4B73] dark:text-sky-300 transition-colors" strokeWidth={2} />
                         <span>{item.label}</span>
                       </div>
                     </button>
@@ -1941,34 +1941,36 @@ function SidebarContent({
                     id={item.id ? `tour-nav-${item.id}` : item.permission ? `tour-nav-${item.permission}` : undefined}
                     onClick={onNavigate}
                     onMouseEnter={() => item.permission && prefetch(item.permission)}
-                    className={`relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-medium transition duration-200 ${
+                    style={active ? { backgroundColor: "var(--primary)" } : undefined}
+                    className={`group relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] transition-all duration-200 cursor-pointer ${
                       active
-                        ? "bg-primary/10 text-black dark:text-white font-semibold"
-                        : "text-black dark:text-white hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-black dark:hover:text-white"
+                        ? "bg-primary text-white font-bold shadow-md shadow-primary/25"
+                        : "font-semibold text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 dark:hover:bg-sky-950/40 hover:text-[#1B4B73] dark:hover:text-sky-200"
                     }`}
                   >
-                    {active && (
-                      <span
-                        className="absolute left-0 top-1/2 -translate-y-1/2 w-1.5 h-6 bg-primary rounded-r-full"
-                        style={{ backgroundColor: "var(--primary)" }}
-                      />
-                    )}
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
                       <item.icon
-                        className="h-5 w-5 shrink-0 transition-colors text-primary"
-                        strokeWidth={1.8}
+                        className={`h-5 w-5 shrink-0 transition-colors ${
+                          active ? "text-white" : "text-[#1B4B73] dark:text-sky-300"
+                        }`}
+                        strokeWidth={2}
                       />
-                      <span>{item.label}</span>
+                      <span className="truncate">{item.label}</span>
                     </div>
 
                     {item.hasArrow && (
-                      <ChevronDown className="h-5 w-5 text-slate-400 shrink-0" strokeWidth={1.8} />
+                      <ChevronDown
+                        className={`h-4 w-4 shrink-0 transition-colors ${
+                          active ? "text-white/80" : "text-[#1B4B73]/60 dark:text-sky-400 group-hover:text-[#1B4B73]"
+                        }`}
+                        strokeWidth={2}
+                      />
                     )}
 
                     {isConversations && unreadCount > 0 && (
                       <Badge
                         className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
-                          active ? "bg-primary text-white" : "bg-primary text-primary-foreground"
+                          active ? "bg-white/20 text-white" : "bg-[#1B4B73] text-white"
                         }`}
                       >
                         {unreadCount}
@@ -1976,7 +1978,12 @@ function SidebarContent({
                     )}
 
                     {item.shortcut && (
-                      <kbd className="hidden sm:inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-black shadow-sm shrink-0 uppercase select-none bg-primary text-white border-none">
+                      <kbd
+                        style={!active ? { backgroundColor: "var(--primary)" } : undefined}
+                        className={`hidden sm:inline-flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10.5px] font-black shadow-xs shrink-0 uppercase select-none border-none ${
+                          active ? "bg-white/20 text-white" : "bg-primary text-white"
+                        }`}
+                      >
                         {item.shortcut}
                       </kbd>
                     )}
@@ -2155,27 +2162,6 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
               </span>
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
-            onSelect={() => {
-              setOpen(false);
-              localStorage.setItem("klynn_tour_is_new_registration", "true");
-              localStorage.removeItem(`klynn_tour_sidebar_${user?.empleado?.id || ""}`);
-              window.location.reload();
-            }}
-            className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-indigo-50 focus:text-slate-950 dark:focus:bg-indigo-950/30 dark:focus:text-white"
-          >
-            <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100 transition-colors group-focus:bg-indigo-100 dark:bg-indigo-950/50 dark:text-indigo-400 dark:ring-indigo-900">
-              <Sparkles className="h-3.5 w-3.5" strokeWidth={2} />
-            </span>
-            <span className="min-w-0 flex-1">
-              <span className="block text-xs font-bold leading-tight">Reiniciar Tour</span>
-              <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
-                Ver recorrido interactivo
-              </span>
-            </span>
-            <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-indigo-500 dark:text-slate-600" />
           </DropdownMenuItem>
 
           <DropdownMenuSeparator className="mx-1 my-1 bg-slate-100 dark:bg-slate-800" />

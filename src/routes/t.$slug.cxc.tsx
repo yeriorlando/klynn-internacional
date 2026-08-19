@@ -467,32 +467,50 @@ export default function CuentasPorCobrarPage() {
                 : "Historial de créditos completamente saldados por tus clientes."}
             </p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 shrink-0">
+          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
             <Button
+              type="button"
               onClick={() => navigate({ to: "/t/$slug/caja", params: { slug: user.tenant.slug } })}
-              className="bg-primary hover:bg-primary/95 text-white gap-1.5 font-bold shadow-sm transition-all active:scale-95"
+              className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
             >
-              <ArrowLeft className="h-4 w-4" /> Volver a Caja
+              <ArrowLeft className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Volver a Caja</span>
             </Button>
             
             <Button
+              type="button"
               onClick={cargar}
-              className="bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200/60 gap-1.5 font-bold"
+              className="flex items-center gap-2 rounded-xl h-10 px-4 font-extrabold bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
             >
-              <RefreshCw className="h-4 w-4" /> Actualizar
+              <RefreshCw className="h-4 w-4 text-[#1B4B73] shrink-0" />
+              <span>Actualizar</span>
             </Button>
-            <div className="flex rounded-lg overflow-hidden border border-border">
+
+            <div className="flex h-10 rounded-xl p-1 bg-surface-elevated border border-border items-center">
               {(["A4", "80mm"] as const).map(f => (
-                <button key={f} onClick={() => setFormatoPrint(f)}
-                  className={`px-3 py-1.5 text-xs font-bold flex items-center gap-1 transition-colors ${
-                    formatoPrint === f ? "bg-primary text-white" : "bg-background text-muted-foreground hover:bg-accent"
-                  }`}>
-                  <FileText className="h-3 w-3" />{f}
+                <button
+                  key={f}
+                  type="button"
+                  onClick={() => setFormatoPrint(f)}
+                  className={`px-3 h-full rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    formatoPrint === f 
+                      ? "bg-[#1B4B73] text-white shadow-xs" 
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  <span>{f}</span>
                 </button>
               ))}
             </div>
-            <Button onClick={handlePrint} className="bg-gradient-primary text-white gap-1.5 font-bold">
-              <Printer className="h-4 w-4" /> Imprimir
+
+            <Button
+              type="button"
+              onClick={handlePrint}
+              className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+            >
+              <Printer className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Imprimir</span>
             </Button>
           </div>
         </div>

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
   UserPlus, LayoutDashboard, ShieldCheck, Sparkles, CheckCircle2,
-  Wallet, Truck, Receipt, MessageSquare, Layers
+  Wallet, Truck, Receipt, MessageSquare, Layers, Gift, Rocket
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -147,117 +147,125 @@ function LoginPage() {
     <div className="h-screen w-full grid lg:grid-cols-12 bg-slate-950 overflow-hidden font-sans antialiased selection:bg-[#F0B900] selection:text-slate-950">
       <SeedBootstrap />
 
-      {/* PANEL IZQUIERDO: Branding Atmosférico con Fondo de Imagen Original */}
-      <div className="relative hidden lg:col-span-7 xl:col-span-7 lg:flex flex-col justify-between p-8 xl:p-10 overflow-hidden bg-primary text-white border-r border-white/10 h-full">
+      {/* PANEL IZQUIERDO: Branding Atmosférico con Fondo Integrado (50% Ancho) */}
+      <div className="relative hidden lg:col-span-6 xl:col-span-6 lg:flex flex-col justify-between p-8 xl:p-12 overflow-hidden bg-[#1B4B73] text-white border-r border-white/10 h-full">
         
-        {/* Imagen de Fondo Original Conservada y Visible */}
+        {/* Imagen de Fondo con Mezcla Atmosférica de Lujo */}
         <div className="absolute inset-0 z-0 pointer-events-none">
           <img 
             src="/login.webp" 
             alt="Laundry background" 
-            className="w-full h-full object-cover opacity-45 mix-blend-overlay"
+            className="w-full h-full object-cover opacity-35 mix-blend-luminosity scale-105"
           />
-          <div className="absolute inset-0 bg-gradient-to-b from-primary/30 via-primary/65 to-primary/85" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#1B4B73]/60 via-[#143B5C]/80 to-[#0c2438]/95" />
+          <div className="absolute inset-0 bg-radial-gradient from-transparent via-transparent to-[#0a1b29]/80" />
         </div>
 
-        {/* Círculos de luz ambiental sutil */}
-        <div className="absolute -top-32 -left-32 w-96 h-96 rounded-full bg-[#F0B900]/15 blur-3xl pointer-events-none" />
-        <div className="absolute bottom-10 right-10 w-80 h-80 rounded-full bg-primary/40 blur-2xl pointer-events-none" />
+        {/* Resplandor ambiental de color */}
+        <div className="absolute -top-24 -left-24 w-80 h-80 rounded-full bg-[#F0B900]/15 blur-3xl pointer-events-none" />
+        <div className="absolute bottom-10 right-10 w-96 h-96 rounded-full bg-sky-400/10 blur-3xl pointer-events-none" />
 
         {/* Header superior del Panel */}
         <div className="relative z-10 flex items-center justify-between">
           <Logo size="lg" variant="white" className="font-display tracking-tight" />
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/10 backdrop-blur-md border border-white/15 text-[11px] font-bold text-slate-200">
+            <ShieldCheck className="h-3.5 w-3.5 text-[#F0B900]" />
+            <span>Plataforma Cloud</span>
+          </div>
         </div>
 
-        {/* Bloque Central de Valor (Ajustado para un solo vistazo sin scroll) */}
-        <div className="relative z-10 my-auto max-w-xl space-y-6 py-4">
+        {/* Bloque Central de Valor */}
+        <div className="relative z-10 my-auto max-w-lg space-y-6 py-6">
           <motion.div
             initial={{ opacity: 0, y: 12 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4 }}
-            className="space-y-3"
+            className="space-y-3.5"
           >
-            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#F0B900] bg-[#F0B900]/10 px-3 py-1 rounded-md border border-[#F0B900]/20">
-              <Sparkles className="h-3.5 w-3.5" /> Software de Gestión Operativa
+            <div className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#F0B900] bg-[#F0B900]/15 px-3 py-1 rounded-lg border border-[#F0B900]/30 shadow-2xs">
+              <Sparkles className="h-3.5 w-3.5 text-[#F0B900]" /> Software de Gestión Operativa
             </div>
-            <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight leading-[1.12] text-white font-display">
+            <h1 className="text-3xl xl:text-4xl font-extrabold tracking-tight leading-[1.14] text-white font-display">
               El sistema inteligente para <br />
               <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-[#F0B900] to-[#F0B900]">
                 la gestión de tu lavandería.
               </span>
             </h1>
-            <p className="text-sm xl:text-base text-slate-300 leading-relaxed font-normal">
+            <p className="text-xs sm:text-sm text-slate-200/90 leading-relaxed font-normal">
               Optimiza la recepción de prendas, automatiza el control de cajas, coordina servicios a domicilio y mantén el control total de tus sucursales con Klynn.
             </p>
           </motion.div>
 
-          {/* Insignias de Características Operativas */}
+          {/* Cuadrícula de Características Bento */}
           <motion.div 
             initial={{ opacity: 0, y: 16 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.4, delay: 0.1 }}
-            className="grid grid-cols-2 gap-2.5 pt-1"
+            className="grid grid-cols-2 gap-3 pt-2"
           >
-            <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2.5 transition-all hover:bg-white/15 group">
-              <div className="h-8 w-8 rounded-lg bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30 group-hover:scale-105 transition-transform">
+            <div className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-3 transition-all hover:bg-white/15 group">
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/20 text-emerald-300 flex items-center justify-center shrink-0 border border-emerald-500/30 group-hover:scale-105 transition-transform">
                 <MessageSquare className="h-4 w-4" />
               </div>
               <div className="space-y-0.5 min-w-0">
-                <span className="text-xs font-bold text-white block truncate">Avisos por WhatsApp</span>
-                <span className="text-[10px] text-slate-300 block truncate">Notificaciones automáticas</span>
+                <span className="text-xs font-bold text-white block truncate">Avisos WhatsApp</span>
+                <span className="text-[10px] text-slate-300 block truncate">Alertas automáticas</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2.5 transition-all hover:bg-white/15 group">
-              <div className="h-8 w-8 rounded-lg bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0 border border-violet-500/30 group-hover:scale-105 transition-transform">
+            <div className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-3 transition-all hover:bg-white/15 group">
+              <div className="h-9 w-9 rounded-xl bg-violet-500/20 text-violet-300 flex items-center justify-center shrink-0 border border-violet-500/30 group-hover:scale-105 transition-transform">
                 <Layers className="h-4 w-4" />
               </div>
               <div className="space-y-0.5 min-w-0">
-                <span className="text-xs font-bold text-white block truncate">Tablero de Procesos</span>
-                <span className="text-[10px] text-slate-300 block truncate">Control Kanban de ropa</span>
+                <span className="text-xs font-bold text-white block truncate">Flujo de Ropa</span>
+                <span className="text-[10px] text-slate-300 block truncate">Control Kanban ágil</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2.5 transition-all hover:bg-white/15 group">
-              <div className="h-8 w-8 rounded-lg bg-sky-500/20 text-sky-300 flex items-center justify-center shrink-0 border border-sky-500/30 group-hover:scale-105 transition-transform">
+            <div className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-3 transition-all hover:bg-white/15 group">
+              <div className="h-9 w-9 rounded-xl bg-sky-500/20 text-sky-300 flex items-center justify-center shrink-0 border border-sky-500/30 group-hover:scale-105 transition-transform">
                 <Receipt className="h-4 w-4" />
               </div>
               <div className="space-y-0.5 min-w-0">
                 <span className="text-xs font-bold text-white block truncate">Comprobantes e-CF</span>
-                <span className="text-[10px] text-slate-300 block truncate">Facturación fiscal DGII</span>
+                <span className="text-[10px] text-slate-300 block truncate">Homologado DGII</span>
               </div>
             </div>
 
-            <div className="p-3 rounded-xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-2.5 transition-all hover:bg-white/15 group">
-              <div className="h-8 w-8 rounded-lg bg-orange-500/20 text-orange-400 flex items-center justify-center shrink-0 border border-orange-500/30 group-hover:scale-105 transition-transform">
+            <div className="p-3.5 rounded-2xl bg-white/10 backdrop-blur-md border border-white/15 flex items-center gap-3 transition-all hover:bg-white/15 group">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/20 text-amber-300 flex items-center justify-center shrink-0 border border-amber-500/30 group-hover:scale-105 transition-transform">
                 <Truck className="h-4 w-4" />
               </div>
               <div className="space-y-0.5 min-w-0">
-                <span className="text-xs font-bold text-white block truncate">Envío a domicilio</span>
-                <span className="text-[10px] text-slate-300 block truncate">Gestión de entregas</span>
+                <span className="text-xs font-bold text-white block truncate">Envío a Domicilio</span>
+                <span className="text-[10px] text-slate-300 block truncate">Logística y entregas</span>
               </div>
             </div>
           </motion.div>
         </div>
 
-
+        {/* Footer del Panel Izquierdo */}
+        <div className="relative z-10 flex items-center justify-center text-center text-xs text-slate-300/80 pt-2 border-t border-white/10">
+          <span>© {new Date().getFullYear()} Klynn Cloud — Todos los derechos reservados</span>
+        </div>
       </div>
 
-      {/* PANEL DERECHO: Formulario de Autenticación Ajustado en 100vh */}
-      <div className="lg:col-span-5 xl:col-span-5 flex items-center justify-center p-6 sm:p-8 bg-white dark:bg-slate-950 h-full overflow-y-auto">
-        <div className="w-full max-w-sm space-y-6">
+      {/* PANEL DERECHO: Formulario Centrado y Armónico (50% Ancho) */}
+      <div className="lg:col-span-6 xl:col-span-6 flex items-center justify-center p-6 sm:p-10 xl:p-14 bg-white dark:bg-slate-950 h-full overflow-y-auto">
+        <div className="w-full max-w-md mx-auto space-y-6">
           
           {/* Logo visible solo en mobile */}
-          <div className="lg:hidden flex justify-center pb-1">
+          <div className="lg:hidden flex justify-center pb-2">
             <Logo size="lg" />
           </div>
 
-          {/* Encabezado del Formulario */}
-          <div className="space-y-1.5 text-left">
-            <h2 className="text-2xl xl:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
+          {/* Encabezado del Formulario Centrado */}
+          <div className="space-y-2 text-center">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 dark:text-white tracking-tight font-display">
               Iniciar sesión
             </h2>
-            <p className="text-xs xl:text-sm text-slate-500 dark:text-slate-400">
+            <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400">
               Ingresa tus credenciales para acceder a tu panel de control.
             </p>
           </div>
@@ -409,30 +417,67 @@ function LoginPage() {
                   </motion.div>
                 )}
 
-                {/* Botón Principal de Enviar */}
-                <Button
+                {/* Botón Principal de Enviar Rediseñado */}
+                <button
                   type="submit"
                   disabled={loading}
-                  className="w-full h-11 text-xs font-bold text-white bg-[#1B4B73] hover:bg-[#143B5C] shadow-md shadow-[#1B4B73]/25 transition-all active:scale-[0.99] rounded-xl cursor-pointer"
+                  className={`group relative w-full h-12 rounded-2xl font-display font-black text-xs uppercase tracking-wider text-white shadow-lg transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] ${
+                    loading 
+                      ? "bg-[#1B4B73] cursor-not-allowed opacity-95 shadow-[#1B4B73]/20" 
+                      : "bg-gradient-to-r from-[#1B4B73] via-[#245e8e] to-[#1B4B73] bg-[length:200%_auto] hover:bg-right shadow-[#1B4B73]/30 hover:shadow-xl hover:shadow-[#1B4B73]/40 hover:-translate-y-0.5"
+                  }`}
                 >
-                  {loading ? (
-                    <span className="flex items-center gap-2">
-                      <span className="h-3.5 w-3.5 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-                      Verificando credenciales...
-                    </span>
-                  ) : (
-                    <span className="flex items-center justify-center gap-1.5">
-                      Acceder al sistema <ArrowRight className="h-4 w-4" />
-                    </span>
-                  )}
-                </Button>
+                  {/* Efecto de Brillo / Rayo Shimmer en Hover */}
+                  <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
 
-                {/* Footer de Registro */}
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 text-center text-xs text-slate-500">
-                  ¿Aún no tienes cuenta?{" "}
-                  <Link to="/registro" className="font-bold text-[#1B4B73] hover:underline">
-                    Registra tu lavandería (14 días gratis)
-                  </Link>
+                  {loading ? (
+                    <div className="relative z-10 flex items-center justify-center gap-3">
+                      {/* Animación de Carga Hermosa y Fluida */}
+                      <div className="relative flex items-center justify-center">
+                        <div className="h-5 w-5 rounded-full border-2 border-white/20 border-t-[#F0B900] border-r-white animate-spin" />
+                        <div className="absolute h-2 w-2 rounded-full bg-[#F0B900] animate-ping opacity-75" />
+                      </div>
+                      <span className="text-xs font-bold text-white tracking-normal normal-case flex items-center gap-1.5">
+                        Iniciando sesión segura
+                        <span className="flex gap-1 items-center">
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#F0B900] animate-bounce [animation-delay:-0.3s]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
+                          <span className="h-1.5 w-1.5 rounded-full bg-[#F0B900] animate-bounce" />
+                        </span>
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="relative z-10 flex items-center justify-center gap-2.5">
+                      <span className="font-bold tracking-wider">INGRESAR AL SISTEMA</span>
+                      <div className="h-6 w-6 rounded-xl bg-white/15 group-hover:bg-[#F0B900] group-hover:text-slate-900 text-white flex items-center justify-center transition-all duration-300 shadow-2xs group-hover:translate-x-1">
+                        <ArrowRight className="h-3.5 w-3.5 transition-transform" />
+                      </div>
+                    </div>
+                  )}
+                </button>
+
+                {/* Tarjeta de Registro y Prueba Gratuita Rediseñada */}
+                <div className="pt-2">
+                  <div className="relative overflow-hidden rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 p-4 transition-all hover:border-[#1B4B73]/40 group shadow-2xs space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">
+                        ¿Aún no tienes cuenta?
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2.5 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800">
+                        <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                        14 días gratis
+                      </span>
+                    </div>
+                    
+                    <Link 
+                      to="/registro" 
+                      className="w-full h-11 flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm font-black text-[#1B4B73] dark:text-sky-400 hover:bg-[#1B4B73] hover:text-white dark:hover:bg-[#1B4B73] dark:hover:text-white shadow-2xs transition-all duration-200 group/btn cursor-pointer"
+                    >
+                      <Rocket className="h-4 w-4 text-[#F0B900] group-hover/btn:scale-110 group-hover/btn:-rotate-12 transition-all shrink-0" />
+                      <span>Registra tu lavandería</span>
+                      <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform shrink-0" />
+                    </Link>
+                  </div>
                 </div>
               </motion.form>
             )}

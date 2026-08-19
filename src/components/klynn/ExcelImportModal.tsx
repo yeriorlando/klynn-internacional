@@ -145,6 +145,7 @@ export function ExcelImportModal({
           tenant_id: tenantId,
           nombre: s.nombre,
           precio: s.precio,
+          por_libra: s.por_libra,
           is_exento: s.is_exento,
           activo: s.activo,
           icono: existing?.icono || "🧺",

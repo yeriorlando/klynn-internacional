@@ -1409,7 +1409,7 @@ function LandingPage() {
           </div>
 
           <div className="grid gap-6 md:grid-cols-3">
-            {plans.map((plan) => {
+            {plans.filter(p => !p.es_especial).map((plan) => {
               const price = billingCycle === "monthly" ? plan.precio_mensual : (plan.precio_anual || (plan.precio_mensual * 12 * 0.85));
               const polarUrl = billingCycle === "monthly" ? plan.polar_product_monthly_url : plan.polar_product_yearly_url;
               const checkoutUrl = polarUrl || "/registro";
@@ -1557,6 +1557,187 @@ function LandingPage() {
               );
             })}
           </div>
+
+          {/* PLAN ESPECIAL (BARRA SUTIL INFERIOR EN LANDING) */}
+          {plans.filter(p => !!p.es_especial).length > 0 && (
+            <div className="mt-8 space-y-4">
+              {plans.filter(p => !!p.es_especial).map((plan) => {
+                const price = billingCycle === "monthly" ? plan.precio_mensual : (plan.precio_anual || (plan.precio_mensual * 12 * 0.85));
+                const polarUrl = billingCycle === "monthly" ? plan.polar_product_monthly_url : plan.polar_product_yearly_url;
+                const checkoutUrl = polarUrl || "/registro";
+                const specialLabel = plan.titulo_especial?.trim() || "Plan especial";
+
+                return (
+                  <div
+                    key={plan.id}
+                    className="relative rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 bg-gradient-to-r from-slate-50/90 via-card to-sky-50/30 dark:from-slate-900/70 dark:via-slate-900/50 dark:to-sky-950/20 shadow-xs hover:shadow-sm transition-all"
+                  >
+                    {/* FILA SUPERIOR: INFORMACIÓN, PRECIO, LÍMITES Y BOTÓN CTA */}
+                    <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-border/60">
+                      
+                      {/* Izquierda: Indicador, Nombre y Precio */}
+                      <div className="min-w-[200px]">
+                        <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 mb-1">
+                          <Sparkles className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                          <span>{specialLabel}</span>
+                        </div>
+                        <div className="font-display text-xl font-bold text-slate-900 dark:text-white leading-tight">{plan.nombre}</div>
+                        <div className="mt-0.5 flex items-baseline gap-1">
+                          <span className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
+                            {formatRD(price).replace("DOP", "RD$")}
+                          </span>
+                          <span className="text-[11px] font-medium text-slate-500">
+                            {billingCycle === "monthly" ? "/mes" : "/año"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Centro: Límites Clave */}
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-2 lg:py-0 border-y lg:border-y-0 lg:border-x border-border/60 lg:px-5 flex-1">
+                        <div className="space-y-0.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <Users className="h-3 w-3 text-slate-500 shrink-0" />
+                            <span>Equipo</span>
+                          </div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {plan.limite_empleados} {plan.limite_empleados === 1 ? "Empleado" : "Empleados"}
+                          </div>
+                        </div>
+
+                        <div className="space-y-0.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <Package className="h-3 w-3 text-slate-500 shrink-0" />
+                            <span>Facturación</span>
+                          </div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes ilimitadas"}
+                          </div>
+                        </div>
+
+                        <div className="space-y-0.5">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                            <MessageSquare className="h-3 w-3 text-blue-500 shrink-0" />
+                            <span>WhatsApp</span>
+                          </div>
+                          <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                            {plan.modulos?.whatsapp
+                              ? (plan.limite_whatsapp_mes ? `${plan.limite_whatsapp_mes.toLocaleString()} msgs/mes` : "Ilimitados")
+                              : "No incluido"}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Derecha: Botón CTA */}
+                      <div className="shrink-0 min-w-[170px] flex justify-end">
+                        {polarUrl ? (
+                          <a
+                            href={checkoutUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="plan-btn w-full sm:w-auto h-9 px-5 text-xs font-bold shrink-0 plan-btn--outline bg-card hover:bg-muted/80 shadow-2xs"
+                          >
+                            Probar Plan {plan.nombre}
+                          </a>
+                        ) : (
+                          <Link
+                            to="/registro"
+                            className="plan-btn w-full sm:w-auto h-9 px-5 text-xs font-bold shrink-0 plan-btn--outline bg-card hover:bg-muted/80 shadow-2xs"
+                          >
+                            Comenzar 14 días gratis
+                          </Link>
+                        )}
+                      </div>
+
+                    </div>
+
+                    {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
+                      
+                      {/* Desglose de Módulos */}
+                      <div>
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                          MÓDULOS HABILITADOS
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                          {[
+                            { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
+                            { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
+                            { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
+                            { key: "logistica", label: "Envío a domicilio" },
+                            { key: "procesos", label: "Tablero de Procesos" },
+                            { key: "estanteria", label: "Estantería virtual" },
+                          ].map(({ key, label, extra }) => {
+                            const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
+                            return (
+                              <div 
+                                key={key} 
+                                className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                  v 
+                                    ? "text-green-700 dark:text-green-400" 
+                                    : "text-slate-400 line-through opacity-70"
+                                }`}
+                              >
+                                {v ? (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="m9 12 2 2 4-4" />
+                                  </svg>
+                                ) : (
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="m15 9-6 6" />
+                                    <path d="m9 9 6 6" />
+                                  </svg>
+                                )}
+                                <span className="flex items-center flex-wrap gap-1">
+                                  <span>{label}</span>
+                                  {extra && (
+                                    <span className={`text-[9px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
+                                      {extra}
+                                    </span>
+                                  )}
+                                  {key === "multisucursal" && v && (
+                                    <span className="text-[8.5px] font-bold text-primary ml-0.5 bg-primary/10 px-1 py-0.2 rounded uppercase tracking-wider">
+                                      Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
+                                    </span>
+                                  )}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* Características Generales */}
+                      <div className="border-t md:border-t-0 md:border-l border-border/50 md:pl-5 pt-3 md:pt-0">
+                        <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                          CARACTERÍSTICAS INCLUIDAS
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                          {[
+                            "Clientes ilimitados",
+                            "Generación de reportes",
+                            "Actualizaciones de software",
+                            "Cuentas x cobrar",
+                            "Impresión A4/80mm"
+                          ].map((feat) => (
+                            <div key={feat} className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-400 shrink-0">
+                                <circle cx="12" cy="12" r="10" />
+                                <path d="m9 12 2 2 4-4" />
+                              </svg>
+                              <span>{feat}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
           <p className="mx-auto mt-10 max-w-2xl text-center text-sm text-muted-foreground">
             Todos los planes incluyen 14 días gratis. Sin compromiso, cancela cuando quieras.

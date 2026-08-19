@@ -131,11 +131,8 @@ function ReportesPage() {
     const totalVentas = ordenes.reduce((s, o) => s + (o.total || 0), 0);
     const totalITBIS = ordenes.reduce((s, o) => s + (o.itbis || 0), 0);
     
-    // Gastos manuales + caja chica
-    const gastosManuales = gastos.filter(g => !g.is_caja_chica).reduce((s, g) => s + g.monto, 0);
-    const gastosCajaChica = movs.filter(m => m.tipo === "GASTO_CAJA_CHICA").reduce((s, m) => s + m.monto, 0);
-    const totalGastos = gastosManuales + gastosCajaChica;
-
+    // Gastos (Total unificado de la tabla gastos)
+    const totalGastos = gastos.reduce((s, g) => s + (g.monto || 0), 0);
     const rentabilidad = totalVentas - totalGastos;
     const ticketPromedio = ordenes.length > 0 ? totalVentas / ordenes.length : 0;
 
@@ -507,51 +504,55 @@ function ReportesPage() {
   return (
     <div className="space-y-6 pb-12">
       <PageHeader title="Reportes y estadísticas" description="Visualiza el rendimiento integral de tu lavandería en tiempo real.">
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2.5">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-sm border-0 transition-all duration-200 active:scale-95">
-                <Download className="h-4 w-4" /> Exportar
+              <Button className="gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0">
+                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Exportar</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-elegant">
+            <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-elegant">
               <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                className="gap-2 cursor-pointer py-2 rounded-lg font-medium text-xs sm:text-sm" 
                 onClick={() => exportToCsv("Reporte_Rendimiento", ["Métrica / Categoría", "Valor Registrado"], exportData)}
               >
-                <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel (CSV)
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
+                <span>Excel (CSV)</span>
               </DropdownMenuItem>
               <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                className="gap-2 cursor-pointer py-2 rounded-lg font-medium text-xs sm:text-sm" 
                 onClick={() => setIsPrinting(true)}
               >
-                <Printer className="h-4 w-4 text-red-600" /> PDF / Impresión
+                <Printer className="h-4 w-4 text-rose-600 shrink-0" />
+                <span>PDF / Impresión</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
           <Button 
-            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm border-0 transition-all duration-200 active:scale-95" 
+            className="gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
             onClick={() => setIsPrinting(true)}
           >
-            <Printer className="h-4 w-4" /> Imprimir
+            <Printer className="h-4 w-4 text-white shrink-0" />
+            <span>Imprimir</span>
           </Button>
 
           {hasFiscalModule && ecfConfig && ecfConfig.is_active && (
             <>
               <Button 
-                variant="outline"
-                className="gap-2 bg-white text-slate-700 hover:bg-slate-50 border-slate-200 shadow-sm transition-all duration-200 active:scale-95"
+                className="gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 onClick={() => { setExportType("606"); setShowDgiiModal(true); }}
               >
-                <FileText className="h-4 w-4 text-blue-600" /> 606 (TXT)
+                <FileText className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>606 (TXT)</span>
               </Button>
               <Button 
-                variant="outline"
-                className="gap-2 bg-white text-slate-700 hover:bg-slate-50 border-slate-200 shadow-sm transition-all duration-200 active:scale-95"
+                className="gap-2 rounded-xl h-10 px-4 font-black bg-[#F0B900] hover:bg-[#dfac00] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 onClick={() => { setExportType("ENVIADOS"); setShowDgiiModal(true); }}
               >
-                <FileSpreadsheet className="h-4 w-4 text-amber-600" /> Facturas (Excel)
+                <FileSpreadsheet className="h-4 w-4 text-[#1B4B73] shrink-0" />
+                <span>Facturas (Excel)</span>
               </Button>
             </>
           )}

@@ -59,31 +59,23 @@ function formatMetodoPagoLabel(metodo?: string): string {
   return metodo.replace(/_/g, " ");
 }
 
-export function esTransicionEstadoPermitida(actual: EstadoOrden, destino: EstadoOrden, saldo: number, metodoPago?: string): boolean {
+export function isMetodoCredito(metodo?: string): boolean {
+  if (!metodo) return false;
+  const m = metodo.toUpperCase().trim();
+  return m === "CREDITO" || m === "CRÉDITO";
+}
+
+export function esTransicionEstadoPermitida(
+  actual: EstadoOrden,
+  destino: EstadoOrden,
+  saldo: number,
+  metodoPago?: string,
+): boolean {
   if (actual === destino) return false;
   if (actual === "ANULADA" || destino === "ANULADA") return false;
-  if (actual === "ENTREGADA") return false;
 
-  // Secuencia estricta paso a paso (no saltarse ningún paso):
-  // RECIBIDA -> EN_PROCESO -> LISTA -> ENTREGADA
-  const transicionesPermitidas: Record<EstadoOrden, EstadoOrden[]> = {
-    RECIBIDA: ["EN_PROCESO"],
-    EN_PROCESO: ["LISTA"],
-    LISTA: ["ENTREGADA", "EN_CAMINO"],
-    EN_CAMINO: ["ENTREGADA"],
-    PAGADA: ["EN_PROCESO", "LISTA"],
-    ENTREGADA: [],
-    ANULADA: [],
-    INCIDENCIA: ["EN_PROCESO", "LISTA"],
-  };
-
-  const destinosValidos = transicionesPermitidas[actual] || [];
-  if (!destinosValidos.includes(destino)) {
-    return false;
-  }
-
-  // Regla especial: Solo se permite entregar si está pagado, a menos que sea a CRÉDITO
-  if (destino === "ENTREGADA" && saldo > 0 && metodoPago !== "CREDITO") {
+  // Regla especial: Solo se bloquea la entrega si tiene saldo pendiente Y NO ES A CRÉDITO
+  if (destino === "ENTREGADA" && saldo > 0 && !isMetodoCredito(metodoPago)) {
     return false;
   }
 
@@ -335,10 +327,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
     if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
-      if (estado === "ENTREGADA" && o.saldo > 0 && o.metodo_pago !== "CREDITO") {
+      if (estado === "ENTREGADA" && o.saldo > 0 && !isMetodoCredito(o.metodo_pago)) {
         toast.error("No se puede entregar una orden con saldo pendiente si no es a crédito");
-      } else {
-        toast.error("El flujo de estados es estrictamente secuencial: Recibida → En proceso → Lista → Entregada");
       }
       return true;
     }
@@ -908,7 +898,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </Button>
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
             {filteredPendientes.map((o) => (
               <PendienteCard
                 key={o.id}
@@ -959,49 +949,52 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   return (
     <div>
       <PageHeader title="Órdenes" description={`${ordenes.length} órdenes registradas`}>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Pendientes de pago (Amarillo Jabón #F0B900 Sólido) */}
           <Button
             onClick={() => setShowPendientes(true)}
-            className="h-10 gap-2 rounded-xl border border-amber-200 bg-amber-50 px-3.5 text-amber-800 shadow-sm transition-all duration-200 hover:border-amber-300 hover:bg-amber-100 hover:text-amber-900 active:scale-[0.98] dark:border-amber-900/60 dark:bg-amber-950/40 dark:text-amber-300 dark:hover:bg-amber-950/60"
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10 active:scale-95"
           >
-            <span className="grid h-6 w-6 place-items-center rounded-lg bg-amber-500 text-white shadow-sm">
-              <Coins className="h-3.5 w-3.5" strokeWidth={2.25} />
-            </span>
-            <span className="text-xs font-black uppercase tracking-wide">Pendientes de pago</span>
+            <Coins className="h-4 w-4 text-[#1B4B73] shrink-0" />
+            <span>Pendientes de pago</span>
             {pendientesCobroList.length > 0 && (
-              <Badge className="ml-0.5 grid h-5 min-w-5 place-items-center rounded-full border-none bg-amber-500 px-1.5 text-[9px] font-black text-white shadow-sm hover:bg-amber-500">
+              <span className="ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none bg-[#1B4B73] text-white shadow-xs">
                 {pendientesCobroList.length}
-              </Badge>
+              </span>
             )}
           </Button>
 
+          {/* Exportar (Azul Añil #1B4B73 Sólido) */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button className="gap-2 bg-slate-800 text-white hover:bg-slate-900 shadow-sm border-0 transition-all duration-200 active:scale-95">
-                <Download className="h-4 w-4" /> Exportar
+              <Button className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95">
+                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Exportar</span>
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-40 rounded-xl shadow-elegant">
+            <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
               <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
                 onClick={() => exportToCsv(exportData.filename, exportData.columns, exportData.data)}
               >
-                <FileSpreadsheet className="h-4 w-4 text-green-600" /> Excel (CSV)
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (CSV)
               </DropdownMenuItem>
               <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-lg" 
+                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
                 onClick={() => setIsPrintingList(true)}
               >
-                <Printer className="h-4 w-4 text-red-600" /> PDF / Impresión
+                <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
+          {/* Imprimir (Esmeralda Sólido) */}
           <Button 
-            className="gap-2 bg-emerald-600 text-white hover:bg-emerald-700 shadow-sm border-0 transition-all duration-200 active:scale-95" 
+            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95" 
             onClick={() => setIsPrintingList(true)}
           >
-            <Printer className="h-4 w-4" /> Imprimir
+            <Printer className="h-4 w-4 text-white shrink-0" />
+            <span>Imprimir</span>
           </Button>
 
         </div>
@@ -1136,13 +1129,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         search: { tab: "plan" } as any,
                       })
                     }
-                    className={`h-9 px-4 rounded-xl font-extrabold text-xs shadow-md hover:shadow-lg transition-all active:scale-95 cursor-pointer gap-1.5 shrink-0 ${
-                      isGrace
-                        ? "bg-gradient-to-r from-amber-500 to-indigo-600 hover:from-amber-600 hover:to-indigo-700 text-white"
-                        : "bg-primary hover:bg-primary/90 text-white"
-                    }`}
+                    className="flex items-center gap-2 h-10 px-4 sm:px-5 rounded-xl font-bold text-xs sm:text-sm bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs active:scale-95 transition-all cursor-pointer shrink-0"
                   >
-                    <Rocket className="h-3.5 w-3.5 text-white" />
+                    <Sparkles className="h-4 w-4 text-[#F0B900] shrink-0" />
                     <span>Ver Planes</span>
                   </Button>
                 </div>
@@ -1260,7 +1249,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                       // Don't open modal if clicking on action buttons or badges
                       const target = e.target as HTMLElement;
                       if (target.closest('button') || target.closest('[role="menuitem"]') || target.closest('.action-menu-container')) return;
-                      if (o.estado !== "ANULADA" && !(o.estado === "ENTREGADA" && o.saldo <= 0)) setEstadoModal(o);
+                      if (o.estado !== "ANULADA") setEstadoModal(o);
                     }}
                   >
                     <td className="px-4 py-3">
@@ -1890,7 +1879,7 @@ export function EstadoOrdenDialog({
         <div className="text-center mb-4 -mt-7 px-8">
           <h2 className="text-xl font-black text-slate-900 tracking-tight leading-snug">Cambiar estado de la orden</h2>
           <p className="text-xs text-slate-500 font-medium mt-0.5">
-            Flujo paso a paso: <span className="font-bold text-blue-600">1. Recibida</span> → <span className="font-bold text-amber-600">2. En proceso</span> → <span className="font-bold text-emerald-600">3. Lista</span> → <span className="font-bold text-purple-600">4. Entregada</span>
+            Selecciona el nuevo estado: <span className="font-bold text-blue-600">1. Recibida</span> · <span className="font-bold text-amber-600">2. En proceso</span> · <span className="font-bold text-emerald-600">3. Lista</span> · <span className="font-bold text-purple-600">4. Entregada</span>
           </p>
         </div>
         
@@ -1904,22 +1893,9 @@ export function EstadoOrdenDialog({
           ]).map((s) => {
             const Icon = s.icon;
             const isCurrent = estadoModal.estado === s.value;
+            const isCredito = isMetodoCredito(estadoModal.metodo_pago);
             const isAllowed = esTransicionEstadoPermitida(estadoModal.estado, s.value, estadoModal.saldo, estadoModal.metodo_pago);
-            
-            const ordenPasos: Record<EstadoOrden, number> = {
-              RECIBIDA: 1,
-              EN_PROCESO: 2,
-              PAGADA: 2,
-              LISTA: 3,
-              EN_CAMINO: 3,
-              ENTREGADA: 4,
-              ANULADA: 0,
-              INCIDENCIA: 2,
-            };
-            const currentStepNum = ordenPasos[estadoModal.estado] || 1;
-            const isPast = s.step < currentStepNum;
-            const isFutureBlocked = s.step > currentStepNum && !isAllowed;
-            const isBlockedBySaldo = s.value === "ENTREGADA" && estadoModal.estado === "LISTA" && estadoModal.saldo > 0 && estadoModal.metodo_pago !== "CREDITO";
+            const isBlockedBySaldo = s.value === "ENTREGADA" && estadoModal.saldo > 0 && !isCredito;
 
             const colorClasses = {
               blue: { iconBg: "bg-blue-100", iconColor: "text-blue-600", activeCardBg: "bg-blue-50/60", activeBorder: "border-blue-500", activeCheckBg: "bg-blue-500" },
@@ -1938,18 +1914,15 @@ export function EstadoOrdenDialog({
               iconContainerClass = colorClasses.iconBg;
               iconColorClass = colorClasses.iconColor;
             } else if (isAllowed) {
-              // Siguiente acción: Tarjeta blanca limpia sin sombreado competing, se activa con hover
+              // Disponible para hacer clic directamente sin bloqueos secuenciales
               cardClass = `border border-slate-200 bg-white hover:border-slate-400 hover:bg-slate-50/80 hover:shadow-sm cursor-pointer active:scale-95 group transition-all`;
               iconContainerClass = "bg-slate-100 group-hover:bg-slate-200/80 transition-colors";
               iconColorClass = "text-slate-600 group-hover:text-slate-900 transition-colors";
-            } else if (isPast) {
-              cardClass = `border border-slate-200/60 bg-slate-50/50 opacity-50 cursor-not-allowed`;
-              iconContainerClass = "bg-slate-100/80";
-              iconColorClass = "text-slate-400";
             } else {
-              cardClass = `border border-slate-200/40 bg-slate-50/30 opacity-30 cursor-not-allowed`;
-              iconContainerClass = "bg-slate-100/60";
-              iconColorClass = "text-slate-400";
+              // Bloqueado (solo entrega con saldo pendiente si no es a crédito)
+              cardClass = `border border-amber-200/70 bg-amber-50/25 opacity-70 cursor-not-allowed`;
+              iconContainerClass = "bg-amber-100/70";
+              iconColorClass = "text-amber-600";
             }
 
             return (
@@ -1958,7 +1931,6 @@ export function EstadoOrdenDialog({
                 type="button"
                 onClick={async () => {
                   if (isAllowed) {
-                    // Actualizar el estado visual del modal inmediatamente
                     setEstadoModal({ ...estadoModal, estado: s.value });
                     const shouldCloseImmediately = await cambiarEstado(estadoModal, s.value);
                     if (shouldCloseImmediately) {
@@ -1973,21 +1945,19 @@ export function EstadoOrdenDialog({
               >
                 {/* Badge Superior */}
                 <div className="absolute top-2 right-2">
-                  {isCurrent && (
+                  {isCurrent ? (
                     <div className={`h-[18px] px-2 rounded-full flex items-center gap-1 text-white shadow-xs text-[9px] font-black uppercase tracking-wider ${colorClasses.activeCheckBg}`} title="Estado actual">
                       <Check className="h-2.5 w-2.5" strokeWidth={3} />
                       <span>Actual</span>
                     </div>
-                  )}
-                  {isAllowed && (
+                  ) : isAllowed ? (
                     <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 border border-slate-200 group-hover:bg-slate-900 group-hover:text-white group-hover:border-slate-900 transition-all flex items-center gap-0.5">
-                      <span>Avanzar</span>
+                      <span>Marcar</span>
                       <span>→</span>
                     </span>
-                  )}
-                  {isPast && (
-                    <span className="text-[9px] font-medium px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-500">
-                      ✓ Listo
+                  ) : (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                      Saldo pendiente
                     </span>
                   )}
                 </div>
@@ -2003,8 +1973,8 @@ export function EstadoOrdenDialog({
                 <p className="text-[10px] text-slate-500 leading-tight font-medium">
                   {isBlockedBySaldo 
                     ? "Requiere estar pagada o a crédito para entregar." 
-                    : isFutureBlocked 
-                    ? "Completa el paso anterior primero." 
+                    : s.value === "ENTREGADA" && isCredito && estadoModal.saldo > 0
+                    ? "Entrega a crédito (CxC)."
                     : s.desc}
                 </p>
               </button>
@@ -2072,48 +2042,54 @@ export function EstadoOrdenDialog({
                     setEstadoModal(null);
                     setAnular(target);
                   }}
-                  className="flex items-center gap-1.5 text-xs font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-rose-200/70 dark:border-rose-800/70 active:scale-95"
+                  className="flex items-center gap-2 text-xs sm:text-sm font-bold text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/60 px-4 py-2 rounded-xl transition-all cursor-pointer border border-rose-200/80 dark:border-rose-800/80 active:scale-95 shadow-xs"
                 >
                   <XCircle className="h-4 w-4 text-rose-600 dark:text-rose-400" />
-                  Anular Orden
+                  <span>Anular Orden</span>
                 </button>
               )}
             </div>
           </div>
         )}
 
-        <div className="flex items-center justify-center gap-3">
-          <Button variant="outline" className="text-xs text-slate-600 font-semibold h-9 px-4 rounded-xl border-slate-200 hover:bg-slate-50 border shadow-none" onClick={() => setEstadoModal(null)}>
+        <div className="flex items-center justify-center gap-3 flex-wrap">
+          <Button 
+            variant="outline" 
+            className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-4 rounded-xl border border-border/80 bg-surface hover:bg-muted/60 text-foreground shadow-xs transition-all cursor-pointer" 
+            onClick={() => setEstadoModal(null)}
+          >
             Cancelar
           </Button>
           {estadoModal.saldo > 0 && estadoModal.estado !== "ANULADA" && setCobrarOrden && (
             <Button 
-              className="text-sm font-black h-11 px-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-none gap-2 transition-all active:scale-95 cursor-pointer"
+              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-6 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all active:scale-95 cursor-pointer"
               onClick={() => {
                 const targetOrden = estadoModal;
                 setEstadoModal(null);
                 setCobrarOrden(targetOrden);
               }}
             >
-              <DollarSign className="h-5 w-5 stroke-[3]" /> Cobrar Orden
+              <DollarSign className="h-4 w-4 stroke-[3]" />
+              <span>Cobrar Orden</span>
             </Button>
           )}
           {setShowPrint && (
             <Button 
-              className="text-xs font-semibold h-9 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white border-none shadow-none gap-1.5 active:scale-95 transition-all cursor-pointer" 
+              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-5 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs active:scale-95 transition-all cursor-pointer" 
               onClick={() => {
                 const target = estadoModal;
                 setEstadoModal(null);
                 setShowPrint(target);
               }}
             >
-              <Printer className="h-3.5 w-3.5" /> Imprimir Ticket
+              <Printer className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Imprimir Ticket</span>
             </Button>
           )}
           {setShowPrintProduccion && (
             <Button 
               variant="outline"
-              className="text-xs font-semibold h-9 px-4 rounded-xl border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 border shadow-none gap-1.5 active:scale-95 transition-all cursor-pointer" 
+              className="flex items-center gap-2 text-xs sm:text-sm font-bold h-10 px-4 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 shadow-xs active:scale-95 transition-all cursor-pointer" 
               onClick={() => {
                 const target = estadoModal;
                 setEstadoModal(null);
@@ -2121,7 +2097,8 @@ export function EstadoOrdenDialog({
               }}
               title="Imprimir copia de uso interno / taller"
             >
-              <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" /> Ticket Taller
+              <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>Ticket Taller</span>
             </Button>
           )}
         </div>
@@ -2174,24 +2151,24 @@ export function OrderDetail({
           Orden {view.numero}
         </DialogTitle>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
           <Button 
             onClick={onPrint}
-            className="bg-[#2E4A79] hover:bg-[#253d63] text-white font-bold text-[11px] uppercase tracking-wider rounded-xl h-8 px-3.5 gap-1.5 shadow-xs cursor-pointer"
+            className="flex items-center gap-2 h-10 px-4 rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] font-bold text-xs sm:text-sm shadow-xs cursor-pointer active:scale-95 transition-all"
             title="Imprimir ticket regular del cliente"
           >
-            <Printer className="h-3.5 w-3.5 text-white" />
-            Ticket Cliente
+            <Printer className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Ticket Cliente</span>
           </Button>
           {onPrintProduccion && (
             <Button 
               onClick={onPrintProduccion}
               variant="outline"
-              className="border-amber-500/40 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-bold text-[11px] uppercase tracking-wider rounded-xl h-8 px-3.5 gap-1.5 shadow-xs cursor-pointer"
+              className="flex items-center gap-2 h-10 px-4 rounded-xl border border-amber-300 dark:border-amber-700/80 bg-amber-50/80 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 font-bold text-xs sm:text-sm shadow-xs cursor-pointer active:scale-95 transition-all"
               title="Imprimir ticket para taller/producción con notas y ubicación"
             >
-              <Tag className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400" />
-              Ticket Taller
+              <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+              <span>Ticket Taller</span>
             </Button>
           )}
         </div>
@@ -3547,43 +3524,63 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
       </button>
       <div className={`absolute inset-x-0 top-0 h-1 bg-gradient-to-r ${estadoAccent}`} />
 
-      <div className={`flex flex-1 flex-col ${compact ? "p-3 pt-4" : "p-4 pt-5"}`}>
-        <div className={`flex items-start justify-between ${compact ? "gap-2" : "gap-3"}`}>
-          <div className={`flex min-w-0 items-center ${compact ? "gap-2" : "gap-2.5"}`}>
-            <div className={`grid shrink-0 place-items-center bg-primary/10 text-primary ring-1 ring-primary/10 dark:bg-primary/20 ${compact ? "h-8 w-8 rounded-lg" : "h-9 w-9 rounded-xl"}`}>
-              <Receipt className={compact ? "h-3.5 w-3.5" : "h-4 w-4"} strokeWidth={2} />
+      <div className={`flex flex-1 flex-col ${compact ? "p-3.5 pt-4" : "p-4 pt-5"}`}>
+        {/* Fila 1: Número de Orden + Icono y Estado Badge */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 border border-[#1B4B73]/20">
+              <Receipt className="h-3.5 w-3.5" strokeWidth={2.2} />
             </div>
-            <div className="min-w-0">
-              <p className={`truncate font-mono font-black tracking-tight text-slate-950 dark:text-white ${compact ? "text-[12px]" : "text-[13px]"}`}>{o.numero}</p>
-              <p className="mt-0.5 flex items-center gap-1 text-[9px] font-semibold text-slate-500 dark:text-slate-400">
-                <Calendar className="h-3 w-3" strokeWidth={2} />
-                {formatDateTimeRD(o.creado_en)}
-              </p>
-            </div>
+            <span className="font-mono text-xs sm:text-[13px] font-bold text-[#1B4B73] dark:text-sky-300 tracking-tight whitespace-nowrap">
+              {o.numero}
+            </span>
           </div>
-          <EstadoBadge estado={o.estado} />
+          <div className="shrink-0">
+            <EstadoBadge estado={o.estado} />
+          </div>
         </div>
 
-        {o.es_urgente && (
-          <div className={`${compact ? "mt-2" : "mt-3"} inline-flex w-fit items-center gap-1.5 rounded-lg border border-rose-200 bg-rose-50 px-2 py-1 text-[9px] font-extrabold uppercase tracking-wider text-rose-600 dark:border-rose-900/60 dark:bg-rose-950/40 dark:text-rose-400`}>
-            <Zap className="h-3 w-3 fill-current" />
-            Servicio urgente
+        {/* Fila 2: Fecha y Hora completa en una sola línea */}
+        <div className="mt-2 flex items-center justify-between gap-2 text-[11px] text-muted-foreground font-medium">
+          <div className="flex items-center gap-1.5 whitespace-nowrap">
+            <Calendar className="h-3.5 w-3.5 text-muted-foreground/70 shrink-0" />
+            <span>{formatDateRD(o.creado_en)}</span>
+            <span className="text-muted-foreground/40">•</span>
+            <span className="text-[10px]">{new Date(o.creado_en).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit', hour12: true })}</span>
           </div>
-        )}
+          {o.es_urgente && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-rose-500 text-white px-2 py-0.5 text-[9px] font-bold shadow-2xs shrink-0">
+              <Zap className="h-2.5 w-2.5 fill-white" /> Urgente
+            </span>
+          )}
+        </div>
 
-        <div className={`flex items-center rounded-2xl border border-slate-200/70 bg-slate-50/70 dark:border-slate-800 dark:bg-slate-900/60 ${compact ? "mt-2 gap-2 p-2.5" : "mt-3 gap-3 p-3"}`}>
-          <div className={`grid shrink-0 place-items-center rounded-full bg-white font-black text-primary shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700 ${compact ? "h-8 w-8 text-[10px]" : "h-10 w-10 text-[11px]"}`}>
-            {c.tipo === "Empresa" ? <Building2 className="h-[18px] w-[18px]" /> : clienteIniciales}
+        {/* Fila 3: Cliente */}
+        <div className="mt-2.5 flex items-center gap-2.5 p-2.5 rounded-xl bg-muted/40 dark:bg-slate-900/50 border border-border/50">
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg font-bold text-[11px] shadow-2xs ${
+              c.tipo === "Empresa"
+                ? "bg-[#1B4B73] text-white"
+                : "bg-[#F0B900] text-slate-950"
+            }`}
+          >
+            {c.tipo === "Empresa" ? <Building2 className="h-4 w-4" /> : clienteIniciales}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.12em] text-slate-500 dark:text-slate-400">Cliente</p>
-            <p className="mt-0.5 truncate text-[13px] font-extrabold text-slate-950 dark:text-white">{clienteNombre}</p>
+            <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground leading-none block">
+              Cliente
+            </span>
+            <span className="mt-0.5 truncate text-xs sm:text-[13px] font-bold text-foreground block" title={clienteNombre}>
+              {clienteNombre}
+            </span>
           </div>
-          <span className={`shrink-0 rounded-full border px-2 py-1 text-[8px] font-extrabold uppercase tracking-wider ${
-            c.tipo === "Empresa"
-              ? "border-violet-200 bg-violet-50 text-violet-700 dark:border-violet-900/60 dark:bg-violet-950/40 dark:text-violet-300"
-              : "border-teal-200 bg-teal-50 text-teal-700 dark:border-teal-900/60 dark:bg-teal-950/40 dark:text-teal-300"
-          }`}>
+          <span
+            className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide ${
+              c.tipo === "Empresa"
+                ? "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/30 dark:text-sky-300"
+                : "bg-[#F0B900]/20 text-amber-900 dark:bg-[#F0B900]/30 dark:text-amber-300"
+            }`}
+          >
             {c.tipo === "Empresa" ? "Empresa" : "Personal"}
           </span>
         </div>

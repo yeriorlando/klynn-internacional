@@ -21,6 +21,7 @@ export interface ParsedServicioItem {
   nombre: string;
   descripcion?: string;
   precio: number;
+  por_libra?: boolean;
   is_exento: boolean;
   activo: boolean;
   permitir_desglose?: boolean;
@@ -72,6 +73,7 @@ export function exportCatalogToExcel(
     "ID (No Modificar)": s.id,
     "Nombre de Servicio": s.nombre,
     "Precio (RD$)": s.precio || 0,
+    "Por Libra (SI/NO)": s.por_libra ? "SI" : "NO",
     "Exento ITBIS (SI/NO)": s.is_exento ? "SI" : "NO",
   }));
 
@@ -80,6 +82,7 @@ export function exportCatalogToExcel(
     { wch: 25 }, // ID
     { wch: 30 }, // Nombre
     { wch: 15 }, // Precio
+    { wch: 18 }, // Por Libra
     { wch: 20 }, // Exento ITBIS
   ];
   XLSX.utils.book_append_sheet(wb, serviciosSheet, "Servicios");
@@ -169,6 +172,7 @@ export async function parseCatalogExcelFile(file: File): Promise<ExcelParseResul
       const precioRaw = (row["Precio (RD$)"] ?? row["Precio"] ?? row["precio"] ?? 0) as
         | number
         | string;
+      const porLibraStr = String(row["Por Libra (SI/NO)"] || row["Por Libra"] || "").toUpperCase();
       const exentoStr = String(row["Exento ITBIS (SI/NO)"] || row["Exento"] || "").toUpperCase();
 
       if (!nombre) {
@@ -190,6 +194,8 @@ export async function parseCatalogExcelFile(file: File): Promise<ExcelParseResul
         id: idRaw || undefined,
         nombre,
         precio,
+        por_libra:
+          porLibraStr.includes("SI") || porLibraStr.includes("TRUE") || porLibraStr === "1",
         is_exento: exentoStr.includes("SI") || exentoStr.includes("TRUE") || exentoStr === "1",
         activo: true,
       });

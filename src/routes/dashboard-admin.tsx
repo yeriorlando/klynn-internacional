@@ -216,8 +216,8 @@ function DashboardAdminPage() {
     
     // Gastos manuales + caja chica
     const gastosManuales = gastos.filter(g => !g.is_caja_chica).reduce((s, g) => s + g.monto, 0);
-    const gastosCajaChica = movimientos.filter(m => m.tipo === "GASTO_CAJA_CHICA").reduce((s, m) => s + m.monto, 0);
-    const totalGastos = gastosManuales + gastosCajaChica;
+    const gastosCajaChica = gastos.filter(g => g.is_caja_chica).reduce((s, g) => s + g.monto, 0);
+    const totalGastos = gastos.reduce((s, g) => s + (g.monto || 0), 0);
 
     const rentabilidad = totalVentas - totalGastos;
     const ticketPromedio = ordenes.length > 0 ? totalVentas / ordenes.length : 0;
@@ -478,18 +478,23 @@ function DashboardAdminPage() {
         <div className="mx-auto flex max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8 py-4">
           <div className="flex items-center gap-3">
             <Logo />
-            <Badge variant="outline" className="border-primary/20 bg-primary/10">
-              <Shield className="mr-1 h-3 w-3" /> Panel Propietario
+            <Badge className="bg-[#1B4B73] hover:bg-[#1B4B73] text-white border-0 font-bold shadow-2xs text-xs px-3 py-1 rounded-xl">
+              <Shield className="mr-1.5 h-3.5 w-3.5 text-[#F0B900]" /> Panel Propietario
             </Badge>
           </div>
           <div className="flex items-center gap-3">
             {auth?.empleado?.email && (
-              <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 sm:py-2.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
+              <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-[#1B4B73] border-0 text-white shadow-xs">
+                <div className="h-6 w-6 rounded-full bg-white/20 text-[#F0B900] flex items-center justify-center text-[11px] font-black shrink-0">
+                  {auth.empleado.email.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-xs sm:text-sm font-bold text-white tracking-tight truncate max-w-[200px]">
+                  {auth.empleado.email}
+                </span>
                 <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
                 </span>
-                <span className="truncate max-w-[200px]">{auth.empleado.email}</span>
               </div>
             )}
             <button

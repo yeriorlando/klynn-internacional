@@ -36,6 +36,7 @@ import {
   AlertCircle,
   ArrowUpRight,
   FilePlus2,
+  Plus,
   Truck,
   TrendingUp,
   Inbox,
@@ -62,6 +63,7 @@ import {
   Clock,
   MessageCircle,
   Loader2,
+  Shirt,
 } from "lucide-react";
 import {
   useOrdenes,
@@ -91,6 +93,7 @@ import {
   TicketPrintPortal,
   OrderDetail,
   esTransicionEstadoPermitida,
+  isMetodoCredito,
   EstadoOrdenDialog,
 } from "@/components/klynn/OrdenesPage";
 
@@ -216,10 +219,8 @@ function DashboardPage() {
 
   async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
     if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
-      if (estado === "ENTREGADA" && o.saldo > 0 && o.metodo_pago !== "CREDITO") {
+      if (estado === "ENTREGADA" && o.saldo > 0 && !isMetodoCredito(o.metodo_pago)) {
         toast.error("No se puede entregar una orden con saldo pendiente si no es a crédito");
-      } else {
-        toast.error("El flujo de estados es estrictamente secuencial: Recibida → En proceso → Lista → Entregada");
       }
       return true;
     }
@@ -420,15 +421,16 @@ function DashboardPage() {
         description="Resumen operativo de tu lavandería en tiempo real."
       >
         <Link to="/t/$slug/nueva-orden" params={{ slug: tenant.slug }}>
-          <Button className="bg-gradient-primary text-white shadow-elegant hover:opacity-95">
-            <FilePlus2 className="mr-1.5 h-4 w-4" /> Nueva orden
+          <Button className="bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold h-10 px-5 rounded-xl shadow-md gap-2 cursor-pointer active:scale-95 transition-all text-xs sm:text-sm flex items-center border border-[#1B4B73]">
+            <Plus className="h-4 w-4 text-[#F0B900] stroke-[3]" />
+            <span>Nueva orden</span>
           </Button>
         </Link>
       </PageHeader>
 
       {/* Alertas */}
       {hasProcesos && ordenesSinRetirar.length > 0 && (
-        <Card className="mb-4 border-amber-500/30 bg-amber-500/10 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-sm">
+        <Card className="mb-4 border-amber-500/30 bg-amber-500/10 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 font-bold">
               <Package className="h-5 w-5" />
@@ -442,26 +444,26 @@ function DashboardPage() {
               </div>
             </div>
           </div>
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} search={{ filter: "almacenadas" }}>
               <Button
                 variant="outline"
                 size="sm"
-                className="font-bold text-xs rounded-xl gap-1.5 h-9 bg-background/80 hover:bg-background border-amber-500/30 text-amber-900 dark:text-amber-200"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs hover:bg-muted/60 transition-all cursor-pointer shrink-0 whitespace-nowrap h-10"
               >
-                <Eye className="h-3.5 w-3.5" />
-                Ver órdenes
+                <Eye className="h-4 w-4 text-primary shrink-0" />
+                <span>Ver órdenes</span>
               </Button>
             </Link>
             {hasWhatsApp && (
               <Button
                 size="sm"
-                className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-sm gap-1.5 h-9"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10"
                 disabled={notificandoLote}
                 onClick={notificarTodosAlmacenados}
               >
-                {notificandoLote ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <MessageCircle className="h-3.5 w-3.5" />}
-                Notificar por WhatsApp ({ordenesSinRetirar.length})
+                {notificandoLote ? <Loader2 className="h-4 w-4 animate-spin shrink-0" /> : <MessageCircle className="h-4 w-4 shrink-0" />}
+                <span>Notificar por WhatsApp ({ordenesSinRetirar.length})</span>
               </Button>
             )}
           </div>
@@ -469,16 +471,21 @@ function DashboardPage() {
       )}
 
       {!caja && (
-        <Card className="mb-6 flex flex-wrap items-center gap-3 border-destructive/30 bg-destructive/5 p-4">
-          <AlertCircle className="h-5 w-5 text-destructive" />
-          <div className="flex-1">
-            <div className="font-medium">No hay caja abierta</div>
-            <div className="text-sm text-muted-foreground">
+        <Card className="mb-6 flex flex-wrap items-center gap-3 border-destructive/30 bg-destructive/5 p-4 rounded-2xl shadow-2xs">
+          <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+          <div className="flex-1 min-w-[200px]">
+            <div className="font-bold text-sm text-foreground">No hay caja abierta</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
               Abre la caja para comenzar a registrar ventas en efectivo.
             </div>
           </div>
           <Link to="/t/$slug/caja" params={{ slug: tenant.slug }}>
-            <Button variant="outline">Ir a caja</Button>
+            <Button 
+              variant="outline"
+              className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs hover:bg-muted/60 transition-all cursor-pointer h-10 shrink-0"
+            >
+              Ir a caja
+            </Button>
           </Link>
         </Card>
       )}
@@ -525,8 +532,9 @@ function DashboardPage() {
           {/* Header con Filtros */}
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
             <div>
-              <div className="text-base font-bold text-foreground leading-tight">
-                Ventas y Tendencia
+              <div className="flex items-center gap-2 text-base font-bold text-foreground leading-tight">
+                <TrendingUp className="h-5 w-5 text-primary shrink-0" />
+                <span>Ventas y Tendencia</span>
               </div>
               <p className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
                 <Info className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -705,8 +713,9 @@ function DashboardPage() {
       <Card className="mt-6 p-6">
         <div className="mb-4 flex items-center justify-between">
           <div>
-            <div className="font-display text-xl font-black text-slate-900 dark:text-white">
-              Órdenes recientes
+            <div className="flex items-center gap-2 font-display text-xl font-black text-slate-900 dark:text-white">
+              <Shirt className="h-5 w-5 text-primary shrink-0" />
+              <span>Órdenes recientes</span>
             </div>
             <div className="text-sm text-muted-foreground">
               {sortedOrdenes.length > 0

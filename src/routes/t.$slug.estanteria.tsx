@@ -389,17 +389,60 @@ export function EstanteriaPage() {
     }
   };
 
-  const getZoneIcon = (tipo: string) => {
+  const getZoneTheme = (tipo: string) => {
     switch (tipo) {
       case "conveyor":
-        return <RotateCw className="h-4 w-4" />;
+        return {
+          icon: RotateCw,
+          inactive: "bg-violet-50 dark:bg-violet-950/40 text-violet-800 dark:text-violet-300 border-violet-200 dark:border-violet-800 hover:bg-violet-100",
+          active: "bg-violet-600 text-white shadow-xs border-violet-600",
+          badgeInactive: "bg-violet-200/80 text-violet-900 dark:bg-violet-900/70 dark:text-violet-200",
+          badgeActive: "bg-white/25 text-white",
+          iconColor: "text-violet-600 dark:text-violet-400",
+        };
       case "estante":
-        return <Box className="h-4 w-4" />;
+        return {
+          icon: Box,
+          inactive: "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100",
+          active: "bg-emerald-600 text-white shadow-xs border-emerald-600",
+          badgeInactive: "bg-emerald-200/80 text-emerald-900 dark:bg-emerald-900/70 dark:text-emerald-200",
+          badgeActive: "bg-white/25 text-white",
+          iconColor: "text-emerald-600 dark:text-emerald-400",
+        };
       case "riel":
-        return <Sparkles className="h-4 w-4" />;
+        return {
+          icon: Sparkles,
+          inactive: "bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200 dark:border-amber-800 hover:bg-amber-100",
+          active: "bg-amber-500 text-white shadow-xs border-amber-500",
+          badgeInactive: "bg-amber-200/80 text-amber-950 dark:bg-amber-900/70 dark:text-amber-200",
+          badgeActive: "bg-white/25 text-white",
+          iconColor: "text-amber-600 dark:text-amber-400",
+        };
+      case "cesta":
+        return {
+          icon: ShoppingBag,
+          inactive: "bg-sky-50 dark:bg-sky-950/40 text-sky-800 dark:text-sky-300 border-sky-200 dark:border-sky-800 hover:bg-sky-100",
+          active: "bg-sky-600 text-white shadow-xs border-sky-600",
+          badgeInactive: "bg-sky-200/80 text-sky-950 dark:bg-sky-900/70 dark:text-sky-200",
+          badgeActive: "bg-white/25 text-white",
+          iconColor: "text-sky-600 dark:text-sky-400",
+        };
       default:
-        return <Layers className="h-4 w-4" />;
+        return {
+          icon: Tag,
+          inactive: "bg-rose-50 dark:bg-rose-950/40 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100",
+          active: "bg-rose-500 text-white shadow-xs border-rose-500",
+          badgeInactive: "bg-rose-200/80 text-rose-950 dark:bg-rose-900/70 dark:text-rose-200",
+          badgeActive: "bg-white/25 text-white",
+          iconColor: "text-rose-600 dark:text-rose-400",
+        };
     }
+  };
+
+  const getZoneIcon = (tipo: string) => {
+    const theme = getZoneTheme(tipo);
+    const Icon = theme.icon;
+    return <Icon className="h-4 w-4" />;
   };
 
   if (isAuthLoading) {
@@ -444,79 +487,82 @@ export function EstanteriaPage() {
         title="Estantería virtual"
         subtitle="Organización física de ganchos, rieles, casilleros y estantes de tu lavandería en tiempo real."
       >
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-2.5 flex-wrap">
           <Button
             type="button"
             onClick={() => setShowZoneModal(true)}
-            className="rounded-xl font-bold text-xs h-9 gap-1.5 bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-slate-200 shadow-xs cursor-pointer"
+            className="flex items-center gap-2 rounded-xl h-10 px-4 font-extrabold bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
           >
-            <FolderPlus className="h-4 w-4" />
-            Nueva Zona
+            <FolderPlus className="h-4 w-4 text-[#1B4B73] shrink-0" />
+            <span>Nueva Zona</span>
           </Button>
 
           <Button
             type="button"
             onClick={() => openBatchModal()}
-            className="rounded-xl font-bold text-xs h-9 gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white shadow-xs cursor-pointer"
+            className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
           >
-            <Layers className="h-4 w-4" />
-            Crear Rango
+            <Layers className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Crear Rango</span>
           </Button>
         </div>
       </PageHeader>
 
-      {/* METRIC CARDS */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
-        <Card className="p-4.5 rounded-2xl border bg-white dark:bg-slate-900 shadow-xs flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-xl bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
-            <Layers className="h-5 w-5" />
+      {/* 4 EXECUTIVE KPI CARDS (ESTILO /GASTOS) */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        {/* 1. Total Espacios (Variant: Solid Azul Añil #1B4B73) */}
+        <Card className="p-4 sm:p-4.5 rounded-2xl bg-[#1B4B73] text-white shadow-md border-0 flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs sm:text-[13px] uppercase tracking-wider text-white/90 font-black">Total Espacios</span>
+            <Layers className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-[#F0B900]" />
           </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Total Espacios</p>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white mt-0.5 leading-none">
-              {metrics.totalSlots} <span className="text-xs font-semibold text-muted-foreground">slots</span>
-            </h3>
+          <div className="my-1.5 font-display font-black tracking-tight text-white text-2xl sm:text-3xl">
+            {metrics.totalSlots}
           </div>
-        </Card>
-
-        <Card className="p-4.5 rounded-2xl border bg-white dark:bg-slate-900 shadow-xs flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <CheckCircle2 className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Disponibles</p>
-            <h3 className="text-xl font-black text-emerald-600 dark:text-emerald-400 mt-0.5 leading-none">
-              {metrics.freeCount} <span className="text-xs font-semibold text-muted-foreground">libres</span>
-            </h3>
+          <div className="text-xs sm:text-[13px] font-semibold truncate text-white/90">
+            Slots configurados
           </div>
         </Card>
 
-        <Card className="p-4.5 rounded-2xl border bg-white dark:bg-slate-900 shadow-xs flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
-            <Clock className="h-5 w-5" />
+        {/* 2. Disponibles (Variant: Emerald / Menta) */}
+        <Card className="p-4 sm:p-4.5 rounded-2xl bg-emerald-500/10 border border-emerald-500/25 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs sm:text-[13px] uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-black">Disponibles</span>
+            <CheckCircle2 className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
           </div>
-          <div className="min-w-0">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Ocupados</p>
-            <div className="flex items-baseline gap-2 mt-0.5">
-              <h3 className="text-xl font-black text-slate-900 dark:text-white leading-none">
-                {metrics.occupiedCount}
-              </h3>
-              <span className="text-xs font-bold text-amber-600 dark:text-amber-400">
-                {metrics.occupancyRate}% ocupación
-              </span>
-            </div>
+          <div className="my-1.5 font-display font-black tracking-tight text-foreground text-2xl sm:text-3xl">
+            {metrics.freeCount}
+          </div>
+          <div className="text-xs sm:text-[13px] font-bold truncate text-emerald-800 dark:text-emerald-300">
+            Espacios libres
           </div>
         </Card>
 
-        <Card className="p-4.5 rounded-2xl border bg-white dark:bg-slate-900 shadow-xs flex items-center gap-3.5">
-          <div className="h-11 w-11 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-            <Shirt className="h-5 w-5" />
+        {/* 3. Ocupados (Variant: Sky / Celeste) */}
+        <Card className="p-4 sm:p-4.5 rounded-2xl bg-sky-500/10 border border-sky-500/25 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs sm:text-[13px] uppercase tracking-wider text-sky-800 dark:text-sky-300 font-black">Ocupados</span>
+            <Clock className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-sky-600 dark:text-sky-400" />
           </div>
-          <div>
-            <p className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">Prendas Almacenadas</p>
-            <h3 className="text-xl font-black text-slate-900 dark:text-white mt-0.5 leading-none">
-              {metrics.totalGarments} <span className="text-xs font-semibold text-muted-foreground">prendas</span>
-            </h3>
+          <div className="my-1.5 font-display font-black tracking-tight text-foreground text-2xl sm:text-3xl">
+            {metrics.occupiedCount}
+          </div>
+          <div className="text-xs sm:text-[13px] font-bold truncate text-sky-800 dark:text-sky-300">
+            {metrics.occupancyRate}% Ocupación
+          </div>
+        </Card>
+
+        {/* 4. Prendas Almacenadas (Variant: Purple / Violeta) */}
+        <Card className="p-4 sm:p-4.5 rounded-2xl bg-purple-500/10 border border-purple-500/25 shadow-2xs flex flex-col justify-between">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs sm:text-[13px] uppercase tracking-wider text-purple-800 dark:text-purple-300 font-black">Prendas</span>
+            <Shirt className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-purple-600 dark:text-purple-400" />
+          </div>
+          <div className="my-1.5 font-display font-black tracking-tight text-foreground text-2xl sm:text-3xl">
+            {metrics.totalGarments}
+          </div>
+          <div className="text-xs sm:text-[13px] font-bold truncate text-purple-800 dark:text-purple-300">
+            En estantería
           </div>
         </Card>
       </div>
@@ -529,16 +575,16 @@ export function EstanteriaPage() {
             <button
               type="button"
               onClick={() => setSelectedZoneId("all")}
-              className={`h-9 flex items-center gap-2 px-3.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+              className={`h-9 flex items-center gap-2 px-3.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
                 selectedZoneId === "all"
-                  ? "bg-slate-900 dark:bg-white text-white dark:text-slate-900 shadow-xs"
-                  : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                  ? "bg-[#1B4B73] text-white shadow-xs border-[#1B4B73]"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border-slate-200 dark:border-slate-700"
               }`}
             >
-              <Layers className="h-4 w-4 shrink-0" />
+              <Layers className={`h-4 w-4 shrink-0 ${selectedZoneId === "all" ? "text-[#F0B900]" : "text-slate-500"}`} />
               <span>Todas las Zonas</span>
               <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
-                selectedZoneId === "all" ? "bg-white/20 dark:bg-black/10 text-white dark:text-slate-900" : "bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                selectedZoneId === "all" ? "bg-white/20 text-white" : "bg-slate-200/80 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
               }`}>
                 {metrics.totalSlots}
               </span>
@@ -546,21 +592,23 @@ export function EstanteriaPage() {
 
             {zonas.map((z) => {
               const isActive = selectedZoneId === z.id;
+              const theme = getZoneTheme(z.tipo);
+              const Icon = theme.icon;
               return (
                 <div key={z.id} className="inline-flex items-center gap-1">
                   <button
                     type="button"
                     onClick={() => setSelectedZoneId(z.id)}
-                    className={`h-9 flex items-center gap-2 px-3.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer ${
+                    className={`h-9 flex items-center gap-2 px-3.5 rounded-xl text-xs font-bold whitespace-nowrap transition-all cursor-pointer border ${
                       isActive
-                        ? "bg-indigo-600 text-white shadow-xs"
-                        : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700"
+                        ? theme.active
+                        : theme.inactive
                     }`}
                   >
-                    {getZoneIcon(z.tipo)}
+                    <Icon className={`h-4 w-4 shrink-0 ${isActive ? "text-white" : theme.iconColor}`} />
                     <span>{z.nombre}</span>
                     <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold ${
-                      isActive ? "bg-indigo-700 text-white" : "bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300"
+                      isActive ? theme.badgeActive : theme.badgeInactive
                     }`}>
                       {z.slots.length}
                     </span>
@@ -679,10 +727,10 @@ export function EstanteriaPage() {
             <Button
               type="button"
               onClick={() => setShowZoneModal(true)}
-              className="rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9.5 px-4 gap-1.5 shadow-xs cursor-pointer"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl h-10 px-6 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm"
             >
-              <Plus className="h-4 w-4" />
-              Crear Primera Zona
+              <FolderPlus className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Crear Primera Zona</span>
             </Button>
           </div>
         </Card>
@@ -699,10 +747,10 @@ export function EstanteriaPage() {
             <Button
               type="button"
               onClick={() => openBatchModal(selectedZoneId === "all" ? undefined : selectedZoneId)}
-              className="mt-4 rounded-xl bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs h-9 gap-1.5 cursor-pointer shadow-xs"
+              className="mt-5 inline-flex items-center gap-2 rounded-xl h-10 px-6 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm"
             >
-              <Layers className="h-4 w-4" />
-              Crear Rango
+              <Layers className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Crear Rango</span>
             </Button>
           )}
         </Card>

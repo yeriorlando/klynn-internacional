@@ -188,8 +188,9 @@ function LogisticaPage() {
     if (!o) return;
     try {
       const next: Orden = { ...o, estado: nextStatus };
+      // Optimistic update
+      setOrdenesRaw(prev => prev.map(item => item.id === id ? next : item));
       await saveOrden(next);
-      setRefresh(r => r + 1);
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenant?.id] });
       
       const msg = nextStatus === "EN_CAMINO" ? "¡Orden en camino hacia el cliente! 🛵" : "Estado actualizado ✅";
@@ -223,8 +224,9 @@ function LogisticaPage() {
     try {
       const repId = repartidorId === "NONE" ? undefined : repartidorId;
       const next: Orden = { ...o, repartidor_id: repId };
+      // Optimistic update so it's instantaneous!
+      setOrdenesRaw(prev => prev.map(item => item.id === orderId ? next : item));
       await saveOrden(next);
-      setRefresh(r => r + 1);
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenant?.id] });
       toast.success("Repartidor asignado con éxito 🛵");
     } catch (err) {
@@ -246,42 +248,41 @@ function LogisticaPage() {
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 space-y-6">
         
         {/* Header Hero Section */}
-        <section className="relative overflow-hidden rounded-3xl sm:rounded-[2.25rem] border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 p-4 sm:p-8 shadow-sm">
-          <div className="absolute right-0 top-0 h-full w-1/3 bg-gradient-to-l from-primary/5 via-primary/5 to-transparent pointer-events-none" />
-          
-          <div className="relative z-10 flex flex-col gap-4 sm:gap-6 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex-1 space-y-2 max-w-xl">
-              <div className="flex items-center gap-2">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-primary/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-primary">
-                  <Truck className="h-3.5 w-3.5" /> {isRepartidor ? "Mi Ruta de Entregas" : "Centro de Despacho & Delivery"}
+        <section className="relative overflow-hidden rounded-2xl sm:rounded-3xl border border-border/80 bg-surface p-5 sm:p-6 lg:p-7 shadow-xs">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+            {/* Text & Badge */}
+            <div className="space-y-2 max-w-2xl">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/60 dark:text-sky-300 px-3 py-1 text-[11px] font-black uppercase tracking-wider">
+                  <Truck className="h-3.5 w-3.5 text-[#F0B900]" /> {isRepartidor ? "Mi Ruta de Entregas" : "Centro de Despacho & Delivery"}
                 </span>
                 {stats.incidencias > 0 && (
-                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-50 dark:bg-rose-950/50 px-2.5 py-0.5 text-[10px] font-bold text-rose-600 border border-rose-200 dark:border-rose-900 animate-pulse">
+                  <span className="inline-flex items-center gap-1 rounded-full bg-rose-500/10 text-rose-700 dark:text-rose-300 px-2.5 py-0.5 text-[10px] font-bold border border-rose-500/20 animate-pulse">
                     <AlertTriangle className="h-3 w-3" /> {stats.incidencias} Incidencias
                   </span>
                 )}
               </div>
               
-              <h1 className="text-2xl sm:text-4xl font-display font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+              <h1 className="text-xl sm:text-2xl lg:text-3xl font-display font-black tracking-tight text-foreground leading-tight">
                 {isRepartidor ? "Mis Entregas Asignadas" : "Gestión de Rutas y Envíos a Domicilio"}
               </h1>
               
-              <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              <p className="text-xs sm:text-sm text-muted-foreground font-medium leading-relaxed">
                 {isRepartidor
                   ? `Hola ${user.empleado.nombre || "Chofer"}, aquí tienes tus órdenes asignadas para entregar hoy. Navega con Waze o Google Maps y registra cobros con firma digital en pantalla.`
                   : "Asigna repartidores, navega con Waze / Google Maps, confirma entregas con firma digital y asienta cobros en ruta automáticamente."}
               </p>
             </div>
             
-            {/* Action Buttons: Hoja de Ruta para Cajeras/Admins */}
+            {/* Action Button */}
             {!isRepartidor && (
-              <div className="flex flex-wrap items-center gap-3 shrink-0">
+              <div className="flex items-center gap-3 shrink-0 self-start md:self-center">
                 <Button
                   onClick={() => setShowManifest(true)}
-                  variant="outline"
-                  className="h-10 sm:h-11 rounded-2xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs font-extrabold shadow-sm gap-2"
+                  type="button"
+                  className="flex items-center gap-2 rounded-xl h-11 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
                 >
-                  <Printer className="h-4 w-4 text-slate-600 dark:text-slate-400" />
+                  <Printer className="h-4 w-4 text-[#F0B900] shrink-0" />
                   <span>Imprimir Hoja de Ruta</span>
                 </Button>
               </div>
@@ -289,53 +290,107 @@ function LogisticaPage() {
           </div>
         </section>
 
-        {/* KPIs Grid */}
-        <section className="grid grid-cols-2 gap-2.5 sm:gap-3.5 sm:grid-cols-3 lg:grid-cols-5">
-          <StatCard
-            label={isRepartidor ? "Por Salir" : "Por Despachar"}
-            value={stats.pendientes}
-            icon={<Clock className="h-4 w-4 sm:h-5 sm:w-5" />}
-            color="amber"
-            active={filterStatus === "LISTA"}
+        {/* 5 EXECUTIVE KPI CARDS (DISEÑO ESTANDARIZADO /CAJA /GASTOS) */}
+        <section className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
+          {/* 1. Por Despachar (Solid Azul Añil #1B4B73) */}
+          <Card
             onClick={() => setFilterStatus(filterStatus === "LISTA" ? "TODAS" : "LISTA")}
-          />
-          <StatCard
-            label="En Ruta Activa"
-            value={stats.enCamino}
-            icon={<Truck className="h-4 w-4 sm:h-5 sm:w-5" />}
-            color="sky"
-            active={filterStatus === "EN_CAMINO"}
-            onClick={() => setFilterStatus(filterStatus === "EN_CAMINO" ? "TODAS" : "EN_CAMINO")}
-          />
-          <StatCard
-            label="Entregadas Hoy"
-            value={stats.entregadas}
-            icon={<PackageCheck className="h-4 w-4 sm:h-5 sm:w-5" />}
-            color="emerald"
-            active={filterStatus === "ENTREGADA"}
-            onClick={() => setFilterStatus(filterStatus === "ENTREGADA" ? "TODAS" : "ENTREGADA")}
-          />
-          <StatCard
-            label="Incidencias"
-            value={stats.incidencias}
-            icon={<AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5" />}
-            color="rose"
-            active={filterStatus === "INCIDENCIA"}
-            onClick={() => setFilterStatus(filterStatus === "INCIDENCIA" ? "TODAS" : "INCIDENCIA")}
-          />
-          <div className="col-span-2 sm:col-span-1 p-3 sm:p-4 rounded-2xl sm:rounded-3xl border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm flex flex-col justify-between">
-            <div className="flex items-center justify-between">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                {isRepartidor ? "Cobro a Liquidar" : "Por Cobrar en Ruta"}
+            className={`p-4 sm:p-4.5 rounded-2xl bg-[#1B4B73] text-white shadow-md border-0 flex flex-col justify-between cursor-pointer transition-all active:scale-[0.98] hover:shadow-lg ${
+              filterStatus === "LISTA" ? "ring-2 ring-[#F0B900]" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs sm:text-[13px] uppercase tracking-wider text-white/90 font-black">
+                {isRepartidor ? "Por Salir" : "Por Despachar"}
               </span>
-              <div className="h-7 w-7 sm:h-8 sm:w-8 rounded-xl bg-emerald-50 text-emerald-600 dark:bg-emerald-950 flex items-center justify-center">
-                <DollarSign className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
-              </div>
+              <Clock className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-[#F0B900]" />
             </div>
-            <div className="text-lg sm:text-xl font-display font-black text-emerald-600 mt-1 sm:mt-2">
+            <div className="my-1.5 font-display font-black tracking-tight text-xl sm:text-2xl truncate text-white">
+              {stats.pendientes}
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-white/90 truncate">
+              Pendientes de salida
+            </div>
+          </Card>
+
+          {/* 2. En Ruta Activa (Sky Sutil) */}
+          <Card
+            onClick={() => setFilterStatus(filterStatus === "EN_CAMINO" ? "TODAS" : "EN_CAMINO")}
+            className={`p-4 sm:p-4.5 rounded-2xl bg-sky-500/10 dark:bg-sky-950/40 border border-sky-500/25 text-sky-800 dark:text-sky-300 shadow-2xs flex flex-col justify-between cursor-pointer transition-all active:scale-[0.98] hover:shadow-md ${
+              filterStatus === "EN_CAMINO" ? "ring-2 ring-sky-500" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs sm:text-[13px] uppercase tracking-wider text-sky-700 dark:text-sky-400 font-black">
+                En Ruta Activa
+              </span>
+              <Truck className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-sky-600 dark:text-sky-400" />
+            </div>
+            <div className="my-1.5 font-display font-black tracking-tight text-xl sm:text-2xl truncate text-sky-950 dark:text-sky-50">
+              {stats.enCamino}
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-sky-700/80 dark:text-sky-300/80 truncate">
+              En camino con chofer
+            </div>
+          </Card>
+
+          {/* 3. Entregadas (Emerald Sutil) */}
+          <Card
+            onClick={() => setFilterStatus(filterStatus === "ENTREGADA" ? "TODAS" : "ENTREGADA")}
+            className={`p-4 sm:p-4.5 rounded-2xl bg-emerald-500/10 dark:bg-emerald-950/40 border border-emerald-500/25 text-emerald-800 dark:text-emerald-300 shadow-2xs flex flex-col justify-between cursor-pointer transition-all active:scale-[0.98] hover:shadow-md ${
+              filterStatus === "ENTREGADA" ? "ring-2 ring-emerald-500" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs sm:text-[13px] uppercase tracking-wider text-emerald-700 dark:text-emerald-400 font-black">
+                Entregadas
+              </span>
+              <PackageCheck className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-emerald-600 dark:text-emerald-400" />
+            </div>
+            <div className="my-1.5 font-display font-black tracking-tight text-xl sm:text-2xl truncate text-emerald-950 dark:text-emerald-50">
+              {stats.entregadas}
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-emerald-700/80 dark:text-emerald-300/80 truncate">
+              Completadas con éxito
+            </div>
+          </Card>
+
+          {/* 4. Incidencias (Rose Sutil) */}
+          <Card
+            onClick={() => setFilterStatus(filterStatus === "INCIDENCIA" ? "TODAS" : "INCIDENCIA")}
+            className={`p-4 sm:p-4.5 rounded-2xl bg-rose-500/10 dark:bg-rose-950/40 border border-rose-500/25 text-rose-800 dark:text-rose-300 shadow-2xs flex flex-col justify-between cursor-pointer transition-all active:scale-[0.98] hover:shadow-md ${
+              filterStatus === "INCIDENCIA" ? "ring-2 ring-rose-500" : ""
+            }`}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs sm:text-[13px] uppercase tracking-wider text-rose-700 dark:text-rose-400 font-black">
+                Incidencias
+              </span>
+              <AlertTriangle className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-rose-600 dark:text-rose-400" />
+            </div>
+            <div className="my-1.5 font-display font-black tracking-tight text-xl sm:text-2xl truncate text-rose-950 dark:text-rose-50">
+              {stats.incidencias}
+            </div>
+            <div className="text-xs sm:text-[13px] font-bold text-rose-700/80 dark:text-rose-300/80 truncate">
+              Devueltas o reportadas
+            </div>
+          </Card>
+
+          {/* 5. Cobrar en Ruta (Amber Sutil) */}
+          <Card className="col-span-2 sm:col-span-1 p-4 sm:p-4.5 rounded-2xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/25 text-amber-800 dark:text-amber-300 shadow-2xs flex flex-col justify-between">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs sm:text-[13px] uppercase tracking-wider text-amber-700 dark:text-amber-400 font-black">
+                {isRepartidor ? "Cobro a Liquidar" : "Cobrar en Ruta"}
+              </span>
+              <DollarSign className="h-4 w-4 sm:h-5 sm:w-5 shrink-0 text-amber-600 dark:text-amber-400" />
+            </div>
+            <div className="my-1.5 font-display font-black tracking-tight text-xl sm:text-2xl truncate text-amber-950 dark:text-amber-50">
               {formatRD(stats.saldoPorCobrar)}
             </div>
-          </div>
+            <div className="text-xs sm:text-[13px] font-bold text-amber-700/80 dark:text-amber-300/80 truncate">
+              Saldo pendiente de cobro
+            </div>
+          </Card>
         </section>
 
         {/* Toolbar & Filters */}
@@ -358,14 +413,14 @@ function LogisticaPage() {
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-black uppercase text-slate-400">Repartidor:</span>
                 <Select value={filterRepartidor} onValueChange={setFilterRepartidor}>
-                  <SelectTrigger className="h-9 rounded-xl text-xs w-44 min-w-[170px] bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800">
-                    <SelectValue placeholder="Todos" />
+                  <SelectTrigger className="h-9 rounded-xl text-xs w-48 min-w-[195px] bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 cursor-pointer font-medium">
+                    <SelectValue placeholder="Todos los Repartidores" />
                   </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    <SelectItem value="TODOS">Todos los Repartidores</SelectItem>
-                    <SelectItem value="SIN_ASIGNAR">⚠️ Sin Asignar</SelectItem>
+                  <SelectContent className="rounded-2xl shadow-xl min-w-[215px]">
+                    <SelectItem value="TODOS" className="text-xs font-medium cursor-pointer">Todos los Repartidores</SelectItem>
+                    <SelectItem value="SIN_ASIGNAR" className="text-xs font-medium cursor-pointer">⚠️ Sin Asignar</SelectItem>
                     {repartidores.map(r => (
-                      <SelectItem key={r.id} value={r.id}>{r.nombre}</SelectItem>
+                      <SelectItem key={r.id} value={r.id} className="text-xs font-medium cursor-pointer">{r.nombre}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -377,13 +432,13 @@ function LogisticaPage() {
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-black uppercase text-slate-400">Sector:</span>
                 <Select value={filterSector} onValueChange={setFilterSector}>
-                  <SelectTrigger className="h-9 rounded-xl text-xs w-48 min-w-[185px] bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800">
+                  <SelectTrigger className="h-9 rounded-xl text-xs w-48 min-w-[195px] bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 cursor-pointer font-medium">
                     <SelectValue placeholder="Todos los Sectores" />
                   </SelectTrigger>
-                  <SelectContent className="rounded-xl">
-                    <SelectItem value="TODOS">Todos los Sectores</SelectItem>
+                  <SelectContent className="rounded-2xl shadow-xl min-w-[215px]">
+                    <SelectItem value="TODOS" className="text-xs font-medium cursor-pointer">Todos los Sectores</SelectItem>
                     {sectoresDisponibles.map(s => (
-                      <SelectItem key={s} value={s}>{s}</SelectItem>
+                      <SelectItem key={s} value={s} className="text-xs font-medium cursor-pointer">{s}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -904,13 +959,13 @@ function DeliveryCard({
               value={orden.repartidor_id || "NONE"}
               onValueChange={(val) => onAssignDriver(val)}
             >
-              <SelectTrigger className="h-8.5 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800">
+              <SelectTrigger className="h-9 text-xs rounded-xl bg-slate-50 dark:bg-slate-950 border-slate-200/80 dark:border-slate-800 cursor-pointer font-medium">
                 <SelectValue placeholder="Asignar repartidor..." />
               </SelectTrigger>
-              <SelectContent className="rounded-xl">
-                <SelectItem value="NONE" className="text-slate-400 text-xs">⚠️ Sin Asignar</SelectItem>
+              <SelectContent className="rounded-2xl shadow-xl min-w-[210px]">
+                <SelectItem value="NONE" className="text-slate-500 text-xs font-medium cursor-pointer">⚠️ Sin Asignar</SelectItem>
                 {repartidores.map(r => (
-                  <SelectItem key={r.id} value={r.id} className="text-xs">{r.nombre}</SelectItem>
+                  <SelectItem key={r.id} value={r.id} className="text-xs font-medium cursor-pointer">{r.nombre}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
