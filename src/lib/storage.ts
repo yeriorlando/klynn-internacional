@@ -44,6 +44,7 @@ export interface GlobalConfig {
   trialDays: number;
   defaultPlanId: PlanId;
   bankDetails?: BankDetails;
+  requireEmployeeOtp?: boolean;
 }
 
 export type RolEmpleado =
@@ -1460,6 +1461,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   requirePlanOnRegistration: true,
   trialDays: 14,
   defaultPlanId: "basico",
+  requireEmployeeOtp: false,
 };
 
 export async function getGlobalConfig(): Promise<GlobalConfig> {
@@ -1470,6 +1472,7 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
       .eq("id", 1)
       .maybeSingle();
     if (!error && data) {
+      const bank = data.bank_details ?? data.bankDetails;
       return {
         requirePlanOnRegistration:
           data.require_plan_on_registration ??
@@ -1478,7 +1481,11 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
         trialDays: data.trial_days ?? data.trialDays ?? DEFAULT_GLOBAL_CONFIG.trialDays,
         defaultPlanId:
           data.default_plan_id ?? data.defaultPlanId ?? DEFAULT_GLOBAL_CONFIG.defaultPlanId,
-        bankDetails: data.bank_details ?? data.bankDetails,
+        bankDetails: bank,
+        requireEmployeeOtp:
+          data.require_employee_otp ??
+          bank?.require_employee_otp ??
+          DEFAULT_GLOBAL_CONFIG.requireEmployeeOtp,
       };
     }
   } catch (e) {
@@ -1489,12 +1496,17 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
 
 export async function saveGlobalConfig(config: GlobalConfig) {
   try {
+    const bankDetailsToSave = {
+      ...(config.bankDetails || {}),
+      require_employee_otp: config.requireEmployeeOtp ?? false,
+    };
+
     const { error } = await supabase.from("global_config").upsert({
       id: 1,
       require_plan_on_registration: config.requirePlanOnRegistration,
       trial_days: config.trialDays,
       default_plan_id: config.defaultPlanId,
-      bank_details: config.bankDetails,
+      bank_details: bankDetailsToSave,
       updated_at: new Date().toISOString(),
     });
     if (error) console.error("Error saving global config to Supabase:", error);
@@ -1502,6 +1514,94 @@ export async function saveGlobalConfig(config: GlobalConfig) {
     console.error("Error saving global config:", e);
   }
   write(KEY.globalConfig, config);
+}
+
+export async function sendEmployeeSignUpOtp(
+  email: string,
+  password: string,
+  nombre: string,
+  tenantId: string,
+  rol: RolEmpleado = "VENDEDOR",
+) {
+  const emailLower = email.toLowerCase().trim();
+  const { data, error } = await supabase.auth.signUp({
+    email: emailLower,
+    password: password || "tempPassword123!",
+    options: {
+      data: {
+        nombre,
+        tenant_id: tenantId,
+        rol,
+      },
+    },
+  });
+  if (error) {
+    if (
+      error.message.toLowerCase().includes("already registered") ||
+      (error as any).status === 422
+    ) {
+      throw new Error(
+        `El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo diferente.`,
+      );
+    }
+    throw error;
+  }
+  return data;
+}
+
+export async function resendEmployeeSignUpOtp(email: string) {
+  const { data, error } = await supabase.auth.resend({
+    type: "signup",
+    email: email.toLowerCase().trim(),
+  });
+  if (error) throw error;
+  return data;
+}
+
+export async function verifyEmployeeOtpAndSave(
+  otpToken: string,
+  empleado: Empleado,
+): Promise<Empleado> {
+  const emailLower = empleado.email.toLowerCase().trim();
+
+  // 1. Verificar OTP en Supabase Auth
+  let verifyResult = await supabase.auth.verifyOtp({
+    email: emailLower,
+    token: otpToken.trim(),
+    type: "signup",
+  });
+
+  if (verifyResult.error) {
+    verifyResult = await supabase.auth.verifyOtp({
+      email: emailLower,
+      token: otpToken.trim(),
+      type: "email",
+    });
+  }
+
+  if (verifyResult.error) {
+    throw new Error(verifyResult.error.message || "Código de verificación inválido o expirado");
+  }
+
+  const user = verifyResult.data.user;
+  if (!user) throw new Error("No se pudo verificar el usuario");
+
+  // 2. Guardar en la tabla public.empleados con el ID de Auth verificado
+  const dataToSave = {
+    ...empleado,
+    id: user.id,
+    email: emailLower,
+    password: "***",
+    nombre: empleado.nombre || "",
+    apellido: empleado.apellido || "",
+    pin: empleado.pin || "",
+    avatar_url: empleado.avatar_url || null,
+  };
+
+  const { error: dbError } = await supabase.from("empleados").upsert(dataToSave);
+  if (dbError) throw new Error("Error al guardar en base de datos: " + dbError.message);
+
+  return dataToSave;
 }
 
 // ============ Empleados (Supabase) ============
@@ -1555,32 +1655,9 @@ export async function saveEmpleado(e: Empleado) {
           authError.message.toLowerCase().includes("already registered") ||
           authError.status === 422
         ) {
-          // El usuario ya existe en Auth. Sincronizamos con su ID de la tabla empleados
-          const { data: existingByEmail } = await supabase
-            .from("empleados")
-            .select("id")
-            .eq("email", emailLower)
-            .maybeSingle();
-
-          if (existingByEmail) {
-            console.log(
-              "El usuario ya existe en Auth y public.empleados. Usando ID existente:",
-              existingByEmail.id,
-            );
-            e.id = existingByEmail.id;
-
-            // Si especificó contraseña, actualizarla
-            if (e.password && e.password !== "***") {
-              await supabase.rpc("admin_set_user_password", {
-                target_user_id: e.id,
-                new_password: e.password,
-              });
-            }
-          } else {
-            throw new Error(
-              `El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente.`,
-            );
-          }
+          throw new Error(
+            `El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente para este empleado.`,
+          );
         } else {
           console.error("SIGNUP ERROR:", authError);
           throw new Error("Error de Auth al crear empleado: " + authError.message);
@@ -1625,50 +1702,50 @@ export async function saveEmpleado(e: Empleado) {
     }
   } else {
     // 1. Manejo de Seguridad en Supabase Auth para edición de usuario existente
-    if (e.password && e.password.length >= 6 && e.password !== "***") {
-      try {
-        const {
-          data: { user: currentUser },
-        } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user: currentUser },
+      } = await supabase.auth.getUser();
 
-        // Caso especial: El admin se actualiza a sí mismo
-        if (currentUser && currentUser.id === e.id) {
+      // Caso especial: El usuario se actualiza a sí mismo
+      if (currentUser && currentUser.id === e.id) {
+        if (e.password && e.password.length >= 6 && e.password !== "***") {
           console.log("Auto-actualización de contraseña...");
           const { error: updateError } = await supabase.auth.updateUser({ password: e.password });
           if (updateError) authErrorMsg = "Error auto-update: " + updateError.message;
+        }
 
-          if (currentUser.email !== emailLower) {
-            console.log("Auto-actualización de email...");
-            const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
-            if (emailError)
-              authErrorMsg =
-                (authErrorMsg ? authErrorMsg + " " : "") +
-                "Error auto-update email: " +
-                emailError.message;
-          }
-        } else if (e.id && e.id.length === 36) {
-          // Actualizar usuario existente que ya tiene ID de Auth (UUID)
-          console.log("Actualizando contraseña/correo de usuario UUID en Auth via RPC...");
+        if (currentUser.email?.toLowerCase() !== emailLower) {
+          console.log("Auto-actualización de email...");
+          const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
+          if (emailError)
+            authErrorMsg =
+              (authErrorMsg ? authErrorMsg + " " : "") +
+              "Error auto-update email: " +
+              emailError.message;
+        }
+      } else if (e.id && e.id.length === 36) {
+        // Actualizar usuario existente (empleado) que ya tiene ID de Auth (UUID)
+        if (e.password && e.password.length >= 6 && e.password !== "***") {
+          console.log("Actualizando contraseña de usuario UUID en Auth via RPC...");
           const { error: rpcError } = await supabase.rpc("admin_set_user_password", {
             target_user_id: e.id,
             new_password: e.password,
           });
-          if (rpcError) {
-            console.error("RPC ERROR:", rpcError);
-          }
-
-          const { error: emailRpcError } = await supabase.rpc("admin_set_user_email", {
-            target_user_id: e.id,
-            new_email: emailLower,
-          });
-          if (emailRpcError) {
-            console.error("RPC EMAIL ERROR:", emailRpcError);
-          }
+          if (rpcError) console.error("RPC ERROR:", rpcError);
         }
-      } catch (err: any) {
-        console.error("EXCEPCION AUTH:", err);
-        authErrorMsg = "Excepción: " + err.message;
+
+        // Sincronizar el correo en Auth via RPC
+        console.log("Actualizando correo de usuario UUID en Auth via RPC...");
+        const { error: emailRpcError } = await supabase.rpc("admin_set_user_email", {
+          target_user_id: e.id,
+          new_email: emailLower,
+        });
+        if (emailRpcError) console.error("RPC EMAIL ERROR:", emailRpcError);
       }
+    } catch (err: any) {
+      console.error("EXCEPCION AUTH:", err);
+      authErrorMsg = "Excepción: " + err.message;
     }
   }
 
@@ -1697,10 +1774,19 @@ export async function saveEmpleado(e: Empleado) {
 
 export async function deleteEmpleado(id: string) {
   // 1. Intentar borrar de Auth primero (vía RPC)
-  try {
-    await supabase.rpc("admin_delete_user", { target_user_id: id });
-  } catch (e) {
-    console.warn("No se pudo eliminar el usuario de Auth, procediendo con DB...", e);
+  if (id && id.length === 36) {
+    try {
+      const { error: rpcError } = await supabase.rpc("admin_delete_user", { target_user_id: id });
+      if (rpcError) {
+        console.error("RPC admin_delete_user error:", rpcError);
+        if (!rpcError.message.toLowerCase().includes("not found")) {
+          throw new Error("Error al eliminar cuenta de acceso: " + rpcError.message);
+        }
+      }
+    } catch (e: any) {
+      console.error("Error al eliminar usuario en Auth:", e);
+      throw e;
+    }
   }
 
   // 2. Borrar de la tabla empleados
@@ -2493,16 +2579,19 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   }
 
   // Caso 2: Usuario regular
-  const { data: emps } = await supabase
+  const { data: empsRaw } = await supabase
     .from("empleados")
     .select("*")
     .eq("email", email)
     .eq("activo", true);
 
-  if (!emps || emps.length === 0) {
+  if (!empsRaw || empsRaw.length === 0) {
     if (isBrowser()) localStorage.removeItem("lvx:session");
     return null;
   }
+
+  // Priorizar cuentas ADMIN sobre otros roles para evitar degradación de privilegios
+  const emps = [...empsRaw].sort((a, b) => (a.rol === "ADMIN" ? -1 : b.rol === "ADMIN" ? 1 : 0));
 
   // 1. Intentar hacer match con el tenant_id de la sesión guardada
   if (session?.tenant_id) {

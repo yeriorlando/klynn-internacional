@@ -2023,7 +2023,8 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
   const navigate = useNavigate();
   const { nombre, rol, avatar_url } = empleado;
   const [open, setOpen] = useState(false);
-  const avatarName = [nombre, empleado.apellido].filter(Boolean).join(" ");
+  const fullName = [nombre, empleado.apellido].filter(Boolean).join(" ");
+  const avatarName = fullName || "Usuario";
   const roleLabel =
     (
       {
@@ -2041,7 +2042,7 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          aria-label={`Abrir menú de ${nombre}`}
+          aria-label={`Abrir menú de ${fullName || nombre}`}
           className="group flex h-11 items-center gap-2.5 rounded-xl border border-transparent px-1.5 pr-2 transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 data-[state=open]:border-slate-200 data-[state=open]:bg-white data-[state=open]:shadow-sm dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:data-[state=open]:border-slate-700 dark:data-[state=open]:bg-slate-900"
         >
           <span className="relative grid h-9 w-9 shrink-0 place-items-center rounded-full bg-gradient-primary text-[12px] font-black tracking-wide text-white shadow-sm ring-2 ring-white dark:ring-slate-950">
@@ -2053,8 +2054,8 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
           </span>
 
           <span className="hidden min-w-0 text-left md:block">
-            <span className="block max-w-28 truncate text-[13px] font-bold leading-4 text-slate-900 dark:text-slate-100">
-              {nombre.split(" ")[0]}
+            <span className="block max-w-32 truncate text-[13px] font-bold leading-4 text-slate-900 dark:text-slate-100">
+              {nombre || "Usuario"}
             </span>
             <span className="block text-[10px] font-semibold uppercase leading-4 tracking-[0.08em] text-slate-500 dark:text-slate-400">
               {roleLabel}
@@ -2090,7 +2091,7 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
 
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-extrabold leading-4 text-slate-950 dark:text-white">
-                {nombre}
+                {fullName || nombre || "Usuario"}
               </p>
               <div className="mt-0.5 flex items-center gap-1.5">
                 <span className="inline-flex items-center gap-1 rounded-full border border-primary/15 bg-white/80 px-1.5 py-0.5 text-[9px] font-bold text-primary shadow-sm dark:bg-slate-900/80">

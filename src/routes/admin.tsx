@@ -1257,11 +1257,11 @@ function AdminPage() {
           </TabsContent>
 
           <TabsContent value="plans" className="mt-6 sm:mt-8 space-y-6">
-            <div className="mb-6 rounded-2xl border border-border/50 bg-surface p-6 shadow-sm">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="mb-6 rounded-2xl border border-border/50 bg-surface p-6 shadow-sm space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/40 pb-4">
                 <div>
-                  <h3 className="font-bold text-lg">Configuración de Registro</h3>
-                  <p className="text-sm text-muted-foreground">Controla cómo se registran las nuevas lavanderías.</p>
+                  <h3 className="font-bold text-lg text-foreground">Configuración de Registro SaaS</h3>
+                  <p className="text-xs text-muted-foreground">Controla las condiciones de prueba y planes para nuevas lavanderías.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-4 md:gap-6">
                   <div className="flex items-center gap-2">
@@ -1280,13 +1280,40 @@ function AdminPage() {
                       onCheckedChange={(v) => setGlobalConfig({ ...globalConfig, requirePlanOnRegistration: v })}
                     />
                   </div>
+                </div>
+              </div>
+
+              {/* SEGURIDAD & AUTENTICACIÓN: VERIFICACIÓN OTP PARA EMPLEADOS */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold text-sm text-foreground">Verificación OTP para Nuevos Empleados</h4>
+                      <Badge variant="outline" className={`text-[10px] font-bold ${globalConfig.requireEmployeeOtp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
+                        {globalConfig.requireEmployeeOtp ? "Activo (Exige OTP)" : "Inactivo (Directo)"}
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Exigir código de confirmación de 6 dígitos enviado al correo del empleado al crearlo en /personal
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4 self-end sm:self-auto">
+                  <Switch
+                    checked={Boolean(globalConfig.requireEmployeeOtp)}
+                    onCheckedChange={(v) => setGlobalConfig({ ...globalConfig, requireEmployeeOtp: v })}
+                  />
                   <Button
                     size="sm"
                     onClick={async () => {
                       await saveGlobalConfig(globalConfig);
-                      toast.success("Configuración guardada");
+                      toast.success("Configuración global guardada correctamente");
                     }}
-                    className="h-9 px-4 rounded-lg shadow-md font-bold"
+                    className="h-9 px-4 rounded-xl shadow-sm font-bold bg-[#1B4B73] hover:bg-[#143755] text-white cursor-pointer"
                   >
                     Guardar cambios
                   </Button>

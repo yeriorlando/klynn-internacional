@@ -70,11 +70,17 @@ import {
   PERMISOS_SISTEMA,
   getPermisosPorRol,
   can,
+  sendEmployeeSignUpOtp,
+  resendEmployeeSignUpOtp,
+  verifyEmployeeOtpAndSave,
+  getGlobalConfig,
   type Empleado,
   type RolEmpleado,
   type Orden,
   type Caja,
+  type GlobalConfig,
 } from "@/lib/storage";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
 import { Checkbox } from "@/components/ui/checkbox";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -145,6 +151,8 @@ function PersonalPage() {
   const [limits, setLimits] = useState<any>({ employeesReached: false, employeeLimit: 0 });
   const [loading, setLoading] = useState(true);
 
+  const [globalConfig, setGlobalConfig] = useState<GlobalConfig | null>(null);
+
   const tenant = user?.tenant;
   const tenantId = tenant?.id || "";
 
@@ -152,14 +160,16 @@ function PersonalPage() {
     async function load() {
       if (!user || !tenant || !tenantId || tenantId === "__loading__") return;
       setLoading(true);
-      const [eList, oList, lim] = await Promise.all([
+      const [eList, oList, lim, cfg] = await Promise.all([
         getEmpleados(tenantId),
         getOrdenes(tenantId),
         checkPlanLimits(tenant),
+        getGlobalConfig(),
       ]);
       setEmps(eList);
       setOrdenes(oList);
       setLimits(lim);
+      setGlobalConfig(cfg);
       setLoading(false);
     }
     load();
@@ -315,7 +325,7 @@ function PersonalPage() {
         })}
       </div>
       <EmpleadoDialog
-        open={showNew || !!edit}
+        open={showNew || Boolean(edit)}
         onOpenChange={(o) => {
           if (!o) {
             setShowNew(false);
@@ -324,6 +334,10 @@ function PersonalPage() {
         }}
         empleado={edit}
         tenantId={user.tenant.id}
+        existingEmployees={emps}
+        currentUserEmail={user.empleado.email}
+        currentEmployeeId={user.empleado.id}
+        requireEmployeeOtp={Boolean(globalConfig?.requireEmployeeOtp)}
         onDone={() => {
           setRefresh((r) => r + 1);
           setShowNew(false);
@@ -347,12 +361,20 @@ function EmpleadoDialog({
   onOpenChange,
   empleado,
   tenantId,
+  existingEmployees = [],
+  currentUserEmail,
+  currentEmployeeId,
+  requireEmployeeOtp = false,
   onDone,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   empleado: Empleado | null;
   tenantId: string;
+  existingEmployees?: Empleado[];
+  currentUserEmail?: string;
+  currentEmployeeId?: string;
+  requireEmployeeOtp?: boolean;
   onDone: () => void;
 }) {
   const empty = {
@@ -376,12 +398,33 @@ function EmpleadoDialog({
         }
       : empty,
   );
-  const [step, setStep] = useState<1 | 2>(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [isOtpRequired, setIsOtpRequired] = useState(requireEmployeeOtp);
+
+  // Estados para verificación OTP
+  const [otpCode, setOtpCode] = useState("");
+  const [otpTimer, setOtpTimer] = useState(60);
+  const [canResendOtp, setCanResendOtp] = useState(false);
+  const [resendingOtp, setResendingOtp] = useState(false);
+
+  useEffect(() => {
+    setIsOtpRequired(requireEmployeeOtp);
+    if (open) {
+      getGlobalConfig().then((cfg) => {
+        if (cfg?.requireEmployeeOtp !== undefined) {
+          setIsOtpRequired(Boolean(cfg.requireEmployeeOtp));
+        }
+      });
+    }
+  }, [open, requireEmployeeOtp]);
 
   useEffect(() => {
     setStep(1);
+    setOtpCode("");
+    setOtpTimer(60);
+    setCanResendOtp(false);
     if (empleado) {
       setF({
         ...empty,
@@ -395,6 +438,23 @@ function EmpleadoDialog({
       setF(empty);
     }
   }, [empleado, open]);
+
+  // Contador de reenvío OTP
+  useEffect(() => {
+    let interval: any;
+    if (step === 3 && otpTimer > 0) {
+      interval = setInterval(() => {
+        setOtpTimer((prev) => {
+          if (prev <= 1) {
+            setCanResendOtp(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [step, otpTimer]);
 
   const togglePermiso = (id: string) => {
     const next = f.permisos.includes(id) ? f.permisos.filter((p) => p !== id) : [...f.permisos, id];
@@ -415,52 +475,135 @@ function EmpleadoDialog({
     toast.info(`Permisos restablecidos para el rol ${f.rol}`);
   };
 
-  function handleNext() {
+  function validateStep1(): boolean {
     const nom = (f.nombre || "").trim();
     const ape = (f.apellido || "").trim();
-    const em = (f.email || "").trim();
+    const em = (f.email || "").trim().toLowerCase();
 
-    if (!nom || !ape) {
-      toast.error("Por favor ingresa nombre y apellido del empleado");
-      return;
+    if (!nom) {
+      toast.error("El nombre del empleado es obligatorio");
+      return false;
     }
-    if (!em || !em.includes("@")) {
-      toast.error("Ingresa un correo electrónico válido");
-      return;
+    if (!ape) {
+      toast.error("El apellido del empleado es obligatorio");
+      return false;
+    }
+    if (!em || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(em)) {
+      toast.error("Ingresa un correo electrónico válido (ej. empleado@gmail.com)");
+      return false;
+    }
+    if (!f.rol) {
+      toast.error("Debes seleccionar un rol para el empleado");
+      return false;
+    }
+    // Si se está creando un empleado nuevo y se usa el correo del admin que está en sesión
+    if (!empleado && currentUserEmail && em === currentUserEmail.toLowerCase().trim()) {
+      toast.error("No puedes asignar el correo del administrador principal a otro empleado");
+      return false;
+    }
+    // Si se duplica el correo de otro empleado en esta sucursal
+    const duplicate = existingEmployees.find(
+      (other) => other.id !== empleado?.id && (other.email || "").toLowerCase().trim() === em
+    );
+    if (duplicate) {
+      toast.error(`El correo "${em}" ya está registrado para el empleado ${duplicate.nombre} ${duplicate.apellido || ""}`);
+      return false;
     }
     if (!empleado && (f.password || "").length < 8) {
       toast.error("La contraseña inicial debe tener al menos 8 caracteres");
-      return;
+      return false;
     }
+    return true;
+  }
+
+  function handleNext() {
+    if (!validateStep1()) return;
     setStep(2);
   }
 
-  async function submit() {
-    const nom = (f.nombre || "").trim();
-    const ape = (f.apellido || "").trim();
-    const em = (f.email || "").trim();
-
-    if (!nom || !ape || !em.includes("@")) {
-      toast.error("Nombre, apellido y email válidos requeridos");
-      setStep(1);
-      return;
+  async function handleResendOtp() {
+    if (!canResendOtp || resendingOtp) return;
+    setResendingOtp(true);
+    try {
+      await resendEmployeeSignUpOtp(f.email.trim());
+      setOtpTimer(60);
+      setCanResendOtp(false);
+      toast.success("Código de verificación reenviado a " + f.email);
+    } catch (err: any) {
+      toast.error(err.message || "Error al reenviar código");
+    } finally {
+      setResendingOtp(false);
     }
-    if (!empleado && (f.password || "").length < 8) {
-      toast.error("La contraseña inicial debe tener al menos 8 caracteres");
-      setStep(1);
+  }
+
+  async function handleVerifyOtp() {
+    if (otpCode.trim().length !== 6) {
+      toast.error("Ingresa el código completo de 6 dígitos");
       return;
     }
 
     setLoading(true);
     try {
       const e: Empleado = {
+        id: uid("emp"),
+        tenant_id: tenantId,
+        nombre: f.nombre.trim(),
+        apellido: f.apellido ? f.apellido.trim() : undefined,
+        email: f.email.trim().toLowerCase(),
+        password: f.password,
+        pin: f.pin ? f.pin.trim() : undefined,
+        rol: f.rol,
+        activo: f.activo,
+        permisos: f.permisos,
+        max_descuento_porcentaje: f.rol === "ADMIN" ? 100 : Number(f.max_descuento_porcentaje) || 0,
+        creado_en: new Date().toISOString(),
+      };
+      await verifyEmployeeOtpAndSave(otpCode.trim(), e);
+      toast.success("¡Empleado verificado y registrado exitosamente!");
+      onDone();
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err.message || "Código OTP inválido o expirado");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function submit() {
+    if (!validateStep1()) {
+      setStep(1);
+      return;
+    }
+
+    // Si la configuración global exige OTP y es un empleado NUEVO
+    if (isOtpRequired && !empleado) {
+      setLoading(true);
+      try {
+        await sendEmployeeSignUpOtp(f.email, f.password, f.nombre, tenantId, f.rol);
+        setStep(3);
+        setOtpTimer(60);
+        setCanResendOtp(false);
+        toast.info(`Hemos enviado un código OTP de 6 dígitos al correo ${f.email}`);
+      } catch (err: any) {
+        console.error(err);
+        toast.error(err.message || "Error al enviar código de verificación");
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    // Flujo normal directo (sin OTP o edición de empleado existente)
+    setLoading(true);
+    try {
+      const e: Empleado = {
         id: empleado?.id || uid("emp"),
         tenant_id: tenantId,
-        nombre: f.nombre,
-        apellido: f.apellido || undefined,
-        email: f.email,
+        nombre: f.nombre.trim(),
+        apellido: f.apellido ? f.apellido.trim() : undefined,
+        email: f.email.trim().toLowerCase(),
         password: f.password || (empleado ? "***" : ""),
-        pin: f.pin || undefined,
+        pin: f.pin ? f.pin.trim() : undefined,
         rol: f.rol,
         activo: f.activo,
         permisos: f.permisos,
@@ -493,6 +636,8 @@ function EmpleadoDialog({
     }
   }
 
+  const isThreeSteps = isOtpRequired && !empleado;
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
@@ -502,7 +647,13 @@ function EmpleadoDialog({
           <div className="flex items-center justify-between mb-2.5 pr-10">
             <div className="flex items-center gap-2.5">
               <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
-                {step === 1 ? <User className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
+                {step === 1 ? (
+                  <User className="h-5 w-5" />
+                ) : step === 2 ? (
+                  <ShieldCheck className="h-5 w-5" />
+                ) : (
+                  <KeyRound className="h-5 w-5" />
+                )}
               </div>
               <div>
                 <DialogTitle className="text-base font-display font-bold text-foreground">
@@ -511,22 +662,25 @@ function EmpleadoDialog({
                 <p className="text-xs text-muted-foreground">
                   {step === 1
                     ? "Paso 1: Datos personales y de acceso"
-                    : "Paso 2: Permisos por módulo del sistema"}
+                    : step === 2
+                    ? "Paso 2: Permisos por módulo del sistema"
+                    : "Paso 3: Verificación de código OTP"}
                 </p>
               </div>
             </div>
           </div>
 
           {/* Stepper Buttons */}
-          <div className="grid grid-cols-2 gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
+          <div className={`grid ${isThreeSteps ? "grid-cols-3" : "grid-cols-2"} gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80`}>
             <button
               type="button"
-              onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-2 px-3.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              onClick={() => step !== 3 && setStep(1)}
+              disabled={step === 3}
+              className={`flex items-center justify-center gap-2 py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
                 step === 1
                   ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
+              } ${step === 3 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <span
                 className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
@@ -537,17 +691,18 @@ function EmpleadoDialog({
               >
                 1
               </span>
-              <span>Información Básica</span>
+              <span className="truncate">Datos</span>
             </button>
 
             <button
               type="button"
-              onClick={handleNext}
-              className={`flex items-center justify-center gap-2 py-2 px-3.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer ${
+              onClick={() => step !== 3 && handleNext()}
+              disabled={step === 3}
+              className={`flex items-center justify-center gap-2 py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
                 step === 2
                   ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              }`}
+              } ${step === 3 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <span
                 className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
@@ -558,14 +713,35 @@ function EmpleadoDialog({
               >
                 2
               </span>
-              <span>Permisos ({f.permisos.length})</span>
+              <span className="truncate">Permisos</span>
             </button>
+
+            {isThreeSteps && (
+              <div
+                className={`flex items-center justify-center gap-2 py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
+                  step === 3
+                    ? "bg-[#1B4B73] text-white shadow-sm font-bold"
+                    : "text-slate-600 dark:text-slate-400"
+                }`}
+              >
+                <span
+                  className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
+                    step === 3
+                      ? "bg-[#F0B900] text-[#1B4B73]"
+                      : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  3
+                </span>
+                <span className="truncate">Código OTP</span>
+              </div>
+            )}
           </div>
         </div>
 
         {/* DIALOG BODY - TIGHT SEAMLESS ATTACHMENT */}
         <div className="px-4 sm:px-5 pt-2 pb-4">
-          {step === 1 ? (
+          {step === 1 && (
             /* STEP 1: INFORMACIÓN Y ACCESO */
             <div className="space-y-2.5 animate-in fade-in slide-in-from-left-3 duration-200">
               <div className="grid gap-2.5 sm:grid-cols-2">
@@ -600,16 +776,18 @@ function EmpleadoDialog({
               </div>
 
               <div className="space-y-1">
-                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Correo Electrónico *
+                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                  <span>Correo Electrónico</span>
+                  <span className="text-destructive font-black">*</span>
                 </Label>
                 <div className="relative">
                   <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                   <Input
                     type="email"
+                    required
                     value={f.email}
                     onChange={(e) => setF({ ...f, email: e.target.value })}
-                    placeholder="empleado@klynn.do"
+                    placeholder="ej. empleado@gmail.com"
                     className="h-10 pl-9.5 rounded-xl bg-surface border-border/60 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20"
                   />
                 </div>
@@ -617,8 +795,9 @@ function EmpleadoDialog({
 
               <div className="grid gap-2.5 sm:grid-cols-2">
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    {empleado ? "Cambiar contraseña" : "Contraseña *"}
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <span>{empleado ? "Cambiar contraseña" : "Contraseña"}</span>
+                    {!empleado && <span className="text-destructive font-black">*</span>}
                   </Label>
                   <div className="relative">
                     <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
@@ -662,8 +841,9 @@ function EmpleadoDialog({
 
               <div className="grid gap-2.5 sm:grid-cols-2 items-center">
                 <div className="space-y-1">
-                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Rol en el negocio
+                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+                    <span>Rol en el negocio</span>
+                    <span className="text-destructive font-black">*</span>
                   </Label>
                   <Select
                     value={f.rol}
@@ -722,7 +902,9 @@ function EmpleadoDialog({
                 <PasswordStrengthIndicator password={f.password} />
               </div>
             </div>
-          ) : (
+          )}
+
+          {step === 2 && (
             /* STEP 2: PERMISOS DE ACCESO */
             <div className="space-y-2.5 animate-in fade-in slide-in-from-right-3 duration-200">
               {/* Toolbar Actions (Primary Brand Background Card) */}
@@ -853,6 +1035,74 @@ function EmpleadoDialog({
             </div>
           )}
 
+          {step === 3 && (
+            /* STEP 3: VERIFICACIÓN OTP */
+            <div className="space-y-4 py-2 animate-in fade-in zoom-in-95 duration-200">
+              <div className="text-center space-y-2 p-4 rounded-2xl bg-primary/5 border border-primary/15">
+                <div className="mx-auto w-12 h-12 rounded-2xl bg-[#1B4B73] text-white flex items-center justify-center shadow-md">
+                  <Mail className="h-6 w-6 text-[#F0B900]" />
+                </div>
+                <div>
+                  <h4 className="font-display font-bold text-base text-foreground">
+                    Verificación de Correo Electrónico
+                  </h4>
+                  <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+                    Hemos enviado un código OTP de 6 dígitos al correo del empleado:
+                  </p>
+                  <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white dark:bg-slate-900 border border-primary/20 shadow-xs">
+                    <span className="font-mono text-xs font-bold text-primary">{f.email}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col items-center justify-center space-y-3 pt-1">
+                <Label className="text-xs font-bold text-muted-foreground uppercase tracking-wider text-center block">
+                  Ingresa los 6 dígitos del código
+                </Label>
+                <InputOTP
+                  maxLength={6}
+                  value={otpCode}
+                  onChange={(val) => setOtpCode(val)}
+                  onComplete={() => {}}
+                  autoFocus
+                >
+                  <InputOTPGroup className="gap-2 sm:gap-2.5">
+                    <InputOTPSlot index={0} className="h-12 w-10 sm:h-13 sm:w-11 text-lg sm:text-xl font-black rounded-xl border-slate-300 dark:border-slate-700 bg-surface focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                    <InputOTPSlot index={1} className="h-12 w-10 sm:h-13 sm:w-11 text-lg sm:text-xl font-black rounded-xl border-slate-300 dark:border-slate-700 bg-surface focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                    <InputOTPSlot index={2} className="h-12 w-10 sm:h-13 sm:w-11 text-lg sm:text-xl font-black rounded-xl border-slate-300 dark:border-slate-700 bg-surface focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                    <InputOTPSlot index={3} className="h-12 w-10 sm:h-13 sm:w-11 text-lg sm:text-xl font-black rounded-xl border-slate-300 dark:border-slate-700 bg-surface focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                    <InputOTPSlot index={4} className="h-12 w-10 sm:h-13 sm:w-11 text-lg sm:text-xl font-black rounded-xl border-slate-300 dark:border-slate-700 bg-surface focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                    <InputOTPSlot index={5} className="h-12 w-10 sm:h-13 sm:w-11 text-lg sm:text-xl font-black rounded-xl border-slate-300 dark:border-slate-700 bg-surface focus:border-[#1B4B73] focus:ring-[#1B4B73]" />
+                  </InputOTPGroup>
+                </InputOTP>
+
+                <div className="text-center pt-2">
+                  <p className="text-xs text-muted-foreground">
+                    ¿No recibió el código en su bandeja o spam?
+                  </p>
+                  <Button
+                    type="button"
+                    variant="link"
+                    size="sm"
+                    disabled={!canResendOtp || resendingOtp}
+                    onClick={handleResendOtp}
+                    className="text-xs font-bold text-primary hover:underline h-7 p-0 cursor-pointer disabled:opacity-50 disabled:no-underline"
+                  >
+                    {resendingOtp ? (
+                      <span className="flex items-center gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" /> Reenviando...
+                      </span>
+                    ) : canResendOtp ? (
+                      "Reenviar código OTP"
+                    ) : (
+                      `Reenviar código en ${otpTimer}s`
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+
           {/* FOOTER ACTIONS */}
           <div className="pt-3 mt-3 border-t border-border/50 flex items-center justify-between gap-2">
             <div>
@@ -898,6 +1148,15 @@ function EmpleadoDialog({
                 >
                   <ArrowLeft className="h-3.5 w-3.5" /> Anterior
                 </Button>
+              ) : step === 3 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(1)}
+                  className="rounded-xl h-9.5 px-4 text-xs font-semibold gap-1.5 border-slate-300 cursor-pointer"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> Editar datos
+                </Button>
               ) : null}
             </div>
 
@@ -919,7 +1178,7 @@ function EmpleadoDialog({
                 >
                   Siguiente: Permisos <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
-              ) : (
+              ) : step === 2 ? (
                 <Button
                   type="button"
                   onClick={submit}
@@ -931,7 +1190,27 @@ function EmpleadoDialog({
                   ) : (
                     <Check className="h-3.5 w-3.5" />
                   )}
-                  <span>{empleado ? "Guardar cambios" : "Crear empleado"}</span>
+                  <span>
+                    {empleado
+                      ? "Guardar cambios"
+                      : isOtpRequired
+                      ? "Continuar con Verificación OTP"
+                      : "Crear empleado"}
+                  </span>
+                </Button>
+              ) : (
+                <Button
+                  type="button"
+                  onClick={handleVerifyOtp}
+                  disabled={loading || otpCode.trim().length !== 6}
+                  className="bg-[#1B4B73] hover:bg-[#143755] text-white rounded-xl h-9.5 px-5 text-xs font-bold shadow-glow hover:opacity-95 disabled:opacity-50 transition-all cursor-pointer gap-1.5"
+                >
+                  {loading ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-[#F0B900]" />
+                  )}
+                  <span>Verificar y Registrar</span>
                 </Button>
               )}
             </div>
