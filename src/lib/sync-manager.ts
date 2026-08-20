@@ -11,6 +11,7 @@ import { emitirECF } from "@/lib/fiscal";
 export type SyncState = "online" | "offline" | "syncing" | "error";
 
 const TABLE_PRIORITY: Record<string, number> = {
+  tenants: 0,
   clientes: 1,
   cajas: 2,
   ordenes: 3,
@@ -19,6 +20,11 @@ const TABLE_PRIORITY: Record<string, number> = {
 };
 
 const VALID_COLUMNS: Record<string, Set<string>> = {
+  tenants: new Set([
+    "id", "nombre", "slug", "rnc", "telefono", "direccion", "ciudad", "provincia",
+    "email", "color_primario", "color_secundario", "plan_id", "estado", "trial_hasta",
+    "config", "nombre_sucursal", "creado_en"
+  ]),
   ordenes: new Set([
     "id", "tenant_id", "numero", "cliente_id", "empleado_id", "servicios", "subtotal", "itbis",
     "descuento", "total", "pagado", "saldo", "metodo_pago", "estado", "fecha_entrega", "es_urgente",

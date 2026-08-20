@@ -55,7 +55,9 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant) return parsed;
+        if (parsed?.empleado && parsed?.tenant && parsed.empleado.nombre !== "Operador Mostrador") {
+          return parsed;
+        }
       } catch {}
     }
 
@@ -65,19 +67,44 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
     if (cachedTenantStr) {
       try {
         const tenant = JSON.parse(cachedTenantStr);
+        const realId = tenant.id;
+
         if (session) {
           const cachedEmpStr = localStorage.getItem(`klynn_emp_id_${session.empleado_id}`);
           if (cachedEmpStr) {
             const empleado = JSON.parse(cachedEmpStr);
-            return { empleado, tenant };
+            if (empleado?.nombre && empleado.nombre !== "Operador Mostrador") {
+              return { empleado, tenant };
+            }
           }
         }
+
+        // Buscar empleado real en la lista de empleados guardada
+        const empsRaw = localStorage.getItem("lvx:empleados") || localStorage.getItem("klynn_empleados");
+        if (empsRaw) {
+          try {
+            const emps = JSON.parse(empsRaw);
+            if (Array.isArray(emps)) {
+              const matchedEmp = emps.find((e: any) => 
+                (e.tenant_id === realId || e.tenant_id === `ten-${activeSlug}` || e.tenant_id === activeSlug) && e.activo
+              );
+              if (matchedEmp) {
+                return { empleado: matchedEmp, tenant };
+              }
+            }
+          } catch {}
+        }
+
+        const adminName = activeSlug === "reynita" ? "Reyna Mancebo" : (tenant.nombre || "Administrador");
+        const adminEmail = activeSlug === "reynita" ? "reynamancebo@gmail.com" : (tenant.email || "admin@klynn.com.do");
+        const adminEmpId = activeSlug === "reynita" ? "d13ef7f6-549b-40be-846c-65fb173318b6" : (session?.empleado_id || `emp-${tenant.id}-admin`);
+
         return {
           empleado: {
-            id: session?.empleado_id || `emp-${tenant.id}-offline`,
+            id: adminEmpId,
             tenant_id: tenant.id,
-            nombre: "Operador Mostrador",
-            email: "operador@klynn.com.do",
+            nombre: adminName,
+            email: adminEmail,
             password: "***",
             rol: "ADMIN",
             activo: true,

@@ -1042,7 +1042,7 @@ interface CobrarDeudaClienteDialogProps {
   onSuccess: () => void;
 }
 
-export function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbierta, queryClient, onSuccess }: CobrarDeudaClienteDialogProps) {
+function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbierta, queryClient, onSuccess }: CobrarDeudaClienteDialogProps) {
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(cliente.total_deuda);
   const [loading, setLoading] = useState<boolean>(false);

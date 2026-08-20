@@ -83,7 +83,7 @@ export const Route = createFileRoute("/t/$slug/estanteria")({
   component: EstanteriaPage,
 });
 
-export function EstanteriaPage() {
+function EstanteriaPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
   const tenantId = tenant?.id || "";

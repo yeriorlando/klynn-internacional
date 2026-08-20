@@ -1021,10 +1021,11 @@ export async function getTenants(): Promise<Tenant[]> {
 }
 
 export async function saveTenant(t: Tenant) {
-  // Asegurar que nombre_sucursal esté sincronizado en config
+  const realId = resolveTenantId(t.id);
   const branchName = t.nombre_sucursal || t.config?.nombre_sucursal || "Sucursal principal";
   const updatedTenant: Tenant = {
     ...t,
+    id: realId,
     nombre_sucursal: branchName,
     config: {
       ...DEFAULT_CONFIG,
@@ -1033,22 +1034,114 @@ export async function saveTenant(t: Tenant) {
     },
   };
 
-  const { error } = await supabase.from("tenants").upsert(updatedTenant);
-  if (error) {
-    // Si la columna nombre_sucursal aún no existe en PostgREST schema cache, guardar sin columna de nivel superior
-    if (error.message && error.message.includes("nombre_sucursal")) {
-      const { nombre_sucursal: _, ...fallbackTenant } = updatedTenant;
-      const { error: errFallback } = await supabase.from("tenants").upsert(fallbackTenant);
-      if (errFallback) throw errFallback;
-      return;
+  if (typeof window !== "undefined") {
+    localStorage.setItem(`klynn_tenant_id_${realId}`, JSON.stringify(updatedTenant));
+    if (updatedTenant.slug) {
+      localStorage.setItem(`klynn_tenant_cache_${updatedTenant.slug}`, JSON.stringify(updatedTenant));
     }
-    throw error;
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: realId,
+      tenant_id: realId,
+      table_name: "tenants",
+      action: "UPSERT",
+      payload: updatedTenant,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from("tenants").upsert(updatedTenant);
+    if (error) {
+      if (error.message && error.message.includes("nombre_sucursal")) {
+        const { nombre_sucursal: _, ...fallbackTenant } = updatedTenant;
+        const { error: errFallback } = await supabase.from("tenants").upsert(fallbackTenant);
+        if (errFallback) throw errFallback;
+        return;
+      }
+      throw error;
+    }
+  } catch (err) {
+    await offlineDB.addToOutbox({
+      id: realId,
+      tenant_id: realId,
+      table_name: "tenants",
+      action: "UPSERT",
+      payload: updatedTenant,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
-  const { error } = await supabase.from("tenants").update({ config }).eq("id", tenantId);
-  if (error) throw error;
+  const realId = resolveTenantId(tenantId);
+
+  // 1. Actualizar caché local de inmediato para 0ms de respuesta y persistencia offline
+  if (typeof window !== "undefined") {
+    const cacheKey = `klynn_tenant_id_${realId}`;
+    let cachedTenant: Tenant | null = null;
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      try { cachedTenant = JSON.parse(raw); } catch {}
+    }
+    if (!cachedTenant) {
+      const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+      if (lastAuthStr) {
+        try {
+          const parsed = JSON.parse(lastAuthStr);
+          if (parsed?.tenant) cachedTenant = parsed.tenant;
+        } catch {}
+      }
+    }
+    if (cachedTenant) {
+      cachedTenant.config = { ...(cachedTenant.config || {}), ...config };
+      localStorage.setItem(cacheKey, JSON.stringify(cachedTenant));
+      if (cachedTenant.slug) {
+        localStorage.setItem(`klynn_tenant_cache_${cachedTenant.slug}`, JSON.stringify(cachedTenant));
+      }
+      const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+      if (lastAuthStr) {
+        try {
+          const parsed = JSON.parse(lastAuthStr);
+          if (parsed?.tenant) {
+            parsed.tenant.config = { ...(parsed.tenant.config || {}), ...config };
+            localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
+          }
+        } catch {}
+      }
+    }
+  }
+
+  // 2. Si estamos sin conexión, agregar a Outbox
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: realId,
+      tenant_id: realId,
+      table_name: "tenants",
+      action: "UPDATE",
+      payload: { config },
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
+  // 3. Intentar guardar en Supabase
+  try {
+    const { error } = await supabase.from("tenants").update({ config }).eq("id", realId);
+    if (error) throw error;
+  } catch (err) {
+    await offlineDB.addToOutbox({
+      id: realId,
+      tenant_id: realId,
+      table_name: "tenants",
+      action: "UPDATE",
+      payload: { config },
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+  }
 }
 
 export async function sendSignUpOtp(email: string, password: string, nombre: string, tenantId: string) {
@@ -2435,15 +2528,20 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
 
 // ============ Caja (Supabase) ============
 export async function getCajas(tenant_id: string): Promise<Caja[]> {
+  const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
-    return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === tenant_id);
+    return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === realId || c.tenant_id === tenant_id);
   }
 
   try {
+    const filter = realId !== tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+      : `tenant_id.eq.${realId}`;
+
     const fetchPromise = supabase
       .from("cajas")
       .select("*")
-      .eq("tenant_id", tenant_id)
+      .or(filter)
       .order("abierta_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
@@ -2453,13 +2551,15 @@ export async function getCajas(tenant_id: string): Promise<Caja[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
-      write(KEY.cajas, data);
+      const local = read<Caja[]>(KEY.cajas, []);
+      const otherCajas = local.filter((c) => c.tenant_id !== realId && c.tenant_id !== tenant_id);
+      write(KEY.cajas, [...data, ...otherCajas]);
       try { offlineDB.putMany("cajas", data); } catch {}
       return data;
     }
   } catch (e) {}
 
-  return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === tenant_id);
+  return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === realId || c.tenant_id === tenant_id);
 }
 
 export async function getHistoricoCierres(filters: {
@@ -2468,16 +2568,21 @@ export async function getHistoricoCierres(filters: {
   desde?: string;
   hasta?: string;
 }): Promise<Caja[]> {
+  const realId = resolveTenantId(filters.tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
     const all = await getCajas(filters.tenant_id);
     return all.filter((c) => c.estado === "CERRADA");
   }
 
   try {
+    const filter = realId !== filters.tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${filters.tenant_id}`
+      : `tenant_id.eq.${realId}`;
+
     let query = supabase
       .from("cajas")
       .select("*")
-      .eq("tenant_id", filters.tenant_id)
+      .or(filter)
       .eq("estado", "CERRADA");
 
     if (filters.empleado_id && filters.empleado_id !== "all") {
@@ -2507,20 +2612,25 @@ export async function getHistoricoCierres(filters: {
 
 export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
   if (!tenant_id || tenant_id === "admin" || tenant_id === "__loading__") return null;
+  const realId = resolveTenantId(tenant_id);
 
   // 1. Si estamos sin conexión, verificar inmediatamente en memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const localCajas = read<Caja[]>(KEY.cajas, []);
-    const openCaja = localCajas.find((c) => c.tenant_id === tenant_id && c.estado === "ABIERTA");
+    const openCaja = localCajas.find((c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA");
     return openCaja || null;
   }
 
   // 2. Intentar buscar en Supabase con timeout de 2000ms
   try {
+    const filter = realId !== tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+      : `tenant_id.eq.${realId}`;
+
     const fetchPromise = supabase
       .from("cajas")
       .select("*")
-      .eq("tenant_id", tenant_id)
+      .or(filter)
       .eq("estado", "ABIERTA")
       .order("abierta_en", { ascending: false });
 
@@ -2541,43 +2651,45 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
   } catch (e) {}
 
   const localCajas = read<Caja[]>(KEY.cajas, []);
-  const openCaja = localCajas.find((c) => c.tenant_id === tenant_id && c.estado === "ABIERTA");
+  const openCaja = localCajas.find((c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA");
   return openCaja || null;
 }
 
 export async function saveCaja(c: Caja) {
+  const realId = resolveTenantId(c.tenant_id);
+  const cajaToSave = { ...c, tenant_id: realId };
   try {
-    await offlineDB.put("cajas", c);
+    await offlineDB.put("cajas", cajaToSave);
   } catch {}
 
   const local = read<Caja[]>(KEY.cajas, []);
-  const exists = local.findIndex((x) => x.id === c.id);
-  if (exists >= 0) local[exists] = c;
-  else local.push(c);
+  const exists = local.findIndex((x) => x.id === cajaToSave.id);
+  if (exists >= 0) local[exists] = cajaToSave;
+  else local.push(cajaToSave);
   write(KEY.cajas, local);
 
   if (typeof window !== "undefined" && !navigator.onLine) {
     await offlineDB.addToOutbox({
-      id: c.id,
-      tenant_id: c.tenant_id,
+      id: cajaToSave.id,
+      tenant_id: realId,
       table_name: "cajas",
       action: "UPSERT",
-      payload: c,
+      payload: cajaToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     return;
   }
 
   try {
-    const { error } = await supabase.from("cajas").upsert(c);
+    const { error } = await supabase.from("cajas").upsert(cajaToSave);
     if (error) throw error;
   } catch (err) {
     await offlineDB.addToOutbox({
-      id: c.id,
-      tenant_id: c.tenant_id,
+      id: cajaToSave.id,
+      tenant_id: realId,
       table_name: "cajas",
       action: "UPSERT",
-      payload: c,
+      payload: cajaToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
@@ -2587,13 +2699,18 @@ export async function getMovimientos(
   tenant_id: string,
   caja_id?: string,
 ): Promise<MovimientoCaja[]> {
+  const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-    return local.filter((m) => m.tenant_id === tenant_id && (!caja_id || m.caja_id === caja_id));
+    return local.filter((m) => (m.tenant_id === realId || m.tenant_id === tenant_id) && (!caja_id || m.caja_id === caja_id));
   }
 
   try {
-    let query = supabase.from("movimientos_caja").select("*").eq("tenant_id", tenant_id);
+    const filter = realId !== tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+      : `tenant_id.eq.${realId}`;
+
+    let query = supabase.from("movimientos_caja").select("*").or(filter);
     if (caja_id) query = query.eq("caja_id", caja_id);
     const fetchPromise = query.order("creado_en", { ascending: false });
 
@@ -2604,49 +2721,53 @@ export async function getMovimientos(
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
-      write(KEY.movimientos, data);
+      const local = read<MovimientoCaja[]>(KEY.movimientos, []);
+      const otherMovs = local.filter((m) => m.tenant_id !== realId && m.tenant_id !== tenant_id);
+      write(KEY.movimientos, [...data, ...otherMovs]);
       try { offlineDB.putMany("movimientos_caja", data); } catch {}
       return data;
     }
   } catch (e) {}
 
   const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-  return local.filter((m) => m.tenant_id === tenant_id && (!caja_id || m.caja_id === caja_id));
+  return local.filter((m) => (m.tenant_id === realId || m.tenant_id === tenant_id) && (!caja_id || m.caja_id === caja_id));
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
+  const realId = resolveTenantId(m.tenant_id);
+  const movToSave = { ...m, tenant_id: realId };
   try {
-    await offlineDB.put("movimientos_caja", m);
+    await offlineDB.put("movimientos_caja", movToSave);
   } catch {}
 
   const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-  if (!local.some((x) => x.id === m.id)) {
-    local.push(m);
+  if (!local.some((x) => x.id === movToSave.id)) {
+    local.push(movToSave);
   }
   write(KEY.movimientos, local);
 
   if (typeof window !== "undefined" && !navigator.onLine) {
     await offlineDB.addToOutbox({
-      id: m.id,
-      tenant_id: m.tenant_id,
+      id: movToSave.id,
+      tenant_id: realId,
       table_name: "movimientos_caja",
       action: "INSERT",
-      payload: m,
+      payload: movToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     return;
   }
 
   try {
-    const { error } = await supabase.from("movimientos_caja").insert(m);
+    const { error } = await supabase.from("movimientos_caja").insert(movToSave);
     if (error) throw error;
   } catch (err) {
     await offlineDB.addToOutbox({
-      id: m.id,
-      tenant_id: m.tenant_id,
+      id: movToSave.id,
+      tenant_id: realId,
       table_name: "movimientos_caja",
       action: "INSERT",
-      payload: m,
+      payload: movToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
@@ -2654,15 +2775,20 @@ export async function saveMovimiento(m: MovimientoCaja) {
 
 // ============ Gastos (Supabase) ============
 export async function getGastos(tenant_id: string): Promise<Gasto[]> {
+  const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
-    return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);
+    return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === realId || g.tenant_id === tenant_id);
   }
 
   try {
+    const filter = realId !== tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+      : `tenant_id.eq.${realId}`;
+
     const fetchPromise = supabase
       .from("gastos")
       .select("*")
-      .eq("tenant_id", tenant_id)
+      .or(filter)
       .order("fecha", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
@@ -2672,47 +2798,51 @@ export async function getGastos(tenant_id: string): Promise<Gasto[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
-      write(KEY.gastos, data);
+      const local = read<Gasto[]>(KEY.gastos, []);
+      const otherGastos = local.filter((g) => g.tenant_id !== realId && g.tenant_id !== tenant_id);
+      write(KEY.gastos, [...data, ...otherGastos]);
       return data;
     }
   } catch (e) {}
 
-  return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);
+  return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === realId || g.tenant_id === tenant_id);
 }
 
 export async function saveGasto(g: Gasto) {
+  const realId = resolveTenantId(g.tenant_id);
+  const gastoToSave = { ...g, tenant_id: realId };
   try {
-    await offlineDB.put("gastos", g);
+    await offlineDB.put("gastos", gastoToSave);
   } catch {}
 
   const local = read<Gasto[]>(KEY.gastos, []);
-  const exists = local.findIndex((x) => x.id === g.id);
-  if (exists >= 0) local[exists] = g;
-  else local.push(g);
+  const exists = local.findIndex((x) => x.id === gastoToSave.id);
+  if (exists >= 0) local[exists] = gastoToSave;
+  else local.push(gastoToSave);
   write(KEY.gastos, local);
 
   if (typeof window !== "undefined" && !navigator.onLine) {
     await offlineDB.addToOutbox({
-      id: g.id,
-      tenant_id: g.tenant_id,
+      id: gastoToSave.id,
+      tenant_id: realId,
       table_name: "gastos",
       action: "UPSERT",
-      payload: g,
+      payload: gastoToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     return;
   }
 
   try {
-    const { error } = await supabase.from("gastos").upsert(g);
+    const { error } = await supabase.from("gastos").upsert(gastoToSave);
     if (error) throw error;
   } catch (err) {
     await offlineDB.addToOutbox({
-      id: g.id,
-      tenant_id: g.tenant_id,
+      id: gastoToSave.id,
+      tenant_id: realId,
       table_name: "gastos",
       action: "UPSERT",
-      payload: g,
+      payload: gastoToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
@@ -3214,7 +3344,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant) {
+        if (parsed?.empleado && parsed?.tenant && parsed.empleado.nombre !== "Operador Mostrador") {
           return parsed;
         }
       } catch {}
@@ -3224,11 +3354,13 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (slug && slug !== "admin") {
       const ten = await getTenantBySlug(slug);
       if (ten) {
-        const fallbackEmp: Empleado = {
-          id: session?.empleado_id || `emp-${ten.id}-offline`,
+        const emps = await getEmpleados(ten.id);
+        const activeEmp = emps.find(e => e.rol === "ADMIN" && e.activo) || emps.find(e => e.activo) || emps[0];
+        const fallbackEmp: Empleado = activeEmp || {
+          id: session?.empleado_id || (slug === "reynita" ? "d13ef7f6-549b-40be-846c-65fb173318b6" : `emp-${ten.id}-admin`),
           tenant_id: ten.id,
-          nombre: "Operador Mostrador",
-          email: "mostrador@klynn.com.do",
+          nombre: slug === "reynita" ? "Reyna Mancebo" : (ten.nombre || "Administrador"),
+          email: slug === "reynita" ? "reynamancebo@gmail.com" : (ten.email || "admin@klynn.com.do"),
           password: "***",
           rol: "ADMIN",
           activo: true,
@@ -3259,7 +3391,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (session?.empleado_id && session?.tenant_id) {
       const emp = await getEmpleadoById(session.empleado_id);
       const ten = await getTenantById(session.tenant_id);
-      if (emp && ten) {
+      if (emp && ten && emp.nombre !== "Operador Mostrador") {
         cacheUserResult(emp, ten);
         return { empleado: emp, tenant: ten };
       }
@@ -3268,7 +3400,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant) {
+        if (parsed?.empleado && parsed?.tenant && parsed.empleado.nombre !== "Operador Mostrador") {
           return parsed;
         }
       } catch {}
@@ -3278,11 +3410,13 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (slug && slug !== "admin") {
       const ten = await getTenantBySlug(slug);
       if (ten) {
-        const fallbackEmp: Empleado = {
-          id: session?.empleado_id || `emp-${ten.id}-offline`,
+        const emps = await getEmpleados(ten.id);
+        const activeEmp = emps.find(e => e.rol === "ADMIN" && e.activo) || emps.find(e => e.activo) || emps[0];
+        const fallbackEmp: Empleado = activeEmp || {
+          id: session?.empleado_id || (slug === "reynita" ? "d13ef7f6-549b-40be-846c-65fb173318b6" : `emp-${ten.id}-admin`),
           tenant_id: ten.id,
-          nombre: "Operador Mostrador",
-          email: "mostrador@klynn.com.do",
+          nombre: slug === "reynita" ? "Reyna Mancebo" : (ten.nombre || "Administrador"),
+          email: slug === "reynita" ? "reynamancebo@gmail.com" : (ten.email || "admin@klynn.com.do"),
           password: "***",
           rol: "ADMIN",
           activo: true,

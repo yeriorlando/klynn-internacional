@@ -1259,16 +1259,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                           <Receipt className="h-5 w-5" />
                         </div>
                         <div className="flex flex-col min-w-0">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
-                              {o.numero}
-                            </span>
-                            {o.ncf && (
-                              <span className="inline-flex items-center px-1.5 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50 text-[10px] font-mono font-bold">
-                                {o.ncf}
-                              </span>
-                            )}
-                          </div>
+                          <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                            {o.numero}
+                          </span>
                           <span className="font-bold text-sm text-foreground truncate max-w-[220px]" title={c ? `${c.nombre} ${c.apellido || ""}` : ""}>
                             {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
                           </span>
@@ -3562,18 +3555,13 @@ export function PendienteCard({ o, clientes, cajaAbierta, onCobrarClick, compact
       <div className={`flex flex-1 flex-col ${compact ? "p-3.5 pt-4" : "p-4 pt-5"}`}>
         {/* Fila 1: Número de Orden + Icono y Estado Badge */}
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2 min-w-0 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 border border-[#1B4B73]/20">
               <Receipt className="h-3.5 w-3.5" strokeWidth={2.2} />
             </div>
             <span className="font-mono text-xs sm:text-[13px] font-bold text-[#1B4B73] dark:text-sky-300 tracking-tight whitespace-nowrap">
               {o.numero}
             </span>
-            {o.ncf && (
-              <span className="inline-flex items-center px-1.5 py-0.2 rounded-md bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200/60 dark:border-emerald-800/50 text-[10px] font-mono font-bold">
-                {o.ncf}
-              </span>
-            )}
           </div>
           <div className="shrink-0">
             <EstadoBadge estado={o.estado} />

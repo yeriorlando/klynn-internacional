@@ -851,9 +851,10 @@ function ConversationsPage() {
 
   if (isLoading) {
     return (
-      <div className="flex h-[calc(100vh-5rem)] items-center justify-center">
-        <Loader2 className="animate-spin h-8 w-8 text-primary" />
-      </div>
+      <GlobalPageLoader 
+        text="Cargando centro de mensajes WhatsApp..." 
+        minHeight="h-[calc(100vh-6rem)] min-h-[550px]" 
+      />
     );
   }
 

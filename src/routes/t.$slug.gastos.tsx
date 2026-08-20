@@ -106,7 +106,7 @@ import {
 export const Route = createFileRoute("/t/$slug/gastos")({ component: GastosPage });
 
 // Mapeo visual y tipado para Categorías de Gastos
-export function getGastoCategoriaVisual(cat: string) {
+function getGastoCategoriaVisual(cat: string) {
   const c = (cat || "").toLowerCase();
   if (c.includes("servicio") || c.includes("luz") || c.includes("agua") || c.includes("internet")) {
     return {
@@ -244,7 +244,7 @@ export function getGastoCategoriaVisual(cat: string) {
 }
 
 // Mapeo visual para Métodos de Pago
-export function getGastoMetodoVisual(metodo: string) {
+function getGastoMetodoVisual(metodo: string) {
   const m = (metodo || "").toUpperCase();
   if (m.includes("EFECTIVO")) {
     return {

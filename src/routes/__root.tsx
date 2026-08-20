@@ -4,7 +4,8 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { queryClient } from "../router";
 
-import appCss from "../styles.css?url";
+import "@/styles.css";
+import appCss from "@/styles.css?url";
 
 function NotFoundComponent() {
   return (

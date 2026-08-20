@@ -336,7 +336,7 @@ export const Route = createFileRoute("/reportes")({
   component: ReportesPage,
 });
 
-export function ReportesPage() {
+function ReportesPage() {
   const auth = useRequireAuth();
   const navigate = useNavigate();
   const [selectedInspectTenant, setSelectedInspectTenant] = useState<Tenant | null>(null);
