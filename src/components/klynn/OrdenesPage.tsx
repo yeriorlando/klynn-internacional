@@ -3042,7 +3042,8 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             finalNCF = `${tenant.config.ncf_secuencia || 'B02'}${String(tenant.config.ncf_proximo || 1).padStart(8, "0")}`;
           }
         } else {
-          try {
+          if (typeof window !== "undefined" && !navigator.onLine) {
+            // ⚠️ Modo Contingencia Offline (Ley 32-23)
             let nextNCF: string | undefined = undefined;
             try {
               const { ncf, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
@@ -3052,35 +3053,54 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               console.warn("Aviso al obtener secuencia local:", seqErr);
             }
 
-            const ordenTemporal: Orden = {
-              ...orden,
-              pagado: nuevoPagado,
-              saldo: nuevoSaldo,
-              estado: nuevoEstado,
-              metodo_pago: metodo,
-              ncf: nextNCF
-            };
-
-            const result = await emitirECF(
-              ordenTemporal,
-              cli as Cliente,
-              fiscalConfig?.pronesoft_tenant_id,
-              tenant.config,
-              tenant,
-              tipoECFDefault
-            );
-
-            finalNCF = result.encf;
+            finalNCF = nextNCF;
             finalTipoECF = tipoECFDefault;
-            finalEcfId = result.document.id;
-            finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
-            finalEcfSecurityCode = result.security_code || '';
-            finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
+            finalEcfSecurityCode = 'SBX' + String(Math.floor(Math.random() * 900000) + 100000);
+            finalEcfSignatureDate = new Date().toISOString();
+            finalEcfQr = `https://ecf.dgii.gov.do/EstadisticaInternet/Consultas/ConsultaPublica?RncEmisor=133190907&RncReceptor=${cli?.cedula || '222333444'}&Encf=${finalNCF}&MontoTotal=${orden.total}&MontoItbis=${orden.itbis}&FechaEmision=${new Date().toISOString().substring(0, 10)}&CodigoSeguridad=TEST99`;
 
-            toast.success(`✅ Comprobante DGII ${result.encf} emitido con éxito`);
-          } catch (fErr: any) {
-            console.error("Error Fiscal al cobrar:", fErr);
-            toast.error("Error al generar comprobante fiscal: " + fErr.message);
+            toast.info(`⚠️ Modo Contingencia: Comprobante ${finalNCF} generado offline. Se enviará a DGII al conectar.`);
+          } else {
+            try {
+              let nextNCF: string | undefined = undefined;
+              try {
+                const { ncf, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
+                nextNCF = ncf;
+                finalNcfVencimiento = expiration_date;
+              } catch (seqErr) {
+                console.warn("Aviso al obtener secuencia local:", seqErr);
+              }
+
+              const ordenTemporal: Orden = {
+                ...orden,
+                pagado: nuevoPagado,
+                saldo: nuevoSaldo,
+                estado: nuevoEstado,
+                metodo_pago: metodo,
+                ncf: nextNCF
+              };
+
+              const result = await emitirECF(
+                ordenTemporal,
+                cli as Cliente,
+                fiscalConfig?.pronesoft_tenant_id,
+                tenant.config,
+                tenant,
+                tipoECFDefault
+              );
+
+              finalNCF = result.encf;
+              finalTipoECF = tipoECFDefault;
+              finalEcfId = result.document.id;
+              finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
+              finalEcfSecurityCode = result.security_code || '';
+              finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
+
+              toast.success(`✅ Comprobante DGII ${result.encf} emitido con éxito`);
+            } catch (fErr: any) {
+              console.error("Error Fiscal al cobrar:", fErr);
+              toast.error("Error al generar comprobante fiscal: " + fErr.message);
+            }
           }
         }
       }
@@ -3102,6 +3122,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         ecf_qr: finalEcfQr,
         ecf_security_code: finalEcfSecurityCode,
         ecf_signature_date: finalEcfSignatureDate,
+        ecf_status: finalEcfSecurityCode?.startsWith("SBX") ? "PENDING_OFFLINE_TRANSMISSION" : (orden as any).ecf_status,
         pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : orden.pago_referencia
       });
 

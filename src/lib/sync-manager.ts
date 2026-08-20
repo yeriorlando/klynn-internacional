@@ -409,10 +409,12 @@ class SyncManager {
       throw error;
     }
 
-    console.log(`[SyncManager] ✅ Registro sincronizado con éxito en tabla: ${table_name} (${data.id})`);
+    // 6. Si es una orden y tiene emisión e-CF pendiente o código provisional offline (SBX)
+    const hasMockSecurityCode = data.ecf_security_code && String(data.ecf_security_code).startsWith("SBX");
+    const isEcfPending = payload.ecf_status === "PENDING_OFFLINE_TRANSMISSION" || 
+      (data.tipo_ecf && (!data.ecf_security_code || hasMockSecurityCode));
 
-    // 6. Si es una orden y tiene emisión e-CF pendiente o no tiene código de seguridad
-    if (table_name === "ordenes" && (payload.ecf_status === "PENDING_OFFLINE_TRANSMISSION" || (data.tipo_ecf && !data.ecf_security_code))) {
+    if (table_name === "ordenes" && isEcfPending) {
       try {
         const ecfCfg = await getECFConfig(data.tenant_id);
         const tenant = await getTenantById(data.tenant_id);
@@ -437,10 +439,11 @@ class SyncManager {
               ecf_qr: result.stamp_url || (result.document as any)?.document_stamp_url || "",
               ecf_security_code: result.security_code || "",
               ecf_signature_date: (result.document as any)?.signature_date || new Date().toISOString(),
+              ecf_status: "TRANSMITTED",
             };
 
             await supabase.from("ordenes").update(fiscalUpdates).eq("id", data.id);
-            console.log(`[SyncManager] ✅ Comprobante e-CF timbrado exitosamente: ${result.encf} (Código de seguridad: ${result.security_code})`);
+            console.log(`[SyncManager] ✅ Comprobante e-CF timbrado exitosamente: ${result.encf} (Código de seguridad oficial: ${result.security_code})`);
 
             // Actualizar en caché local
             const localOrd = read<Orden[]>(KEY.ordenes, []);
