@@ -4518,8 +4518,22 @@ export async function nextECFNumero(
   const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
   const cacheKey = `klynn_ecf_seqs_${realId}`;
 
-  // 1. Obtener secuencias locales en caché
-  let localSeqs: ECFSequence[] = [];
+  // 1. Obtener el número máximo YA UTILIZADO en órdenes locales existentes
+  let maxOrderNum = 0;
+  try {
+    const localOrders = read<Orden[]>(KEY.ordenes, []);
+    for (const o of localOrders) {
+      if (o.ncf && o.ncf.startsWith(normalizedTipo)) {
+        const numPart = parseInt(o.ncf.slice(normalizedTipo.length), 10);
+        if (!isNaN(numPart) && numPart > maxOrderNum) {
+          maxOrderNum = numPart;
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Obtener secuencias locales en caché
+  let localSeqs: any[] = [];
   if (typeof window !== "undefined") {
     const raw = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (raw) {
@@ -4527,116 +4541,59 @@ export async function nextECFNumero(
     }
   }
 
-  // 2. Si no hay conexión, usar estrictamente la secuencia local configurada y avanzar contador
-  if (typeof window !== "undefined" && !navigator.onLine) {
-    const seqIndex = localSeqs.findIndex((s) => s.tipo_ecf === normalizedTipo && s.is_active);
-    if (seqIndex >= 0) {
-      const seq = localSeqs[seqIndex];
-      const current = seq.valor_actual || 0;
-      const initial = seq.valor_inicial || 1;
-      const proximo = current < initial ? initial : current + 1;
+  // Encontrar la secuencia para este tipo
+  const seqIndex = localSeqs.findIndex(
+    (s) => (s.tipo_ecf === normalizedTipo || s.tipo === normalizedTipo) && (s.is_active !== false && s.activa !== false)
+  );
 
-      // Actualizar valor_actual en caché local
-      localSeqs[seqIndex].valor_actual = proximo;
-      localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
-      localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(localSeqs));
+  const seq = seqIndex >= 0 ? localSeqs[seqIndex] : null;
+  const currentSeqVal = seq ? (seq.valor_actual ?? seq.secuencia_actual ?? 0) : 0;
+  const initialSeqVal = seq ? (seq.valor_inicial ?? seq.secuencia_desde ?? 1) : 1;
+  const localCounter = read<number>(`klynn_ecf_sec_${realId}_${normalizedTipo}`, 0);
 
-      const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
-      return { ncf: encf, expiration_date: seq.fecha_vencimiento };
-    }
+  // El siguiente número DEBE ser mayor al máximo de TODAS las fuentes
+  const baseNum = Math.max(currentSeqVal, maxOrderNum, localCounter, initialSeqVal - 1);
+  const proximo = baseNum + 1;
 
-    const localSec = read<number>(`klynn_ecf_sec_${realId}_${normalizedTipo}`, 1);
-    write(`klynn_ecf_sec_${realId}_${normalizedTipo}`, localSec + 1);
-    write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, localSec + 1);
-    return { ncf: `${normalizedTipo}${String(localSec).padStart(padLen, "0")}` };
-  }
-
-  // 3. Si hay conexión: intentar RPC con timeout
-  try {
-    const fetchRPC = supabase.rpc("reservar_proximo_ncf", {
-      p_tenant_id: realId,
-      p_tipo_ecf: normalizedTipo,
-    });
-    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
-    );
-    const { data, error } = await Promise.race([fetchRPC, timeoutPromise]);
-    if (!error && data && data.length > 0 && data[0]?.ncf) {
-      return { ncf: data[0].ncf, expiration_date: data[0].expiration_date };
-    }
-  } catch {}
-
-  // 4. Fallback de base de datos buscando en ecf_sequences
-  try {
-    const filter = realId !== tenantId 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
-      : `tenant_id.eq.${realId}`;
-
-    const fetchSeq = supabase
-      .from("ecf_sequences")
-      .select("*")
-      .or(filter)
-      .eq("tipo_ecf", normalizedTipo)
-      .eq("is_active", true);
-
-    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
-    );
-
-    const { data: sequences, error } = await Promise.race([fetchSeq, timeoutPromise]);
-    const seq = sequences && sequences.length > 0 ? sequences[0] : null;
-
-    if (!error && seq) {
-      if (seq.valor_actual < seq.valor_final) {
-        const current = seq.valor_actual || 0;
-        const initial = seq.valor_inicial || 1;
-        const proximo = current < initial ? initial : current + 1;
-        const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
-
-        supabase
-          .from("ecf_sequences")
-          .update({ valor_actual: proximo })
-          .eq("id", seq.id)
-          .then();
-
-        // Actualizar en caché local
-        const sIdx = localSeqs.findIndex((s) => s.id === seq.id);
-        if (sIdx >= 0) {
-          localSeqs[sIdx].valor_actual = proximo;
-        } else {
-          localSeqs.push({ ...seq, valor_actual: proximo });
-        }
-        if (typeof window !== "undefined") {
-          localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
-          localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(localSeqs));
-        }
-
-        return { ncf: encf, expiration_date: seq.fecha_vencimiento };
-      }
-    }
-  } catch {}
-
-  // 5. Si falló la red o no hay RPC, usar la secuencia local en memoria
-  const seqIndex = localSeqs.findIndex((s) => s.tipo_ecf === normalizedTipo && s.is_active);
+  // Actualizar inmediatamente todas las fuentes locales (0ms)
   if (seqIndex >= 0) {
-    const seq = localSeqs[seqIndex];
-    const current = seq.valor_actual || 0;
-    const initial = seq.valor_inicial || 1;
-    const proximo = current < initial ? initial : current + 1;
-
     localSeqs[seqIndex].valor_actual = proximo;
-    if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
-
-    const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
-    return { ncf: encf, expiration_date: seq.fecha_vencimiento };
+    localSeqs[seqIndex].secuencia_actual = proximo;
+  } else {
+    localSeqs.push({
+      id: uid("seq"),
+      tenant_id: realId,
+      tipo_ecf: normalizedTipo,
+      valor_inicial: 1,
+      valor_final: 99999999,
+      valor_actual: proximo,
+      secuencia_actual: proximo,
+      is_active: true,
+      activa: true,
+    });
   }
 
-  const localSec = read<number>(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, 1);
-  write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, localSec + 1);
-  return {
-    ncf: `${normalizedTipo}${String(localSec).padStart(padLen, "0")}`,
-    expiration_date: undefined,
-  };
+  if (typeof window !== "undefined") {
+    localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+    localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(localSeqs));
+  }
+  write(`klynn_ecf_sec_${realId}_${normalizedTipo}`, proximo);
+  write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, proximo);
+
+  const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
+
+  // Si estamos online, intentar actualizar Supabase en segundo plano
+  if (typeof window === "undefined" || navigator.onLine) {
+    if (seq?.id) {
+      supabase
+        .from("ecf_sequences")
+        .update({ valor_actual: proximo, secuencia_actual: proximo })
+        .eq("id", seq.id)
+        .then();
+    }
+  }
+
+  return { ncf: encf, expiration_date: seq?.fecha_vencimiento };
 }
 
 import { getProneSoftClient } from "./fiscal/pronesoft-client";

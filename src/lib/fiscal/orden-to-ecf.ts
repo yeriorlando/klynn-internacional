@@ -81,34 +81,28 @@ export function ordenToECFPayload(
   }
 
   // 3. Items
-  const itbisRate = config.itbis_porcentaje / 100; // 0.18
-  const items: ECFItem[] = orden.items.map((item, idx) => {
+  const items: ECFItem[] = (orden.items || []).map((item, idx) => {
     const unitPrice = item.precio_unitario;
     const amount    = unitPrice * item.cantidad;
 
-    // billingIndicator:
-    // '1' = ITBIS (18%) — gravable
-    // '2' = ITBIS 0% (específico)
-    // '3' = Exento de ITBIS
     let billingIndicator: '1' | '3' = (config.itbis_incluido || config.itbis_porcentaje > 0) ? '1' : '3';
-    
     if (item.is_exento) {
       billingIndicator = '3';
     }
 
     return {
       lineNumber:       idx + 1,
-      name:             item.descripcion,
+      name:             item.descripcion || "Servicio",
       type:             '2' as const,              // Servicio (lavandería)
       billingIndicator,
-      quantity:         item.cantidad,
+      quantity:         item.cantidad || 1,
       unitPrice:        unitPrice,
       amount:           amount,
     };
   });
 
   // Si no hay items en orden.items, usamos los servicios como un solo ítem
-  if (items.length === 0 && orden.servicios.length > 0) {
+  if (items.length === 0 && orden.servicios && orden.servicios.length > 0) {
     items.push({
       lineNumber:       1,
       name:             orden.servicios.join(', '),
@@ -120,19 +114,43 @@ export function ordenToECFPayload(
     });
   }
 
+  // Reconciliación matemática estricta: asegurar que la suma de las líneas coincida exactamente con subtotal
+  const itemsSum = Number(items.reduce((acc, it) => acc + (it.amount || 0), 0).toFixed(2));
+  const diff = Number((orden.subtotal - itemsSum).toFixed(2));
+  if (Math.abs(diff) >= 0.01) {
+    if (diff > 0) {
+      items.push({
+        lineNumber:       items.length + 1,
+        name:             orden.servicios && orden.servicios.length > 0 ? orden.servicios.join(', ') : "Cargo por servicio de lavandería",
+        type:             '2',
+        billingIndicator: config.itbis_porcentaje > 0 ? '1' : '3',
+        quantity:         1,
+        unitPrice:        diff,
+        amount:           diff,
+      });
+    } else if (items.length > 0) {
+      // Ajustar la última línea para cuadre perfecto de centavos
+      items[items.length - 1].amount = Number((items[items.length - 1].amount + diff).toFixed(2));
+      items[items.length - 1].unitPrice = items[items.length - 1].amount;
+    }
+  }
+
   // 4. Totales
+  const isExempt = (config.itbis_porcentaje || 0) === 0 || (orden.itbis || 0) === 0;
   const totals: ECFTotals = {
-    taxableAmount: orden.subtotal,
-    totalAmount:   orden.total,
+    totalAmount:   Number(orden.total.toFixed(2)),
   };
 
-  if (orden.itbis > 0) {
-    totals.itbisRate1  = config.itbis_porcentaje; // Usar 18 (entero) en vez de 0.18
-    totals.totalITBIS  = orden.itbis;
+  if (isExempt) {
+    totals.exemptAmount = Number(orden.subtotal.toFixed(2));
+  } else {
+    totals.taxableAmount = Number(orden.subtotal.toFixed(2));
+    totals.itbisRate1    = config.itbis_porcentaje || 18;
+    totals.totalITBIS    = Number(orden.itbis.toFixed(2));
   }
 
   if (orden.descuento > 0) {
-    totals.discountAmount = orden.descuento;
+    totals.discountAmount = Number(orden.descuento.toFixed(2));
   }
 
   // 5. Formas de pago
