@@ -567,6 +567,18 @@ export function getTenantPlan(tenant: Tenant | null, dynamicPlans?: Plan[]): Pla
   return list.find((p) => p.id === tenant.plan_id) || list[0] || PLANS[0];
 }
 
+export function resolveTenantId(idOrSlug?: string): string {
+  if (!idOrSlug || idOrSlug === "undefined" || idOrSlug === "__loading__") {
+    return "8423be36-736f-4233-b933-1c1225042857";
+  }
+  if (idOrSlug.length === 36 && !idOrSlug.startsWith("ten-")) {
+    return idOrSlug;
+  }
+  const clean = idOrSlug.replace("ten-", "").replace("tenant-", "").toLowerCase();
+  if (clean === "reynita") return "8423be36-736f-4233-b933-1c1225042857";
+  return idOrSlug;
+}
+
 export function isSameTenant(tid1?: string, tid2?: string): boolean {
   if (!tid1 || !tid2) return true;
   if (tid1 === tid2) return true;
@@ -1402,7 +1414,7 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
 
   // 4. Modo Resiliencia Offline: Si no hay conexión o falló el server, generar estructura base para que nunca se quede cargando
   const defaultTenant: Tenant = {
-    id: `ten-${cleanSlug}`,
+    id: cleanSlug === "reynita" ? "8423be36-736f-4233-b933-1c1225042857" : (resolveTenantId(cleanSlug) || `ten-${cleanSlug}`),
     nombre: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1),
     slug: cleanSlug,
     rnc: "131-00000-0",
@@ -2733,25 +2745,31 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
+  const realId = resolveTenantId(tenant_id);
+
   // 1. Si estamos sin conexión, devolver inmediatamente del almacenamiento local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<CatalogoItem[]>(KEY.catalogo, []);
-    const relevant = local.filter((i) => i.tenant_id === tenant_id || i.tenant_id === "admin");
+    const relevant = local.filter((i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin");
     if (relevant.length > 0) return relevant;
     return CATALOGO_PRENDAS_PREDEFINIDAS as any;
   }
 
-  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  // 2. Intentar buscar en Supabase con timeout de 3000ms
   try {
+    const filter = realId !== tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id},tenant_id.eq.admin`
+      : `tenant_id.eq.${realId},tenant_id.eq.admin`;
+
     const fetchPromise = supabase
       .from("catalogo_items")
       .select("*")
-      .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
+      .or(filter)
       .order("categoria", { ascending: true })
       .order("nombre", { ascending: true });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000)
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -2784,7 +2802,7 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   }
 
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
-  const relevant = local.filter((i) => i.tenant_id === tenant_id || i.tenant_id === "admin");
+  const relevant = local.filter((i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin");
   if (relevant.length > 0) return relevant;
   return CATALOGO_PRENDAS_PREDEFINIDAS as any;
 }
@@ -2795,12 +2813,14 @@ export async function saveCatalogoItem(item: CatalogoItem) {
     throw new Error("tenant_id inválido");
   }
 
+  const itemToSave = { ...item, tenant_id: resolveTenantId(item.tenant_id) };
+
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
-  const exists = local.findIndex((x) => x.id === item.id);
-  if (exists >= 0) local[exists] = item;
-  else local.push(item);
+  const exists = local.findIndex((x) => x.id === itemToSave.id);
+  if (exists >= 0) local[exists] = itemToSave;
+  else local.push(itemToSave);
   write(KEY.catalogo, local);
-  try { offlineDB.put("catalogo_prendas", item); } catch {}
+  try { offlineDB.put("catalogo_prendas", itemToSave); } catch {}
 
   if (typeof window !== "undefined" && !navigator.onLine) {
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
@@ -2808,7 +2828,7 @@ export async function saveCatalogoItem(item: CatalogoItem) {
   }
 
   try {
-    const { error } = await supabase.from("catalogo_items").upsert(item);
+    const { error } = await supabase.from("catalogo_items").upsert(itemToSave);
     if (error) throw error;
   } catch (err) {
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
@@ -2834,22 +2854,28 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
+  const realId = resolveTenantId(tenant_id);
+
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<Servicio[]>(KEY.servicios, []);
-    const relevant = local.filter((s) => s.tenant_id === tenant_id || s.tenant_id === "admin");
+    const relevant = local.filter((s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin");
     if (relevant.length > 0) return relevant;
     return SERVICIOS_PREDEFINIDOS as any;
   }
 
   try {
+    const filter = realId !== tenant_id 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id},tenant_id.eq.admin`
+      : `tenant_id.eq.${realId},tenant_id.eq.admin`;
+
     const fetchPromise = supabase
       .from("servicios")
       .select("*")
-      .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
+      .or(filter)
       .order("nombre", { ascending: true });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000)
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -2882,7 +2908,7 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
   }
 
   const local = read<Servicio[]>(KEY.servicios, []);
-  const relevant = local.filter((s) => s.tenant_id === tenant_id || s.tenant_id === "admin");
+  const relevant = local.filter((s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin");
   if (relevant.length > 0) return relevant;
   return SERVICIOS_PREDEFINIDOS as any;
 }
@@ -2893,7 +2919,8 @@ export async function saveServicio(s: Servicio) {
     console.error("saveServicio: tenant_id inválido, abortando.", s.tenant_id);
     throw new Error("tenant_id inválido");
   }
-  const { error } = await supabase.from("servicios").upsert(s);
+  const sToSave = { ...s, tenant_id: resolveTenantId(s.tenant_id) };
+  const { error } = await supabase.from("servicios").upsert(sToSave);
 
   if (error) throw error;
 }
