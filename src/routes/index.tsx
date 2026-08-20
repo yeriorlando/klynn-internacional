@@ -862,9 +862,15 @@ function LandingPage() {
                     </li>
                   </ul>
                   <div style={{ display: "flex", gap: "1rem", alignItems: "center", flexWrap: "wrap", marginTop: "1.5rem" }}>
-                    <Link to="/descargar" search={{ autostart: true }} className="btn btn--anil">
+                    <button
+                      type="button"
+                      disabled
+                      aria-disabled="true"
+                      className="btn btn--anil"
+                      style={{ opacity: 0.55, cursor: "not-allowed", pointerEvents: "none" }}
+                    >
                       Descargar gratis <span className="btn__arrow" aria-hidden="true">↓</span>
-                    </Link>
+                    </button>
                     <span style={{ fontFamily: "var(--font-label, monospace)", fontSize: "11px", color: "var(--color-muted, #64748b)" }}>
                       Windows 10 / 11 · 174 MB
                     </span>

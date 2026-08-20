@@ -128,29 +128,24 @@ function CatalogoPage() {
 
   // Sincronización automática desactivada, manejada por DB Triggers
 
-  const [tab, setTab] = useState(() => {
-    if (typeof window !== "undefined") {
-      return new URLSearchParams(window.location.search).get("tab") || "prendas";
-    }
-    return "prendas";
-  });
+  const [tab, setTab] = useState<string>("prendas");
 
   useEffect(() => {
-    const handleUrlChange = () => {
-      const currentTab = new URLSearchParams(window.location.search).get("tab") || "prendas";
-      if (currentTab !== tab) {
-        setTab(currentTab);
+    if (typeof window !== "undefined") {
+      const urlTab = new URLSearchParams(window.location.search).get("tab");
+      if (urlTab && (urlTab === "prendas" || urlTab === "servicios")) {
+        setTab(urlTab);
       }
-    };
-    const interval = setInterval(handleUrlChange, 100);
-    return () => clearInterval(interval);
-  }, [tab]);
+    }
+  }, []);
 
   const handleTabChange = (val: string) => {
     setTab(val);
-    const url = new URL(window.location.href);
-    url.searchParams.set("tab", val);
-    window.history.pushState({}, "", url.toString());
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", val);
+      window.history.pushState({}, "", url.toString());
+    }
   };
 
   const loading = loadingItems || loadingServicios;
