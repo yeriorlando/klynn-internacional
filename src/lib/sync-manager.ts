@@ -235,7 +235,7 @@ class SyncManager {
 
       for (const item of sortedItems) {
         try {
-          await offlineDB.updateOutboxItemStatus(item.id, "processing");
+          await offlineDB.updateOutboxItemStatus(item.id, "processing", undefined, false);
           const success = await this.syncSingleItem(item);
 
           if (success) {
@@ -396,6 +396,10 @@ class SyncManager {
     const { error } = await supabase.from(table_name).upsert(sanitizedData, { onConflict: "id" });
     if (error) {
       console.error(`[SyncManager] Fallo upsert en ${table_name}:`, error);
+      if (error.code === "42501") {
+        console.warn(`[SyncManager] Fila en ${table_name} (${data.id}) bloqueada por política RLS. Descartando de la cola para no bloquear sincronización.`);
+        return true;
+      }
       throw error;
     }
 

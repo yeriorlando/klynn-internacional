@@ -217,9 +217,16 @@ class OfflineDBManager {
     }
   }
 
-  async getPendingOutbox(tenantId?: string): Promise<SyncOutboxItem[]> {
+  async getPendingOutbox(tenantId?: string, maxAttempts = 5): Promise<SyncOutboxItem[]> {
     const all = await this.getAll<SyncOutboxItem>("sync_outbox");
-    return all.filter((x) => x.status === "pending" || x.status === "failed");
+    return all.filter((x) => {
+      if (x.status === "synced") return false;
+      if (x.status === "pending") return true;
+      if (x.status === "failed") {
+        return (x.attempts || 0) < maxAttempts;
+      }
+      return false;
+    });
   }
 
   async getOutboxCount(tenantId?: string): Promise<number> {
@@ -241,15 +248,18 @@ class OfflineDBManager {
   async updateOutboxItemStatus(
     id: string,
     status: SyncOutboxItem["status"],
-    errorMessage?: string
+    errorMessage?: string,
+    notify: boolean = true
   ): Promise<void> {
     const item = await this.get<SyncOutboxItem>("sync_outbox", id);
     if (item) {
       item.status = status;
-      item.attempts += 1;
+      if (status === "failed") {
+        item.attempts = (item.attempts || 0) + 1;
+      }
       if (errorMessage) item.error_message = errorMessage;
       await this.put("sync_outbox", item);
-      if (typeof window !== "undefined") {
+      if (notify && typeof window !== "undefined") {
         window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
       }
     }

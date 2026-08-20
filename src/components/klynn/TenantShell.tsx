@@ -181,8 +181,14 @@ export function TenantShell() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
-  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [isOnline, setIsOnline] = useState(true);
   const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      setIsOnline(navigator.onLine);
+    }
+  }, []);
 
   useEffect(() => {
     const isStandalone =
@@ -1644,7 +1650,13 @@ function SidebarContent({
     getTenantsForUser(empleado.email).then(setMyTenants);
   }, [empleado.email]);
 
-  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [isOnline, setIsOnline] = useState(true);
+
+  useEffect(() => {
+    if (typeof navigator !== "undefined") {
+      setIsOnline(navigator.onLine);
+    }
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
