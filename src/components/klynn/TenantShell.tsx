@@ -1238,7 +1238,7 @@ export function TenantShell() {
                 Prueba gratis · {trialDays} días
               </Badge>
             )}
-            <OfflineStatusBadge tenantId={tenant.id} />
+            <OfflineStatusBadge tenantId={tenant.id} hasOfflineModule={isModuleEnabled(tenant, "pos_offline")} />
             <PWAInstallButton variant="header" />
             {/* Mostrar botón Atajos si está online O si la app ya está instalada (PWA) */}
             {(isOnline || isInstalled) && (
@@ -1955,21 +1955,39 @@ function SidebarContent({
         {/* Punto de Venta CTA Button */}
         {can(empleado, "nueva-orden") && (
           <div className="px-1 pb-2 flex justify-center shrink-0">
-            <Link
-              to={`/t/${tenant.slug}/nueva-orden`}
-              id="tour-nav-nueva-orden"
-              onClick={onNavigate}
-              onMouseEnter={() => prefetch("nueva-orden")}
-              className="w-full h-11 px-4 rounded-xl text-white shadow-md flex items-center justify-between font-bold text-[14.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
-            >
-              <div className="flex items-center gap-2.5">
-                <PlusCircle className="h-5.5 w-5.5 shrink-0" strokeWidth={2.2} />
-                <span>Nueva orden</span>
-              </div>
-              <kbd className="hidden sm:inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-extrabold text-white/95 border border-white/10 shadow-sm shrink-0">
-                N
-              </kbd>
-            </Link>
+            {!isOnline && !isModuleEnabled(tenant, "pos_offline") ? (
+              <button
+                type="button"
+                onClick={() => {
+                  toast.error("El Modo Offline está inactivo en esta lavandería. Conéctate a internet para emitir órdenes.");
+                }}
+                className="w-full h-11 px-4 rounded-xl text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/60 shadow-none flex items-center justify-between font-bold text-[14.5px] cursor-not-allowed opacity-80"
+              >
+                <div className="flex items-center gap-2.5">
+                  <PlusCircle className="h-5.5 w-5.5 shrink-0 text-slate-400" strokeWidth={2.2} />
+                  <span>Nueva orden</span>
+                </div>
+                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-lg shrink-0 shadow-2xs">
+                  <WifiOff className="h-3 w-3 text-amber-600 dark:text-amber-400" /> Solo Online
+                </span>
+              </button>
+            ) : (
+              <Link
+                to={`/t/${tenant.slug}/nueva-orden`}
+                id="tour-nav-nueva-orden"
+                onClick={onNavigate}
+                onMouseEnter={() => prefetch("nueva-orden")}
+                className="w-full h-11 px-4 rounded-xl text-white shadow-md flex items-center justify-between font-bold text-[14.5px] transition-all hover:scale-[1.02] active:scale-95 border-none bg-[#16A34A] hover:bg-[#15803D] dark:bg-[#15803D] dark:hover:bg-[#16A34A]"
+              >
+                <div className="flex items-center gap-2.5">
+                  <PlusCircle className="h-5.5 w-5.5 shrink-0" strokeWidth={2.2} />
+                  <span>Nueva orden</span>
+                </div>
+                <kbd className="hidden sm:inline-flex h-5 w-5 items-center justify-center rounded-full bg-white/20 text-[11px] font-extrabold text-white/95 border border-white/10 shadow-sm shrink-0">
+                  N
+                </kbd>
+              </Link>
+            )}
           </div>
         )}
 
@@ -1985,7 +2003,8 @@ function SidebarContent({
               {category.items.map((item) => {
                 const active = item.isSoporte ? false : isActive(item.to, item.exact);
                 const isConversations = item.permission === "conversations";
-                const isOfflineUnavailable = !isOnline && !OFFLINE_CAPABLE_IDS.has(item.id);
+                const hasOfflineModule = isModuleEnabled(tenant, "pos_offline");
+                const isOfflineUnavailable = !isOnline && (!hasOfflineModule || !OFFLINE_CAPABLE_IDS.has(item.id));
 
                 if (item.isSoporte) {
                   return (

@@ -4,7 +4,7 @@ import { syncManager, type SyncState } from "@/lib/sync-manager";
 import { offlineDB } from "@/lib/offline-db";
 import { toast } from "sonner";
 
-export function OfflineStatusBadge({ tenantId }: { tenantId?: string }) {
+export function OfflineStatusBadge({ tenantId, hasOfflineModule = true }: { tenantId?: string; hasOfflineModule?: boolean }) {
   const [status, setStatus] = useState<SyncState>("online");
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isHovered, setIsHovered] = useState(false);
@@ -95,6 +95,19 @@ export function OfflineStatusBadge({ tenantId }: { tenantId?: string }) {
   }
 
   if (status === "offline" || !navigator.onLine) {
+    if (!hasOfflineModule) {
+      return (
+        <button
+          onClick={() => toast.error("El Modo Offline (Facturación sin conexión) está inactivo para este plan. Conéctate a internet para continuar operando.")}
+          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-500/10 dark:bg-slate-500/20 border border-rose-500/40 text-rose-600 dark:text-rose-400 text-[11px] font-bold shadow-2xs transition-all hover:bg-rose-500/10 cursor-pointer"
+          title="Sin conexión a internet. El Modo Offline está inactivo en esta lavandería."
+        >
+          <CloudOff className="h-3.5 w-3.5 text-rose-500" />
+          <span>Sin conexión (Modo offline inactivo)</span>
+        </button>
+      );
+    }
+
     return (
       <button
         onClick={handleManualSync}

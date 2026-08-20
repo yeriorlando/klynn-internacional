@@ -814,6 +814,9 @@ function AdminPage() {
                         const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined 
                           ? t.config.modulos_override.estanteria 
                           : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
+                        const hasOffline = t.config?.modulos_override?.pos_offline !== undefined 
+                          ? t.config.modulos_override.pos_offline 
+                          : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
 
                         const daysRemaining = t.trial_hasta
                           ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -981,6 +984,16 @@ function AdminPage() {
                                 >
                                   <Layers className="h-3 w-3" />
                                 </span>
+                                <span
+                                  title={hasOffline ? "Modo Offline: Habilitado (Punto de Venta sin conexión)" : "Modo Offline: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasOffline
+                                      ? "bg-rose-50 text-rose-700 border border-rose-300 dark:bg-rose-950/50 dark:text-rose-300 dark:border-rose-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <WifiOff className="h-3 w-3" />
+                                </span>
                               </div>
                             </td>
 
@@ -1098,6 +1111,7 @@ function AdminPage() {
                   const hasLogistica = t.config?.modulos_override?.logistica !== undefined ? t.config.modulos_override.logistica : !!planOfTenant?.modulos.logistica;
                   const hasProcesos = t.config?.modulos_override?.procesos !== undefined ? t.config.modulos_override.procesos : (planOfTenant?.modulos.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
                   const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined ? t.config.modulos_override.estanteria : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
+                  const hasOffline = t.config?.modulos_override?.pos_offline !== undefined ? t.config.modulos_override.pos_offline : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
 
                   const daysRemaining = t.trial_hasta
                     ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1182,7 +1196,8 @@ function AdminPage() {
                             <span className={`p-1 rounded ${hasSucursales ? 'text-purple-600 bg-purple-50 dark:bg-purple-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Building2 className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasLogistica ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Truck className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
-                            <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Layers className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasOffline ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasOffline ? "Modo Offline: Habilitado (Punto de Venta sin conexión)" : "Modo Offline: Inactivo"}><WifiOff className="h-3 w-3" /></span>
                           </div>
                         </div>
 

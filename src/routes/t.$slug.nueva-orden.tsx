@@ -50,6 +50,9 @@ import {
   Layers,
   Package,
   MapPin,
+  WifiOff,
+  Lock,
+  RefreshCw,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -920,6 +923,45 @@ function NuevaOrdenPage() {
     return <GlobalPageLoader text="Cargando punto de venta POS..." />;
   }
   const { empleado } = user;
+
+  const isOfflineEnabled = isModuleEnabled(tenant, "pos_offline");
+  if (typeof window !== "undefined" && !navigator.onLine && !isOfflineEnabled) {
+    return (
+      <div className="flex min-h-[70vh] flex-col items-center justify-center p-6 text-center animate-in fade-in zoom-in duration-200">
+        <div className="relative mb-5">
+          <div className="h-20 w-20 rounded-3xl bg-rose-500/10 dark:bg-rose-500/20 text-rose-600 dark:text-rose-400 flex items-center justify-center shadow-lg border border-rose-500/20">
+            <WifiOff className="h-10 w-10" />
+          </div>
+          <div className="absolute -bottom-1 -right-1 h-7 w-7 rounded-full bg-amber-500 text-white flex items-center justify-center shadow-md">
+            <Lock className="h-3.5 w-3.5" />
+          </div>
+        </div>
+        <Badge className="bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/30 text-xs font-bold px-3 py-1 mb-3 rounded-full">
+          Módulo Offline Inactivo
+        </Badge>
+        <h2 className="text-2xl font-black text-foreground tracking-tight max-w-md">
+          Facturación Sin Conexión no disponible
+        </h2>
+        <p className="text-muted-foreground text-sm max-w-md mt-2 leading-relaxed">
+          Esta lavandería no tiene habilitado el <strong>Modo Offline</strong> en su suscripción actual. Para emitir órdenes y cobrar en el POS necesitas estar conectado a internet o solicitar la activación del módulo a tu administrador.
+        </p>
+        <div className="flex items-center gap-3 mt-6 flex-wrap justify-center">
+          <Button
+            onClick={() => window.location.reload()}
+            className="rounded-xl font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white gap-2 shadow-xs cursor-pointer"
+          >
+            <RefreshCw className="h-4 w-4" />
+            <span>Reintentar Conexión</span>
+          </Button>
+          <Link to="/t/$slug" params={{ slug: tenant.slug }}>
+            <Button variant="outline" className="rounded-xl font-bold gap-2 cursor-pointer">
+              <span>Volver al Dashboard</span>
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   const filtrados = clientes.filter(
     (c) =>
