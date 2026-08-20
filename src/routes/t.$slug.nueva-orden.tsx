@@ -1278,46 +1278,66 @@ function NuevaOrdenPage() {
         opcionPagoSelected !== "PAGO_AL_RETIRAR" &&
         opcionPagoSelected !== "CREDITO"
       ) {
-        try {
-          // 1. Guardar la orden inicial en Supabase para satisfacer la clave foránea
-          await saveOrden(orden);
-
+        if (typeof window !== "undefined" && !navigator.onLine) {
+          // ⚠️ Modo Contingencia Tributaria Offline (Ley 32-23)
           let nextNCF: string | undefined = undefined;
-
           try {
             const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
             nextNCF = ncf;
             ncfVencimiento = expiration_date;
-          } catch (seqErr) {
-            console.warn("Aviso al obtener secuencia local:", seqErr);
-          }
+          } catch {}
 
-          const result = await emitirECF(
-            { ...orden, ncf: nextNCF }, // Pasamos el NCF generado (o undefined en Sandbox)
-            targetCliente,
-            freshFiscalConfig?.pronesoft_tenant_id || fiscalConfig?.pronesoft_tenant_id,
-            cfg,
-            tenant,
-            activeTipo,
-          );
-
-          const fiscalFields = {
-            ncf: result.encf,
+          const contingencyNCF = nextNCF || `${activeTipo}CONT${String(Date.now()).slice(-6)}`;
+          ordenActualizada = {
+            ...orden,
+            ncf: contingencyNCF,
             tipo_ecf: activeTipo,
-            ecf_id: result.document.id,
-            ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || "",
-            ecf_security_code: result.security_code || "",
-            ecf_signature_date: (result.document as any).signature_date || new Date().toISOString(),
+            ecf_status: "PENDING_OFFLINE_TRANSMISSION",
             ncf_vencimiento: ncfVencimiento,
           };
-
-          ordenActualizada = { ...orden, ...fiscalFields };
           await saveOrden(ordenActualizada);
-          toast.success(`✅ Comprobante ${result.encf} emitido`);
-        } catch (fErr: any) {
-          console.error("Error Fiscal:", fErr);
-          toast.error("Error al generar comprobante: " + fErr.message);
-          await saveOrden(orden);
+          toast.info(`⚠️ Modo Contingencia: Comprobante ${contingencyNCF} generado offline.`);
+        } else {
+          try {
+            await saveOrden(orden);
+
+            let nextNCF: string | undefined = undefined;
+
+            try {
+              const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
+              nextNCF = ncf;
+              ncfVencimiento = expiration_date;
+            } catch (seqErr) {
+              console.warn("Aviso al obtener secuencia local:", seqErr);
+            }
+
+            const result = await emitirECF(
+              { ...orden, ncf: nextNCF },
+              targetCliente,
+              freshFiscalConfig?.pronesoft_tenant_id || fiscalConfig?.pronesoft_tenant_id,
+              cfg,
+              tenant,
+              activeTipo,
+            );
+
+            const fiscalFields = {
+              ncf: result.encf,
+              tipo_ecf: activeTipo,
+              ecf_id: result.document.id,
+              ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || "",
+              ecf_security_code: result.security_code || "",
+              ecf_signature_date: (result.document as any).signature_date || new Date().toISOString(),
+              ncf_vencimiento: ncfVencimiento,
+            };
+
+            ordenActualizada = { ...orden, ...fiscalFields };
+            await saveOrden(ordenActualizada);
+            toast.success(`✅ Comprobante ${result.encf} emitido`);
+          } catch (fErr: any) {
+            console.error("Error Fiscal:", fErr);
+            toast.error("Error al generar comprobante: " + fErr.message);
+            await saveOrden(orden);
+          }
         }
       } else {
         await saveOrden(orden);

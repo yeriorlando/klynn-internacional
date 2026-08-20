@@ -1,5 +1,7 @@
 import { supabase } from "./supabase";
 import { createClient } from "@supabase/supabase-js";
+import { offlineDB } from "./offline-db";
+import { syncManager } from "./sync-manager";
 
 export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
 
@@ -20,6 +22,7 @@ export interface Plan {
     logistica?: boolean;
     procesos?: boolean;
     estanteria?: boolean;
+    pos_offline?: boolean;
   };
   destacado?: boolean;
   es_especial?: boolean;
@@ -161,6 +164,7 @@ export interface TenantConfig {
     logistica?: boolean;
     procesos?: boolean;
     estanteria?: boolean;
+    pos_offline?: boolean;
   };
 }
 
@@ -492,7 +496,7 @@ export interface InvitacionCodigo {
   usado_por_email?: string | null;
 }
 
-const KEY = {
+export const KEY = {
   tenants: "lvx:tenants",
   empleados: "lvx:empleados",
   plans: "lvx:plans",
@@ -521,7 +525,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 2,
     limite_ordenes_mes: 300,
     limite_whatsapp_mes: 300,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false, procesos: true, estanteria: true },
+    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false, procesos: true, estanteria: true, pos_offline: false },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
     polar_sucursal_url: "",
@@ -534,7 +538,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 10,
     limite_ordenes_mes: 1000,
     limite_whatsapp_mes: 1000,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true, procesos: true, estanteria: true },
+    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true, procesos: true, estanteria: true, pos_offline: true },
     destacado: true,
     precio_sucursal_adicional: 1200,
     limite_sucursales_adicionales: 3,
@@ -548,7 +552,7 @@ export const PLANS: Plan[] = [
     limite_empleados: 999,
     limite_ordenes_mes: null,
     limite_whatsapp_mes: 5000,
-    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true, procesos: true, estanteria: true },
+    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true, procesos: true, estanteria: true, pos_offline: true },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
     polar_sucursal_url: "",
@@ -565,7 +569,7 @@ export function getTenantPlan(tenant: Tenant | null, dynamicPlans?: Plan[]): Pla
 
 export function isModuleEnabled(
   tenant: Tenant | null,
-  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos" | "estanteria",
+  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos" | "estanteria" | "pos_offline",
   plan?: Plan,
 ): boolean {
   if (!tenant || tenant.id === "__loading__") return true;
@@ -583,6 +587,9 @@ export function isModuleEnabled(
   }
   if (moduleKey === "procesos") {
     return activePlan?.modulos?.procesos !== undefined ? !!activePlan.modulos.procesos : true;
+  }
+  if (moduleKey === "pos_offline") {
+    return activePlan?.modulos?.pos_offline !== undefined ? !!activePlan.modulos.pos_offline : false;
   }
   return !!activePlan?.modulos?.[moduleKey];
 }
@@ -841,7 +848,7 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
 }
 
 const isBrowser = () => typeof window !== "undefined";
-function read<T>(k: string, f: T): T {
+export function read<T>(k: string, f: T): T {
   if (!isBrowser()) return f;
   try {
     const v = localStorage.getItem(k);
@@ -850,15 +857,25 @@ function read<T>(k: string, f: T): T {
     return f;
   }
 }
-function write<T>(k: string, v: T) {
+export function write<T>(k: string, v: T) {
   if (isBrowser()) localStorage.setItem(k, JSON.stringify(v));
 }
 
 // ============ Plans ============
 
 export async function getPlans(): Promise<Plan[]> {
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const localStored = read<Plan[] | null>(KEY.plans, null);
+    if (localStored && localStored.length > 0) return localStored;
+    return PLANS;
+  }
+
   try {
-    const { data, error } = await supabase.from("planes").select("*").order("precio_mensual");
+    const fetchPromise = supabase.from("planes").select("*").order("precio_mensual");
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
     if (!error && data && data.length > 0) {
       const localStored = read<Plan[] | null>(KEY.plans, null) || [];
       const mapped = data.map((p) => {
@@ -891,11 +908,16 @@ export async function getPlans(): Promise<Plan[]> {
             estanteria: p.estanteria !== undefined && p.estanteria !== null
               ? !!p.estanteria
               : (localMatch?.modulos?.estanteria !== undefined ? !!localMatch.modulos.estanteria : (staticMatch?.modulos?.estanteria ?? true)),
+            pos_offline: p.pos_offline !== undefined && p.pos_offline !== null
+              ? !!p.pos_offline
+              : (localMatch?.modulos?.pos_offline !== undefined ? !!localMatch.modulos.pos_offline : (staticMatch?.modulos?.pos_offline ?? false)),
           },
           limite_whatsapp_mes: p.limite_whatsapp_mes ?? localMatch?.limite_whatsapp_mes ?? staticMatch?.limite_whatsapp_mes ?? 0,
-          destacado: p.destacado !== undefined && p.destacado !== null ? !!p.destacado : (localMatch?.destacado ?? !!staticMatch?.destacado),
-          es_especial: p.es_especial !== undefined && p.es_especial !== null ? !!p.es_especial : (localMatch?.es_especial ?? staticMatch?.es_especial ?? false),
-          titulo_especial: p.titulo_especial ?? localMatch?.titulo_especial ?? staticMatch?.titulo_especial ?? "Plan especial",
+          destacado: localMatch?.destacado !== undefined ? !!localMatch.destacado : (p.destacado !== undefined && p.destacado !== null ? !!p.destacado : !!staticMatch?.destacado),
+          es_especial: localMatch?.es_especial !== undefined ? !!localMatch.es_especial : (p.es_especial !== undefined && p.es_especial !== null ? !!p.es_especial : (staticMatch?.es_especial ?? false)),
+          titulo_especial: (localMatch?.titulo_especial !== undefined && localMatch?.titulo_especial !== null && localMatch.titulo_especial !== "")
+            ? localMatch.titulo_especial
+            : (p.titulo_especial || staticMatch?.titulo_especial || "Plan especial"),
           polar_product_monthly_url: p.polar_product_monthly_url ?? localMatch?.polar_product_monthly_url ?? staticMatch?.polar_product_monthly_url,
           polar_product_yearly_url: p.polar_product_yearly_url ?? localMatch?.polar_product_yearly_url ?? staticMatch?.polar_product_yearly_url,
           precio_sucursal_adicional:
@@ -912,9 +934,11 @@ export async function getPlans(): Promise<Plan[]> {
               : (localMatch?.limite_sucursales_adicionales ?? staticMatch?.limite_sucursales_adicionales ?? 0),
         };
       });
-      _cachedPlans = mapped;
-      write(KEY.plans, mapped);
-      return mapped;
+      const extraLocalPlans = localStored.filter((lp) => !data.some((dp: any) => dp.id === lp.id));
+      const fullMapped = [...mapped, ...extraLocalPlans];
+      _cachedPlans = fullMapped;
+      write(KEY.plans, fullMapped);
+      return fullMapped;
     }
   } catch (e) {
     console.error("Error fetching plans from Supabase:", e);
@@ -1317,19 +1341,112 @@ export async function deleteTenant(id: string) {
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | undefined> {
-  const { data, error } = await supabase
-    .from("tenants")
-    .select("*")
-    .eq("slug", slug.toLowerCase())
-    .single();
-  if (error) return undefined;
-  return data;
+  const cleanSlug = slug.toLowerCase();
+  const cacheKey = `klynn_tenant_cache_${cleanSlug}`;
+
+  // 1. Si no hay conexión o ya está en caché, intentar leer primero si offline
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+  }
+
+  // 2. Intentar buscar en Supabase con timeout de seguridad
+  try {
+    const fetchPromise = supabase
+      .from("tenants")
+      .select("*")
+      .eq("slug", cleanSlug)
+      .maybeSingle();
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(`klynn_tenant_id_${data.id}`, JSON.stringify(data));
+      }
+      return data;
+    }
+  } catch (e) {
+    console.warn("Aviso al obtener tenant por slug:", e);
+  }
+
+  // 3. Fallback a caché local si Supabase falló o está sin conexión
+  if (typeof window !== "undefined") {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+  }
+
+  // 4. Modo Resiliencia Offline: Si no hay conexión o falló el server, generar estructura base para que nunca se quede cargando
+  const defaultTenant: Tenant = {
+    id: `ten-${cleanSlug}`,
+    nombre: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1),
+    slug: cleanSlug,
+    rnc: "131-00000-0",
+    telefono: "809-000-0000",
+    direccion: "Sucursal Principal",
+    ciudad: "Santo Domingo",
+    provincia: "Distrito Nacional",
+    email: `contacto@${cleanSlug}.com.do`,
+    color_primario: "#1B4B73",
+    color_secundario: "#F0B900",
+    plan_id: "pro",
+    estado: "TRIAL",
+    trial_hasta: new Date(Date.now() + 30 * 86400000).toISOString(),
+    creado_en: new Date().toISOString(),
+    config: { ...DEFAULT_CONFIG },
+  };
+
+  if (typeof window !== "undefined") {
+    localStorage.setItem(cacheKey, JSON.stringify(defaultTenant));
+    localStorage.setItem(`klynn_tenant_id_${defaultTenant.id}`, JSON.stringify(defaultTenant));
+  }
+
+  return defaultTenant;
 }
 
 export async function getTenantById(id: string): Promise<Tenant | undefined> {
-  const { data, error } = await supabase.from("tenants").select("*").eq("id", id).single();
-  if (error) return undefined;
-  return data;
+  const cacheKey = `klynn_tenant_id_${id}`;
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+  }
+
+  try {
+    const fetchPromise = supabase.from("tenants").select("*").eq("id", id).maybeSingle();
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+        if (data.slug) localStorage.setItem(`klynn_tenant_cache_${data.slug}`, JSON.stringify(data));
+      }
+      return data;
+    }
+  } catch (e) {}
+
+  if (typeof window !== "undefined") {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+  }
+
+  return undefined;
 }
 
 export async function isSlugAvailable(slug: string): Promise<boolean> {
@@ -1809,57 +1926,120 @@ export async function deleteEmpleado(id: string) {
 }
 
 export async function getEmpleadoById(id: string): Promise<Empleado | undefined> {
-  const { data, error } = await supabase.from("empleados").select("*").eq("id", id).single();
-  if (error) return undefined;
-  return data;
+  const cacheKey = `klynn_emp_id_${id}`;
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+  }
+
+  try {
+    const fetchPromise = supabase.from("empleados").select("*").eq("id", id).maybeSingle();
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+      }
+      return data;
+    }
+  } catch (e) {}
+
+  if (typeof window !== "undefined") {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+  }
+
+  return undefined;
 }
 
 // ============ Clientes (Supabase) ============
 export async function getClientes(tenant_id: string): Promise<Cliente[]> {
-  const PAGE_SIZE = 1000;
-  let allData: Cliente[] = [];
-  let from = 0;
-  let hasMore = true;
+  // 1. Si no hay conexión, devolver inmediatamente de memoria local
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return read<Cliente[]>(KEY.clientes, []).filter((c) => c.tenant_id === tenant_id);
+  }
 
-  while (hasMore) {
-    const { data, error } = await supabase
+  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  try {
+    const fetchPromise = supabase
       .from("clientes")
       .select("*")
       .eq("tenant_id", tenant_id)
-      .order("nombre")
-      .range(from, from + PAGE_SIZE - 1);
+      .order("nombre");
 
-    if (error) {
-      console.error("Error getClientes:", error);
-      break;
-    }
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
 
-    if (data && data.length > 0) {
-      allData.push(...data);
-      if (data.length < PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        from += PAGE_SIZE;
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      if (isBrowser()) {
+        const local = read<Cliente[]>(KEY.clientes, []).filter((c) => c.tenant_id === tenant_id);
+        const combined = [...data];
+        local.forEach((lc) => {
+          if (!combined.some((sc) => sc.id === lc.id)) combined.push(lc);
+        });
+        write(KEY.clientes, combined);
+        try { offlineDB.putMany("clientes", combined); } catch {}
+        return combined;
       }
-    } else {
-      hasMore = false;
+      return data;
     }
+  } catch (e) {
+    console.warn("Aviso al consultar clientes en Supabase:", e);
   }
 
-  return allData;
+  return read<Cliente[]>(KEY.clientes, []).filter((c) => c.tenant_id === tenant_id);
 }
 
 export async function saveCliente(c: Cliente) {
+  // 1. Guardar siempre en IndexedDB y localStorage para disponibilidad inmediata
+  try {
+    await offlineDB.put("clientes", c);
+  } catch (idbErr) {
+    console.warn("IndexedDB save cliente warning:", idbErr);
+  }
+
+  const local = read<Cliente[]>(KEY.clientes, []);
+  const exists = local.findIndex((x) => x.id === c.id);
+  if (exists >= 0) local[exists] = c;
+  else local.push(c);
+  write(KEY.clientes, local);
+
+  // 2. Intentar guardar en Supabase si hay red; de lo contrario, encolar en Outbox
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: c.id,
+      tenant_id: c.tenant_id,
+      table_name: "clientes",
+      action: "UPSERT",
+      payload: c,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
   try {
     const { error } = await supabase.from("clientes").upsert(c);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: saving cliente locally", err);
-    const local = read<Cliente[]>(KEY.clientes, []);
-    const exists = local.findIndex((x) => x.id === c.id);
-    if (exists >= 0) local[exists] = c;
-    else local.push(c);
-    write(KEY.clientes, local);
+    console.warn("Offline outbox fallback for cliente:", err);
+    await offlineDB.addToOutbox({
+      id: c.id,
+      tenant_id: c.tenant_id,
+      table_name: "clientes",
+      action: "UPSERT",
+      payload: c,
+    });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
@@ -1877,51 +2057,48 @@ export async function getClienteById(id: string): Promise<Cliente | undefined> {
 
 // ============ Órdenes (Supabase) ============
 export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
-  const PAGE_SIZE = 1000;
-  let allData: Orden[] = [];
-  let from = 0;
-  let hasMore = true;
+  // 1. Si no hay conexión, devolver inmediatamente de memoria local
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return read<Orden[]>(KEY.ordenes, [])
+      .filter((o) => o.tenant_id === tenant_id)
+      .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+  }
 
-  while (hasMore) {
-    const { data, error } = await supabase
+  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  try {
+    const fetchPromise = supabase
       .from("ordenes")
       .select("*")
       .eq("tenant_id", tenant_id)
-      .order("creado_en", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
+      .order("creado_en", { ascending: false });
 
-    if (error) {
-      console.error("Error getOrdenes:", error);
-      break;
-    }
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
 
-    if (data && data.length > 0) {
-      allData.push(...data);
-      if (data.length < PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        from += PAGE_SIZE;
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      if (isBrowser()) {
+        const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+        const combined = [...data];
+        local.forEach((lo) => {
+          if (!combined.some((co) => co.id === lo.id)) combined.push(lo);
+        });
+        const sorted = combined.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+        write(KEY.ordenes, sorted);
+        try { offlineDB.putMany("ordenes", sorted); } catch {}
+        return sorted;
       }
-    } else {
-      hasMore = false;
+      return data;
     }
+  } catch (e) {
+    console.warn("Aviso al consultar órdenes en Supabase:", e);
   }
 
-  let results = allData;
-
-  if (isBrowser()) {
-    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
-    // Combinar y desduplicar por ID, priorizando local si hay colisión (ya que local podría ser una edición más reciente offline)
-    const combined = [...results];
-    local.forEach((lo) => {
-      if (!combined.some((co) => co.id === lo.id)) {
-        combined.push(lo);
-      }
-    });
-    results = combined.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-  }
-
-  return results;
+  return read<Orden[]>(KEY.ordenes, [])
+    .filter((o) => o.tenant_id === tenant_id)
+    .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
 }
 
 export async function getOrdenesByPeriod(filters: {
@@ -1930,12 +2107,17 @@ export async function getOrdenesByPeriod(filters: {
   desde?: string;
   hasta?: string;
 }): Promise<Orden[]> {
-  const PAGE_SIZE = 1000;
-  let allData: Orden[] = [];
-  let from = 0;
-  let hasMore = true;
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const all = await getOrdenes(filters.tenant_id);
+    return all.filter((o) => {
+      if (filters.empleado_id && filters.empleado_id !== "all" && o.empleado_id !== filters.empleado_id) return false;
+      if (filters.desde && o.creado_en < filters.desde) return false;
+      if (filters.hasta && o.creado_en > filters.hasta + "T23:59:59Z") return false;
+      return true;
+    });
+  }
 
-  while (hasMore) {
+  try {
     let query = supabase.from("ordenes").select("*").eq("tenant_id", filters.tenant_id);
 
     if (filters.empleado_id && filters.empleado_id !== "all") {
@@ -1950,41 +2132,64 @@ export async function getOrdenesByPeriod(filters: {
       query = query.lte("creado_en", filters.hasta + "T23:59:59Z");
     }
 
-    const { data, error } = await query
-      .order("creado_en", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
+    const fetchPromise = query.order("creado_en", { ascending: false });
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
 
-    if (error) {
-      console.error("Error getOrdenesByPeriod:", error);
-      break;
-    }
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+    if (!error && data) return data;
+  } catch (e) {}
 
-    if (data && data.length > 0) {
-      allData.push(...data);
-      if (data.length < PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        from += PAGE_SIZE;
-      }
-    } else {
-      hasMore = false;
-    }
-  }
-
-  return allData;
+  const all = await getOrdenes(filters.tenant_id);
+  return all.filter((o) => {
+    if (filters.empleado_id && filters.empleado_id !== "all" && o.empleado_id !== filters.empleado_id) return false;
+    if (filters.desde && o.creado_en < filters.desde) return false;
+    if (filters.hasta && o.creado_en > filters.hasta + "T23:59:59Z") return false;
+    return true;
+  });
 }
 
 export async function saveOrden(o: Orden) {
+  // 1. Guardar de inmediato en IndexedDB y localStorage (0 latencia)
+  try {
+    await offlineDB.put("ordenes", o);
+  } catch (idbErr) {
+    console.warn("IndexedDB save order warning:", idbErr);
+  }
+
+  const local = read<Orden[]>(KEY.ordenes, []);
+  const exists = local.findIndex((x) => x.id === o.id);
+  if (exists >= 0) local[exists] = o;
+  else local.push(o);
+  write(KEY.ordenes, local);
+
+  // 2. Si estamos sin conexión, agregar directamente a la cola Outbox
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: o.id,
+      tenant_id: o.tenant_id,
+      table_name: "ordenes",
+      action: "UPSERT",
+      payload: o,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
+  // 3. Intentar guardar en Supabase; si falla por timeout o corte, encolar en Outbox
   try {
     const { error } = await supabase.from("ordenes").upsert(o);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: saving order locally", err);
-    const local = read<Orden[]>(KEY.ordenes, []);
-    const exists = local.findIndex((x) => x.id === o.id);
-    if (exists >= 0) local[exists] = o;
-    else local.push(o);
-    write(KEY.ordenes, local);
+    console.warn("Offline outbox fallback for orden:", err);
+    await offlineDB.addToOutbox({
+      id: o.id,
+      tenant_id: o.tenant_id,
+      table_name: "ordenes",
+      action: "UPSERT",
+      payload: o,
+    });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
@@ -1993,63 +2198,139 @@ export async function updateOrdenEstado(id: string, estado: EstadoOrden, ubicaci
   const updates: Record<string, any> = { estado };
   if (ubicacion_ropa !== undefined) updates.ubicacion_ropa = ubicacion_ropa;
 
-  // Siempre intentar actualizar localmente por si la orden no se ha sincronizado
   const local = read<Orden[]>(KEY.ordenes, []);
   const idx = local.findIndex((x) => x.id === id);
-  let localUpdated = false;
   if (idx >= 0) {
     local[idx].estado = estado;
     if (ubicacion_ropa !== undefined) local[idx].ubicacion_ropa = ubicacion_ropa;
     write(KEY.ordenes, local);
+    try {
+      offlineDB.put("ordenes", local[idx]);
+    } catch {}
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
-    localUpdated = true;
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: id,
+      tenant_id: local[idx]?.tenant_id || "default",
+      table_name: "ordenes",
+      action: "UPDATE",
+      payload: updates,
+    });
+    return;
   }
 
   try {
     const { error } = await supabase.from("ordenes").update(updates).eq("id", id);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: updating order estado locally failed", err);
+    await offlineDB.addToOutbox({
+      id: id,
+      tenant_id: local[idx]?.tenant_id || "default",
+      table_name: "ordenes",
+      action: "UPDATE",
+      payload: updates,
+    });
   }
 }
 
 export async function getOrdenById(id: string): Promise<Orden | undefined> {
-  const { data, error } = await supabase.from("ordenes").select("*").eq("id", id).single();
-  if (error) return undefined;
-  return data;
+  const local = read<Orden[]>(KEY.ordenes, []);
+  const match = local.find((o) => o.id === id);
+  if (match) return match;
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return undefined;
+  }
+
+  try {
+    const { data, error } = await supabase.from("ordenes").select("*").eq("id", id).single();
+    if (error) return undefined;
+    return data;
+  } catch {
+    return undefined;
+  }
 }
 
 export async function nextOrdenNumero(tenant_id: string): Promise<string> {
-  // Para un sistema robusto, podríamos usar una tabla de secuencias en Supabase
-  // Por ahora, buscaremos el número más alto
-  const { data, error } = await supabase
-    .from("ordenes")
-    .select("numero")
-    .eq("tenant_id", tenant_id)
-    .order("creado_en", { ascending: false })
-    .limit(1);
-
-  let next = 1;
-  if (!error && data && data.length > 0) {
-    const lastNum = data[0].numero;
-    const match = lastNum.match(/-(\d+)$/);
-    if (match) next = parseInt(match[1]) + 1;
-  }
-
   const d = new Date();
   const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
-  return `KL-${ym}-${String(next).padStart(4, "0")}`;
+
+  // 1. Si no hay conexión, calcular secuencial local de inmediato en 0ms
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+    let next = 1;
+    if (local.length > 0) {
+      const highest = local.reduce((max, o) => {
+        const match = (o.numero || "").match(/-(\d+)$/);
+        return match ? Math.max(max, parseInt(match[1])) : max;
+      }, 0);
+      next = highest + 1;
+    }
+    return `KL-${ym}-${String(next).padStart(4, "0")}`;
+  }
+
+  // 2. Intentar buscar en Supabase con timeout de 1500ms
+  try {
+    const fetchPromise = supabase
+      .from("ordenes")
+      .select("numero")
+      .eq("tenant_id", tenant_id)
+      .order("creado_en", { ascending: false })
+      .limit(1);
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    let next = 1;
+    if (!error && data && data.length > 0) {
+      const lastNum = data[0].numero;
+      const match = lastNum.match(/-(\d+)$/);
+      if (match) next = parseInt(match[1]) + 1;
+    } else {
+      const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+      next = local.length + 1;
+    }
+
+    return `KL-${ym}-${String(next).padStart(4, "0")}`;
+  } catch (e) {
+    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+    const next = local.length + 1;
+    return `KL-${ym}-${String(next).padStart(4, "0")}`;
+  }
 }
 
 // ============ Caja (Supabase) ============
 export async function getCajas(tenant_id: string): Promise<Caja[]> {
-  const { data, error } = await supabase
-    .from("cajas")
-    .select("*")
-    .eq("tenant_id", tenant_id)
-    .order("abierta_en", { ascending: false });
-  if (error) return [];
-  return data || [];
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === tenant_id);
+  }
+
+  try {
+    const fetchPromise = supabase
+      .from("cajas")
+      .select("*")
+      .eq("tenant_id", tenant_id)
+      .order("abierta_en", { ascending: false });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      write(KEY.cajas, data);
+      try { offlineDB.putMany("cajas", data); } catch {}
+      return data;
+    }
+  } catch (e) {}
+
+  return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === tenant_id);
 }
 
 export async function getHistoricoCierres(filters: {
@@ -2058,169 +2339,252 @@ export async function getHistoricoCierres(filters: {
   desde?: string;
   hasta?: string;
 }): Promise<Caja[]> {
-  let query = supabase
-    .from("cajas")
-    .select("*")
-    .eq("tenant_id", filters.tenant_id)
-    .eq("estado", "CERRADA");
-
-  if (filters.empleado_id && filters.empleado_id !== "all") {
-    query = query.eq("empleado_id", filters.empleado_id);
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const all = await getCajas(filters.tenant_id);
+    return all.filter((c) => c.estado === "CERRADA");
   }
 
-  if (filters.desde) {
-    query = query.gte("abierta_en", filters.desde);
-  }
+  try {
+    let query = supabase
+      .from("cajas")
+      .select("*")
+      .eq("tenant_id", filters.tenant_id)
+      .eq("estado", "CERRADA");
 
-  if (filters.hasta) {
-    query = query.lte("abierta_en", filters.hasta + "T23:59:59Z");
-  }
+    if (filters.empleado_id && filters.empleado_id !== "all") {
+      query = query.eq("empleado_id", filters.empleado_id);
+    }
 
-  const { data, error } = await query.order("cerrada_en", { ascending: false });
-  if (error) {
-    console.error("Error getHistoricoCierres:", error);
-    return [];
-  }
-  return data || [];
+    if (filters.desde) {
+      query = query.gte("abierta_en", filters.desde);
+    }
+
+    if (filters.hasta) {
+      query = query.lte("abierta_en", filters.hasta + "T23:59:59Z");
+    }
+
+    const fetchPromise = query.order("cerrada_en", { ascending: false });
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+    if (!error && data) return data;
+  } catch (e) {}
+
+  const all = await getCajas(filters.tenant_id);
+  return all.filter((c) => c.estado === "CERRADA");
 }
 
 export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
-  if (!tenant_id || tenant_id === "admin") return null;
+  if (!tenant_id || tenant_id === "admin" || tenant_id === "__loading__") return null;
+
+  // 1. Si estamos sin conexión, verificar inmediatamente en memoria local
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const localCajas = read<Caja[]>(KEY.cajas, []);
+    const openCaja = localCajas.find((c) => c.tenant_id === tenant_id && c.estado === "ABIERTA");
+    return openCaja || null;
+  }
+
+  // 2. Intentar buscar en Supabase con timeout de 2000ms
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from("cajas")
       .select("*")
       .eq("tenant_id", tenant_id)
       .eq("estado", "ABIERTA")
       .order("abierta_en", { ascending: false });
 
-    if (error) {
-      console.error("Error getCajaAbierta:", error);
-      return null;
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data && data.length > 0) {
+      const localCajas = read<Caja[]>(KEY.cajas, []);
+      const idx = localCajas.findIndex((c) => c.id === data[0].id);
+      if (idx >= 0) localCajas[idx] = data[0];
+      else localCajas.push(data[0]);
+      write(KEY.cajas, localCajas);
+      return data[0];
     }
-    if (!data || data.length === 0) return null;
-    return data[0];
-  } catch (e) {
-    console.error("Exception in getCajaAbierta:", e);
-    return null;
-  }
+  } catch (e) {}
+
+  const localCajas = read<Caja[]>(KEY.cajas, []);
+  const openCaja = localCajas.find((c) => c.tenant_id === tenant_id && c.estado === "ABIERTA");
+  return openCaja || null;
 }
 
 export async function saveCaja(c: Caja) {
-  const { error } = await supabase.from("cajas").upsert(c);
-  if (error) throw error;
+  try {
+    await offlineDB.put("cajas", c);
+  } catch {}
+
+  const local = read<Caja[]>(KEY.cajas, []);
+  const exists = local.findIndex((x) => x.id === c.id);
+  if (exists >= 0) local[exists] = c;
+  else local.push(c);
+  write(KEY.cajas, local);
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: c.id,
+      tenant_id: c.tenant_id,
+      table_name: "cajas",
+      action: "UPSERT",
+      payload: c,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
+  try {
+    const { error } = await supabase.from("cajas").upsert(c);
+    if (error) throw error;
+  } catch (err) {
+    await offlineDB.addToOutbox({
+      id: c.id,
+      tenant_id: c.tenant_id,
+      table_name: "cajas",
+      action: "UPSERT",
+      payload: c,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+  }
 }
 
 export async function getMovimientos(
   tenant_id: string,
   caja_id?: string,
 ): Promise<MovimientoCaja[]> {
-  const PAGE_SIZE = 1000;
-  let allData: MovimientoCaja[] = [];
-  let from = 0;
-  let hasMore = true;
-
-  while (hasMore) {
-    let query = supabase.from("movimientos_caja").select("*").eq("tenant_id", tenant_id);
-    if (caja_id) query = query.eq("caja_id", caja_id);
-    const { data, error } = await query
-      .order("creado_en", { ascending: true })
-      .range(from, from + PAGE_SIZE - 1);
-
-    if (error) {
-      console.error("Error getMovimientos:", error);
-      break;
-    }
-
-    if (data && data.length > 0) {
-      allData.push(...data);
-      if (data.length < PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        from += PAGE_SIZE;
-      }
-    } else {
-      hasMore = false;
-    }
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const local = read<MovimientoCaja[]>(KEY.movimientos, []);
+    return local.filter((m) => m.tenant_id === tenant_id && (!caja_id || m.caja_id === caja_id));
   }
 
-  return allData;
+  try {
+    let query = supabase.from("movimientos_caja").select("*").eq("tenant_id", tenant_id);
+    if (caja_id) query = query.eq("caja_id", caja_id);
+    const fetchPromise = query.order("creado_en", { ascending: false });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      write(KEY.movimientos, data);
+      try { offlineDB.putMany("movimientos_caja", data); } catch {}
+      return data;
+    }
+  } catch (e) {}
+
+  const local = read<MovimientoCaja[]>(KEY.movimientos, []);
+  return local.filter((m) => m.tenant_id === tenant_id && (!caja_id || m.caja_id === caja_id));
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
   try {
+    await offlineDB.put("movimientos_caja", m);
+  } catch {}
+
+  const local = read<MovimientoCaja[]>(KEY.movimientos, []);
+  if (!local.some((x) => x.id === m.id)) {
+    local.push(m);
+  }
+  write(KEY.movimientos, local);
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: m.id,
+      tenant_id: m.tenant_id,
+      table_name: "movimientos_caja",
+      action: "INSERT",
+      payload: m,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
+  try {
     const { error } = await supabase.from("movimientos_caja").insert(m);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: saving movimiento locally", err);
-    const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-    if (!local.some((x) => x.id === m.id)) {
-      local.push(m);
-    }
-    write(KEY.movimientos, local);
+    await offlineDB.addToOutbox({
+      id: m.id,
+      tenant_id: m.tenant_id,
+      table_name: "movimientos_caja",
+      action: "INSERT",
+      payload: m,
+    });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 // ============ Gastos (Supabase) ============
 export async function getGastos(tenant_id: string): Promise<Gasto[]> {
-  const PAGE_SIZE = 1000;
-  let allData: Gasto[] = [];
-  let from = 0;
-  let hasMore = true;
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);
+  }
 
-  while (hasMore) {
-    const { data, error } = await supabase
+  try {
+    const fetchPromise = supabase
       .from("gastos")
       .select("*")
       .eq("tenant_id", tenant_id)
-      .order("fecha", { ascending: false })
-      .range(from, from + PAGE_SIZE - 1);
+      .order("fecha", { ascending: false });
 
-    if (error) {
-      console.error("Error getGastos:", error);
-      break;
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      write(KEY.gastos, data);
+      return data;
     }
+  } catch (e) {}
 
-    if (data && data.length > 0) {
-      allData.push(...data);
-      if (data.length < PAGE_SIZE) {
-        hasMore = false;
-      } else {
-        from += PAGE_SIZE;
-      }
-    } else {
-      hasMore = false;
-    }
-  }
-
-  let results = allData;
-
-  if (isBrowser()) {
-    const local = read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);
-    const combined = [...results];
-    local.forEach((lg) => {
-      if (!combined.some((cg) => cg.id === lg.id)) {
-        combined.push(lg);
-      }
-    });
-    results = combined.sort((a, b) => +new Date(b.fecha) - +new Date(a.fecha));
-  }
-
-  return results;
+  return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === tenant_id);
 }
 
 export async function saveGasto(g: Gasto) {
   try {
+    await offlineDB.put("gastos", g);
+  } catch {}
+
+  const local = read<Gasto[]>(KEY.gastos, []);
+  const exists = local.findIndex((x) => x.id === g.id);
+  if (exists >= 0) local[exists] = g;
+  else local.push(g);
+  write(KEY.gastos, local);
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: g.id,
+      tenant_id: g.tenant_id,
+      table_name: "gastos",
+      action: "UPSERT",
+      payload: g,
+    });
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
+  try {
     const { error } = await supabase.from("gastos").upsert(g);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: saving gasto locally", err);
-    const local = read<Gasto[]>(KEY.gastos, []);
-    const exists = local.findIndex((x) => x.id === g.id);
-    if (exists >= 0) local[exists] = g;
-    else local.push(g);
-    write(KEY.gastos, local);
+    await offlineDB.addToOutbox({
+      id: g.id,
+      tenant_id: g.tenant_id,
+      table_name: "gastos",
+      action: "UPSERT",
+      payload: g,
+    });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
@@ -2228,12 +2592,8 @@ export async function saveGasto(g: Gasto) {
 export async function deleteGasto(id: string) {
   try {
     await supabase.from("movimientos_caja").delete().eq("referencia", id);
-  } catch (e) {
-    console.error("Error deleting related movimiento:", e);
-  }
-  const { error } = await supabase.from("gastos").delete().eq("id", id);
-  if (error) throw error;
-
+  } catch (e) {}
+  
   if (isBrowser()) {
     const local = read<Gasto[]>(KEY.gastos, []);
     write(
@@ -2241,121 +2601,173 @@ export async function deleteGasto(id: string) {
       local.filter((x) => x.id !== id),
     );
   }
+
+  try {
+    const { error } = await supabase.from("gastos").delete().eq("id", id);
+    if (error) throw error;
+  } catch (e) {}
 }
 
 // ============ Catálogo (Supabase) ============
 export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
-  const { data, error } = await supabase
-    .from("catalogo_items")
-    .select("*")
-    .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
-    .order("categoria", { ascending: true })
-    .order("nombre", { ascending: true });
-
-  if (error) {
-    console.error("Error cargando catálogo:", error);
-    return [];
-  }
-
-  // Normaliza tildes/acentos para comparación robusta
   const normalize = (s: string) =>
     s
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-  // Desduplicar: Si existe una versión del tenant, ocultar la versión 'admin' (global)
-  const results: CatalogoItem[] = data || [];
-  const finalItems: CatalogoItem[] = [];
-  const namesSet = new Set<string>();
+  // 1. Si estamos sin conexión, devolver inmediatamente del almacenamiento local
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const local = read<CatalogoItem[]>(KEY.catalogo, []);
+    const relevant = local.filter((i) => i.tenant_id === tenant_id || i.tenant_id === "admin");
+    if (relevant.length > 0) return relevant;
+    return CATALOGO_PRENDAS_PREDEFINIDAS as any;
+  }
 
-  // Primero añadimos los del tenant
-  results
-    .filter((i) => i.tenant_id !== "admin")
-    .forEach((i) => {
-      finalItems.push(i);
-      namesSet.add(normalize(i.nombre));
-    });
+  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  try {
+    const fetchPromise = supabase
+      .from("catalogo_items")
+      .select("*")
+      .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
+      .order("categoria", { ascending: true })
+      .order("nombre", { ascending: true });
 
-  // Luego añadimos los admin solo si no hay uno del tenant con el mismo nombre (normalizado)
-  results
-    .filter((i) => i.tenant_id === "admin")
-    .forEach((i) => {
-      if (!namesSet.has(normalize(i.nombre))) {
-        finalItems.push(i);
-      }
-    });
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
 
-  return finalItems;
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data && data.length > 0) {
+      const finalItems: CatalogoItem[] = [];
+      const namesSet = new Set<string>();
+
+      data
+        .filter((i: any) => i.tenant_id !== "admin")
+        .forEach((i: any) => {
+          finalItems.push(i);
+          namesSet.add(normalize(i.nombre));
+        });
+
+      data
+        .filter((i: any) => i.tenant_id === "admin")
+        .forEach((i: any) => {
+          if (!namesSet.has(normalize(i.nombre))) {
+            finalItems.push(i);
+          }
+        });
+
+      write(KEY.catalogo, finalItems);
+      try { offlineDB.putMany("catalogo_prendas", finalItems); } catch {}
+      return finalItems;
+    }
+  } catch (e) {
+    console.warn("Aviso al cargar catálogo:", e);
+  }
+
+  const local = read<CatalogoItem[]>(KEY.catalogo, []);
+  const relevant = local.filter((i) => i.tenant_id === tenant_id || i.tenant_id === "admin");
+  if (relevant.length > 0) return relevant;
+  return CATALOGO_PRENDAS_PREDEFINIDAS as any;
 }
 
 export async function saveCatalogoItem(item: CatalogoItem) {
-  // Guard: never save with an invalid tenant_id
   if (!item.tenant_id || item.tenant_id === "__loading__") {
     console.error("saveCatalogoItem: tenant_id inválido, abortando.", item.tenant_id);
     throw new Error("tenant_id inválido");
   }
+
+  const local = read<CatalogoItem[]>(KEY.catalogo, []);
+  const exists = local.findIndex((x) => x.id === item.id);
+  if (exists >= 0) local[exists] = item;
+  else local.push(item);
+  write(KEY.catalogo, local);
+  try { offlineDB.put("catalogo_prendas", item); } catch {}
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return;
+  }
+
   try {
     const { error } = await supabase.from("catalogo_items").upsert(item);
     if (error) throw error;
   } catch (err) {
-    console.error("Offline fallback: saving catalog locally", err);
-    const local = read<CatalogoItem[]>(KEY.catalogo, []);
-    const exists = local.findIndex((x) => x.id === item.id);
-    if (exists >= 0) local[exists] = item;
-    else local.push(item);
-    write(KEY.catalogo, local);
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function deleteCatalogoItem(id: string) {
-  const { error } = await supabase.from("catalogo_items").delete().eq("id", id);
-
-  if (error) throw error;
+  if (typeof window !== "undefined") {
+    const local = read<CatalogoItem[]>(KEY.catalogo, []);
+    write(KEY.catalogo, local.filter((x) => x.id !== id));
+  }
+  try {
+    const { error } = await supabase.from("catalogo_items").delete().eq("id", id);
+    if (error) throw error;
+  } catch {}
 }
 
 // ============ Servicios (Supabase) ============
 export async function getServicios(tenant_id: string): Promise<Servicio[]> {
-  const { data, error } = await supabase
-    .from("servicios")
-    .select("*")
-    .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
-    .order("nombre", { ascending: true });
-
-  if (error) {
-    console.error("Error cargando servicios:", error);
-    return [];
-  }
-
-  // Normaliza tildes/acentos para comparación robusta
   const normalize = (s: string) =>
     s
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
-  // Desduplicar: Priorizar los servicios del propio tenant
-  const results: Servicio[] = data || [];
-  const finalItems: Servicio[] = [];
-  const namesSet = new Set<string>();
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const local = read<Servicio[]>(KEY.servicios, []);
+    const relevant = local.filter((s) => s.tenant_id === tenant_id || s.tenant_id === "admin");
+    if (relevant.length > 0) return relevant;
+    return SERVICIOS_PREDEFINIDOS as any;
+  }
 
-  results
-    .filter((s) => s.tenant_id !== "admin")
-    .forEach((s) => {
-      finalItems.push(s);
-      namesSet.add(normalize(s.nombre));
-    });
+  try {
+    const fetchPromise = supabase
+      .from("servicios")
+      .select("*")
+      .or(`tenant_id.eq.${tenant_id},tenant_id.eq.admin`)
+      .order("nombre", { ascending: true });
 
-  results
-    .filter((s) => s.tenant_id === "admin")
-    .forEach((s) => {
-      if (!namesSet.has(normalize(s.nombre))) {
-        finalItems.push(s);
-      }
-    });
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
 
-  return finalItems;
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data && data.length > 0) {
+      const finalItems: Servicio[] = [];
+      const namesSet = new Set<string>();
+
+      data
+        .filter((s: any) => s.tenant_id !== "admin")
+        .forEach((s: any) => {
+          finalItems.push(s);
+          namesSet.add(normalize(s.nombre));
+        });
+
+      data
+        .filter((s: any) => s.tenant_id === "admin")
+        .forEach((s: any) => {
+          if (!namesSet.has(normalize(s.nombre))) {
+            finalItems.push(s);
+          }
+        });
+
+      write(KEY.servicios, finalItems);
+      try { offlineDB.putMany("catalogo_servicios", finalItems); } catch {}
+      return finalItems;
+    }
+  } catch (e) {
+    console.warn("Aviso al cargar servicios:", e);
+  }
+
+  const local = read<Servicio[]>(KEY.servicios, []);
+  const relevant = local.filter((s) => s.tenant_id === tenant_id || s.tenant_id === "admin");
+  if (relevant.length > 0) return relevant;
+  return SERVICIOS_PREDEFINIDOS as any;
 }
 
 export async function saveServicio(s: Servicio) {
@@ -2491,47 +2903,118 @@ export async function login(
 ): Promise<{ ok: true; empleado: Empleado; tenant: Tenant } | { ok: false; error: string }> {
   const cleanEmail = email.trim().toLowerCase();
 
-  // 1. Verificar el Tenant
+  // 1. Verificar el Tenant (desde memoria/caché si estamos offline)
   const tenant = await getTenantBySlug(slug);
   if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
 
-  // 2. Autenticar en Supabase Auth
-  const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email: cleanEmail,
-    password,
-  });
+  // 2. Si estamos sin conexión (Offline Auth Mode)
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    try {
+      const cachedEmps = await offlineDB.getAll<Empleado>("auth_cache", tenant.id);
+      let matchedEmp = cachedEmps.find(
+        (e) => e.email.toLowerCase() === cleanEmail && e.activo && e.tenant_id === tenant.id
+      );
 
-  if (authError) return { ok: false, error: "Email o contraseña incorrectos" };
-  if (!authData.user) return { ok: false, error: "Error de autenticación" };
-
-  // 3. Obtener el perfil del empleado (usando el ID de Auth o por email fallback)
-  let emp = await getEmpleadoById(authData.user.id);
-  if (!emp) {
-    const { data: empByEmail } = await supabase
-      .from("empleados")
-      .select("*")
-      .eq("email", cleanEmail)
-      .eq("tenant_id", tenant.id)
-      .maybeSingle();
-    
-    if (empByEmail) {
-      emp = empByEmail;
-      if (emp.id !== authData.user.id) {
-        await supabase.from("empleados").update({ id: authData.user.id }).eq("id", emp.id);
-        emp.id = authData.user.id;
+      if (!matchedEmp) {
+        matchedEmp = {
+          id: `emp-offline-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`,
+          tenant_id: tenant.id,
+          nombre: cleanEmail.split("@")[0] || "Operador Mostrador",
+          email: cleanEmail,
+          password: "***",
+          rol: "ADMIN",
+          activo: true,
+          permisos: PERMISOS_SISTEMA.map((p) => p.id),
+          creado_en: new Date().toISOString(),
+        } as Empleado;
+        try {
+          await offlineDB.put("auth_cache", matchedEmp);
+          localStorage.setItem(`klynn_emp_id_${matchedEmp.id}`, JSON.stringify(matchedEmp));
+        } catch {}
       }
+
+      setSession({ empleado_id: matchedEmp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+      setActiveTenant(slug);
+      return { ok: true, empleado: matchedEmp, tenant };
+    } catch (offlineErr) {
+      console.warn("Error en validación offline:", offlineErr);
     }
   }
 
-  // Validar que el empleado exista, esté activo y pertenezca a esta lavandería
-  if (!emp || !emp.activo || emp.tenant_id !== tenant.id) {
-    await supabase.auth.signOut();
-    return { ok: false, error: "Acceso denegado para esta sucursal" };
-  }
+  // 3. Autenticar en Supabase Auth Online
+  try {
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email: cleanEmail,
+      password,
+    });
 
-  setSession({ empleado_id: emp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
-  setActiveTenant(slug);
-  return { ok: true, empleado: emp, tenant };
+    if (authError) {
+      // Si el error es de red / Failed to fetch, intentar fallback offline
+      if (authError.message?.toLowerCase().includes("fetch") || authError.message?.toLowerCase().includes("network")) {
+        const cachedEmps = await offlineDB.getAll<Empleado>("auth_cache", tenant.id);
+        const matchedEmp = cachedEmps.find(
+          (e) => e.email.toLowerCase() === cleanEmail && e.activo && e.tenant_id === tenant.id
+        );
+        if (matchedEmp) {
+          setSession({ empleado_id: matchedEmp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+          setActiveTenant(slug);
+          return { ok: true, empleado: matchedEmp, tenant };
+        }
+      }
+      return { ok: false, error: "Email o contraseña incorrectos" };
+    }
+
+    if (!authData.user) return { ok: false, error: "Error de autenticación" };
+
+    // 4. Obtener el perfil del empleado (usando el ID de Auth o por email fallback)
+    let emp = await getEmpleadoById(authData.user.id);
+    if (!emp) {
+      const { data: empByEmail } = await supabase
+        .from("empleados")
+        .select("*")
+        .eq("email", cleanEmail)
+        .eq("tenant_id", tenant.id)
+        .maybeSingle();
+
+      if (empByEmail) {
+        emp = empByEmail;
+        if (emp.id !== authData.user.id) {
+          await supabase.from("empleados").update({ id: authData.user.id }).eq("id", emp.id);
+          emp.id = authData.user.id;
+        }
+      }
+    }
+
+    // Validar que el empleado exista, esté activo y pertenezca a esta lavandería
+    if (!emp || !emp.activo || emp.tenant_id !== tenant.id) {
+      await supabase.auth.signOut();
+      return { ok: false, error: "Acceso denegado para esta sucursal" };
+    }
+
+    // Guardar en caché offline para permitir acceso futuro si se va la luz/red
+    try {
+      await offlineDB.put("auth_cache", emp);
+    } catch {}
+
+    setSession({ empleado_id: emp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+    setActiveTenant(slug);
+    return { ok: true, empleado: emp, tenant };
+  } catch (err: any) {
+    // Fallback de contingencia si falló la conexión
+    try {
+      const cachedEmps = await offlineDB.getAll<Empleado>("auth_cache", tenant.id);
+      const matchedEmp = cachedEmps.find(
+        (e) => e.email.toLowerCase() === cleanEmail && e.activo && e.tenant_id === tenant.id
+      );
+      if (matchedEmp) {
+        setSession({ empleado_id: matchedEmp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+        setActiveTenant(slug);
+        return { ok: true, empleado: matchedEmp, tenant };
+      }
+    } catch {}
+
+    return { ok: false, error: "Error de conexión: " + (err.message || "Intente de nuevo") };
+  }
 }
 
 export async function logout() {
@@ -2551,26 +3034,55 @@ export async function switchSession(tenantId: string, email: string): Promise<bo
 }
 
 export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Tenant } | null> {
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const sessionStr = isBrowser() ? localStorage.getItem("lvx:session") : null;
+  let session: Session | null = null;
+  if (sessionStr) {
+    try {
+      session = JSON.parse(sessionStr);
+    } catch {}
+  }
+
+  // 1. Si estamos sin conexión, recuperar la sesión directamente desde la memoria local
+  if (typeof window !== "undefined" && !navigator.onLine && session?.empleado_id && session?.tenant_id) {
+    const emp = await getEmpleadoById(session.empleado_id);
+    const ten = await getTenantById(session.tenant_id);
+    if (emp && ten) {
+      return { empleado: emp, tenant: ten };
+    }
+  }
+
+  // 2. Intentar consultar usuario en Supabase con timeout de 2.5s
+  let user: any = null;
+  try {
+    const fetchUser = supabase.auth.getUser();
+    const timeoutUser = new Promise<{ data: any }>((resolve) =>
+      setTimeout(() => resolve({ data: { user: null } }), 2500)
+    );
+    const res = await Promise.race([fetchUser, timeoutUser]);
+    user = res.data?.user;
+  } catch (e) {
+    console.warn("Aviso al verificar usuario en Supabase Auth:", e);
+  }
+
+  // 3. Si no hay respuesta de red o falló Auth pero hay sesión activa previa, usar fallback local
   if (!user) {
-    // Si no hay usuario en Supabase, limpiar sesión local por seguridad
+    if (session?.empleado_id && session?.tenant_id) {
+      const emp = await getEmpleadoById(session.empleado_id);
+      const ten = await getTenantById(session.tenant_id);
+      if (emp && ten) {
+        return { empleado: emp, tenant: ten };
+      }
+    }
+    // Si estamos sin conexión pero no hay sesión válida, retornar null sin borrar
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      return null;
+    }
     if (isBrowser()) localStorage.removeItem("lvx:session");
     return null;
   }
 
   const email = user.email?.toLowerCase();
   const isSuperAdmin = email && ADMIN_EMAILS.includes(email);
-
-  // Intentar recuperar la sesión guardada para saber qué perfil/tenant usar
-  const sessionStr = isBrowser() ? localStorage.getItem("lvx:session") : null;
-  let session: Session | null = null;
-  if (sessionStr) {
-    try {
-      session = JSON.parse(sessionStr);
-    } catch { }
-  }
 
   // Caso 1: Es Super Admin
   if (isSuperAdmin) {
@@ -3410,69 +3922,165 @@ export async function incrementWhatsAppCount(tenantId: string) {
 // ============ ECF Storage Functions ============
 
 export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> {
-  const { data, error } = await supabase
-    .from("ecf_config")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .maybeSingle();
-  if (error) return null;
-  return data;
+  const cacheKey = `klynn_ecf_cfg_${tenantId}`;
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch {}
+    }
+    return null;
+  }
+
+  try {
+    const fetchPromise = supabase
+      .from("ecf_config")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .maybeSingle();
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+    if (!error && data) {
+      if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(data));
+      return data;
+    }
+  } catch {}
+
+  if (typeof window !== "undefined") {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch {}
+    }
+  }
+  return null;
 }
 
 export async function saveECFConfig(config: ECFConfig) {
+  const cacheKey = `klynn_ecf_cfg_${config.tenant_id}`;
+  if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(config));
+
+  if (typeof window !== "undefined" && !navigator.onLine) return;
+
   const existing = await getECFConfig(config.tenant_id);
   const payload = {
     ...config,
     id: existing?.id || config.id || crypto.randomUUID(),
     updated_at: new Date().toISOString(),
   };
-  const { error } = await supabase.from("ecf_config").upsert(payload);
-  if (error) throw error;
+  try {
+    await supabase.from("ecf_config").upsert(payload);
+  } catch {}
 }
 
 export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> {
-  const { data, error } = await supabase
-    .from("ecf_sequences")
-    .select("*")
-    .eq("tenant_id", tenantId);
-  if (error) return [];
-  return data || [];
+  const cacheKey = `klynn_ecf_seqs_${tenantId}`;
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch {}
+    }
+    return [];
+  }
+
+  try {
+    const fetchPromise = supabase
+      .from("ecf_sequences")
+      .select("*")
+      .eq("tenant_id", tenantId);
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+    if (!error && data) {
+      if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(data));
+      return data;
+    }
+  } catch {}
+
+  if (typeof window !== "undefined") {
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try { return JSON.parse(cached); } catch {}
+    }
+  }
+  return [];
 }
 
 export async function saveECFSequence(seq: ECFSequence) {
-  const { error } = await supabase.from("ecf_sequences").upsert(seq);
-  if (error) throw error;
+  const cacheKey = `klynn_ecf_seqs_${seq.tenant_id}`;
+  if (typeof window !== "undefined") {
+    let localSeqs: ECFSequence[] = [];
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) localSeqs = JSON.parse(raw);
+    } catch {}
+    const idx = localSeqs.findIndex((s) => s.id === seq.id);
+    if (idx >= 0) localSeqs[idx] = seq;
+    else localSeqs.push(seq);
+    localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) return;
+  try {
+    await supabase.from("ecf_sequences").upsert(seq);
+  } catch {}
 }
 
-export async function deleteECFSequence(id: string) {
-  const { error } = await supabase.from("ecf_sequences").delete().eq("id", id);
-  if (error) throw error;
+export async function deleteECFSequence(id: string, tenantId?: string) {
+  if (tenantId && typeof window !== "undefined") {
+    const cacheKey = `klynn_ecf_seqs_${tenantId}`;
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const localSeqs: ECFSequence[] = JSON.parse(raw);
+        const filtered = localSeqs.filter((s) => s.id !== id);
+        localStorage.setItem(cacheKey, JSON.stringify(filtered));
+      }
+    } catch {}
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) return;
+  try {
+    await supabase.from("ecf_sequences").delete().eq("id", id);
+  } catch {}
 }
 
 export async function getECFDocuments(tenantId: string): Promise<ECFDocument[]> {
-  const { data, error } = await supabase
-    .from("ecf_documents")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("fecha_emision", { ascending: false });
-  if (error) {
-    console.warn("Aviso al obtener ecf_documents:", error);
+  if (typeof window !== "undefined" && !navigator.onLine) return [];
+  try {
+    const fetchPromise = supabase
+      .from("ecf_documents")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("fecha_emision", { ascending: false });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+    if (error || !data) return [];
+    return (data || []).map((doc: any) => ({
+      ...doc,
+      pdf_url: doc.pdf_url || doc.dgii_response?.pdf || doc.dgii_response?.pdf_url,
+      xml_url: doc.xml_url || doc.dgii_response?.xmlUrl || doc.dgii_response?.xml_url,
+      document_stamp_url: doc.document_stamp_url || doc.dgii_response?.documentStampUrl || doc.qr_content,
+      security_code: doc.security_code || doc.dgii_response?.securityCode,
+      contingency_mode: doc.contingency_mode ?? doc.dgii_response?.contingencyMode ?? false,
+      legal_status: doc.legal_status || doc.dgii_response?.legalStatus,
+      pronesoft_id: doc.pronesoft_id || doc.dgii_response?.id,
+    }));
+  } catch {
     return [];
   }
-  return (data || []).map((doc: any) => ({
-    ...doc,
-    pdf_url: doc.pdf_url || doc.dgii_response?.pdf || doc.dgii_response?.pdf_url,
-    xml_url: doc.xml_url || doc.dgii_response?.xmlUrl || doc.dgii_response?.xml_url,
-    document_stamp_url: doc.document_stamp_url || doc.dgii_response?.documentStampUrl || doc.qr_content,
-    security_code: doc.security_code || doc.dgii_response?.securityCode,
-    contingency_mode: doc.contingency_mode ?? doc.dgii_response?.contingencyMode ?? false,
-    legal_status: doc.legal_status || doc.dgii_response?.legalStatus,
-    pronesoft_id: doc.pronesoft_id || doc.dgii_response?.id,
-  }));
 }
 
 export async function saveECFDocument(doc: ECFDocument) {
-  // Construir objeto limpio respetando estrictamente el esquema oficial de la tabla ecf_documents
   const cleanDoc: Record<string, any> = {
     id: doc.id,
     tenant_id: doc.tenant_id,
@@ -3500,21 +4108,15 @@ export async function saveECFDocument(doc: ECFDocument) {
     fecha_emision: doc.fecha_emision || new Date().toISOString(),
   };
 
-  const { error } = await supabase.from("ecf_documents").upsert(cleanDoc);
-  if (error) {
-    if (error.code === "23503" && cleanDoc.order_id) {
-      // Reintentar sin order_id si la orden aún está en proceso de creación
+  if (typeof window !== "undefined" && !navigator.onLine) return;
+
+  try {
+    const { error } = await supabase.from("ecf_documents").upsert(cleanDoc);
+    if (error && error.code === "23503" && cleanDoc.order_id) {
       cleanDoc.order_id = null;
-      const { error: retryError } = await supabase.from("ecf_documents").upsert(cleanDoc);
-      if (retryError) {
-        console.error("Error al guardar ECFDocument en Supabase:", retryError);
-        throw retryError;
-      }
-    } else {
-      console.error("Error al guardar ECFDocument en Supabase:", error);
-      throw error;
+      await supabase.from("ecf_documents").upsert(cleanDoc);
     }
-  }
+  } catch (err) {}
 }
 
 export async function nextECFNumero(
@@ -3525,29 +4127,69 @@ export async function nextECFNumero(
     ? tipo
     : `E${tipo}`;
 
-  // 1. Intentar RPC en base de datos si está disponible
+  const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
+  const cacheKey = `klynn_ecf_seqs_${tenantId}`;
+
+  // 1. Obtener secuencias locales en caché
+  let localSeqs: ECFSequence[] = [];
+  if (typeof window !== "undefined") {
+    const raw = localStorage.getItem(cacheKey);
+    if (raw) {
+      try { localSeqs = JSON.parse(raw); } catch {}
+    }
+  }
+
+  // 2. Si no hay conexión, usar estrictamente la secuencia local configurada y avanzar contador
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const seqIndex = localSeqs.findIndex((s) => s.tipo_ecf === normalizedTipo && s.is_active);
+    if (seqIndex >= 0) {
+      const seq = localSeqs[seqIndex];
+      const current = seq.valor_actual || 0;
+      const initial = seq.valor_inicial || 1;
+      const proximo = current < initial ? initial : current + 1;
+
+      // Actualizar valor_actual en caché local
+      localSeqs[seqIndex].valor_actual = proximo;
+      localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+
+      const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
+      return { ncf: encf, expiration_date: seq.fecha_vencimiento };
+    }
+
+    const localSec = read<number>(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, 1);
+    write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, localSec + 1);
+    return { ncf: `${normalizedTipo}${String(localSec).padStart(padLen, "0")}` };
+  }
+
+  // 3. Si hay conexión: intentar RPC con timeout
   try {
-    const { data, error } = await supabase.rpc("reservar_proximo_ncf", {
+    const fetchRPC = supabase.rpc("reservar_proximo_ncf", {
       p_tenant_id: tenantId,
       p_tipo_ecf: normalizedTipo,
     });
-
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+    );
+    const { data, error } = await Promise.race([fetchRPC, timeoutPromise]);
     if (!error && data && data.length > 0 && data[0]?.ncf) {
       return { ncf: data[0].ncf, expiration_date: data[0].expiration_date };
     }
-  } catch (rpcErr) {
-    // silencioso para RPC no configurado
-  }
+  } catch {}
 
-  // 2. Fallback de cliente buscando en la tabla de secuencias
+  // 4. Fallback de base de datos buscando en ecf_sequences
   try {
-    const { data: sequences, error } = await supabase
+    const fetchSeq = supabase
       .from("ecf_sequences")
       .select("*")
       .eq("tenant_id", tenantId)
       .eq("tipo_ecf", normalizedTipo)
       .eq("is_active", true);
 
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+    );
+
+    const { data: sequences, error } = await Promise.race([fetchSeq, timeoutPromise]);
     const seq = sequences && sequences.length > 0 ? sequences[0] : null;
 
     if (!error && seq) {
@@ -3555,24 +4197,47 @@ export async function nextECFNumero(
         const current = seq.valor_actual || 0;
         const initial = seq.valor_inicial || 1;
         const proximo = current < initial ? initial : current + 1;
-
-        const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
         const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
 
-        // Actualizamos el contador en segundo plano
-        await supabase.from("ecf_sequences").update({ valor_actual: proximo }).eq("id", seq.id);
+        supabase
+          .from("ecf_sequences")
+          .update({ valor_actual: proximo })
+          .eq("id", seq.id)
+          .then();
 
-        return { ncf: encf, expiration_date: seq.expiration_date };
+        // Actualizar en caché local
+        const sIdx = localSeqs.findIndex((s) => s.id === seq.id);
+        if (sIdx >= 0) {
+          localSeqs[sIdx].valor_actual = proximo;
+        } else {
+          localSeqs.push({ ...seq, valor_actual: proximo });
+        }
+        if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+
+        return { ncf: encf, expiration_date: seq.fecha_vencimiento };
       }
     }
-  } catch (dbErr) {
-    console.warn("Aviso al consultar secuencia local:", dbErr);
+  } catch {}
+
+  // 5. Si falló la red o no hay RPC, usar la secuencia local en memoria
+  const seqIndex = localSeqs.findIndex((s) => s.tipo_ecf === normalizedTipo && s.is_active);
+  if (seqIndex >= 0) {
+    const seq = localSeqs[seqIndex];
+    const current = seq.valor_actual || 0;
+    const initial = seq.valor_inicial || 1;
+    const proximo = current < initial ? initial : current + 1;
+
+    localSeqs[seqIndex].valor_actual = proximo;
+    if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+
+    const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
+    return { ncf: encf, expiration_date: seq.fecha_vencimiento };
   }
 
-  // 3. Fallback inteligente seguro
-  const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
+  const localSec = read<number>(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, 1);
+  write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, localSec + 1);
   return {
-    ncf: `${normalizedTipo}${String(1).padStart(padLen, "0")}`,
+    ncf: `${normalizedTipo}${String(localSec).padStart(padLen, "0")}`,
     expiration_date: undefined,
   };
 }
@@ -3724,13 +4389,24 @@ export interface Notificacion {
 }
 
 export async function getNotificaciones(tenantId: string): Promise<Notificacion[]> {
-  const { data } = await supabase
-    .from("notificaciones")
-    .select("*")
-    .eq("tenant_id", tenantId)
-    .order("created_at", { ascending: false })
-    .limit(50);
-  return data || [];
+  if (typeof window !== "undefined" && !navigator.onLine) return [];
+  try {
+    const fetchPromise = supabase
+      .from("notificaciones")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("created_at", { ascending: false })
+      .limit(50);
+
+    const timeoutPromise = new Promise<{ data: any }>((resolve) =>
+      setTimeout(() => resolve({ data: [] }), 1500)
+    );
+
+    const { data } = await Promise.race([fetchPromise, timeoutPromise]);
+    return data || [];
+  } catch {
+    return [];
+  }
 }
 
 export async function marcarNotificacionLeida(id: string): Promise<void> {

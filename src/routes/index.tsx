@@ -40,6 +40,9 @@ import {
   Wifi,
   Layers,
   MessageSquare,
+  WifiOff,
+  CloudOff,
+  RefreshCw,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -90,6 +93,8 @@ const features = [
   { icon: Scissors, title: "Módulo de sastrería", desc: "Ajustes, ruedos, cierres y composturas con medidas y entrega coordinada con el lavado." },
   { icon: Package, title: "Lavado por libra y prendas", desc: "Cobra por peso (lb/kg) o por prenda. Combina ambos en la misma orden con cargos de planchado, suavizante o rapidez." },
   { icon: Smartphone, title: "WhatsApp integrado", desc: "Envía recibos, recordatorios de retiro y promociones desde el sistema. Tu cliente recibe el ticket en su celular." },
+  { icon: Layers, title: "Estantería y ganchos", desc: "Mapea casilleros, rieles y conveyors. Ubica cualquier prenda y entrega en 5 segundos sin confusiones." },
+  { icon: WifiOff, title: "Modo Offline & Contingencia", desc: "Sigue facturando, cobrando e imprimiendo tickets térmicos aunque no haya internet. Sincronización automática con la nube." },
 ];
 
 const testimonios = [
@@ -208,12 +213,10 @@ function LandingPage() {
   const [activeWaTab, setActiveWaTab] = useState<"lista" | "recibo">("lista");
 
   useEffect(() => {
-    if (!initialPlans || initialPlans.length === 0) {
-      getPlans().then((p) => {
-        if (p && p.length > 0) setPlans(p);
-      });
-    }
-  }, [initialPlans]);
+    getPlans().then((p) => {
+      if (p && p.length > 0) setPlans(p);
+    });
+  }, []);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -480,7 +483,7 @@ function LandingPage() {
               { icon: FileText, t: "NCF por tipo", d: "B01, B02, B14, B15 con secuencias auto." },
               { icon: Banknote, t: "Pesos dominicanos", d: "Sin conversiones, sin tasas raras." },
               { icon: Cloud, t: "100% en la nube", d: "Entra desde cualquier dispositivo." },
-              { icon: Lock, t: "Permisos por rol", d: "Cajero, admin, repartidor. Cada uno ve lo suyo." },
+              { icon: WifiOff, t: "Modo Offline POS", d: "Sigue cobrando e imprimiendo sin internet." },
               { icon: Headphones, t: "Soporte criollo", d: "Te respondemos en WhatsApp en minutos." },
             ].map((b) => (
               <div key={b.t} className="rounded-2xl border border-border bg-surface p-5 shadow-card">
@@ -1351,6 +1354,92 @@ function LandingPage() {
                 </div>
               </div>
             </motion.div>
+
+            {/* 7. Modo Offline & Contingencia Total */}
+            <motion.div
+              initial={{ opacity: 0, y: 30 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-60px" }}
+              transition={{ duration: 0.6 }}
+              className="grid gap-8 md:grid-cols-2 items-center"
+            >
+              <div>
+                <div className="flex items-center gap-3 mb-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-500/10 text-rose-600 font-display text-xl font-black shrink-0">7</div>
+                  <h3 className="font-display text-2xl md:text-3xl">Modo Offline & Contingencia Total</h3>
+                </div>
+                <p className="text-muted-foreground leading-relaxed mb-6">
+                  El internet inestable o los apagones ya no detienen tus ventas. Klynn almacena órdenes, cobros y catálogos directamente en tu equipo, permitiendo que tu mostrador siga facturando e imprimiendo tickets con total fluidez.
+                </p>
+                <div className="space-y-3">
+                  {[
+                    "Cobro continuo y registro de órdenes 100% offline (Efectivo, Tarjeta, Transferencia)",
+                    "Impresión instantánea de tickets térmicos 57mm y 80mm ESC/POS sin requerir conexión externa",
+                    "Base de datos local ultrarrápida cifrada en el navegador / terminal para cero latencia",
+                    "Sincronización automática e inteligente en segundo plano al restablecerse el internet",
+                    "Instalación como App de Escritorio PWA en 1-clic en Windows, Mac, iPad y tablets Android",
+                  ].map((b, i) => (
+                    <div key={i} className="flex items-start gap-2.5 text-sm">
+                      <Check className="h-4 w-4 text-rose-600 mt-0.5 shrink-0" />
+                      <span className="text-foreground/80">{b}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              <div className="rounded-2xl border border-border bg-surface p-6 shadow-card">
+                <div className="flex items-center justify-between mb-4 border-b border-border/60 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-rose-500/10 flex items-center justify-center text-rose-600">
+                      <WifiOff className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="font-bold text-sm">Mostrador Principal · Modo Offline</div>
+                      <div className="text-[11px] text-muted-foreground">Terminal de Caja #1 · Contingencia</div>
+                    </div>
+                  </div>
+                  <Badge className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold flex items-center gap-1">
+                    <span className="h-1.5 w-1.5 rounded-full bg-rose-500 animate-pulse" />
+                    Sin Internet
+                  </Badge>
+                </div>
+                <div className="space-y-2.5 font-mono text-xs">
+                  <div className="rounded-xl bg-accent/30 p-3 border border-border/70 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-foreground">KL-4832 · María Santos</div>
+                      <div className="text-[10.5px] text-muted-foreground">3 prendas · Cobro Efectivo · Ticket Impreso</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-rose-600">RD$ 850.00</div>
+                      <div className="text-[9.5px] text-emerald-600 font-bold">Guardada local ✓</div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-accent/30 p-3 border border-border/70 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-foreground">KL-4833 · Pedro Gómez</div>
+                      <div className="text-[10.5px] text-muted-foreground">Lavado x Libra (12 lb) · Cobro Tarjeta</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-rose-600">RD$ 1,240.00</div>
+                      <div className="text-[9.5px] text-emerald-600 font-bold">Guardada local ✓</div>
+                    </div>
+                  </div>
+                  <div className="rounded-xl bg-accent/30 p-3 border border-border/70 flex items-center justify-between">
+                    <div>
+                      <div className="font-bold text-foreground">KL-4834 · Rosa Marte</div>
+                      <div className="text-[10.5px] text-muted-foreground">Planchado Rápido · Ticket Impreso</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="font-black text-rose-600">RD$ 320.00</div>
+                      <div className="text-[9.5px] text-emerald-600 font-bold">Guardada local ✓</div>
+                    </div>
+                  </div>
+                </div>
+                <div className="mt-4 rounded-xl bg-rose-500/10 p-2.5 text-center text-[11px] font-bold text-rose-700 uppercase tracking-wider flex items-center justify-center gap-1.5">
+                  <RefreshCw className="h-3.5 w-3.5 animate-spin text-rose-600" />
+                  <span>3 Órdenes en cola · Sincronización automática lista</span>
+                </div>
+              </div>
+            </motion.div>
           </div>
         </div>
       </section>
@@ -1466,6 +1555,7 @@ function LandingPage() {
                           { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
                           { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
                           { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
+                          { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
                           { key: "estanteria", label: "Estantería virtual" },
@@ -1499,7 +1589,7 @@ function LandingPage() {
                                     {extra}
                                   </span>
                                 )}
-                                {key === "whatsapp" && v && plan.limite_whatsapp_mes && (
+                                {key === "whatsapp" && v && (plan.limite_whatsapp_mes || 0) > 0 && (
                                   <span className="text-[10px] font-normal text-muted-foreground ml-0.5">
                                     ({plan.limite_whatsapp_mes.toLocaleString("es-DO")} msg/mes)
                                   </span>
@@ -1663,6 +1753,7 @@ function LandingPage() {
                             { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
                             { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
                             { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
+                            { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
                             { key: "logistica", label: "Envío a domicilio" },
                             { key: "procesos", label: "Tablero de Procesos" },
                             { key: "estanteria", label: "Estantería virtual" },

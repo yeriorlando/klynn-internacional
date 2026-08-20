@@ -68,6 +68,20 @@ function LoginPage() {
           tenant_id: "admin",
           iniciado_en: new Date().toISOString(),
         });
+        localStorage.setItem(
+          "klynn_emp_id_admin",
+          JSON.stringify({
+            id: "admin",
+            tenant_id: "admin",
+            nombre: "Super Admin",
+            email: email.toLowerCase(),
+            rol: "ADMIN",
+            activo: true,
+            permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
+            creado_en: new Date().toISOString(),
+          })
+        );
+        localStorage.setItem("klynn_active_tenant", "admin");
         setLoading(false);
         setIsEntering(true);
         navigate({ to: "/admin" });

@@ -1,0 +1,60 @@
+{
+  "name": "Klynn Cloud — Software de Lavanderías y Tintorerías",
+  "short_name": "Klynn POS",
+  "description": "Sistema POS y gestión integral para lavanderías, tintorerías y centros de lavado.",
+  "start_url": "/",
+  "id": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0B1520",
+  "theme_color": "#1B4B73",
+  "lang": "es-DO",
+  "dir": "ltr",
+  "scope": "/",
+  "categories": ["business", "finance", "productivity", "utilities"],
+  "icons": [
+    {
+      "src": "/favicon.webp",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/webp",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logotipo-klynn.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Nueva Orden (POS)",
+      "short_name": "Nueva Orden",
+      "description": "Crear y recibir prendas en el mostrador",
+      "url": "/login",
+      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+    },
+    {
+      "name": "Control de Caja",
+      "short_name": "Caja",
+      "description": "Arqueo y movimientos de caja",
+      "url": "/login",
+      "icons": [{ "src": "/logo.png", "sizes": "192x192" }]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/PWA.webp",
+      "sizes": "1280x720",
+      "type": "image/webp",
+      "form_factor": "wide",
+      "label": "Klynn Cloud POS"
+    }
+  ]
+}

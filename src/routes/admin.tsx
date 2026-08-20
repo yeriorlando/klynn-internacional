@@ -5,7 +5,7 @@ import {
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
-  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock
+  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -166,6 +166,7 @@ function AdminPage() {
   const [modOverrideLogistica, setModOverrideLogistica] = useState(false);
   const [modOverrideProcesos, setModOverrideProcesos] = useState(false);
   const [modOverrideEstanteria, setModOverrideEstanteria] = useState(true);
+  const [modOverridePosOffline, setModOverridePosOffline] = useState(false);
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -404,6 +405,9 @@ function AdminPage() {
     setModOverrideEstanteria(t.config?.modulos_override?.estanteria !== undefined
       ? t.config.modulos_override.estanteria
       : (pOfTenant?.modulos.estanteria !== undefined ? !!pOfTenant.modulos.estanteria : true));
+    setModOverridePosOffline(t.config?.modulos_override?.pos_offline !== undefined
+      ? t.config.modulos_override.pos_offline
+      : (pOfTenant?.modulos.pos_offline !== undefined ? !!pOfTenant.modulos.pos_offline : false));
 
     setEditStep(1);
     setOpenEditModal(true);
@@ -433,6 +437,7 @@ function AdminPage() {
             logistica: modOverrideLogistica,
             procesos: modOverrideProcesos,
             estanteria: modOverrideEstanteria,
+            pos_offline: modOverridePosOffline,
           }
         );
       } else {
@@ -1446,6 +1451,7 @@ function AdminPage() {
                           { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
                           { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
                           { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
+                          { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
                           { key: "estanteria", label: "Estantería virtual" },
@@ -1635,6 +1641,7 @@ function AdminPage() {
                               { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
                               { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
                               { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
+                              { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
                               { key: "logistica", label: "Envío a domicilio" },
                               { key: "procesos", label: "Tablero de Procesos" },
                               { key: "estanteria", label: "Estantería virtual" },
@@ -2626,6 +2633,7 @@ function AdminPage() {
                     { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, checked: modOverrideWa, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideWa(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
                     { key: "fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, checked: modOverrideFiscal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideFiscal(v); }, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
                     { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, checked: modOverrideMultisucursal, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideMultisucursal(v); }, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+                    { key: "pos_offline", label: "Modo Offline", desc: "Punto de Venta y cobros sin internet", icon: WifiOff, checked: modOverridePosOffline, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePosOffline(v); }, colorClass: "text-rose-600 dark:text-rose-400", bgClass: "bg-rose-500/10" },
                     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, checked: modOverrideLogistica, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideLogistica(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
                     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideProcesos(v); }, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
                     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideEstanteria(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
@@ -2963,7 +2971,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         id: ("plan_" + Date.now()) as PlanId,
         nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
         limite_whatsapp_mes: 300,
-        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true },
+        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false },
       });
     }
   }, [open, initial]);
@@ -2991,6 +2999,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         whatsapp: !!f.modulos?.whatsapp,
         facturacion_fiscal: !!f.modulos?.facturacion_fiscal,
         multisucursal: !!f.modulos?.multisucursal,
+        pos_offline: !!f.modulos?.pos_offline,
         logistica: !!f.modulos?.logistica,
         procesos: f.modulos?.procesos !== undefined ? !!f.modulos?.procesos : true,
         estanteria: f.modulos?.estanteria !== undefined ? !!f.modulos?.estanteria : true,
@@ -3016,6 +3025,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
     { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
     { key: "facturacion_fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
     { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
+    { key: "pos_offline", label: "Modo Offline", desc: "Punto de Venta y cobros sin internet", icon: WifiOff, colorClass: "text-rose-600 dark:text-rose-400", bgClass: "bg-rose-500/10" },
     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },

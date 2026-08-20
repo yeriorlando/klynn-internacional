@@ -45,6 +45,10 @@ export async function notificarWhatsApp(
   evento: Evento,
   pagoRecibido?: number,
 ): Promise<{ ok: boolean; reason?: string }> {
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return { ok: false, reason: "Sin conexión a internet (modo offline)" };
+  }
+
   // 1. Verificar Límites del Plan (0 = Ilimitado / Sin restricción)
   const plan = getTenantPlan(tenant);
   const currentCount = tenant.whatsapp_sent_month || 0;

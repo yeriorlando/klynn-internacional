@@ -52,6 +52,7 @@ import {
   Maximize2,
   Minimize2,
   Layers,
+  WifiOff,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -94,6 +95,8 @@ import {
 import { Toaster, toast } from "sonner";
 import { motion } from "framer-motion";
 import { CloudSync } from "@/components/klynn/CloudSync";
+import { OfflineStatusBadge } from "@/components/klynn/OfflineStatusBadge";
+import { PWAInstallButton } from "@/components/klynn/PWAInstallButton";
 import { TourManager, resetTours } from "@/components/klynn/onboarding/TourManager";
 import { queryClient } from "@/router";
 import { useCajaAbierta } from "@/hooks/use-queries";
@@ -178,6 +181,29 @@ export function TenantShell() {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    const isStandalone =
+      typeof window !== "undefined" &&
+      (window.matchMedia("(display-mode: standalone)").matches ||
+        (window.navigator as any).standalone === true ||
+        document.referrer.includes("android-app://"));
+    setIsInstalled(isStandalone);
+  }, []);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
   useEffect(() => {
     const handleFullscreenChange = () => {
       setIsFullscreen(!!document.fullscreenElement);
@@ -222,30 +248,33 @@ export function TenantShell() {
 
   useEffect(() => {
     if (!tenantId || tenantId === "__loading__") return;
+    if (typeof window !== "undefined" && !navigator.onLine) return;
 
     const fetchUnreadCount = async (changedConvId?: string) => {
-      const { data, error } = await supabase
-        .from("conversations")
-        .select("unread")
-        .eq("tenant_id", tenantId);
+      try {
+        const { data, error } = await supabase
+          .from("conversations")
+          .select("unread")
+          .eq("tenant_id", tenantId);
 
-      if (!error && data) {
-        const total = data.reduce((acc, current) => acc + (current.unread || 0), 0);
+        if (!error && data) {
+          const total = data.reduce((acc, current) => acc + (current.unread || 0), 0);
 
-        // Play sound only when unread count increased (skip initial load)
-        if (prevUnreadRef.current >= 0 && total > prevUnreadRef.current) {
-          const activeChatId = localStorage.getItem("klynn_active_chat_id");
-          if (changedConvId && changedConvId === activeChatId) {
-            // Do not play sound in any tab if it corresponds to the active chat
-          } else if (window.location.pathname.includes("/conversations")) {
-            // Omit in global shell if user is already on the chat page (let conversations.tsx play it)
-          } else {
-            playNotificationSoundDebounced();
+          // Play sound only when unread count increased (skip initial load)
+          if (prevUnreadRef.current >= 0 && total > prevUnreadRef.current) {
+            const activeChatId = localStorage.getItem("klynn_active_chat_id");
+            if (changedConvId && changedConvId === activeChatId) {
+              // Do not play sound in any tab if it corresponds to the active chat
+            } else if (window.location.pathname.includes("/conversations")) {
+              // Omit in global shell if user is already on the chat page (let conversations.tsx play it)
+            } else {
+              playNotificationSoundDebounced();
+            }
           }
+          prevUnreadRef.current = total;
+          setUnreadCount(total);
         }
-        prevUnreadRef.current = total;
-        setUnreadCount(total);
-      }
+      } catch (e) {}
     };
 
     fetchUnreadCount();
@@ -1209,18 +1238,22 @@ export function TenantShell() {
                 Prueba gratis · {trialDays} días
               </Badge>
             )}
-            {!pathname.endsWith("/nueva-orden") && <CloudSync tenantId={tenant.id} />}
-            <button
-              onClick={() => setShowAtajosModal(true)}
-              className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
-              title="Mostrar atajos de teclado (Alt+K)"
-            >
-              <Keyboard className="h-4 w-4 text-slate-500 dark:text-slate-400" />
-              <span>Atajos</span>
-              <kbd className="h-4 px-1.5 flex items-center justify-center rounded-md bg-primary text-[9px] font-bold text-white select-none border-0">
-                Alt+K
-              </kbd>
-            </button>
+            <OfflineStatusBadge tenantId={tenant.id} />
+            <PWAInstallButton variant="header" />
+            {/* Mostrar botón Atajos si está online O si la app ya está instalada (PWA) */}
+            {(isOnline || isInstalled) && (
+              <button
+                onClick={() => setShowAtajosModal(true)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-semibold shadow-sm transition-all active:scale-95 cursor-pointer bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm"
+                title="Mostrar atajos de teclado (Alt+K)"
+              >
+                <Keyboard className="h-4 w-4 text-slate-500 dark:text-slate-400" />
+                <span>Atajos</span>
+                <kbd className="h-4 px-1.5 flex items-center justify-center rounded-md bg-primary text-[9px] font-bold text-white select-none border-0">
+                  Alt+K
+                </kbd>
+              </button>
+            )}
 
             {pathname.endsWith("/nueva-orden") && (
               <button
@@ -1611,6 +1644,38 @@ function SidebarContent({
     getTenantsForUser(empleado.email).then(setMyTenants);
   }, [empleado.email]);
 
+  const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
+
+  useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
+
+  const OFFLINE_CAPABLE_IDS = useMemo(
+    () =>
+      new Set([
+        "nueva-orden",
+        "dashboard",
+        "ordenes",
+        "procesos",
+        "estanteria",
+        "caja",
+        "gastos",
+        "logistica",
+        "catalogo-prendas",
+        "catalogo-servicios",
+        "clientes",
+        "configuracion",
+      ]),
+    []
+  );
+
   const switchBranch = async (t: any) => {
     if (t.slug === tenant.slug) return;
     const ok = await switchSession(t.id, empleado.email);
@@ -1785,7 +1850,7 @@ function SidebarContent({
   return (
     <>
       <div className="relative flex min-h-[110px] py-3.5 flex-col items-center justify-center border-b border-border px-5">
-        <Logo size="md" />
+        <Logo size="md" to={`/t/${tenant.slug}`} />
         <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
           Tu lavandería, simplificada.
         </span>
@@ -1920,21 +1985,35 @@ function SidebarContent({
               {category.items.map((item) => {
                 const active = item.isSoporte ? false : isActive(item.to, item.exact);
                 const isConversations = item.permission === "conversations";
+                const isOfflineUnavailable = !isOnline && !OFFLINE_CAPABLE_IDS.has(item.id);
 
                 if (item.isSoporte) {
                   return (
                     <button
                       key={item.label}
                       onClick={() => {
+                        if (!isOnline) {
+                          toast.warning("El módulo de soporte requiere conexión a internet.");
+                          return;
+                        }
                         setShowSoporteModal(true);
                         if (onNavigate) onNavigate();
                       }}
-                      className="w-full text-left relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-semibold transition-all duration-200 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 dark:hover:bg-sky-950/40 hover:text-[#1B4B73] dark:hover:text-sky-200 cursor-pointer group"
+                      className={`w-full text-left relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] font-semibold transition-all duration-200 ${
+                        isOfflineUnavailable
+                          ? "bg-slate-100/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/60 text-slate-400 dark:text-slate-500 cursor-not-allowed hover:bg-slate-100/80"
+                          : "text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 dark:hover:bg-sky-950/40 hover:text-[#1B4B73] dark:hover:text-sky-200 cursor-pointer group"
+                      }`}
                     >
                       <div className="flex items-center gap-3">
-                        <item.icon className="h-5 w-5 shrink-0 text-[#1B4B73] dark:text-sky-300 transition-colors" strokeWidth={2} />
+                        <item.icon className={`h-5 w-5 shrink-0 transition-colors ${isOfflineUnavailable ? "text-slate-400 dark:text-slate-500" : "text-[#1B4B73] dark:text-sky-300"}`} strokeWidth={2} />
                         <span>{item.label}</span>
                       </div>
+                      {isOfflineUnavailable && (
+                        <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-lg shrink-0 shadow-2xs">
+                          <WifiOff className="h-3 w-3 text-amber-600 dark:text-amber-400" /> Solo Online
+                        </span>
+                      )}
                     </button>
                   );
                 }
@@ -1944,53 +2023,74 @@ function SidebarContent({
                     key={item.to}
                     to={item.to}
                     id={item.id ? `tour-nav-${item.id}` : item.permission ? `tour-nav-${item.permission}` : undefined}
-                    onClick={onNavigate}
+                    onClick={(e) => {
+                      if (isOfflineUnavailable) {
+                        e.preventDefault();
+                        toast.warning(`"${item.label}" requiere conexión a internet para sincronizar con la nube.`);
+                        return;
+                      }
+                      if (onNavigate) onNavigate();
+                    }}
                     onMouseEnter={() => item.permission && prefetch(item.permission)}
-                    style={active ? { backgroundColor: "var(--primary)" } : undefined}
-                    className={`group relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] transition-all duration-200 cursor-pointer ${
-                      active
-                        ? "bg-primary text-white font-bold shadow-md shadow-primary/25"
-                        : "font-semibold text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 dark:hover:bg-sky-950/40 hover:text-[#1B4B73] dark:hover:text-sky-200"
+                    style={active && !isOfflineUnavailable ? { backgroundColor: "var(--primary)" } : undefined}
+                    className={`group relative flex items-center justify-between gap-3 rounded-xl px-3.5 py-2.5 text-[15px] transition-all duration-200 ${
+                      isOfflineUnavailable
+                        ? "bg-slate-100/70 dark:bg-slate-900/50 border border-slate-200/60 dark:border-slate-800/60 text-slate-400 dark:text-slate-500 cursor-not-allowed hover:bg-slate-100/80"
+                        : active
+                        ? "bg-primary text-white font-bold shadow-md shadow-primary/25 cursor-pointer"
+                        : "font-semibold text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 dark:hover:bg-sky-950/40 hover:text-[#1B4B73] dark:hover:text-sky-200 cursor-pointer"
                     }`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <item.icon
                         className={`h-5 w-5 shrink-0 transition-colors ${
-                          active ? "text-white" : "text-[#1B4B73] dark:text-sky-300"
+                          isOfflineUnavailable
+                            ? "text-slate-400 dark:text-slate-500"
+                            : active && !isOfflineUnavailable
+                            ? "text-white"
+                            : "text-[#1B4B73] dark:text-sky-300"
                         }`}
                         strokeWidth={2}
                       />
                       <span className="truncate">{item.label}</span>
                     </div>
 
-                    {item.hasArrow && (
-                      <ChevronDown
-                        className={`h-4 w-4 shrink-0 transition-colors ${
-                          active ? "text-white/80" : "text-[#1B4B73]/60 dark:text-sky-400 group-hover:text-[#1B4B73]"
-                        }`}
-                        strokeWidth={2}
-                      />
-                    )}
+                    {isOfflineUnavailable ? (
+                      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 bg-amber-500/15 dark:bg-amber-500/20 border border-amber-500/30 px-2 py-0.5 rounded-lg shrink-0 shadow-2xs">
+                        <WifiOff className="h-3 w-3 text-amber-600 dark:text-amber-400" /> Solo Online
+                      </span>
+                    ) : (
+                      <>
+                        {item.hasArrow && (
+                          <ChevronDown
+                            className={`h-4 w-4 shrink-0 transition-colors ${
+                              active ? "text-white/80" : "text-[#1B4B73]/60 dark:text-sky-400 group-hover:text-[#1B4B73]"
+                            }`}
+                            strokeWidth={2}
+                          />
+                        )}
 
-                    {isConversations && unreadCount > 0 && (
-                      <Badge
-                        className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
-                          active ? "bg-white/20 text-white" : "bg-[#1B4B73] text-white"
-                        }`}
-                      >
-                        {unreadCount}
-                      </Badge>
-                    )}
+                        {isConversations && unreadCount > 0 && (
+                          <Badge
+                            className={`text-[10px] h-5 min-w-[20px] flex items-center justify-center font-bold px-1.5 rounded-full border-none shadow-sm animate-in zoom-in duration-300 ${
+                              active ? "bg-white/20 text-white" : "bg-[#1B4B73] text-white"
+                            }`}
+                          >
+                            {unreadCount}
+                          </Badge>
+                        )}
 
-                    {item.shortcut && (
-                      <kbd
-                        style={!active ? { backgroundColor: "var(--primary)" } : undefined}
-                        className={`hidden sm:inline-flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10.5px] font-black shadow-xs shrink-0 uppercase select-none border-none ${
-                          active ? "bg-white/20 text-white" : "bg-primary text-white"
-                        }`}
-                      >
-                        {item.shortcut}
-                      </kbd>
+                        {item.shortcut && (
+                          <kbd
+                            style={!active ? { backgroundColor: "var(--primary)" } : undefined}
+                            className={`hidden sm:inline-flex h-5.5 w-5.5 items-center justify-center rounded-full text-[10.5px] font-black shadow-xs shrink-0 uppercase select-none border-none ${
+                              active ? "bg-white/20 text-white" : "bg-primary text-white"
+                            }`}
+                          >
+                            {item.shortcut}
+                          </kbd>
+                        )}
+                      </>
                     )}
                   </Link>
                 );
@@ -1999,6 +2099,9 @@ function SidebarContent({
           </div>
         ))}
       </nav>
+
+      {/* Banner Sutil de Instalación Desktop (Solo si no está instalada y no fue descartada) */}
+      <PWAInstallButton variant="sidebar-banner" />
 
       {/* Tarjeta Herramientas */}
       <div className="mt-auto border-t border-border p-3 shrink-0">

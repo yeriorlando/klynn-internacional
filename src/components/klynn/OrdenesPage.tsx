@@ -292,18 +292,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     [pendientesCobroList]
   );
 
+  const PAGE_SIZE = 10;
   const [currentPage, setCurrentPage] = useState(1);
 
-  const totalPages = Math.ceil(filt.length / 15);
+  const totalPages = Math.max(1, Math.ceil(filt.length / PAGE_SIZE));
 
   const paginatedOrders = useMemo(() => {
-    const start = (currentPage - 1) * 15;
-    return filt.slice(start, start + 15);
+    const start = (currentPage - 1) * PAGE_SIZE;
+    return filt.slice(start, start + PAGE_SIZE);
   }, [filt, currentPage]);
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filt.length]);
+  }, [filt.length, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, q]);
 
   const exportData = useMemo(() => {
     return {
@@ -1502,24 +1503,49 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           </table>
         </div>
         {totalPages > 1 && (
-          <div className="p-4 border-t flex items-center justify-between">
-            <div className="text-xs text-muted-foreground">
-              Página {currentPage} de {totalPages}
+          <div className="px-5 py-3.5 border-t border-border flex flex-col sm:flex-row items-center justify-between gap-3 bg-surface/50">
+            <div className="text-xs text-muted-foreground font-medium">
+              Mostrando <span className="font-bold text-foreground">{(currentPage - 1) * PAGE_SIZE + 1}</span>–<span className="font-bold text-foreground">{Math.min(currentPage * PAGE_SIZE, filt.length)}</span> de <span className="font-bold text-foreground">{filt.length}</span> órdenes
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98]"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
               >
                 <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
               </Button>
+
+              <div className="flex items-center gap-1 px-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 1)
+                  .map((page, idx, arr) => {
+                    const prevPage = arr[idx - 1];
+                    const showEllipsis = prevPage && page - prevPage > 1;
+                    return (
+                      <div key={page} className="flex items-center gap-1">
+                        {showEllipsis && <span className="px-1 text-xs text-muted-foreground">...</span>}
+                        <button
+                          onClick={() => setCurrentPage(page)}
+                          className={`h-8 min-w-8 px-2.5 rounded-lg text-xs font-bold transition-all ${
+                            currentPage === page
+                              ? "bg-primary text-primary-foreground shadow-xs"
+                              : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                          }`}
+                        >
+                          {page}
+                        </button>
+                      </div>
+                    );
+                  })}
+              </div>
+
               <Button
-                variant="default"
+                variant="outline"
                 size="sm"
-                className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
+                className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98]"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
               >

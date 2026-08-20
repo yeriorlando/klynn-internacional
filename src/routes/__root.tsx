@@ -51,8 +51,18 @@ export const Route = createRootRoute({
       { name: "twitter:description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/05ff4a4b-0512-4fb9-b96c-1b005d4fa98a/id-preview-e1b6eddf--32655e9b-c01d-4ebb-89e1-08399bd65bae.lovable.app-1777726950641.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/05ff4a4b-0512-4fb9-b96c-1b005d4fa98a/id-preview-e1b6eddf--32655e9b-c01d-4ebb-89e1-08399bd65bae.lovable.app-1777726950641.png" },
+      { name: "theme-color", content: "#1B4B73" },
+      { name: "application-name", content: "Klynn Cloud" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "default" },
+      { name: "apple-mobile-web-app-title", content: "Klynn POS" },
+      { name: "mobile-web-app-capable", content: "yes" },
     ],
     links: [
+      {
+        rel: "manifest",
+        href: "/manifest.json",
+      },
       {
         rel: "preconnect",
         href: "https://fonts.googleapis.com",
@@ -75,6 +85,10 @@ export const Route = createRootRoute({
         type: "image/webp",
         href: "/favicon.webp",
       },
+      {
+        rel: "apple-touch-icon",
+        href: "/logo.png",
+      },
     ],
   }),
   shellComponent: RootShell,
@@ -84,7 +98,7 @@ export const Route = createRootRoute({
 
 function RootShell({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang="es" suppressHydrationWarning>
       <head>
         <HeadContent />
         {/* Google Analytics */}
@@ -111,6 +125,23 @@ function RootShell({ children }: { children: React.ReactNode }) {
                   r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
                   a.appendChild(r);
               })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
+            `,
+          }}
+        />
+        {/* Service Worker Registration for PWA and Offline Support */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `
+              if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
+                window.addEventListener('load', function() {
+                  navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                    reg.update();
+                    console.log('[Klynn PWA] Service Worker activo y actualizado');
+                  }).catch(function(err) {
+                    console.warn('[Klynn PWA] Fallo al registrar Service Worker:', err);
+                  });
+                });
+              }
             `,
           }}
         />
