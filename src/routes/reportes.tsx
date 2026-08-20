@@ -1394,10 +1394,15 @@ export function ReportesPage() {
   }
 
   async function handleLogout() {
+    const slug = auth?.tenant?.slug || selectedInspectTenant?.slug || (typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/)?.[1] : null);
     setIsLoggingOut(true);
     await logout();
     setTimeout(() => {
-      navigate({ to: "/login" });
+      if (slug && slug !== "admin") {
+        navigate({ to: "/t/$slug/login", params: { slug } });
+      } else {
+        navigate({ to: "/login" });
+      }
     }, 450);
   }
 

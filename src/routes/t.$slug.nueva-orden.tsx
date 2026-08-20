@@ -5533,10 +5533,12 @@ function TicketPrintPortal({
             display: block !important;
             visibility: visible !important;
             position: relative !important;
-            left: 0 !important;
+            left: -2mm !important;
             width: 100% !important;
             max-width: ${tenant.config?.formato_ticket === "57mm" ? "52mm" : "72mm"} !important;
             padding: ${tenant.config?.formato_ticket === "57mm" ? "1.5mm" : "2mm"} !important;
+            margin: 0 auto !important;
+            background: white;
             color: black;
             font-family: "Segoe UI", Arial, sans-serif !important;
             font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};

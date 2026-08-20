@@ -5,7 +5,7 @@ import {
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
-  Wrench, ArrowLeft, ArrowRight
+  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -47,8 +47,12 @@ import {
   createLicenciaLocal,
   updateLicenciaLocal,
   deleteLicenciaLocal,
+  getInvitaciones,
+  createInvitacion,
+  deleteInvitacion,
+  generateInvitationCode,
 
-  type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal, type BankDetails
+  type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal, type BankDetails, type InvitacionCodigo
 } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { listAssociatedCompaniesPronesoft } from "@/lib/fiscal";
@@ -168,6 +172,17 @@ function AdminPage() {
   const [editingLicencia, setEditingLicencia] = useState<LicenciaLocal | null>(null);
   const [deleteLicencia, setDeleteLicencia] = useState<LicenciaLocal | null>(null);
 
+  // Invitaciones VIP
+  const [invitaciones, setInvitaciones] = useState<InvitacionCodigo[]>([]);
+  const [openCreateInvModal, setOpenCreateInvModal] = useState(false);
+  const [invNota, setInvNota] = useState("");
+  const [invPlanId, setInvPlanId] = useState<PlanId>("pro");
+  const [invExpiraHoras, setInvExpiraHoras] = useState<number | null>(24);
+  const [invDiasTrial, setInvDiasTrial] = useState<number>(14);
+  const [invSearchQuery, setInvSearchQuery] = useState("");
+  const [invStatusFilter, setInvStatusFilter] = useState<string>("all");
+  const [previewCode, setPreviewCode] = useState(generateInvitationCode());
+
   const [pronesoftCompanies, setPronesoftCompanies] = useState<any[]>([]);
   const [ecfConfigsMap, setEcfConfigsMap] = useState<Record<string, any>>({});
   const [loadingPronesoft, setLoadingPronesoft] = useState(false);
@@ -260,11 +275,18 @@ function AdminPage() {
 
   useEffect(() => {
     async function load() {
-      const [t, p, cfg, lics] = await Promise.all([getTenants(), getPlans(), getGlobalConfig(), getLicenciasLocales()]);
+      const [t, p, cfg, lics, invs] = await Promise.all([
+        getTenants(),
+        getPlans(),
+        getGlobalConfig(),
+        getLicenciasLocales(),
+        getInvitaciones(),
+      ]);
       setTenants(t);
       setPlans(p);
       setGlobalConfig(cfg);
       setLicencias(lics);
+      setInvitaciones(invs);
       loadPronesoftData();
       const ordsMap: Record<string, { count: number; total: number }> = {};
       let grandTotal = 0;
@@ -426,11 +448,57 @@ function AdminPage() {
     }
   }
 
+  async function handleCreateInvitacion() {
+    try {
+      const nueva = await createInvitacion({
+        nota: invNota,
+        plan_id: invPlanId,
+        expira_horas: invExpiraHoras,
+        dias_trial: invDiasTrial,
+      });
+      toast.success(`Código de invitación ${nueva.codigo} generado con éxito`);
+      setOpenCreateInvModal(false);
+      setInvNota("");
+      setPreviewCode(generateInvitationCode());
+      setTick((t) => t + 1);
+    } catch (err: any) {
+      toast.error("Error al generar código: " + (err.message || String(err)));
+    }
+  }
+
+  function copyInvitationLink(codigo: string) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://klynn.com.do";
+    const link = `${origin}/registro?code=${codigo}`;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(link);
+      toast.success(`Enlace copiado al portapapeles: ${link}`);
+    }
+  }
+
+  function shareWhatsAppInvitation(codigo: string, nota?: string) {
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://klynn.com.do";
+    const link = `${origin}/registro?code=${codigo}`;
+    const greeting = nota ? `¡Hola ${nota}!` : "¡Hola!";
+    const msg = `${greeting} Aquí tienes tu enlace exclusivo para registrar tu lavandería en Klynn Cloud con 14 días de prueba sin costo:\n\n🔗 ${link}\n\nCódigo de acceso: *${codigo}*`;
+    window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
+  }
+
+  async function handleDeleteInvitacion(id: string) {
+    await deleteInvitacion(id);
+    toast.success("Invitación eliminada");
+    setTick((t) => t + 1);
+  }
+
   async function handleLogout() {
+    const slug = user?.tenant?.slug || (typeof window !== "undefined" ? localStorage.getItem("klynn_active_tenant") : null);
     setIsLoggingOut(true);
     await logout();
     setTimeout(() => {
-      window.location.assign("/login");
+      if (slug && slug !== "admin") {
+        window.location.assign(`/t/${slug}/login`);
+      } else {
+        window.location.assign("/login");
+      }
     }, 450);
   }
 
@@ -547,6 +615,22 @@ function AdminPage() {
             >
               <ShieldCheck className="h-4 w-4 shrink-0" />
               <span>Empresas Fiscales (Pronesoft)</span>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="invitaciones"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Ticket className="h-4 w-4 shrink-0 text-amber-500" />
+              <span>Códigos de Invitación ({invitaciones.filter(i => i.estado === "DISPONIBLE").length})</span>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="seguridad"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Lock className="h-4 w-4 shrink-0 text-blue-500" />
+              <span>Seguridad</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1257,8 +1341,8 @@ function AdminPage() {
           </TabsContent>
 
           <TabsContent value="plans" className="mt-6 sm:mt-8 space-y-6">
-            <div className="mb-6 rounded-2xl border border-border/50 bg-surface p-6 shadow-sm space-y-4">
-              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-border/40 pb-4">
+            <div className="mb-6 rounded-2xl border border-border/50 bg-surface p-6 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                   <h3 className="font-bold text-lg text-foreground">Configuración de Registro SaaS</h3>
                   <p className="text-xs text-muted-foreground">Controla las condiciones de prueba y planes para nuevas lavanderías.</p>
@@ -1280,42 +1364,15 @@ function AdminPage() {
                       onCheckedChange={(v) => setGlobalConfig({ ...globalConfig, requirePlanOnRegistration: v })}
                     />
                   </div>
-                </div>
-              </div>
-
-              {/* SEGURIDAD & AUTENTICACIÓN: VERIFICACIÓN OTP PARA EMPLEADOS */}
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-1">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-xl bg-primary/10 text-primary shrink-0">
-                    <ShieldCheck className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h4 className="font-bold text-sm text-foreground">Verificación OTP para Nuevos Empleados</h4>
-                      <Badge variant="outline" className={`text-[10px] font-bold ${globalConfig.requireEmployeeOtp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-50 text-slate-600 border-slate-200'}`}>
-                        {globalConfig.requireEmployeeOtp ? "Activo (Exige OTP)" : "Inactivo (Directo)"}
-                      </Badge>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                      Exigir código de confirmación de 6 dígitos enviado al correo del empleado al crearlo en /personal
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 self-end sm:self-auto">
-                  <Switch
-                    checked={Boolean(globalConfig.requireEmployeeOtp)}
-                    onCheckedChange={(v) => setGlobalConfig({ ...globalConfig, requireEmployeeOtp: v })}
-                  />
                   <Button
                     size="sm"
                     onClick={async () => {
                       await saveGlobalConfig(globalConfig);
-                      toast.success("Configuración global guardada correctamente");
+                      toast.success("Configuración de registro guardada");
                     }}
                     className="h-9 px-4 rounded-xl shadow-sm font-bold bg-[#1B4B73] hover:bg-[#143755] text-white cursor-pointer"
                   >
-                    Guardar cambios
+                    Guardar
                   </Button>
                 </div>
               </div>
@@ -1863,6 +1920,433 @@ function AdminPage() {
               </div>
             </Card>
           </TabsContent>
+
+          <TabsContent value="invitaciones" className="space-y-6 mt-6">
+            {/* Header de la sección de invitaciones */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-5 sm:p-6 rounded-2xl border border-border/60 shadow-sm">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
+                    <Ticket className="h-5 w-5 text-amber-500" />
+                    Códigos de Invitación & Acceso Privado
+                  </h2>
+                  <Badge variant="outline" className="bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-300 font-extrabold text-[10px] uppercase">
+                    Exclusivo
+                  </Badge>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl">
+                  Genera códigos aleatorios con formato <span className="font-mono font-bold text-primary">KLYNN-XXXXXXXX</span> y enlaces mágicos para permitir el registro de nuevas lavanderías de forma privada y controlada.
+                </p>
+              </div>
+
+              <Button
+                onClick={() => {
+                  setPreviewCode(generateInvitationCode());
+                  setOpenCreateInvModal(true);
+                }}
+                className="bg-primary hover:bg-primary/90 text-white font-bold rounded-xl gap-2 shadow-md shrink-0 h-10 px-5 cursor-pointer"
+              >
+                <Plus className="h-4 w-4" />
+                Generar Código VIP
+              </Button>
+            </div>
+
+            {/* Mini KPIs de Invitaciones */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+              <Card className="p-4 rounded-2xl border-border/60 bg-surface shadow-xs flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 flex items-center justify-center shrink-0">
+                  <Ticket className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground block">Total Generadas</span>
+                  <span className="text-xl font-bold font-display text-foreground">{invitaciones.length}</span>
+                </div>
+              </Card>
+
+              <Card className="p-4 rounded-2xl border-border/60 bg-surface shadow-xs flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center shrink-0">
+                  <CheckCircle2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground block">Disponibles</span>
+                  <span className="text-xl font-bold font-display text-emerald-600 dark:text-emerald-400">
+                    {invitaciones.filter(i => i.estado === "DISPONIBLE").length}
+                  </span>
+                </div>
+              </Card>
+
+              <Card className="p-4 rounded-2xl border-border/60 bg-surface shadow-xs flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 flex items-center justify-center shrink-0">
+                  <Building2 className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground block">Canjeadas / Usadas</span>
+                  <span className="text-xl font-bold font-display text-purple-600 dark:text-purple-400">
+                    {invitaciones.filter(i => i.estado === "USADO").length}
+                  </span>
+                </div>
+              </Card>
+
+              <Card className="p-4 rounded-2xl border-border/60 bg-surface shadow-xs flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center shrink-0">
+                  <Clock className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground block">Expiradas</span>
+                  <span className="text-xl font-bold font-display text-rose-600 dark:text-rose-400">
+                    {invitaciones.filter(i => i.estado === "EXPIRADO").length}
+                  </span>
+                </div>
+              </Card>
+            </div>
+
+            {/* Barra de Filtros y Búsqueda */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/50 shadow-xs">
+              <div className="relative flex-1 max-w-md">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Buscar por código (ej. KLYNN-7X4M9P2K), cliente o lavandería..."
+                  value={invSearchQuery}
+                  onChange={(e) => setInvSearchQuery(e.target.value)}
+                  className="pl-10 h-10 rounded-xl bg-background border-border/80 text-sm focus-visible:ring-primary/20"
+                />
+              </div>
+
+              <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-xl p-1 shrink-0 overflow-x-auto">
+                <button
+                  type="button"
+                  onClick={() => setInvStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${invStatusFilter === "all" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Todas ({invitaciones.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatusFilter("DISPONIBLE")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${invStatusFilter === "DISPONIBLE" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Disponibles ({invitaciones.filter(i => i.estado === "DISPONIBLE").length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatusFilter("USADO")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${invStatusFilter === "USADO" ? "bg-purple-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Usadas ({invitaciones.filter(i => i.estado === "USADO").length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setInvStatusFilter("EXPIRADO")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${invStatusFilter === "EXPIRADO" ? "bg-rose-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Expiradas ({invitaciones.filter(i => i.estado === "EXPIRADO").length})
+                </button>
+              </div>
+            </div>
+
+            {/* Tabla de Invitaciones */}
+            <Card className="rounded-2xl border-border/60 overflow-hidden shadow-sm bg-surface">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs sm:text-sm">
+                  <thead className="bg-muted/50 border-b border-border/60 text-[11px] uppercase tracking-wider text-muted-foreground">
+                    <tr>
+                      <th className="px-5 py-3.5 font-bold">Código VIP</th>
+                      <th className="px-5 py-3.5 font-bold">Cliente / Destinatario</th>
+                      <th className="px-5 py-3.5 font-bold text-center">Plan Asignado</th>
+                      <th className="px-5 py-3.5 font-bold text-center">Estado</th>
+                      <th className="px-5 py-3.5 font-bold text-center">Creación / Expiración</th>
+                      <th className="px-5 py-3.5 font-bold text-center">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/40">
+                    {invitaciones
+                      .filter((inv) => {
+                        const q = invSearchQuery.toLowerCase().trim();
+                        const matchesQ = !q || inv.codigo.toLowerCase().includes(q) || (inv.nota && inv.nota.toLowerCase().includes(q)) || (inv.usado_por_slug && inv.usado_por_slug.toLowerCase().includes(q));
+                        const matchesS = invStatusFilter === "all" || inv.estado === invStatusFilter;
+                        return matchesQ && matchesS;
+                      })
+                      .map((inv) => {
+                        const isExpired = inv.estado === "EXPIRADO" || (inv.estado === "DISPONIBLE" && inv.expira_en && new Date(inv.expira_en) < new Date());
+                        const isUsed = inv.estado === "USADO";
+                        const isAvailable = inv.estado === "DISPONIBLE" && !isExpired;
+
+                        return (
+                          <tr key={inv.id} className="hover:bg-muted/30 transition-colors">
+                            <td className="px-5 py-4 font-mono font-black text-sm">
+                              <div className="flex items-center gap-2">
+                                <span className={`px-2.5 py-1 rounded-lg border text-xs sm:text-sm tracking-wider font-extrabold font-mono ${
+                                  isAvailable
+                                    ? "bg-amber-50 dark:bg-amber-950/50 text-amber-900 dark:text-amber-200 border-amber-300"
+                                    : isUsed
+                                    ? "bg-purple-50 dark:bg-purple-950/50 text-purple-800 dark:text-purple-300 border-purple-200"
+                                    : "bg-slate-100 dark:bg-slate-800 text-slate-500 border-slate-300"
+                                }`}>
+                                  {inv.codigo}
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-4">
+                              {inv.nota ? (
+                                <span className="font-bold text-foreground block">{inv.nota}</span>
+                              ) : (
+                                <span className="text-muted-foreground italic text-xs">Sin nota asignada</span>
+                              )}
+                              {isUsed && inv.usado_por_slug && (
+                                <span className="text-[11px] text-purple-600 dark:text-purple-400 font-semibold block mt-0.5">
+                                  Registrado en: <strong>/t/{inv.usado_por_slug}</strong> {inv.usado_por_email ? `(${inv.usado_por_email})` : ''}
+                                </span>
+                              )}
+                            </td>
+
+                            <td className="px-5 py-4 text-center">
+                              <div className="inline-flex items-center gap-1.5">
+                                <PlanBadge id={inv.plan_id || "pro"} />
+                                <span className="text-[11px] text-muted-foreground font-semibold">
+                                  ({inv.dias_trial || 14}d)
+                                </span>
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-4 text-center">
+                              {isAvailable && (
+                                <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  Disponible
+                                </Badge>
+                              )}
+                              {isUsed && (
+                                <Badge className="bg-purple-50 text-purple-700 hover:bg-purple-50 border-purple-200 text-[10px] font-bold uppercase gap-1">
+                                  <CheckCircle2 className="h-3 w-3 text-purple-600" />
+                                  Canjeado
+                                </Badge>
+                              )}
+                              {isExpired && (
+                                <Badge variant="outline" className="bg-rose-50 text-rose-700 border-rose-200 text-[10px] font-bold uppercase gap-1">
+                                  <Clock className="h-3 w-3 text-rose-500" />
+                                  Expirado
+                                </Badge>
+                              )}
+                            </td>
+
+                            <td className="px-5 py-4 text-center text-xs">
+                              <div className="text-muted-foreground">
+                                Creado: {new Date(inv.creado_en).toLocaleDateString("es-DO")}
+                              </div>
+                              <div className="text-[11px] font-medium text-slate-500 mt-0.5">
+                                {inv.expira_en ? (
+                                  <span>Expira: {new Date(inv.expira_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
+                                ) : (
+                                  <span className="text-emerald-600 font-bold">Sin expiración</span>
+                                )}
+                              </div>
+                            </td>
+
+                            <td className="px-5 py-4 text-center">
+                              <div className="flex items-center justify-center gap-1.5">
+                                {isAvailable && (
+                                  <>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => copyInvitationLink(inv.codigo)}
+                                      title="Copiar Enlace de Registro"
+                                      className="h-8 px-2.5 rounded-lg border-border/80 hover:bg-primary hover:text-white transition-all text-xs font-bold gap-1 cursor-pointer"
+                                    >
+                                      <Copy className="h-3.5 w-3.5" />
+                                      <span className="hidden sm:inline">Copiar Enlace</span>
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      onClick={() => shareWhatsAppInvitation(inv.codigo, inv.nota)}
+                                      title="Enviar por WhatsApp"
+                                      className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition-all text-xs font-bold gap-1 cursor-pointer"
+                                    >
+                                      <MessageCircle className="h-3.5 w-3.5" />
+                                      <span className="hidden sm:inline">WhatsApp</span>
+                                    </Button>
+                                  </>
+                                )}
+
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDeleteInvitacion(inv.id)}
+                                  title="Eliminar invitación"
+                                  className="h-8 w-8 p-0 rounded-lg text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors cursor-pointer"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    {invitaciones.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="py-12 text-center text-muted-foreground font-medium">
+                          No has generado ningún código de invitación todavía. Haz clic en "Generar Código VIP" arriba.
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="seguridad" className="space-y-6 mt-6">
+            {/* Header de la sección de Seguridad */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-5 sm:p-6 rounded-2xl border border-border/60 shadow-sm">
+              <div className="space-y-1">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
+                    <Lock className="h-5 w-5 text-blue-500" />
+                    Seguridad & Control de Acceso
+                  </h2>
+                  <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 font-extrabold text-[10px] uppercase">
+                    Módulos Globales
+                  </Badge>
+                </div>
+                <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl">
+                  Configura y expande las políticas de autenticación, verificación de dos pasos y auditoría para toda la plataforma Klynn.
+                </p>
+              </div>
+            </div>
+
+            {/* Grid de 5 Columnas de Módulos de Seguridad */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4 items-stretch">
+              {/* Tarjeta 1: Verificación OTP para Nuevos Empleados (ACTIVO / CONFIGURABLE) */}
+              <Card className="p-4.5 rounded-2xl border-border/70 bg-surface shadow-xs hover:border-primary/50 hover:shadow-md transition-all flex flex-col justify-between h-full group">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/60 dark:border-blue-900/40 shadow-2xs group-hover:scale-105 transition-transform">
+                      <ShieldCheck className="h-5 w-5" />
+                    </div>
+                    <Badge variant="outline" className={`text-[10px] font-bold ${globalConfig.requireEmployeeOtp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                      {globalConfig.requireEmployeeOtp ? "Activo" : "Inactivo"}
+                    </Badge>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-foreground leading-snug">
+                    Verificación OTP para Nuevos Empleados
+                  </h3>
+                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
+                    Exige un código de confirmación de 6 dígitos enviado al correo del empleado cada vez que un administrador lo cree en <code className="font-mono text-[11px] text-primary font-bold">/personal</code>.
+                  </p>
+                </div>
+
+                <div className="pt-3.5 mt-3.5 border-t border-border/50 flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-muted-foreground">
+                    {globalConfig.requireEmployeeOtp ? "Habilitado" : "Deshabilitado"}
+                  </span>
+                  <Switch
+                    checked={Boolean(globalConfig.requireEmployeeOtp)}
+                    onCheckedChange={async (v) => {
+                      const updated = { ...globalConfig, requireEmployeeOtp: v };
+                      setGlobalConfig(updated);
+                      await saveGlobalConfig(updated);
+                      toast.success(v ? "Verificación OTP activada correctamente" : "Verificación OTP desactivada");
+                    }}
+                    className="cursor-pointer"
+                  />
+                </div>
+              </Card>
+
+              {/* Tarjeta 2: 2FA Super Admin (Próximamente) */}
+              <Card className="p-4.5 rounded-2xl border-dashed border-border/80 bg-surface/40 shadow-2xs flex flex-col justify-between h-full opacity-75 hover:opacity-100 transition-opacity">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200/60 dark:border-amber-900/40 shadow-2xs">
+                      <Key className="h-5 w-5" />
+                    </div>
+                    <Badge variant="secondary" className="text-[9.5px] font-bold text-muted-foreground bg-muted/60">
+                      Próximamente
+                    </Badge>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-foreground leading-snug">
+                    2FA para Super Admin
+                  </h3>
+                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
+                    Autenticación en dos pasos obligatoria con Google Authenticator o correo al ingresar al panel <code className="font-mono text-[11px] text-primary font-bold">/admin</code>.
+                  </p>
+                </div>
+
+                <div className="pt-3.5 mt-3.5 border-t border-border/40 flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-muted-foreground">En desarrollo</span>
+                  <Switch disabled checked={false} />
+                </div>
+              </Card>
+
+              {/* Tarjeta 3: Bloqueo de Intentos Fallidos (Próximamente) */}
+              <Card className="p-4.5 rounded-2xl border-dashed border-border/80 bg-surface/40 shadow-2xs flex flex-col justify-between h-full opacity-75 hover:opacity-100 transition-opacity">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center border border-rose-200/60 dark:border-rose-900/40 shadow-2xs">
+                      <AlertCircle className="h-5 w-5" />
+                    </div>
+                    <Badge variant="secondary" className="text-[9.5px] font-bold text-muted-foreground bg-muted/60">
+                      Próximamente
+                    </Badge>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-foreground leading-snug">
+                    Bloqueo por Intentos Fallidos
+                  </h3>
+                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
+                    Suspende temporalmente el acceso tras 5 intentos fallidos consecutivos de contraseña para evitar ataques de fuerza bruta.
+                  </p>
+                </div>
+
+                <div className="pt-3.5 mt-3.5 border-t border-border/40 flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-muted-foreground">En desarrollo</span>
+                  <Switch disabled checked={false} />
+                </div>
+              </Card>
+
+              {/* Tarjeta 4: Registro de Auditoría (Próximamente) */}
+              <Card className="p-4.5 rounded-2xl border-dashed border-border/80 bg-surface/40 shadow-2xs flex flex-col justify-between h-full opacity-75 hover:opacity-100 transition-opacity">
+                <div>
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="h-10 w-10 rounded-2xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-200/60 dark:border-purple-900/40 shadow-2xs">
+                      <Clock className="h-5 w-5" />
+                    </div>
+                    <Badge variant="secondary" className="text-[9.5px] font-bold text-muted-foreground bg-muted/60">
+                      Próximamente
+                    </Badge>
+                  </div>
+
+                  <h3 className="font-bold text-sm text-foreground leading-snug">
+                    Auditoría de Inicios de Sesión
+                  </h3>
+                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
+                    Historial detallado de IP, navegadores y horas de conexión de administradores y cajeros en cada lavandería.
+                  </p>
+                </div>
+
+                <div className="pt-3.5 mt-3.5 border-t border-border/40 flex items-center justify-between">
+                  <span className="text-[11px] font-medium text-muted-foreground">En desarrollo</span>
+                  <Switch disabled checked={false} />
+                </div>
+              </Card>
+
+              {/* Tarjeta 5: Tarjeta para Agregar Nuevas Opciones */}
+              <Card className="p-4.5 rounded-2xl border-dashed border-2 border-primary/25 bg-primary/5 shadow-2xs flex flex-col items-center justify-center text-center h-full min-h-[190px] hover:bg-primary/10 transition-colors">
+                <div className="h-10 w-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mb-2.5">
+                  <Plus className="h-5 w-5" />
+                </div>
+                <h3 className="font-bold text-xs text-foreground">
+                  Espacio para Nuevo Módulo
+                </h3>
+                <p className="text-[11px] text-muted-foreground mt-1 max-w-[160px]">
+                  Listo para integrar más herramientas de protección a medida que crezca Klynn.
+                </p>
+              </Card>
+            </div>
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -2251,6 +2735,150 @@ function AdminPage() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Modal: Generar Código de Invitación VIP */}
+      <Dialog open={openCreateInvModal} onOpenChange={setOpenCreateInvModal}>
+        <DialogContent className="rounded-2xl max-w-[430px] p-0 gap-0 overflow-hidden border shadow-2xl bg-background text-foreground">
+          {/* Header Compacto */}
+          <div className="bg-gradient-to-r from-amber-500/10 via-primary/5 to-transparent p-3.5 sm:p-4 border-b border-border/60">
+            <div className="flex items-center gap-2.5">
+              <div className="h-8 w-8 rounded-xl bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-500/20 shadow-2xs shrink-0">
+                <Ticket className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <DialogTitle className="text-sm font-display font-bold text-foreground leading-tight">
+                  Generar Código de Invitación VIP
+                </DialogTitle>
+                <DialogDescription className="text-[11px] text-muted-foreground leading-tight">
+                  Crea un código de activación único para una nueva lavandería.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* Form Content Compacto */}
+          <div className="p-3.5 sm:p-4 space-y-2.5">
+            {/* Display del Código Generado */}
+            <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/80 text-center space-y-1.5">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block leading-none">
+                Código de Acceso Asignado
+              </span>
+              <div className="flex items-center justify-center gap-2">
+                <span className="font-mono text-xl sm:text-2xl font-black tracking-widest text-primary bg-background px-3 py-1 rounded-lg border border-primary/30 shadow-2xs select-all">
+                  {previewCode}
+                </span>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setPreviewCode(generateInvitationCode())}
+                  title="Generar otro código"
+                  className="rounded-lg h-8 w-8 p-0 text-muted-foreground hover:text-foreground cursor-pointer shrink-0"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <p className="text-[10px] text-muted-foreground truncate">
+                Enlace: <code className="font-mono text-primary font-bold">{typeof window !== 'undefined' ? window.location.origin : 'https://klynn.com.do'}/registro?code={previewCode}</code>
+              </p>
+            </div>
+
+            {/* Campo: Nota o Nombre del Cliente */}
+            <div className="space-y-1">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Destinatario / Nota del Cliente
+              </Label>
+              <Input
+                placeholder="Ej: Lavandería Don Pedro (Santo Domingo)"
+                value={invNota}
+                onChange={(e) => setInvNota(e.target.value)}
+                className="h-8.5 rounded-lg bg-surface border-border/80 text-xs"
+              />
+            </div>
+
+            {/* Fila: Plan & Días de Prueba */}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Plan Inicial
+                </Label>
+                <Select value={invPlanId} onValueChange={(v: PlanId) => setInvPlanId(v)}>
+                  <SelectTrigger className="h-8.5 rounded-lg bg-surface border-border/80 text-xs">
+                    <SelectValue placeholder="Seleccionar plan" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    {plans.map((p) => (
+                      <SelectItem key={p.id} value={p.id} className="text-xs">
+                        {p.nombre} ({formatRD(p.precio_mensual)}/m)
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-1">
+                <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                  Días de Prueba
+                </Label>
+                <Input
+                  type="number"
+                  min={1}
+                  max={90}
+                  value={invDiasTrial}
+                  onChange={(e) => setInvDiasTrial(Number(e.target.value) || 14)}
+                  className="h-8.5 rounded-lg bg-surface border-border/80 text-xs font-bold"
+                />
+              </div>
+            </div>
+
+            {/* Campo: Expiración del Código */}
+            <div className="space-y-1">
+              <Label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground">
+                Vigencia de la Invitación
+              </Label>
+              <Select
+                value={invExpiraHoras === null ? "null" : String(invExpiraHoras)}
+                onValueChange={(v) => setInvExpiraHoras(v === "null" ? null : Number(v))}
+              >
+                <SelectTrigger className="h-8.5 rounded-lg bg-surface border-border/80 text-xs">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  <SelectItem value="1" className="text-xs">1 Hora</SelectItem>
+                  <SelectItem value="3" className="text-xs">3 Horas</SelectItem>
+                  <SelectItem value="5" className="text-xs">5 Horas</SelectItem>
+                  <SelectItem value="24" className="text-xs">24 Horas (1 día - Recomendado)</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[9.5px] text-muted-foreground leading-tight">
+                Una vez transcurrido este tiempo o canjeado el código, nadie más podrá utilizarlo.
+              </p>
+            </div>
+          </div>
+
+          {/* Footer Compacto */}
+          <DialogFooter className="p-3 bg-muted/20 border-t border-border/60 flex items-center justify-end gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setOpenCreateInvModal(false)}
+              className="h-8.5 rounded-lg font-bold px-3.5 text-xs cursor-pointer"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleCreateInvitacion}
+              className="bg-primary hover:bg-primary/90 text-white font-bold h-8.5 px-4 rounded-lg shadow-xs cursor-pointer gap-1 text-xs"
+            >
+              <CheckCircle2 className="h-3.5 w-3.5" />
+              Generar y Guardar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

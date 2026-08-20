@@ -7,7 +7,7 @@ import {
   AlertCircle, Search, MapPin, Upload, Image as ImageIcon, Receipt, MessageCircle, Sparkles,
   Eye, EyeOff, Cloud, Loader2, Droplet, Landmark, ShieldCheck, Trash2,
   Store, Phone, User, Mail, Lock, ChevronRight,
-  Layers, Truck, Wallet, Tags, Users, BarChart3, QrCode, Shirt,
+  Layers, Truck, Wallet, Tags, Users, BarChart3, QrCode, Shirt, Ticket, KeyRound,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -15,12 +15,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   PLANS, formatRD, formatPhoneRD, isSlugAvailable, registerTenant,
   sendSignUpOtp, resendSignUpOtp, verifyOtpAndRegisterTenant,
   setActiveTenant, uid, PROVINCIAS_RD, NCF_TIPOS, DEFAULT_CONFIG, getGlobalConfig, getPlans,
-  updateECFConfig, saveECFConfig,
-  type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan, type ECFConfig,
+  updateECFConfig, saveECFConfig, validarCodigoInvitacion, marcarCodigoUsado,
+  type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan, type ECFConfig, type InvitacionCodigo,
 } from "@/lib/storage";
 import { registerTenantInPronesoft, consultarRNC } from "@/lib/fiscal";
 import { sendWelcomeEmail } from "@/lib/email";
@@ -223,6 +224,70 @@ function RegistroPage() {
   const [isProvisioning, setIsProvisioning] = useState(false);
   const [provisioningStep, setProvisioningStep] = useState(0);
 
+  // Estados de Invitación y Acceso Privado
+  const [codigoIngresado, setCodigoIngresado] = useState("");
+  const [invitacionValidada, setInvitacionValidada] = useState<InvitacionCodigo | null>(null);
+  const [validandoCodigo, setValidandoCodigo] = useState(true);
+  const [errorCodigo, setErrorCodigo] = useState<string | null>(null);
+  const [isUnlocked, setIsUnlocked] = useState(false);
+
+  useEffect(() => {
+    async function checkUrlCode() {
+      if (typeof window === "undefined") return;
+      const params = new URLSearchParams(window.location.search);
+      const codeParam = params.get("code") || params.get("c") || params.get("codigo") || params.get("invitacion");
+      
+      if (codeParam) {
+        setValidandoCodigo(true);
+        const clean = codeParam.trim().toUpperCase();
+        setCodigoIngresado(clean);
+        const res = await validarCodigoInvitacion(clean);
+        if (res.ok && res.invitacion) {
+          setInvitacionValidada(res.invitacion);
+          setIsUnlocked(true);
+          if (res.invitacion.plan_id) {
+            setForm((f) => ({ ...f, plan_id: res.invitacion!.plan_id! }));
+          }
+          toast.success(`¡Invitación ${res.invitacion.codigo} validada exitosamente!`);
+        } else {
+          setErrorCodigo(res.error || "El código de invitación no es válido o ha expirado.");
+          toast.error(res.error || "Código de invitación no válido");
+        }
+        setValidandoCodigo(false);
+      } else {
+        setValidandoCodigo(false);
+      }
+    }
+    checkUrlCode();
+  }, []);
+
+  async function validarDirecto(codeToValidate: string) {
+    setErrorCodigo(null);
+    setValidandoCodigo(true);
+    const res = await validarCodigoInvitacion(codeToValidate);
+    if (res.ok && res.invitacion) {
+      setInvitacionValidada(res.invitacion);
+      setIsUnlocked(true);
+      if (res.invitacion.plan_id) {
+        setForm((f) => ({ ...f, plan_id: res.invitacion!.plan_id! }));
+      }
+      toast.success(`¡Acceso desbloqueado con el código ${res.invitacion.codigo}!`);
+    } else {
+      setErrorCodigo(res.error || "Código inválido o expirado.");
+    }
+    setValidandoCodigo(false);
+  }
+
+  async function handleValidarManual(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    const clean = codigoIngresado.trim().toUpperCase().replace(/^KLYNN-?/i, "").replace(/^KL-?/i, "");
+    if (!clean) {
+      setErrorCodigo("Por favor escribe tu código de activación de 8 dígitos.");
+      return;
+    }
+    await validarDirecto(`KLYNN-${clean}`);
+  }
+
   // Estados de Verificación OTP
   const [otpCode, setOtpCode] = useState("");
   const [otpSending, setOtpSending] = useState(false);
@@ -412,6 +477,7 @@ function RegistroPage() {
       nombre_sucursal: "Sucursal principal",
     };
     const cleanRnc = form.rnc.replace(/\D/g, "");
+    const trialDays = invitacionValidada?.dias_trial || globalConfig.trialDays || 14;
     const tenant: Tenant = {
       id: tenantIdRef.current,
       nombre: form.nombre,
@@ -425,9 +491,9 @@ function RegistroPage() {
       logo_url: form.logo_url || undefined,
       color_primario: form.color_primario,
       color_secundario: form.color_secundario,
-      plan_id: form.plan_id,
+      plan_id: form.plan_id || invitacionValidada?.plan_id || "pro",
       estado: "TRIAL",
-      trial_hasta: new Date(Date.now() + globalConfig.trialDays * 86400000).toISOString(),
+      trial_hasta: new Date(Date.now() + trialDays * 86400000).toISOString(),
       creado_en: new Date().toISOString(),
       plan_fecha_inicio: new Date().toISOString(),
       config,
@@ -484,6 +550,11 @@ function RegistroPage() {
         nombreLavanderia: form.nombre,
         tenantSlug: form.slug,
       }).catch((emailErr) => console.warn("[Registro] Aviso al enviar correo de bienvenida:", emailErr));
+
+      // Si se utilizó un código de invitación VIP, marcarlo como usado
+      if (invitacionValidada) {
+        await marcarCodigoUsado(invitacionValidada.codigo, tenant.slug, form.admin_email);
+      }
 
       localStorage.setItem("klynn_tour_is_new_registration", "true");
       setActiveTenant(tenant.slug);
@@ -630,155 +701,302 @@ function RegistroPage() {
         ))}
       </div>
 
-      {/* 3. Tarjetas de Módulos Flotantes de Klynn con Iconos SVG (visibles en pantallas grandes) */}
-      <div className="fixed inset-0 z-0 pointer-events-none hidden xl:block max-w-7xl mx-auto">
-        {/* Columna Izquierda: 3 Módulos Oficiales */}
-        <div className="absolute left-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
-          {KLYNN_MODULES_LEFT.map((m) => {
-            const ModIcon = m.icon;
-            return (
-              <motion.div
-                key={m.id}
-                animate={{ y: m.floatY }}
-                transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
-              >
-                <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
-                  <ModIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
-                  <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
+      {/* 3. Tarjetas de Módulos Flotantes de Klynn con Iconos SVG (visibles solo tras desbloquear el registro) */}
+      {isUnlocked && (
+        <div className="fixed inset-0 z-0 pointer-events-none hidden 2xl:block max-w-7xl mx-auto">
+          {/* Columna Izquierda: 3 Módulos Oficiales */}
+          <div className="absolute left-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
+            {KLYNN_MODULES_LEFT.map((m) => {
+              const ModIcon = m.icon;
+              return (
+                <motion.div
+                  key={m.id}
+                  animate={{ y: m.floatY }}
+                  transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
+                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
+                >
+                  <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
+                    <ModIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
+                    <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
 
-        {/* Columna Derecha: 3 Módulos Oficiales */}
-        <div className="absolute right-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
-          {KLYNN_MODULES_RIGHT.map((m) => {
-            const ModIcon = m.icon;
-            return (
-              <motion.div
-                key={m.id}
-                animate={{ y: m.floatY }}
-                transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
-              >
-                <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
-                  <ModIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
-                  <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
-                </div>
-              </motion.div>
-            );
-          })}
+          {/* Columna Derecha: 3 Módulos Oficiales */}
+          <div className="absolute right-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
+            {KLYNN_MODULES_RIGHT.map((m) => {
+              const ModIcon = m.icon;
+              return (
+                <motion.div
+                  key={m.id}
+                  animate={{ y: m.floatY }}
+                  transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
+                  className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
+                >
+                  <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
+                    <ModIcon className="h-5 w-5" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
+                    <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
+                  </div>
+                </motion.div>
+              );
+            })}
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="relative z-10">
-        <header className="flex flex-col items-center justify-center pt-5 pb-1 px-6 relative">
+        <header className="flex flex-col items-center justify-center pt-5 pb-2 px-6 relative">
           <div className="flex flex-col items-center">
             <Logo size="lg" />
-            <span className="-mt-2 text-[13px] font-semibold tracking-tight text-slate-500/80">
+            <span className="-mt-2.5 text-sm font-bold tracking-tight text-slate-600/90">
               Tu lavandería, simplificada.
             </span>
           </div>
-          <div className="absolute right-6 top-4 hidden md:flex items-center gap-3 px-4 py-2 rounded-full bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25 border border-white/20 transition-all hover:scale-105">
-            <span className="text-xs sm:text-sm font-medium text-white/90">¿Ya tienes cuenta?</span>
+          <div className="absolute right-6 top-5 hidden md:flex items-center gap-3.5 px-4 py-2 rounded-2xl bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25 border border-white/20 transition-all hover:scale-105">
+            <span className="text-sm font-semibold text-white/95">¿Ya tienes cuenta?</span>
             <Link 
               to="/login" 
-              className="inline-flex items-center gap-1.5 font-bold text-xs sm:text-sm text-[#1B4B73] bg-[#F0B900] hover:bg-[#F0B900]/90 px-3.5 py-1 rounded-full shadow-xs transition-colors"
+              className="inline-flex items-center gap-1.5 font-extrabold text-xs text-[#1B4B73] bg-[#F0B900] hover:bg-[#ffc814] px-4 py-1.5 rounded-xl shadow-xs transition-all cursor-pointer"
             >
-              Inicia sesión
+              <span>Inicia sesión</span>
               <ArrowRight className="h-3.5 w-3.5 text-[#1B4B73]" />
             </Link>
           </div>
         </header>
 
-        <main className="container mx-auto pb-6 pt-2">
-          {/* Wizard Stepper Compacto & Horizontal de Baja Altura */}
-          <div className="mx-auto mb-4 max-w-2xl px-2">
-            <div className="flex items-center justify-between gap-1 sm:gap-2 rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-1.5 sm:p-2 shadow-md shadow-slate-200/40">
-              {filteredSteps.map((s, index) => {
-                const done = step > s.id;
-                const current = step === s.id;
-                const StepIcon = s.icon;
+        {!isUnlocked ? (
+          <main className="container mx-auto pb-4 pt-1 px-4 flex items-center justify-center min-h-[calc(100vh-100px)]">
+            <div className="w-full max-w-[460px] rounded-3xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-5 sm:p-6 shadow-2xl shadow-slate-300/60 text-center animate-in fade-in zoom-in-95 duration-200 my-auto">
+              {/* Badge VIP Exclusivo */}
+              <div className="inline-flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#F0B900] border border-[#e0ad00] text-[#1B4B73] font-black text-[11px] tracking-wider uppercase mb-2.5 shadow-xs">
+                <Lock className="h-3.5 w-3.5 text-[#1B4B73] stroke-[2.5]" />
+                <span>Acceso Privado por Invitación</span>
+              </div>
 
-                return (
-                  <div key={s.id} className="flex items-center gap-1 sm:gap-2 flex-1 last:flex-none">
-                    <div
-                      className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl transition-all duration-300 w-full justify-center sm:justify-start ${
-                        current
-                          ? "bg-[#1B4B73] text-white shadow-xs font-bold"
-                          : done
-                          ? "bg-[#1B4B73]/10 text-[#1B4B73] font-semibold hover:bg-[#1B4B73]/15"
-                          : "text-slate-400 font-medium hover:text-slate-600"
-                      }`}
-                    >
-                      <div
-                        className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs transition-colors ${
-                          current
-                            ? "bg-white/15 text-[#F0B900]"
-                            : done
-                            ? "bg-[#1B4B73] text-[#F0B900]"
-                            : "bg-slate-100 text-slate-400"
-                        }`}
-                      >
-                        {done ? (
-                          <Check className="h-3.5 w-3.5 stroke-[2.5]" />
-                        ) : (
-                          <StepIcon className="h-3.5 w-3.5" />
-                        )}
-                      </div>
+              <h1 className="font-display text-xl sm:text-2xl font-black text-slate-800 tracking-tight">
+                Ingresa tu Código de Acceso
+              </h1>
 
-                      <div className="hidden sm:flex flex-col">
-                        <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
-                          current ? "text-[#F0B900]" : done ? "text-[#1B4B73]" : "text-slate-400"
-                        }`}>
-                          0{index + 1}
-                        </span>
-                        <span className="text-[11px] font-bold tracking-tight leading-tight">
-                          {s.label}
-                        </span>
-                      </div>
-                    </div>
-
-                    {index < filteredSteps.length - 1 && (
-                      <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0 hidden sm:block" />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-
-          <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-5 shadow-xl shadow-slate-200/50 sm:p-6 md:p-8">
-          {isProvisioning ? (
-            <div className="flex flex-col items-center justify-center py-8 text-center">
-              <motion.div
-                animate={{ rotate: 360 }}
-                transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
-                className="mb-6 rounded-full border-4 border-primary/20 border-t-primary p-3"
-              >
-                <Droplet className="h-10 w-10 text-primary" fill="currentColor" />
-              </motion.div>
-              <h2 className="text-xl font-bold">Creando tu espacio</h2>
-              <p className="mt-1 text-xs text-muted-foreground italic">
-                {provisioningSteps[provisioningStep]}
+              <p className="mt-1 text-xs text-slate-600 leading-snug max-w-sm mx-auto">
+                <strong className="font-bold text-slate-800">Klynn</strong> opera bajo invitación exclusiva para garantizar acompañamiento personalizado a cada lavandería.
               </p>
-              <div className="mt-6 h-1.5 w-56 overflow-hidden rounded-full bg-slate-100">
-                <motion.div
-                  className="h-full bg-primary"
-                  initial={{ width: "0%" }}
-                  animate={{ width: `${(provisioningStep + 1) * 20}%` }}
-                />
+
+              <form onSubmit={handleValidarManual} className="mt-4 space-y-3.5 text-center">
+                <div className="space-y-2.5">
+                  <div className="text-center">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
+                      Código de activación
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-center py-1">
+                    <InputOTP
+                      maxLength={8}
+                      value={codigoIngresado.replace(/^KLYNN-?/i, "").replace(/^KL-?/i, "")}
+                      onChange={(val) => {
+                        const clean = val.toUpperCase().replace(/^KLYNN-?/i, "").replace(/^KL-?/i, "").replace(/[^0-9A-Z]/g, "").slice(0, 8);
+                        setCodigoIngresado(clean);
+                        setErrorCodigo(null);
+                        if (clean.length === 8) {
+                          setTimeout(() => {
+                            validarDirecto(clean);
+                          }, 50);
+                        }
+                      }}
+                      onPaste={(e) => {
+                        e.preventDefault();
+                        const pasted = e.clipboardData.getData("text/plain") || "";
+                        const clean = pasted.toUpperCase().replace(/^KLYNN-?/i, "").replace(/^KL-?/i, "").replace(/[^0-9A-Z]/g, "").slice(0, 8);
+                        setCodigoIngresado(clean);
+                        setErrorCodigo(null);
+                        if (clean.length === 8) {
+                          setTimeout(() => {
+                            validarDirecto(clean);
+                          }, 50);
+                        }
+                      }}
+                      disabled={validandoCodigo}
+                      autoFocus
+                      className="justify-center"
+                    >
+                      <div className="flex items-center justify-center gap-1.5 sm:gap-2">
+                        {Array.from({ length: 8 }).map((_, i) => (
+                          <InputOTPGroup key={i}>
+                            <InputOTPSlot
+                              index={i}
+                              className="h-11 w-8 sm:h-12 sm:w-10 text-base sm:text-lg font-mono font-black uppercase rounded-xl border border-slate-300 bg-white text-slate-800 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/20 shadow-xs"
+                            />
+                          </InputOTPGroup>
+                        ))}
+                      </div>
+                    </InputOTP>
+                  </div>
+                </div>
+
+                {errorCodigo && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -4 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2 text-xs font-semibold text-rose-700 mx-auto max-w-sm"
+                  >
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{errorCodigo}</span>
+                  </motion.div>
+                )}
+
+                <button
+                  type="submit"
+                  disabled={validandoCodigo}
+                  className="w-full h-11 rounded-xl font-display font-black text-xs sm:text-sm uppercase tracking-wider text-white bg-gradient-to-r from-[#1B4B73] via-[#245e8e] to-[#1B4B73] hover:shadow-lg hover:shadow-[#1B4B73]/25 transition-all duration-200 cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2"
+                >
+                  {validandoCodigo ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin text-white" />
+                      <span>Verificando invitación...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="h-4 w-4 text-[#F0B900]" />
+                      <span>Desbloquear Registro</span>
+                      <ArrowRight className="h-4 w-4" />
+                    </>
+                  )}
+                </button>
+              </form>
+
+              {/* Solicitar por WhatsApp */}
+              <div className="mt-3.5 pt-3 border-t border-slate-200/80 space-y-1.5">
+                <p className="text-[11px] font-medium text-slate-500">
+                  ¿Aún no tienes un código de acceso para tu lavandería?
+                </p>
+                <a
+                  href={`https://wa.me/18299416546?text=${encodeURIComponent("Hola, me gustaría solicitar un código de acceso por invitación para registrar mi lavandería en Klynn.")}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center justify-center gap-2 w-full h-9.5 px-4 rounded-xl bg-emerald-50 hover:bg-emerald-100/90 text-emerald-800 border border-emerald-200 font-bold text-xs transition-colors cursor-pointer"
+                >
+                  <MessageCircle className="h-4 w-4 text-emerald-600" />
+                  <span>Solicitar invitación por WhatsApp</span>
+                </a>
+              </div>
+
+              {/* Iniciar sesión */}
+              <div className="mt-2.5 text-center">
+                <Link to="/login" className="text-[11.5px] font-bold text-[#1B4B73] hover:underline">
+                  ¿Ya tienes una cuenta registrada? Inicia sesión aquí
+                </Link>
               </div>
             </div>
-          ) : (
+          </main>
+        ) : (
+          <main className="container mx-auto pb-6 pt-2">
+            {/* Banner de Invitación VIP Activa */}
+            {invitacionValidada && (
+              <div className="mx-auto mb-3 max-w-2xl px-2">
+                <div className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 shadow-xs">
+                  <div className="flex items-center gap-2 text-xs font-bold">
+                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-[11px]">
+                      👑
+                    </span>
+                    <span>
+                      Invitación Verificada: <strong className="font-mono text-emerald-800">{invitacionValidada.codigo}</strong>
+                      {invitacionValidada.nota ? ` (${invitacionValidada.nota})` : ""} • 14 días de prueba gratis habilitados
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300 font-extrabold text-[10px] uppercase shrink-0">
+                    Acceso VIP
+                  </Badge>
+                </div>
+              </div>
+            )}
+
+            {/* Wizard Stepper Compacto & Horizontal de Baja Altura */}
+            <div className="mx-auto mb-4 max-w-2xl px-2">
+              <div className="flex items-center justify-between gap-1 sm:gap-2 rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-1.5 sm:p-2 shadow-md shadow-slate-200/40">
+                {filteredSteps.map((s, index) => {
+                  const done = step > s.id;
+                  const current = step === s.id;
+                  const StepIcon = s.icon;
+
+                  return (
+                    <div key={s.id} className="flex items-center gap-1 sm:gap-2 flex-1 last:flex-none">
+                      <div
+                        className={`flex items-center gap-2 px-2.5 sm:px-3 py-1.5 rounded-xl transition-all duration-300 w-full justify-center sm:justify-start ${
+                          current
+                            ? "bg-[#1B4B73] text-white shadow-xs font-bold"
+                            : done
+                            ? "bg-[#1B4B73]/10 text-[#1B4B73] font-semibold hover:bg-[#1B4B73]/15"
+                            : "text-slate-400 font-medium hover:text-slate-600"
+                        }`}
+                      >
+                        <div
+                          className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs transition-colors ${
+                            current
+                              ? "bg-white/15 text-[#F0B900]"
+                              : done
+                              ? "bg-[#1B4B73] text-[#F0B900]"
+                              : "bg-slate-100 text-slate-400"
+                          }`}
+                        >
+                          {done ? (
+                            <Check className="h-3.5 w-3.5 stroke-[2.5]" />
+                          ) : (
+                            <StepIcon className="h-3.5 w-3.5" />
+                          )}
+                        </div>
+
+                        <div className="hidden sm:flex flex-col">
+                          <span className={`text-[9px] font-black uppercase tracking-wider leading-none ${
+                            current ? "text-[#F0B900]" : done ? "text-[#1B4B73]" : "text-slate-400"
+                          }`}>
+                            0{index + 1}
+                          </span>
+                          <span className="text-[11px] font-bold tracking-tight leading-tight">
+                            {s.label}
+                          </span>
+                        </div>
+                      </div>
+
+                      {index < filteredSteps.length - 1 && (
+                        <ChevronRight className="h-3.5 w-3.5 text-slate-300 shrink-0 hidden sm:block" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            <div className="mx-auto max-w-2xl rounded-2xl border border-slate-200/90 bg-white/95 backdrop-blur-xl p-5 shadow-xl shadow-slate-200/50 sm:p-6 md:p-8">
+            {isProvisioning ? (
+              <div className="flex flex-col items-center justify-center py-8 text-center">
+                <motion.div
+                  animate={{ rotate: 360 }}
+                  transition={{ repeat: Infinity, duration: 2, ease: "linear" }}
+                  className="mb-6 rounded-full border-4 border-primary/20 border-t-primary p-3"
+                >
+                  <Droplet className="h-10 w-10 text-primary" fill="currentColor" />
+                </motion.div>
+                <h2 className="text-xl font-bold">Creando tu espacio</h2>
+                <p className="mt-1 text-xs text-muted-foreground italic">
+                  {provisioningSteps[provisioningStep]}
+                </p>
+                <div className="mt-6 h-1.5 w-56 overflow-hidden rounded-full bg-slate-100">
+                  <motion.div
+                    className="h-full bg-primary"
+                    initial={{ width: "0%" }}
+                    animate={{ width: `${(provisioningStep + 1) * 20}%` }}
+                  />
+                </div>
+              </div>
+            ) : (
             <AnimatePresence mode="wait">
               <motion.div
                 key={step}
@@ -1240,6 +1458,7 @@ function RegistroPage() {
           )}
         </div>
       </main>
+      )}
       </div>
 
       <ProvinciaModal open={provOpen} onClose={() => setProvOpen(false)} value={form.provincia} onSelect={(p) => { update("provincia", p); setProvOpen(false); }} />

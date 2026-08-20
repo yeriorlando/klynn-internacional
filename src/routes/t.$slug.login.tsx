@@ -1,10 +1,13 @@
+/* Hallmark · redesign: tenant-login · genre: modern-minimal · theme: custom (#1B4B73 / #F0B900) */
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
-import { ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
+import { 
+  ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
+  MapPin, ShieldCheck 
+} from "lucide-react";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
-import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getTenantBySlug, login, setActiveTenant, type Tenant } from "@/lib/storage";
@@ -18,7 +21,7 @@ export const Route = createFileRoute("/t/$slug/login")({
     return {
       meta: [
         { title: `Iniciar sesión — ${tenant?.nombre || "Lavandería"}` },
-        { name: "description", content: `Accede al panel de ${tenant?.nombre || "tu lavandería"} en Klynn.` },
+        { name: "description", content: `Accede al panel de ${tenant?.nombre || "tu lavandería"} en Klynn Cloud.` },
       ],
     };
   },
@@ -40,8 +43,8 @@ function TenantLoginPage() {
   const brandStyle = useMemo(() => {
     if (!tenant) return undefined;
     return {
-      "--brand-primary": tenant.color_primario,
-      "--brand-secondary": tenant.color_secundario || tenant.color_primario,
+      "--brand-primary": tenant.color_primario || "#1B4B73",
+      "--brand-secondary": tenant.color_secundario || tenant.color_primario || "#F0B900",
     } as React.CSSProperties;
   }, [tenant]);
 
@@ -59,8 +62,9 @@ function TenantLoginPage() {
     try {
       const r = await login(slug, email, password);
       setLoading(false);
-      if (!r.ok) setError(r.error);
-      else {
+      if (!r.ok) {
+        setError(r.error);
+      } else {
         setIsEntering(true);
         navigate({ to: "/t/$slug", params: { slug } });
       }
@@ -80,159 +84,221 @@ function TenantLoginPage() {
 
   if (!tenant) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center">
-        <div className="mb-6 rounded-full bg-destructive/10 p-6 text-destructive">
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center bg-slate-950 text-slate-100">
+        <div className="mb-6 rounded-full bg-rose-500/10 p-6 text-rose-500 border border-rose-500/20 shadow-lg">
           <AlertCircle className="h-12 w-12" />
         </div>
-        <h1 className="text-2xl font-bold">Lavandería no encontrada</h1>
-        <p className="mt-2 text-muted-foreground">El subdominio "{slug}" no está registrado en nuestra plataforma.</p>
-        <Link to="/registro" className="mt-6 text-primary font-semibold hover:underline">
-          ¿Quieres registrar tu lavandería? Hazlo aquí
+        <h1 className="text-2xl font-black tracking-tight">Lavandería no encontrada</h1>
+        <p className="mt-2 text-sm text-slate-400 max-w-sm">
+          El subdominio <span className="font-mono text-amber-400 font-bold">"{slug}"</span> no está registrado o fue desactivado.
+        </p>
+        <Link 
+          to="/login" 
+          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1B4B73] hover:bg-[#153a5b] text-white font-bold text-xs shadow-md transition-all"
+        >
+          <span>Ir al inicio de sesión general</span>
+          <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
     );
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center relative p-4 sm:p-6 overflow-hidden" style={brandStyle}>
+    <div 
+      className="min-h-screen w-full flex items-center justify-center relative p-4 sm:p-6 overflow-hidden font-sans antialiased selection:bg-[#F0B900] selection:text-slate-950" 
+      style={brandStyle}
+    >
       <SeedBootstrap />
 
-      {/* Imagen de fondo difuminada a pantalla completa */}
+      {/* Imagen de fondo difuminada con atmósfera envolvente */}
       <div className="absolute inset-0 z-0">
         <img 
           src="/login.webp" 
           alt="Laundry background" 
-          className="w-full h-full object-cover blur-[8px] scale-105 opacity-90 dark:opacity-60"
+          className="w-full h-full object-cover blur-[10px] scale-105 opacity-90 dark:opacity-40 brightness-95"
         />
-        <div className="absolute inset-0 bg-slate-100/10 dark:bg-slate-950/40" />
+        <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/70 via-slate-900/40 to-slate-950/60" />
       </div>
 
-      {/* Tarjeta de Inicio de Sesión Compacta */}
-      <div className="w-full max-w-[370px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-md rounded-2xl border border-slate-200/50 dark:border-slate-800 shadow-[0_15px_40px_rgba(0,0,0,0.05)] p-6 sm:p-7 relative z-10">
-        <div className="text-center">
-          {/* Logotipo completo arriba, sin bordes ni fondos extra */}
-          <div className="mb-4.5 flex flex-col items-center justify-center">
-             <div className="h-14 flex items-center justify-center overflow-hidden">
-                {tenant.logo_url ? (
-                  <img 
-                    src={tenant.logo_url} 
-                    className="object-contain max-h-full w-auto animate-fade-in" 
-                    alt={tenant.nombre} 
-                  />
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Building2 className="h-5.5 w-5.5" style={{ color: tenant.color_primario }} />
-                    <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{tenant.nombre}</span>
-                  </div>
-                )}
-             </div>
+      {/* Halo de resplandor ambiental suave centrado */}
+      <div className="absolute w-[500px] h-[500px] rounded-full bg-[#1B4B73]/20 blur-[100px] pointer-events-none z-0" />
 
-             {/* Dirección debajo del logotipo y encima de los campos */}
-             {(tenant.direccion || tenant.provincia) && (
-               <p className="mt-2 text-[10.5px] text-slate-700 dark:text-slate-300 font-bold max-w-xs mx-auto leading-tight">
-                 {tenant.direccion}
-                 {tenant.direccion && tenant.provincia && " · "}
-                 {tenant.provincia}
-               </p>
-             )}
+      {/* Tarjeta de Inicio de Sesión Hallmark Glassmorphism Proporcional */}
+      <motion.div 
+        initial={{ opacity: 0, y: 14, scale: 0.98 }}
+        animate={{ opacity: 1, y: 0, scale: 1 }}
+        transition={{ duration: 0.32, ease: "easeOut" }}
+        className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-white/70 dark:border-slate-800 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10"
+      >
+        <div className="text-center">
+          {/* Contenedor de Logo de la Lavandería */}
+          <div className="mb-2.5 flex flex-col items-center justify-center">
+            <div className="h-13 flex items-center justify-center overflow-hidden">
+              {tenant.logo_url ? (
+                <img 
+                  src={tenant.logo_url} 
+                  className="object-contain max-h-13 max-w-[190px] w-auto drop-shadow-2xs transition-transform duration-200 hover:scale-105" 
+                  alt={tenant.nombre} 
+                />
+              ) : (
+                <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/70 dark:border-blue-900/50 flex items-center justify-center shadow-2xs">
+                  <Building2 className="h-6 w-6 text-[#1B4B73] dark:text-sky-400" />
+                </div>
+              )}
+            </div>
+
+            {/* Badge con Ubicación / Sucursal */}
+            {(tenant.direccion || tenant.provincia) && (
+              <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-[10.5px] font-semibold text-slate-600 dark:text-slate-300 shadow-2xs">
+                <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                <span className="truncate max-w-[250px]">
+                  {tenant.direccion ? `${tenant.direccion}${tenant.provincia ? ` · ${tenant.provincia}` : ""}` : tenant.provincia}
+                </span>
+              </div>
+            )}
           </div>
 
-          <h1 className="text-2xl font-black tracking-tight text-slate-900 dark:text-white leading-none mb-2">Iniciar sesión</h1>
+          {/* Título & Subtítulo */}
+          <h1 className="text-[22px] font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+            Iniciar sesión
+          </h1>
+          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
+            Acceso operativo para <span className="font-bold text-slate-700 dark:text-slate-300">{tenant.nombre}</span>
+          </p>
 
-          <form onSubmit={onSubmit} className="mt-5 space-y-3.5 flex flex-col items-center">
+          {/* Formulario de Login */}
+          <form onSubmit={onSubmit} className="mt-4.5 space-y-3 text-left">
             {/* Campo Email */}
-            <div className="w-full text-center">
-              <Label className="mb-1.5 block text-[10px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center">Correo de acceso</Label>
+            <div className="space-y-1.5">
+              <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                Correo electrónico
+              </Label>
               <div className="relative group">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                   <Mail className="h-3.5 w-3.5" />
-                </div>
-                <Input 
-                   value={email} 
-                   onChange={(e) => setEmail(e.target.value)} 
-                   type="email" 
-                   placeholder="demo@klynn.com.do" 
-                   className="pl-9 pr-3 text-center h-10 text-sm border-slate-200 dark:border-slate-800 focus:border-primary transition-all rounded-lg shadow-2xs" 
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] dark:group-focus-within:text-sky-400 transition-colors" />
+                <Input
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  type="email"
+                  required
+                  placeholder="ejemplo@lavanderia.do"
+                  className="pl-10 h-10.5 bg-slate-50/60 dark:bg-slate-800/50 border-slate-200/90 dark:border-slate-700/80 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium"
                 />
               </div>
             </div>
 
             {/* Campo Contraseña */}
-            <div className="w-full text-center">
-              <Label className="mb-1.5 block text-[10px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-wider text-center">Contraseña</Label>
-              <div className="relative group">
-                <div className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-primary transition-colors">
-                   <Lock className="h-3.5 w-3.5" />
-                </div>
-                <Input 
-                   value={password} 
-                   onChange={(e) => setPassword(e.target.value)} 
-                   type={showPassword ? "text" : "password"} 
-                   placeholder="••••••••" 
-                   className="pl-9 pr-9 text-center h-10 text-sm border-slate-200 dark:border-slate-800 focus:border-primary transition-all rounded-lg shadow-2xs" 
-                />
-                <button 
-                   type="button" 
-                   onClick={() => setShowPassword(!showPassword)} 
-                   className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-primary transition-colors"
-                >
-                  {showPassword ? <EyeOff className="h-3.5 w-3.5" /> : <Eye className="h-3.5 w-3.5" />}
-                </button>
-              </div>
-              
-              <div className="mt-2 text-center">
-                <a 
-                  href={`/recuperar?redirect=/t/${tenant.slug}/login`} 
-                  className="text-xs text-primary hover:underline font-bold"
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between">
+                <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                  Contraseña
+                </Label>
+                <Link 
+                  to="/recuperar" 
+                  search={{ redirect: `/t/${tenant.slug}/login` } as any}
+                  className="text-[10.5px] font-bold text-[#1B4B73] dark:text-sky-400 hover:underline"
                 >
                   ¿Olvidaste tu contraseña?
-                </a>
+                </Link>
+              </div>
+              <div className="relative group">
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] dark:group-focus-within:text-sky-400 transition-colors" />
+                <Input
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  type={showPassword ? "text" : "password"}
+                  required
+                  placeholder="••••••••"
+                  className="pl-10 pr-10 h-10.5 bg-slate-50/60 dark:bg-slate-800/50 border-slate-200/90 dark:border-slate-700/80 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1B4B73] dark:hover:text-sky-400 transition-colors p-1"
+                  title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                >
+                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
               </div>
             </div>
 
-            {error && (
-              <motion.div 
-                 initial={{ opacity: 0, height: 0 }}
-                 animate={{ opacity: 1, height: "auto" }}
-                 className="flex items-center justify-center gap-1.5 rounded-lg border border-destructive/20 bg-destructive/5 p-2 text-xs text-destructive w-full"
-              >
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" /> {error}
-              </motion.div>
-            )}
+            {/* Mensaje de Error */}
+            <AnimatePresence>
+              {error && (
+                <motion.div
+                  initial={{ opacity: 0, y: -4 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -4 }}
+                  className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-400"
+                >
+                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                  <span>{error}</span>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
-            <Button
-              type="submit"
-              size="sm"
-              disabled={loading}
-              className="w-full h-10 text-sm text-white font-bold shadow-sm hover:shadow-md transition-all hover:scale-[1.01] active:scale-[0.99] rounded-lg flex items-center justify-center gap-1.5"
-              style={{ background: tenant.color_primario }}
-            >
-              {loading ? "Verificando..." : <span className="flex items-center gap-1.5">Entrar al panel <ArrowRight className="h-4 w-4" /></span>}
-            </Button>
+            {/* Botón Principal INGRESAR AL SISTEMA con Animación Signature */}
+            <div className="pt-1">
+              <button
+                type="submit"
+                disabled={loading}
+                className={`group relative w-full h-11.5 rounded-2xl font-display font-black text-xs uppercase tracking-wider text-white shadow-md transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] ${
+                  loading 
+                    ? "bg-[#1B4B73] cursor-not-allowed opacity-95 shadow-[#1B4B73]/20" 
+                    : "bg-gradient-to-r from-[#1B4B73] via-[#245e8e] to-[#1B4B73] bg-[length:200%_auto] hover:bg-right shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5"
+                }`}
+              >
+                {/* Efecto de Brillo / Rayo Shimmer en Hover */}
+                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+
+                {loading ? (
+                  <div className="relative z-10 flex items-center justify-center gap-2.5">
+                    <div className="relative flex items-center justify-center">
+                      <div className="h-4.5 w-4.5 rounded-full border-2 border-white/20 border-t-[#F0B900] border-r-white animate-spin" />
+                      <div className="absolute h-1.5 w-1.5 rounded-full bg-[#F0B900] animate-ping opacity-75" />
+                    </div>
+                    <span className="text-xs font-bold text-white tracking-normal normal-case flex items-center gap-1">
+                      Iniciando sesión segura
+                      <span className="flex gap-0.5 items-center">
+                        <span className="h-1 w-1 rounded-full bg-[#F0B900] animate-bounce [animation-delay:-0.3s]" />
+                        <span className="h-1 w-1 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
+                        <span className="h-1 w-1 rounded-full bg-[#F0B900] animate-bounce" />
+                      </span>
+                    </span>
+                  </div>
+                ) : (
+                  <div className="relative z-10 flex items-center justify-center gap-2">
+                    <span className="font-bold tracking-wider">INGRESAR AL SISTEMA</span>
+                    <div className="h-5.5 w-5.5 rounded-xl bg-white/15 group-hover:bg-[#F0B900] group-hover:text-slate-900 text-white flex items-center justify-center transition-all duration-300 shadow-2xs group-hover:translate-x-1">
+                      <ArrowRight className="h-3.5 w-3.5 transition-transform" />
+                    </div>
+                  </div>
+                )}
+              </button>
+            </div>
           </form>
 
-          <div className="mt-6 border-t border-slate-100 dark:border-slate-800/80 pt-5 text-center">
-             <p className="text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2.5">¿No trabajas en {tenant.nombre}?</p>
-             <Link 
-                to="/login" 
-                className="inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full border text-xs font-semibold transition-all shadow-2xs hover:scale-[1.02] active:scale-[0.98]"
-                style={{ 
-                  borderColor: `${tenant.color_primario}30`, 
-                  color: tenant.color_primario,
-                  background: `${tenant.color_primario}08` 
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = `${tenant.color_primario}15`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = `${tenant.color_primario}08`;
-                }}
-             >
-                <Building2 className="h-3.5 w-3.5" style={{ color: tenant.color_primario }} /> Cambiar de lavandería
-             </Link>
+          {/* Sección Inferior: Cambiar de Lavandería */}
+          <div className="mt-4.5 border-t border-slate-100 dark:border-slate-800/90 pt-3.5 text-center">
+            <p className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 mb-2">
+              ¿No trabajas en {tenant.nombre}?
+            </p>
+            <Link 
+              to="/login" 
+              className="w-full h-9.5 inline-flex items-center justify-center gap-2 px-3.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all shadow-2xs hover:border-[#1B4B73]/40 cursor-pointer"
+            >
+              <Building2 className="h-3.5 w-3.5 text-[#1B4B73] dark:text-sky-400" />
+              <span>Cambiar de lavandería</span>
+            </Link>
           </div>
+
+          {/* Sello de Seguridad Inferior */}
+          <div className="mt-3.5 flex items-center justify-center gap-1 text-[10px] font-medium text-slate-400">
+            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+            <span>Conexión segura con cifrado SSL 256-bit</span>
+          </div>
+
         </div>
-      </div>
+      </motion.div>
     </div>
   );
 }

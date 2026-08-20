@@ -478,6 +478,20 @@ export interface Servicio {
   permitir_editar_precio?: boolean;
 }
 
+export interface InvitacionCodigo {
+  id: string;
+  codigo: string; // ej: "KL-7283"
+  nota?: string;
+  plan_id?: PlanId;
+  dias_trial?: number;
+  estado: "DISPONIBLE" | "USADO" | "EXPIRADO";
+  creado_en: string;
+  expira_en?: string | null;
+  usado_en?: string | null;
+  usado_por_slug?: string | null;
+  usado_por_email?: string | null;
+}
+
 const KEY = {
   tenants: "lvx:tenants",
   empleados: "lvx:empleados",
@@ -493,6 +507,7 @@ const KEY = {
   session: "lvx:session",
   seq: "lvx:orden_seq",
   globalConfig: "lvx:globalConfig",
+  invitaciones: "lvx:invitaciones",
 };
 
 export const ADMIN_EMAILS = ["admin@klynn.com.do"];
@@ -1773,25 +1788,24 @@ export async function saveEmpleado(e: Empleado) {
 }
 
 export async function deleteEmpleado(id: string) {
-  // 1. Intentar borrar de Auth primero (vía RPC)
+  // 1. Borrar de la tabla empleados primero (elimina el registro del negocio inmediatamente)
+  const { error: dbError } = await supabase.from("empleados").delete().eq("id", id);
+  if (dbError) {
+    console.error("Error al eliminar empleado de la base de datos:", dbError);
+    throw dbError;
+  }
+
+  // 2. Intentar limpiar la cuenta de autenticación en Auth en segundo plano
   if (id && id.length === 36) {
     try {
       const { error: rpcError } = await supabase.rpc("admin_delete_user", { target_user_id: id });
       if (rpcError) {
-        console.error("RPC admin_delete_user error:", rpcError);
-        if (!rpcError.message.toLowerCase().includes("not found")) {
-          throw new Error("Error al eliminar cuenta de acceso: " + rpcError.message);
-        }
+        console.warn("Aviso al limpiar usuario en Auth (RPC admin_delete_user):", rpcError.message);
       }
     } catch (e: any) {
-      console.error("Error al eliminar usuario en Auth:", e);
-      throw e;
+      console.warn("Aviso al invocar admin_delete_user:", e);
     }
   }
-
-  // 2. Borrar de la tabla empleados
-  const { error } = await supabase.from("empleados").delete().eq("id", id);
-  if (error) throw error;
 }
 
 export async function getEmpleadoById(id: string): Promise<Empleado | undefined> {
@@ -2475,21 +2489,39 @@ export async function login(
   email: string,
   password: string,
 ): Promise<{ ok: true; empleado: Empleado; tenant: Tenant } | { ok: false; error: string }> {
+  const cleanEmail = email.trim().toLowerCase();
+
   // 1. Verificar el Tenant
   const tenant = await getTenantBySlug(slug);
   if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
 
   // 2. Autenticar en Supabase Auth
   const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-    email,
+    email: cleanEmail,
     password,
   });
 
   if (authError) return { ok: false, error: "Email o contraseña incorrectos" };
   if (!authData.user) return { ok: false, error: "Error de autenticación" };
 
-  // 3. Obtener el perfil del empleado (usando el ID de Auth)
-  const emp = await getEmpleadoById(authData.user.id);
+  // 3. Obtener el perfil del empleado (usando el ID de Auth o por email fallback)
+  let emp = await getEmpleadoById(authData.user.id);
+  if (!emp) {
+    const { data: empByEmail } = await supabase
+      .from("empleados")
+      .select("*")
+      .eq("email", cleanEmail)
+      .eq("tenant_id", tenant.id)
+      .maybeSingle();
+    
+    if (empByEmail) {
+      emp = empByEmail;
+      if (emp.id !== authData.user.id) {
+        await supabase.from("empleados").update({ id: authData.user.id }).eq("id", emp.id);
+        emp.id = authData.user.id;
+      }
+    }
+  }
 
   // Validar que el empleado exista, esté activo y pertenezca a esta lavandería
   if (!emp || !emp.activo || emp.tenant_id !== tenant.id) {
@@ -3769,4 +3801,186 @@ export async function crearNotificacion(notif: {
   } catch (e) {
     console.warn("Supabase Realtime Broadcast error:", e);
   }
+}
+
+// ============ Invitaciones y Códigos VIP de Registro ============
+
+export function generateInvitationCode(): string {
+  // Formato: KLYNN-XXXXXXXX (8 caracteres alfanuméricos en mayúsculas, ej: KLYNN-7X4M9P2K)
+  const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ";
+  let randomPart = "";
+  for (let i = 0; i < 8; i++) {
+    randomPart += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `KLYNN-${randomPart}`;
+}
+
+export async function getInvitaciones(): Promise<InvitacionCodigo[]> {
+  try {
+    const { data, error } = await supabase
+      .from("invitaciones")
+      .select("*")
+      .order("creado_en", { ascending: false });
+    if (!error && data) {
+      const now = new Date();
+      const updated = data.map((inv: any) => {
+        if (inv.estado === "DISPONIBLE" && inv.expira_en && new Date(inv.expira_en) < now) {
+          return { ...inv, estado: "EXPIRADO" as const };
+        }
+        return inv as InvitacionCodigo;
+      });
+      write(KEY.invitaciones, updated);
+      return updated;
+    }
+  } catch (e) {
+    console.warn("getInvitaciones Supabase fallback to local:", e);
+  }
+
+  const local = read<InvitacionCodigo[]>(KEY.invitaciones, []) || [];
+  const now = new Date();
+  return local.map((inv) => {
+    if (inv.estado === "DISPONIBLE" && inv.expira_en && new Date(inv.expira_en) < now) {
+      return { ...inv, estado: "EXPIRADO" };
+    }
+    return inv;
+  });
+}
+
+export async function createInvitacion(data: {
+  nota?: string;
+  plan_id?: PlanId;
+  expira_horas?: number | null;
+  dias_trial?: number;
+}): Promise<InvitacionCodigo> {
+  const all = await getInvitaciones();
+  let code = generateInvitationCode();
+  let attempts = 0;
+  while (all.some((x) => x.codigo === code) && attempts < 50) {
+    code = generateInvitationCode();
+    attempts++;
+  }
+
+  let expira_en: string | null = null;
+  if (data.expira_horas && data.expira_horas > 0) {
+    const d = new Date();
+    d.setHours(d.getHours() + data.expira_horas);
+    expira_en = d.toISOString();
+  }
+
+  const nueva: InvitacionCodigo = {
+    id: uid("inv"),
+    codigo: code,
+    nota: data.nota?.trim() || "",
+    plan_id: data.plan_id || "pro",
+    dias_trial: data.dias_trial || 14,
+    estado: "DISPONIBLE",
+    creado_en: new Date().toISOString(),
+    expira_en,
+    usado_en: null,
+    usado_por_slug: null,
+    usado_por_email: null,
+  };
+
+  try {
+    const { error } = await supabase.from("invitaciones").insert(nueva);
+    if (error) {
+      console.warn("Supabase 'invitaciones' table insert warning (fallback local):", error.message);
+    }
+  } catch (e) {
+    console.warn("createInvitacion Supabase error:", e);
+  }
+
+  const list = [nueva, ...all.filter((x) => x.id !== nueva.id)];
+  write(KEY.invitaciones, list);
+  return nueva;
+}
+
+export async function validarCodigoInvitacion(codigoRaw: string): Promise<{
+  ok: boolean;
+  error?: string;
+  invitacion?: InvitacionCodigo;
+}> {
+  if (!codigoRaw || !codigoRaw.trim()) {
+    return { ok: false, error: "Ingresa un código de activación." };
+  }
+
+  const clean = codigoRaw.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const all = await getInvitaciones();
+  const found = all.find((x) => {
+    const storedClean = x.codigo.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    return (
+      x.codigo.toUpperCase() === codigoRaw.trim().toUpperCase() ||
+      storedClean === clean ||
+      storedClean.endsWith(clean) ||
+      clean.endsWith(storedClean)
+    );
+  });
+
+  if (!found) {
+    return { ok: false, error: "El código de activación ingresado no existe o no es válido." };
+  }
+
+  if (found.estado === "USADO") {
+    return { ok: false, error: "Este código de activación ya fue utilizado." };
+  }
+
+  if (found.expira_en && new Date(found.expira_en) < new Date()) {
+    return { ok: false, error: "Este código de activación ha expirado." };
+  }
+
+  return { ok: true, invitacion: found };
+}
+
+export async function marcarCodigoUsado(
+  codigoRaw: string,
+  tenantSlug: string,
+  email: string
+): Promise<boolean> {
+  const clean = codigoRaw.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const all = await getInvitaciones();
+  const found = all.find((x) => {
+    const storedClean = x.codigo.toUpperCase().replace(/[^0-9A-Z]/g, "");
+    return (
+      x.codigo.toUpperCase() === codigoRaw.trim().toUpperCase() ||
+      storedClean === clean ||
+      storedClean.endsWith(clean) ||
+      clean.endsWith(storedClean)
+    );
+  });
+  if (!found) return false;
+
+  const updated: InvitacionCodigo = {
+    ...found,
+    estado: "USADO",
+    usado_en: new Date().toISOString(),
+    usado_por_slug: tenantSlug,
+    usado_por_email: email,
+  };
+
+  try {
+    await supabase.from("invitaciones").update({
+      estado: "USADO",
+      usado_en: updated.usado_en,
+      usado_por_slug: tenantSlug,
+      usado_por_email: email,
+    }).eq("id", found.id);
+  } catch (e) {
+    console.warn("marcarCodigoUsado Supabase error:", e);
+  }
+
+  const list = all.map((x) => (x.id === found.id ? updated : x));
+  write(KEY.invitaciones, list);
+  return true;
+}
+
+export async function deleteInvitacion(id: string): Promise<boolean> {
+  try {
+    await supabase.from("invitaciones").delete().eq("id", id);
+  } catch (e) {
+    console.warn("deleteInvitacion error in Supabase:", e);
+  }
+  const all = await getInvitaciones();
+  const filtered = all.filter((x) => x.id !== id);
+  write(KEY.invitaciones, filtered);
+  return true;
 }

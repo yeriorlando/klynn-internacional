@@ -3196,17 +3196,18 @@ function ReporteCuadreThermal({
           .atomic-print-target {
             display: block !important;
             visibility: visible !important;
-            position: static !important;
-            width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"} !important;
-            max-width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"} !important;
-            padding: ${tenant.config?.formato_ticket === "57mm" ? "2.5mm" : "4mm"};
-            margin: 0;
+            position: relative !important;
+            left: -2mm !important;
+            width: 100% !important;
+            max-width: ${tenant.config?.formato_ticket === "57mm" ? "52mm" : "72mm"} !important;
+            padding: ${tenant.config?.formato_ticket === "57mm" ? "1.5mm" : "2mm"} !important;
+            margin: 0 auto !important;
             background: white;
             color: black;
             font-family: monospace;
             font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};
             line-height: ${tenant.config?.formato_ticket === "57mm" ? "1.2" : "1.3"} !important;
-            box-sizing: border-box;
+            box-sizing: border-box !important;
           }
 
           .thermal-ticket { border: none !important; padding: 0 !important; width: 100% !important; }

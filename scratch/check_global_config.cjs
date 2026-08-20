@@ -5,9 +5,9 @@ const supabase = createClient(
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxdGp3Y3BoaWRid2l3cm5xYmFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMjc4NjUsImV4cCI6MjA5MzYwMzg2NX0.ZX6X1marjaOCaTt9gM2sVN9u07Qp7YmqsDR5sd71DE0"
 );
 
-async function check() {
-  const { data: tenant } = await supabase.from("tenants").select("*").eq("id", "41109a25-9e3f-4c9e-8221-2c0555df9cd8").single();
-  console.log("Tenant data:", tenant);
+async function checkConfig() {
+  const { data, error } = await supabase.from("global_config").select("*").eq("id", 1).maybeSingle();
+  console.log("Global config row in DB:", data);
 }
 
-check();
+checkConfig();

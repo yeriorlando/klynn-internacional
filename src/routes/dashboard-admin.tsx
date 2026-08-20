@@ -452,10 +452,15 @@ function DashboardAdminPage() {
   }
 
   async function handleLogout() {
+    const slug = auth?.tenant?.slug || myTenants[0]?.slug || (typeof window !== "undefined" ? localStorage.getItem("klynn_active_tenant") : null);
     setIsLoggingOut(true);
     await logout();
     setTimeout(() => {
-      navigate({ to: "/login" });
+      if (slug && slug !== "admin") {
+        navigate({ to: "/t/$slug/login", params: { slug } });
+      } else {
+        navigate({ to: "/login" });
+      }
     }, 450);
   }
 
@@ -1050,7 +1055,7 @@ function DashboardAdminPage() {
                   <div className="mt-2.5 flex items-center justify-center gap-2 text-sm text-slate-600 font-medium">
                     <span>¿Prefieres pago manual?</span>
                     <a 
-                      href={`https://wa.me/18299881122?text=Hola%20Klynn,%20me%20gustaria%20activar%20una%20sucursal%20adicional%20para%20mi%20lavanderia%20${encodeURIComponent(mainTenant?.nombre || "")}`} 
+                      href={`https://wa.me/18299416546?text=Hola%20Klynn,%20me%20gustaria%20activar%20una%20sucursal%20adicional%20para%20mi%20lavanderia%20${encodeURIComponent(mainTenant?.nombre || "")}`} 
                       target="_blank" 
                       rel="noreferrer" 
                       className="font-bold text-primary hover:underline flex items-center gap-1.5"
@@ -1074,7 +1079,7 @@ function DashboardAdminPage() {
                 </div>
                 <div className="pt-3 flex flex-col gap-2">
                   <a 
-                    href={`https://wa.me/18299881122?text=Hola%20Klynn,%20he%20alcanzado%20el%20limite%20de%20sucursales%20en%20el%20plan%20${plan?.nombre}%20y%20me%20gustaria%20actualizar%20a%20un%20plan%20corporativo%20personalizado.`} 
+                    href={`https://wa.me/18299416546?text=Hola%20Klynn,%20he%20alcanzado%20el%20limite%20de%20sucursales%20en%20el%20plan%20${plan?.nombre}%20y%20me%20gustaria%20actualizar%20a%20un%20plan%20corporativo%20personalizado.`} 
                     target="_blank" 
                     rel="noreferrer"
                   >

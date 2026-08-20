@@ -626,10 +626,11 @@ function EmpleadoDialog({
       setLoading(true);
       try {
         await deleteEmpleado(empleado.id);
-        toast.success("Empleado eliminado");
+        toast.success("Empleado eliminado correctamente");
         onDone();
-      } catch (err) {
-        toast.error("Error al eliminar");
+      } catch (err: any) {
+        console.error("Error al eliminar empleado:", err);
+        toast.error(err?.message || "Error al eliminar el empleado");
       } finally {
         setLoading(false);
       }

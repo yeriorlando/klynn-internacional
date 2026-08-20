@@ -718,10 +718,15 @@ export function TenantShell() {
     tenant.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now();
 
   async function onLogout() {
+    const slug = tenant?.slug || (typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/)?.[1] : null);
     setIsLoggingOut(true);
     await logout();
     setTimeout(() => {
-      navigate({ to: "/login" });
+      if (slug && slug !== "admin") {
+        navigate({ to: "/t/$slug/login", params: { slug } });
+      } else {
+        navigate({ to: "/login" });
+      }
     }, 450);
   }
 

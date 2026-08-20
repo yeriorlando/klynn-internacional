@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
   UserPlus, LayoutDashboard, ShieldCheck, Sparkles, CheckCircle2,
-  Wallet, Truck, Receipt, MessageSquare, Layers, Gift, Rocket
+  Wallet, Truck, Receipt, MessageSquare, Layers, Gift, Rocket, Ticket
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -456,16 +456,16 @@ function LoginPage() {
                   )}
                 </button>
 
-                {/* Tarjeta de Registro y Prueba Gratuita Rediseñada */}
+                {/* Tarjeta de Acceso Privado por Invitación */}
                 <div className="pt-2">
                   <div className="relative overflow-hidden rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/90 dark:border-slate-800 p-4 transition-all hover:border-[#1B4B73]/40 group shadow-2xs space-y-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <span className="text-xs sm:text-sm font-bold text-slate-700 dark:text-slate-200">
-                        ¿Aún no tienes cuenta?
+                        ¿Tienes una invitación?
                       </span>
-                      <span className="inline-flex items-center gap-1.5 text-xs font-black text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2.5 py-0.5 rounded-full border border-emerald-200/80 dark:border-emerald-800">
-                        <Gift className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
-                        14 días gratis
+                      <span className="inline-flex items-center gap-1.5 text-xs font-black text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/70 px-2.5 py-0.5 rounded-full border border-amber-200/80 dark:border-amber-800">
+                        <Ticket className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
+                        Acceso Privado
                       </span>
                     </div>
                     
@@ -473,8 +473,8 @@ function LoginPage() {
                       to="/registro" 
                       className="w-full h-11 flex items-center justify-center gap-2 py-2 px-4 rounded-xl bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 text-xs sm:text-sm font-black text-[#1B4B73] dark:text-sky-400 hover:bg-[#1B4B73] hover:text-white dark:hover:bg-[#1B4B73] dark:hover:text-white shadow-2xs transition-all duration-200 group/btn cursor-pointer"
                     >
-                      <Rocket className="h-4 w-4 text-[#F0B900] group-hover/btn:scale-110 group-hover/btn:-rotate-12 transition-all shrink-0" />
-                      <span>Registra tu lavandería</span>
+                      <Ticket className="h-4 w-4 text-[#F0B900] group-hover/btn:scale-110 group-hover/btn:-rotate-12 transition-all shrink-0" />
+                      <span>Canjear código de activación</span>
                       <ArrowRight className="h-4 w-4 group-hover/btn:translate-x-1 transition-transform shrink-0" />
                     </Link>
                   </div>
