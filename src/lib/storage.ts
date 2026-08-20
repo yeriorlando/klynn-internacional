@@ -4142,9 +4142,10 @@ export async function incrementWhatsAppCount(tenantId: string) {
 // ============ ECF Storage Functions ============
 
 export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> {
-  const cacheKey = `klynn_ecf_cfg_${tenantId}`;
+  const realId = resolveTenantId(tenantId);
+  const cacheKey = `klynn_ecf_cfg_${realId}`;
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const cached = localStorage.getItem(cacheKey);
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_cfg_${tenantId}`);
     if (cached) {
       try { return JSON.parse(cached); } catch {}
     }
@@ -4152,25 +4153,32 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
   }
 
   try {
+    const filter = realId !== tenantId 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
+      : `tenant_id.eq.${realId}`;
+
     const fetchPromise = supabase
       .from("ecf_config")
       .select("*")
-      .eq("tenant_id", tenantId)
+      .or(filter)
       .maybeSingle();
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
     if (!error && data) {
-      if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(data));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(`klynn_ecf_cfg_${tenantId}`, JSON.stringify(data));
+      }
       return data;
     }
   } catch {}
 
   if (typeof window !== "undefined") {
-    const cached = localStorage.getItem(cacheKey);
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_cfg_${tenantId}`);
     if (cached) {
       try { return JSON.parse(cached); } catch {}
     }
@@ -4179,15 +4187,20 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
 }
 
 export async function saveECFConfig(config: ECFConfig) {
-  const cacheKey = `klynn_ecf_cfg_${config.tenant_id}`;
-  if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(config));
+  const realId = resolveTenantId(config.tenant_id);
+  const configToSave = { ...config, tenant_id: realId };
+  const cacheKey = `klynn_ecf_cfg_${realId}`;
+  if (typeof window !== "undefined") {
+    localStorage.setItem(cacheKey, JSON.stringify(configToSave));
+    localStorage.setItem(`klynn_ecf_cfg_${config.tenant_id}`, JSON.stringify(configToSave));
+  }
 
   if (typeof window !== "undefined" && !navigator.onLine) return;
 
-  const existing = await getECFConfig(config.tenant_id);
+  const existing = await getECFConfig(realId);
   const payload = {
-    ...config,
-    id: existing?.id || config.id || crypto.randomUUID(),
+    ...configToSave,
+    id: existing?.id || configToSave.id || crypto.randomUUID(),
     updated_at: new Date().toISOString(),
   };
   try {
@@ -4196,9 +4209,10 @@ export async function saveECFConfig(config: ECFConfig) {
 }
 
 export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> {
-  const cacheKey = `klynn_ecf_seqs_${tenantId}`;
+  const realId = resolveTenantId(tenantId);
+  const cacheKey = `klynn_ecf_seqs_${realId}`;
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const cached = localStorage.getItem(cacheKey);
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (cached) {
       try { return JSON.parse(cached); } catch {}
     }
@@ -4206,24 +4220,34 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
   }
 
   try {
+    const filter = realId !== tenantId 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
+      : `tenant_id.eq.${realId}`;
+
     const fetchPromise = supabase
       .from("ecf_sequences")
       .select("*")
-      .eq("tenant_id", tenantId);
+      .or(filter)
+      .order("tipo_ecf");
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
     if (!error && data) {
-      if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(data));
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+        localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(data));
+      }
       return data;
     }
-  } catch {}
+  } catch (e) {
+    console.warn("Aviso al obtener secuencias:", e);
+  }
 
   if (typeof window !== "undefined") {
-    const cached = localStorage.getItem(cacheKey);
+    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (cached) {
       try { return JSON.parse(cached); } catch {}
     }
@@ -4232,41 +4256,50 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
 }
 
 export async function saveECFSequence(seq: ECFSequence) {
-  const cacheKey = `klynn_ecf_seqs_${seq.tenant_id}`;
+  const realId = resolveTenantId(seq.tenant_id);
+  const seqToSave = { ...seq, tenant_id: realId };
+  const cacheKey = `klynn_ecf_seqs_${realId}`;
   if (typeof window !== "undefined") {
     let localSeqs: ECFSequence[] = [];
     try {
-      const raw = localStorage.getItem(cacheKey);
+      const raw = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${seq.tenant_id}`);
       if (raw) localSeqs = JSON.parse(raw);
     } catch {}
-    const idx = localSeqs.findIndex((s) => s.id === seq.id);
-    if (idx >= 0) localSeqs[idx] = seq;
-    else localSeqs.push(seq);
+    const idx = localSeqs.findIndex((s) => s.id === seqToSave.id || s.tipo_ecf === seqToSave.tipo_ecf);
+    if (idx >= 0) localSeqs[idx] = seqToSave;
+    else localSeqs.push(seqToSave);
     localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+    localStorage.setItem(`klynn_ecf_seqs_${seq.tenant_id}`, JSON.stringify(localSeqs));
   }
 
-  if (typeof window !== "undefined" && !navigator.onLine) return;
   try {
-    await supabase.from("ecf_sequences").upsert(seq);
-  } catch {}
+    const { error } = await supabase.from("ecf_sequences").upsert(seqToSave);
+    if (error) {
+      console.warn("Aviso al guardar secuencia e-CF en Supabase:", error);
+    }
+  } catch (e) {
+    console.warn("Error guardando secuencia e-CF:", e);
+  }
 }
 
 export async function deleteECFSequence(id: string, tenantId?: string) {
-  if (tenantId && typeof window !== "undefined") {
-    const cacheKey = `klynn_ecf_seqs_${tenantId}`;
+  const realId = tenantId ? resolveTenantId(tenantId) : undefined;
+  if (realId && typeof window !== "undefined") {
+    const cacheKey = `klynn_ecf_seqs_${realId}`;
     try {
       const raw = localStorage.getItem(cacheKey);
       if (raw) {
         const localSeqs: ECFSequence[] = JSON.parse(raw);
         const filtered = localSeqs.filter((s) => s.id !== id);
         localStorage.setItem(cacheKey, JSON.stringify(filtered));
+        if (tenantId) localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(filtered));
       }
     } catch {}
   }
 
-  if (typeof window !== "undefined" && !navigator.onLine) return;
   try {
-    await supabase.from("ecf_sequences").delete().eq("id", id);
+    const { error } = await supabase.from("ecf_sequences").delete().eq("id", id);
+    if (error) console.warn("Aviso al eliminar secuencia:", error);
   } catch {}
 }
 
@@ -4343,17 +4376,18 @@ export async function nextECFNumero(
   tenantId: string,
   tipo: string,
 ): Promise<{ ncf: string; expiration_date?: string }> {
+  const realId = resolveTenantId(tenantId);
   const normalizedTipo = tipo.startsWith("E") || tipo.startsWith("B")
     ? tipo
     : `E${tipo}`;
 
   const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
-  const cacheKey = `klynn_ecf_seqs_${tenantId}`;
+  const cacheKey = `klynn_ecf_seqs_${realId}`;
 
   // 1. Obtener secuencias locales en caché
   let localSeqs: ECFSequence[] = [];
   if (typeof window !== "undefined") {
-    const raw = localStorage.getItem(cacheKey);
+    const raw = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (raw) {
       try { localSeqs = JSON.parse(raw); } catch {}
     }
@@ -4371,12 +4405,14 @@ export async function nextECFNumero(
       // Actualizar valor_actual en caché local
       localSeqs[seqIndex].valor_actual = proximo;
       localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+      localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(localSeqs));
 
       const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
       return { ncf: encf, expiration_date: seq.fecha_vencimiento };
     }
 
-    const localSec = read<number>(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, 1);
+    const localSec = read<number>(`klynn_ecf_sec_${realId}_${normalizedTipo}`, 1);
+    write(`klynn_ecf_sec_${realId}_${normalizedTipo}`, localSec + 1);
     write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, localSec + 1);
     return { ncf: `${normalizedTipo}${String(localSec).padStart(padLen, "0")}` };
   }
@@ -4384,7 +4420,7 @@ export async function nextECFNumero(
   // 3. Si hay conexión: intentar RPC con timeout
   try {
     const fetchRPC = supabase.rpc("reservar_proximo_ncf", {
-      p_tenant_id: tenantId,
+      p_tenant_id: realId,
       p_tipo_ecf: normalizedTipo,
     });
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
@@ -4398,10 +4434,14 @@ export async function nextECFNumero(
 
   // 4. Fallback de base de datos buscando en ecf_sequences
   try {
+    const filter = realId !== tenantId 
+      ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
+      : `tenant_id.eq.${realId}`;
+
     const fetchSeq = supabase
       .from("ecf_sequences")
       .select("*")
-      .eq("tenant_id", tenantId)
+      .or(filter)
       .eq("tipo_ecf", normalizedTipo)
       .eq("is_active", true);
 
@@ -4432,7 +4472,10 @@ export async function nextECFNumero(
         } else {
           localSeqs.push({ ...seq, valor_actual: proximo });
         }
-        if (typeof window !== "undefined") localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+        if (typeof window !== "undefined") {
+          localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+          localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(localSeqs));
+        }
 
         return { ncf: encf, expiration_date: seq.fecha_vencimiento };
       }

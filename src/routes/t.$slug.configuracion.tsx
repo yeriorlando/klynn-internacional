@@ -1999,7 +1999,10 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             tenant={tenant} 
             config={ecfConfig} 
             sequences={ecfSequences}
-            onRefresh={() => { queryClient.invalidateQueries({ queryKey: ['ecf-config', tenantId] }); queryClient.invalidateQueries({ queryKey: ['ecf-sequences', tenantId] }); }}
+            onRefresh={() => { 
+              queryClient.invalidateQueries({ queryKey: ['ecf-config'] }); 
+              queryClient.invalidateQueries({ queryKey: ['ecf-sequences'] }); 
+            }}
             onTenantUpdate={(updated) => setTenant(updated)}
             enabled={!!hasFiscal}
             onTabChange={setActiveTab}
@@ -4337,7 +4340,7 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
       const existing = sequences.find(s => s.tipo_ecf === tipo);
 
       if (existing) {
-        await deleteECFSequence(existing.id);
+        await deleteECFSequence(existing.id, tenantId);
       }
 
       // Si es electrónica, intentamos registrar la secuencia en Pronesoft vía API
@@ -4357,13 +4360,15 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
 
       await saveECFSequence({
         ...seq,
-        id: crypto.randomUUID(),
+        id: existing?.id || crypto.randomUUID(),
         tenant_id: tenantId,
         tipo_ecf: tipo,
         prefijo: mode === 'traditional' ? 'B' : 'E'
       } as ECFSequence);
 
       toast.success("Secuencia creada con éxito");
+      queryClient.invalidateQueries({ queryKey: ['ecf-sequences'] });
+      queryClient.invalidateQueries({ queryKey: ['ecf-config'] });
       onCreated();
       onOpenChange(false);
     } catch (err: any) {
