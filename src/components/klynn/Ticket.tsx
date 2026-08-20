@@ -79,15 +79,31 @@ export function Ticket({
 
   const vuelto = pagoRecibido && pagoRecibido > orden.total ? pagoRecibido - orden.total : 0;
 
-  // Generar URL para el QR de la DGII (e-CF)
-  const isECF = orden.ncf?.startsWith("E");
-  const actualQR = orden.ecf_qr === "null" ? "" : orden.ecf_qr;
-  const qrData = actualQR || (isECF ? `https://fc.dgii.gov.do/testecf/consultatimbrefc?rncemisor=${tenant.rnc}&encf=${orden.ncf}&montototal=${orden.total}&codigoseguridad=${encodeURIComponent(orden.ecf_security_code && orden.ecf_security_code !== "null" ? orden.ecf_security_code : '')}` : "");
+  // Detección de comprobante electrónico (e-CF)
+  const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
+  const isPendingECF = isECF && (
+    !orden.ecf_security_code ||
+    orden.ecf_security_code === "null" ||
+    orden.ecf_security_code.trim() === "" ||
+    (orden as any).ecf_status === "PENDING_OFFLINE_TRANSMISSION"
+  );
+
+  const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
+  const qrData = !isPendingECF && (actualQR || (isECF && orden.ncf ? `https://fc.dgii.gov.do/testecf/consultatimbrefc?rncemisor=${tenant.rnc}&encf=${orden.ncf}&montototal=${orden.total}&codigoseguridad=${encodeURIComponent(orden.ecf_security_code && orden.ecf_security_code !== "null" ? orden.ecf_security_code : '')}` : ""));
 
   let tipoDocumento = "RECIBO";
   if (!esProduccion) {
     if (orden.nota_credito_ncf) {
       tipoDocumento = isECF ? "NOTA DE CRÉDITO ELECTRÓNICA" : "NOTA DE CRÉDITO";
+    } else if (isPendingECF) {
+      const tipo = orden.tipo_ecf || (orden.ncf ? orden.ncf.substring(0, 3) : "E32");
+      if (tipo === "E31") {
+        tipoDocumento = "PRE-FACTURA CRÉDITO FISCAL";
+      } else if (tipo === "E32") {
+        tipoDocumento = "PRE-FACTURA CONSUMIDOR FINAL";
+      } else {
+        tipoDocumento = "PRE-FACTURA FISCAL";
+      }
     } else if (orden.ncf) {
       const prefix = orden.ncf.substring(0, 3);
       const nombreOficial = NCF_NOMBRES[prefix];
@@ -342,13 +358,19 @@ export function Ticket({
           </>
         ) : (
           <>
-            {orden.ncf && (
+            {isPendingECF ? (
               <div>
-                <b>{isECF ? 'e-NCF' : 'NCF'}:</b> <span className="font-semibold">{orden.ncf}</span>
-                {orden.ncf_vencimiento && (
-                  <div className="font-bold">Fecha Vencimiento: {formatDateRD(orden.ncf_vencimiento)}</div>
-                )}
+                <b>e-NCF:</b> <span className="font-semibold text-black">Pendiente de timbrado</span>
               </div>
+            ) : (
+              orden.ncf && (
+                <div>
+                  <b>{isECF ? 'e-NCF' : 'NCF'}:</b> <span className="font-semibold">{orden.ncf}</span>
+                  {orden.ncf_vencimiento && (
+                    <div className="font-bold">Fecha Vencimiento: {formatDateRD(orden.ncf_vencimiento)}</div>
+                  )}
+                </div>
+              )
             )}
             <div><b>Fecha Emisión:</b> <span className="font-semibold">{formatDateTimeRD(orden.creado_en)}</span></div>
             {orden.notas && ((cfg?.ticket_mostrar_notas || esCopiaCaja) && !ocultarNotas) && (
@@ -580,9 +602,13 @@ export function Ticket({
               </div>
             )}
           </div>
-          <Sep />
+          {isPendingECF && (
+            <div className="mt-2 text-center text-[10px] font-bold border-t border-dashed border-black/40 pt-1.5 leading-snug">
+              Documento sujeto a timbrado e-CF.
+            </div>
+          )}
 
-          {isECF && qrData && (
+          {isECF && !isPendingECF && qrData && (
             <div className="mt-2 flex flex-col items-center gap-1">
               <div className="text-[9px] font-bold uppercase text-center">
                 {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : ""}

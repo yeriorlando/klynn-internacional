@@ -1321,24 +1321,16 @@ function NuevaOrdenPage() {
         opcionPagoSelected !== "CREDITO"
       ) {
         if (typeof window !== "undefined" && !navigator.onLine) {
-          // ⚠️ Modo Contingencia Tributaria Offline (Ley 32-23)
-          let nextNCF: string | undefined = undefined;
-          try {
-            const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
-            nextNCF = ncf;
-            ncfVencimiento = expiration_date;
-          } catch {}
-
-          const contingencyNCF = nextNCF || `${activeTipo}CONT${String(Date.now()).slice(-6)}`;
+          // ⚠️ Modo Offline: Generar Pre-Factura y encolar para timbrado con Pronesoft al volver conexión
           ordenActualizada = {
             ...orden,
-            ncf: contingencyNCF,
+            ncf: undefined,
             tipo_ecf: activeTipo,
             ecf_status: "PENDING_OFFLINE_TRANSMISSION",
             ncf_vencimiento: ncfVencimiento,
           };
           await saveOrden(ordenActualizada);
-          toast.info(`⚠️ Modo Contingencia: Comprobante ${contingencyNCF} generado offline.`);
+          toast.info(`⚠️ Modo Offline: Pre-Factura generada. Se timbrará con DGII al restablecer internet.`);
         } else {
           try {
             await saveOrden(orden);
@@ -1365,6 +1357,7 @@ function NuevaOrdenPage() {
             const fiscalFields = {
               ncf: result.encf,
               tipo_ecf: activeTipo,
+              ecf_status: "SIGNED",
               ecf_id: result.document.id,
               ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || "",
               ecf_security_code: result.security_code || "",
@@ -1377,8 +1370,16 @@ function NuevaOrdenPage() {
             toast.success(`✅ Comprobante ${result.encf} emitido`);
           } catch (fErr: any) {
             console.error("Error Fiscal:", fErr);
-            toast.error("Error al generar comprobante: " + fErr.message);
-            await saveOrden(orden);
+            // Fallback resiliente: Pre-factura offline si falla la conexión en el momento
+            ordenActualizada = {
+              ...orden,
+              ncf: undefined,
+              tipo_ecf: activeTipo,
+              ecf_status: "PENDING_OFFLINE_TRANSMISSION",
+              ncf_vencimiento: ncfVencimiento,
+            };
+            await saveOrden(ordenActualizada);
+            toast.warning("Aviso de red: Se generó Pre-Factura. Se timbrará con DGII al sincronizar.");
           }
         }
       } else {

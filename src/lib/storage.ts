@@ -308,7 +308,8 @@ export interface Orden {
   incidencia_motivo?: string;
   incidencia_notas?: string;
   incidencia_fecha?: string;
-  // Metadatos e-CF para el ticket
+  // Metadatos e-CF para el ticket y sincronización offline
+  ecf_status?: "PENDING_OFFLINE_TRANSMISSION" | "SIGNED" | "ERROR" | string;
   ecf_qr?: string;
   ecf_security_code?: string;
   ecf_signature_date?: string;

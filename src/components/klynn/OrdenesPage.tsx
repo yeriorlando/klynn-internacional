@@ -24,7 +24,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -204,6 +204,22 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       setLoadingLimits(false);
     });
   }, [tenantId, ordenes.length]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !tenantId || tenantId === "__loading__") return;
+
+    const handleFiscalUpdate = () => {
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+    };
+
+    window.addEventListener("klynn-order-fiscal-updated", handleFiscalUpdate);
+    window.addEventListener("klynn-sync-completed", handleFiscalUpdate);
+
+    return () => {
+      window.removeEventListener("klynn-order-fiscal-updated", handleFiscalUpdate);
+      window.removeEventListener("klynn-sync-completed", handleFiscalUpdate);
+    };
+  }, [tenantId, queryClient]);
 
   const loading = loadingOrdenes || loadingClientes || loadingCaja;
 
@@ -1254,22 +1270,48 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     }}
                   >
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
-                          <Receipt className="h-5 w-5" />
-                        </div>
-                        <div className="flex flex-col min-w-0">
-                          <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
-                            {o.numero}
-                          </span>
-                          <span className="font-bold text-sm text-foreground truncate max-w-[220px]" title={c ? `${c.nombre} ${c.apellido || ""}` : ""}>
-                            {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
-                          </span>
-                          <span className="text-[11px] text-muted-foreground font-medium">
-                            {formatDateTimeRD(o.creado_en)}
-                          </span>
-                        </div>
-                      </div>
+                      {(() => {
+                        const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
+                        const isSignedECF = isECFOrder && Boolean(o.ecf_security_code && o.ecf_security_code !== "null" && o.ecf_security_code.trim() !== "");
+                        const isPendingECF = isECFOrder && !isSignedECF;
+
+                        return (
+                          <div className="flex items-center gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
+                              <Receipt className="h-5 w-5" />
+                            </div>
+                            <div className="flex flex-col min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
+                                  {o.numero}
+                                </span>
+                                {isPendingECF && (
+                                  <span
+                                    title="Pendiente de timbrado e-CF (se firmará con Pronesoft/DGII al sincronizar)"
+                                    className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-colors"
+                                  >
+                                    <Clock className="h-3.5 w-3.5 animate-pulse" />
+                                  </span>
+                                )}
+                                {isSignedECF && (
+                                  <span
+                                    title={`e-CF Firmado con Pronesoft / DGII (${o.ncf || o.tipo_ecf})`}
+                                    className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
+                                  >
+                                    <ShieldCheck className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
+                              </div>
+                              <span className="font-bold text-sm text-foreground truncate max-w-[220px]" title={c ? `${c.nombre} ${c.apellido || ""}` : ""}>
+                                {c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final"}
+                              </span>
+                              <span className="text-[11px] text-muted-foreground font-medium">
+                                {formatDateTimeRD(o.creado_en)}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {o.estado === "ANULADA" ? (
@@ -2526,11 +2568,28 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
 
   if (!emp || !cli) return null;
 
-  const isCréditoFiscal = orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
-  const isECF = orden.ncf?.startsWith("E");
-  const qrData = orden.ecf_qr || (isECF ? `https://dgii.gov.do/consulta_ecf?RNC_EMISOR=${tenant.rnc}&E_NCF=${orden.ncf}&MONTO_TOTAL=${orden.total}&FECHA_EMISION=${new Date(orden.creado_en).toLocaleDateString('en-GB').replace(/\//g, '')}` : "");
+  const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
+  const isPendingECF = isECF && (
+    !orden.ecf_security_code ||
+    orden.ecf_security_code === "null" ||
+    orden.ecf_security_code.trim() === "" ||
+    (orden as any).ecf_status === "PENDING_OFFLINE_TRANSMISSION"
+  );
+  const isCréditoFiscal = orden.tipo_ecf === "E31" || orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
+  const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
+  const qrData = !isPendingECF && (actualQR || (isECF && orden.ncf ? `https://dgii.gov.do/consulta_ecf?RNC_EMISOR=${tenant.rnc}&E_NCF=${orden.ncf}&MONTO_TOTAL=${orden.total}&FECHA_EMISION=${new Date(orden.creado_en).toLocaleDateString('en-GB').replace(/\//g, '')}` : ""));
   const cfg = tenant.config;
 
+  let docTitle = "Factura de Consumo";
+  if (orden.nota_credito_ncf) {
+    docTitle = isECF ? "Nota de Crédito Electrónica" : "Nota de Crédito";
+  } else if (isPendingECF) {
+    docTitle = isCréditoFiscal ? "Pre-Factura Crédito Fiscal" : "Pre-Factura Consumidor Final";
+  } else if (isCréditoFiscal) {
+    docTitle = "Factura de Crédito Fiscal";
+  } else if (isECF) {
+    docTitle = "Factura de Consumo Electrónica";
+  }
 
   return createPortal(
     <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
@@ -2561,7 +2620,7 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
 
             <div className="text-right">
               <h2 className="text-2xl font-display font-black uppercase text-slate-900 mb-1">
-                {orden.nota_credito_ncf ? (isECF ? "Nota de Crédito Electrónica" : "Nota de Crédito") : (isCréditoFiscal ? "Factura de Crédito Fiscal" : (isECF ? "Factura de Consumo Electrónica" : "Factura de Consumo"))}
+                {docTitle}
               </h2>
               <div className="text-sm font-bold text-muted-foreground uppercase tracking-wider mb-2">
                 ORDEN #{orden.numero}
@@ -2575,6 +2634,10 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
                     <tr><td className="font-bold pr-1.5 text-right text-destructive whitespace-nowrap">{isECF ? "e-NCF:" : "NCF:"}</td><td className="font-mono font-bold text-destructive text-left">{orden.nota_credito_ncf}</td></tr>
                     {orden.ncf_vencimiento && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Vencimiento:</td><td className="text-left font-bold">{formatDateRD(orden.ncf_vencimiento)}</td></tr>}
                     <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Doc. Modificado:</td><td className="font-mono text-left">{orden.ncf}</td></tr>
+                  </>
+                ) : isPendingECF ? (
+                  <>
+                    <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">e-NCF:</td><td className="font-mono text-left font-bold text-amber-600">Pendiente de timbrado</td></tr>
                   </>
                 ) : (
                   orden.ncf && (
@@ -2726,7 +2789,13 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
               Documento generado por Klynn POS
             </div>
             
-            {isECF && qrData && (
+            {isPendingECF && (
+              <div className="text-center text-xs font-bold text-amber-800 bg-amber-50 border border-dashed border-amber-300 px-4 py-2 rounded-lg">
+                Documento sujeto a timbrado e-CF.
+              </div>
+            )}
+
+            {isECF && !isPendingECF && qrData && (
               <div className="flex flex-col items-center gap-2">
                 <QRCodeSVG value={qrData} size={100} level="M" />
                 <div className="text-[10px] text-center font-bold text-slate-500">
@@ -3018,6 +3087,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       let finalNCF: string | undefined = orden.ncf;
       let finalNcfVencimiento: string | undefined = orden.ncf_vencimiento;
       let finalTipoECF: string | undefined = orden.tipo_ecf;
+      let finalEcfStatus: string | undefined = orden.ecf_status;
       let finalEcfId: string | undefined = orden.ecf_id;
       let finalEcfQr: string | undefined = orden.ecf_qr;
       let finalEcfSecurityCode: string | undefined = orden.ecf_security_code;
@@ -3041,9 +3111,14 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
             finalNCF = `${tenant.config.ncf_secuencia || 'B02'}${String(tenant.config.ncf_proximo || 1).padStart(8, "0")}`;
           }
+        } else if (typeof window !== "undefined" && !navigator.onLine) {
+          // ⚠️ Modo Offline: Cobro registrado, Pre-Factura y encolado para timbrado al sincronizar
+          finalNCF = undefined;
+          finalTipoECF = tipoECFDefault;
+          finalEcfStatus = "PENDING_OFFLINE_TRANSMISSION";
+          toast.info("⚠️ Modo Offline: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.");
         } else {
-          if (typeof window !== "undefined" && !navigator.onLine) {
-            // ⚠️ Modo Contingencia Offline (Ley 32-23)
+          try {
             let nextNCF: string | undefined = undefined;
             try {
               const { ncf, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
@@ -3053,54 +3128,40 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               console.warn("Aviso al obtener secuencia local:", seqErr);
             }
 
-            finalNCF = nextNCF;
+            const ordenTemporal: Orden = {
+              ...orden,
+              pagado: nuevoPagado,
+              saldo: nuevoSaldo,
+              estado: nuevoEstado,
+              metodo_pago: metodo,
+              ncf: nextNCF
+            };
+
+            const result = await emitirECF(
+              ordenTemporal,
+              cli as Cliente,
+              fiscalConfig?.pronesoft_tenant_id,
+              tenant.config,
+              tenant,
+              tipoECFDefault
+            );
+
+            finalNCF = result.encf;
             finalTipoECF = tipoECFDefault;
-            finalEcfSecurityCode = 'SBX' + String(Math.floor(Math.random() * 900000) + 100000);
-            finalEcfSignatureDate = new Date().toISOString();
-            finalEcfQr = `https://ecf.dgii.gov.do/EstadisticaInternet/Consultas/ConsultaPublica?RncEmisor=133190907&RncReceptor=${cli?.cedula || '222333444'}&Encf=${finalNCF}&MontoTotal=${orden.total}&MontoItbis=${orden.itbis}&FechaEmision=${new Date().toISOString().substring(0, 10)}&CodigoSeguridad=TEST99`;
+            finalEcfStatus = "SIGNED";
+            finalEcfId = result.document.id;
+            finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
+            finalEcfSecurityCode = result.security_code || '';
+            finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
 
-            toast.info(`⚠️ Modo Contingencia: Comprobante ${finalNCF} generado offline. Se enviará a DGII al conectar.`);
-          } else {
-            try {
-              let nextNCF: string | undefined = undefined;
-              try {
-                const { ncf, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
-                nextNCF = ncf;
-                finalNcfVencimiento = expiration_date;
-              } catch (seqErr) {
-                console.warn("Aviso al obtener secuencia local:", seqErr);
-              }
-
-              const ordenTemporal: Orden = {
-                ...orden,
-                pagado: nuevoPagado,
-                saldo: nuevoSaldo,
-                estado: nuevoEstado,
-                metodo_pago: metodo,
-                ncf: nextNCF
-              };
-
-              const result = await emitirECF(
-                ordenTemporal,
-                cli as Cliente,
-                fiscalConfig?.pronesoft_tenant_id,
-                tenant.config,
-                tenant,
-                tipoECFDefault
-              );
-
-              finalNCF = result.encf;
-              finalTipoECF = tipoECFDefault;
-              finalEcfId = result.document.id;
-              finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
-              finalEcfSecurityCode = result.security_code || '';
-              finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
-
-              toast.success(`✅ Comprobante DGII ${result.encf} emitido con éxito`);
-            } catch (fErr: any) {
-              console.error("Error Fiscal al cobrar:", fErr);
-              toast.error("Error al generar comprobante fiscal: " + fErr.message);
-            }
+            toast.success(`✅ Comprobante DGII ${result.encf} emitido con éxito`);
+          } catch (fErr: any) {
+            console.error("Error Fiscal al cobrar:", fErr);
+            // Fallback resiliente
+            finalNCF = undefined;
+            finalTipoECF = tipoECFDefault;
+            finalEcfStatus = "PENDING_OFFLINE_TRANSMISSION";
+            toast.warning("Aviso de red: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.");
           }
         }
       }
@@ -3118,6 +3179,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         ncf: finalNCF,
         ncf_vencimiento: finalNcfVencimiento,
         tipo_ecf: finalTipoECF,
+        ecf_status: finalEcfStatus,
         ecf_id: finalEcfId,
         ecf_qr: finalEcfQr,
         ecf_security_code: finalEcfSecurityCode,
@@ -3727,10 +3789,12 @@ function cleanOrden(o: any): Orden {
     entrega_domicilio: o.entrega_domicilio,
     costo_envio: o.costo_envio,
     repartidor_id: o.repartidor_id,
+    ecf_status: o.ecf_status,
     ecf_qr: o.ecf_qr,
     ecf_security_code: o.ecf_security_code,
     ecf_signature_date: o.ecf_signature_date,
     ncf_vencimiento: o.ncf_vencimiento,
+    pago_referencia: o.pago_referencia,
   };
 }
 

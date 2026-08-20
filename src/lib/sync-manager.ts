@@ -435,6 +435,7 @@ class SyncManager {
             const fiscalUpdates = {
               ncf: result.encf,
               tipo_ecf: data.tipo_ecf || "E32",
+              ecf_status: "SIGNED",
               ecf_id: result.document?.id,
               ecf_qr: result.stamp_url || (result.document as any)?.document_stamp_url || "",
               ecf_security_code: result.security_code || "",
@@ -451,6 +452,14 @@ class SyncManager {
             if (ordIdx >= 0) {
               localOrd[ordIdx] = { ...localOrd[ordIdx], ...fiscalUpdates };
               write(KEY.ordenes, localOrd);
+            }
+
+            if (typeof window !== "undefined") {
+              window.dispatchEvent(
+                new CustomEvent("klynn-order-fiscal-updated", {
+                  detail: { orderId: data.id, numero: data.numero, ...fiscalUpdates },
+                })
+              );
             }
           }
         }
