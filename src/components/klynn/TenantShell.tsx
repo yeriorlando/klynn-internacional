@@ -1678,6 +1678,7 @@ function SidebarContent({
         "procesos",
         "estanteria",
         "caja",
+        "cxc",
         "gastos",
         "logistica",
         "catalogo-prendas",
@@ -1705,6 +1706,11 @@ function SidebarContent({
     switch (permission) {
       case "ordenes":
         queryClient.prefetchQuery({ queryKey: ["ordenes", tid], queryFn: () => getOrdenes(tid) });
+        break;
+      case "cxc":
+        queryClient.prefetchQuery({ queryKey: ["ordenes", tid], queryFn: () => getOrdenes(tid) });
+        queryClient.prefetchQuery({ queryKey: ["clientes", tid], queryFn: () => getClientes(tid) });
+        queryClient.prefetchQuery({ queryKey: ["movimientos", tid], queryFn: () => getMovimientos(tid) });
         break;
       case "clientes":
         queryClient.prefetchQuery({ queryKey: ["clientes", tid], queryFn: () => getClientes(tid) });
@@ -1791,6 +1797,7 @@ function SidebarContent({
             shortcut: "E",
           },
           { id: "caja", to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
+          { id: "cxc", to: `/t/${slug}/cxc`, label: "Cuentas por cobrar", icon: CreditCard, permission: "caja" },
           { id: "gastos", to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
           { id: "logistica", to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
         ],

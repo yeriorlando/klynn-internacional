@@ -567,6 +567,21 @@ export function getTenantPlan(tenant: Tenant | null, dynamicPlans?: Plan[]): Pla
   return list.find((p) => p.id === tenant.plan_id) || list[0] || PLANS[0];
 }
 
+export function isSameTenant(tid1?: string, tid2?: string): boolean {
+  if (!tid1 || !tid2) return true;
+  if (tid1 === tid2) return true;
+  const clean1 = tid1.replace("ten-", "").replace("tenant-", "").toLowerCase();
+  const clean2 = tid2.replace("ten-", "").replace("tenant-", "").toLowerCase();
+  if (clean1 === clean2) return true;
+  if (
+    (clean1 === "reynita" || tid1 === "8423be36-736f-4233-b933-1c1225042857") &&
+    (clean2 === "reynita" || tid2 === "8423be36-736f-4233-b933-1c1225042857")
+  ) {
+    return true;
+  }
+  return false;
+}
+
 export function isModuleEnabled(
   tenant: Tenant | null,
   moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos" | "estanteria" | "pos_offline",
@@ -1752,14 +1767,70 @@ export async function verifyEmployeeOtpAndSave(
 
 // ============ Empleados (Supabase) ============
 export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
-  let query = supabase.from("empleados").select("*");
-  if (tenant_id) query = query.eq("tenant_id", tenant_id);
-  const { data, error } = await query.order("nombre");
-  if (error) {
-    console.error("Error getEmpleados:", error);
-    return [];
+  const cacheKey = tenant_id ? `klynn_empleados_${tenant_id}` : "klynn_empleados_all";
+
+  // 1. Si estamos offline, leer inmediatamente de caché local y de lastAuth
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try {
+        const parsed = JSON.parse(cachedStr);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch {}
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado) return [parsed.empleado];
+      } catch {}
+    }
+    const local = read<Empleado[]>(KEY.empleados, []);
+    if (tenant_id) return local.filter((e) => isSameTenant(e.tenant_id, tenant_id));
+    return local;
   }
-  return data || [];
+
+  // 2. Intentar Supabase con timeout de 2000ms
+  try {
+    let query = supabase.from("empleados").select("*");
+    if (tenant_id) query = query.eq("tenant_id", tenant_id);
+    const fetchPromise = query.order("nombre");
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+
+    if (!error && data) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(data));
+      }
+      write(KEY.empleados, data);
+      return data;
+    }
+  } catch (e) {
+    console.warn("Aviso al obtener empleados de Supabase:", e);
+  }
+
+  // 3. Fallback a caché
+  if (typeof window !== "undefined") {
+    const cachedStr = localStorage.getItem(cacheKey);
+    if (cachedStr) {
+      try { return JSON.parse(cachedStr); } catch {}
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado) return [parsed.empleado];
+      } catch {}
+    }
+  }
+
+  const local = read<Empleado[]>(KEY.empleados, []);
+  if (tenant_id) return local.filter((e) => isSameTenant(e.tenant_id, tenant_id));
+  return local;
 }
 
 export async function saveEmpleado(e: Empleado) {
@@ -1992,7 +2063,15 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
 export async function getClientes(tenant_id: string): Promise<Cliente[]> {
   // 1. Si no hay conexión, devolver inmediatamente de memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
-    return read<Cliente[]>(KEY.clientes, []).filter((c) => c.tenant_id === tenant_id);
+    const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id));
+    if (local.length > 0) return local;
+    try {
+      const idbClis = await offlineDB.getAll<Cliente>("clientes");
+      if (idbClis && idbClis.length > 0) {
+        return idbClis.filter((c) => isSameTenant(c.tenant_id, tenant_id));
+      }
+    } catch {}
+    return local;
   }
 
   // 2. Intentar buscar en Supabase con timeout de 2000ms
@@ -2011,7 +2090,7 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
 
     if (!error && data) {
       if (isBrowser()) {
-        const local = read<Cliente[]>(KEY.clientes, []).filter((c) => c.tenant_id === tenant_id);
+        const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id));
         const combined = [...data];
         local.forEach((lc) => {
           if (!combined.some((sc) => sc.id === lc.id)) combined.push(lc);
@@ -2026,7 +2105,7 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
     console.warn("Aviso al consultar clientes en Supabase:", e);
   }
 
-  return read<Cliente[]>(KEY.clientes, []).filter((c) => c.tenant_id === tenant_id);
+  return read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id));
 }
 
 export async function saveCliente(c: Cliente) {
@@ -2087,9 +2166,19 @@ export async function getClienteById(id: string): Promise<Cliente | undefined> {
 export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
   // 1. Si no hay conexión, devolver inmediatamente de memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
-    return read<Orden[]>(KEY.ordenes, [])
-      .filter((o) => o.tenant_id === tenant_id)
+    const local = read<Orden[]>(KEY.ordenes, [])
+      .filter((o) => isSameTenant(o.tenant_id, tenant_id))
       .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+    if (local.length > 0) return local;
+    try {
+      const idbOrds = await offlineDB.getAll<Orden>("ordenes");
+      if (idbOrds && idbOrds.length > 0) {
+        return idbOrds
+          .filter((o) => isSameTenant(o.tenant_id, tenant_id))
+          .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+      }
+    } catch {}
+    return local;
   }
 
   // 2. Intentar buscar en Supabase con timeout de 2000ms
@@ -2108,7 +2197,7 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
 
     if (!error && data) {
       if (isBrowser()) {
-        const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+        const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id));
         const combined = [...data];
         local.forEach((lo) => {
           if (!combined.some((co) => co.id === lo.id)) combined.push(lo);
@@ -2125,7 +2214,7 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
   }
 
   return read<Orden[]>(KEY.ordenes, [])
-    .filter((o) => o.tenant_id === tenant_id)
+    .filter((o) => isSameTenant(o.tenant_id, tenant_id))
     .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
 }
 

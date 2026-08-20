@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, getOrdenes, formatDateTimeRD } from "@/lib/storage";
+import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, getOrdenes, getClientes, getMovimientos, formatDateTimeRD } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
 import { notificarWhatsApp } from "@/lib/whatsapp";
@@ -97,25 +97,21 @@ export default function CuentasPorCobrarPage() {
   const [ordenesSaldadas, setOrdenesSaldadas] = useState<(Orden & { cliente_nombre: string; cliente_telefono: string })[]>([]);
 
   async function cargar() {
-    if (!tenantId || tenantId === "__loading__") return;
+    if (!tenantId || tenantId === "__loading__") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const ordenesRaw = await getOrdenes(tenantId);
-      const { data: dbClients, error: errClients } = await supabase
-        .from("clientes")
-        .select("*")
-        .eq("tenant_id", tenantId);
-
-      if (errClients) throw errClients;
+      const [ordenesRaw, dbClients, dbMovs] = await Promise.all([
+        getOrdenes(tenantId),
+        getClientes(tenantId),
+        getMovimientos(tenantId),
+      ]);
 
       const clientsMap = new Map(dbClients?.map(c => [c.id, c]) || []);
       
       // Consultar movimientos del tenant para identificar créditos saldados
-      const { data: dbMovs } = await supabase
-        .from("movimientos_caja")
-        .select("orden_id, tipo, concepto")
-        .eq("tenant_id", tenantId);
-
       const creditOrdenIds = new Set(
         dbMovs
           ?.filter(m => m.tipo === "ABONO" || m.concepto?.includes("Abono inicial") || m.concepto?.includes("Cobro de saldo"))
@@ -438,7 +434,7 @@ export default function CuentasPorCobrarPage() {
     }
   }
 
-  if (!user || tenantId === "__loading__" || (loading && clientes.length === 0)) {
+  if (!user || tenantId === "__loading__" || (loading && clientes.length === 0 && (typeof navigator === "undefined" || navigator.onLine))) {
     return <GlobalPageLoader text="Cargando cuentas por cobrar..." />;
   }
 

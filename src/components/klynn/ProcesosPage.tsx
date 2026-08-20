@@ -156,7 +156,10 @@ export function ProcesosPage() {
   }, [ordenes, diasAlmacen]);
 
   const loadData = async () => {
-    if (!tenantId) return;
+    if (!tenantId || tenantId === "__loading__") {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       const [ords, clis, emps] = await Promise.all([
@@ -178,14 +181,15 @@ export function ProcesosPage() {
       setEmpleados(emps || []);
     } catch (err) {
       console.error("Error cargando procesos:", err);
-      toast.error("Error cargando tablero de procesos");
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    loadData();
+    if (tenantId && tenantId !== "__loading__") {
+      loadData();
+    }
   }, [tenantId]);
 
   // Manejo de Pantalla Completa
@@ -447,7 +451,7 @@ export function ProcesosPage() {
     return { total, urgentes, enProceso, listas };
   }, [ordenes]);
 
-  if (loading && ordenes.length === 0) {
+  if (loading && ordenes.length === 0 && (typeof navigator === "undefined" || navigator.onLine)) {
     return <GlobalPageLoader text="Cargando operaciones..." />;
   }
 
