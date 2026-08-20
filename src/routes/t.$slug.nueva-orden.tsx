@@ -916,7 +916,7 @@ function NuevaOrdenPage() {
     };
   }, [isPosMode]);
 
-  if (!user || user.tenant.id === "__loading__" || loadingCatalog || loadingServicios) {
+  if (!user || user.tenant.id === "__loading__" || (loadingCatalog && catalogoData.length === 0) || (loadingServicios && serviciosData.length === 0)) {
     return <GlobalPageLoader text="Cargando punto de venta POS..." />;
   }
   const { empleado } = user;

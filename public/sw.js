@@ -1,4 +1,4 @@
-const CACHE_NAME = "klynn-pwa-v3";
+const CACHE_NAME = "klynn-pwa-v4";
 const STATIC_ASSETS = [
   "/",
   "/favicon.webp",

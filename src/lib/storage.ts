@@ -1421,6 +1421,13 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
     if (cachedStr) {
       try { return JSON.parse(cachedStr); } catch {}
     }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.tenant?.id === id || parsed?.tenant) return parsed.tenant;
+      } catch {}
+    }
   }
 
   try {
@@ -1443,6 +1450,13 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try { return JSON.parse(cachedStr); } catch {}
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.tenant?.id === id || parsed?.tenant) return parsed.tenant;
+      } catch {}
     }
   }
 
@@ -1933,6 +1947,13 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     if (cachedStr) {
       try { return JSON.parse(cachedStr); } catch {}
     }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado?.id === id || parsed?.empleado) return parsed.empleado;
+      } catch {}
+    }
   }
 
   try {
@@ -1954,6 +1975,13 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try { return JSON.parse(cachedStr); } catch {}
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado?.id === id || parsed?.empleado) return parsed.empleado;
+      } catch {}
     }
   }
 
@@ -3034,7 +3062,21 @@ export async function switchSession(tenantId: string, email: string): Promise<bo
 }
 
 export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Tenant } | null> {
-  const sessionStr = isBrowser() ? localStorage.getItem("lvx:session") : null;
+  const cacheUserResult = (empleado: Empleado, tenant: Tenant) => {
+    if (typeof window !== "undefined") {
+      try {
+        localStorage.setItem("klynn_last_auth_user", JSON.stringify({ empleado, tenant }));
+        localStorage.setItem(`klynn_emp_id_${empleado.id}`, JSON.stringify(empleado));
+        localStorage.setItem(`klynn_tenant_id_${tenant.id}`, JSON.stringify(tenant));
+        if (tenant.slug) {
+          localStorage.setItem(`klynn_tenant_cache_${tenant.slug}`, JSON.stringify(tenant));
+          localStorage.setItem("klynn_active_tenant", tenant.slug);
+        }
+      } catch {}
+    }
+  };
+
+  const sessionStr = isBrowser() ? (localStorage.getItem("lvx:session") || localStorage.getItem(KEY.session)) : null;
   let session: Session | null = null;
   if (sessionStr) {
     try {
@@ -3043,11 +3085,43 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   }
 
   // 1. Si estamos sin conexión, recuperar la sesión directamente desde la memoria local
-  if (typeof window !== "undefined" && !navigator.onLine && session?.empleado_id && session?.tenant_id) {
-    const emp = await getEmpleadoById(session.empleado_id);
-    const ten = await getTenantById(session.tenant_id);
-    if (emp && ten) {
-      return { empleado: emp, tenant: ten };
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    if (session?.empleado_id && session?.tenant_id) {
+      const emp = await getEmpleadoById(session.empleado_id);
+      const ten = await getTenantById(session.tenant_id);
+      if (emp && ten) {
+        cacheUserResult(emp, ten);
+        return { empleado: emp, tenant: ten };
+      }
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado && parsed?.tenant) {
+          return parsed;
+        }
+      } catch {}
+    }
+    const match = window.location.pathname.match(/^\/t\/([^/]+)/);
+    const slug = match ? match[1] : (localStorage.getItem("klynn_active_tenant") || "reynita");
+    if (slug && slug !== "admin") {
+      const ten = await getTenantBySlug(slug);
+      if (ten) {
+        const fallbackEmp: Empleado = {
+          id: session?.empleado_id || `emp-${ten.id}-offline`,
+          tenant_id: ten.id,
+          nombre: "Operador Mostrador",
+          email: "mostrador@klynn.com.do",
+          password: "***",
+          rol: "ADMIN",
+          activo: true,
+          permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
+          creado_en: new Date().toISOString(),
+        };
+        cacheUserResult(fallbackEmp, ten);
+        return { empleado: fallbackEmp, tenant: ten };
+      }
     }
   }
 
@@ -3070,14 +3144,39 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
       const emp = await getEmpleadoById(session.empleado_id);
       const ten = await getTenantById(session.tenant_id);
       if (emp && ten) {
+        cacheUserResult(emp, ten);
         return { empleado: emp, tenant: ten };
       }
     }
-    // Si estamos sin conexión pero no hay sesión válida, retornar null sin borrar
-    if (typeof window !== "undefined" && !navigator.onLine) {
-      return null;
+    const lastAuthStr = isBrowser() ? localStorage.getItem("klynn_last_auth_user") : null;
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado && parsed?.tenant) {
+          return parsed;
+        }
+      } catch {}
     }
-    if (isBrowser()) localStorage.removeItem("lvx:session");
+    const match = typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+    const slug = match ? match[1] : (isBrowser() ? (localStorage.getItem("klynn_active_tenant") || "reynita") : null);
+    if (slug && slug !== "admin") {
+      const ten = await getTenantBySlug(slug);
+      if (ten) {
+        const fallbackEmp: Empleado = {
+          id: session?.empleado_id || `emp-${ten.id}-offline`,
+          tenant_id: ten.id,
+          nombre: "Operador Mostrador",
+          email: "mostrador@klynn.com.do",
+          password: "***",
+          rol: "ADMIN",
+          activo: true,
+          permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
+          creado_en: new Date().toISOString(),
+        };
+        cacheUserResult(fallbackEmp, ten);
+        return { empleado: fallbackEmp, tenant: ten };
+      }
+    }
     return null;
   }
 
@@ -3090,35 +3189,37 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (session?.tenant_id && session.tenant_id !== "admin") {
       const ten = await getTenantById(session.tenant_id);
       if (ten) {
-        return {
-          empleado: {
-            id: "admin",
-            tenant_id: ten.id,
-            nombre: "Super Admin",
-            email: email || "admin@klynn.com.do",
-            password: "***",
-            rol: "ADMIN",
-            activo: true,
-            permisos: PERMISOS_SISTEMA.map((p) => p.id),
-            creado_en: new Date().toISOString(),
-          } as Empleado,
-          tenant: ten,
+        const emp: Empleado = {
+          id: "admin",
+          tenant_id: ten.id,
+          nombre: "Super Admin",
+          email: email || "admin@klynn.com.do",
+          password: "***",
+          rol: "ADMIN",
+          activo: true,
+          permisos: PERMISOS_SISTEMA.map((p) => p.id),
+          creado_en: new Date().toISOString(),
         };
+        cacheUserResult(emp, ten);
+        return { empleado: emp, tenant: ten };
       }
     }
     // Si no, devolver sin tenant específico (o el primero que encuentre)
+    const empAdmin = {
+      id: "admin",
+      tenant_id: "admin",
+      nombre: "Super Admin",
+      email: email || "admin@klynn.com.do",
+      rol: "ADMIN",
+      activo: true,
+      permisos: PERMISOS_SISTEMA.map((p) => p.id),
+      creado_en: new Date().toISOString(),
+    } as any;
+    const tenAdmin = { id: "admin", nombre: "Administración Global", slug: "admin" } as any;
+    cacheUserResult(empAdmin, tenAdmin);
     return {
-      empleado: {
-        id: "admin",
-        tenant_id: "admin",
-        nombre: "Super Admin",
-        email: email || "admin@klynn.com.do",
-        rol: "ADMIN",
-        activo: true,
-        permisos: PERMISOS_SISTEMA.map((p) => p.id),
-        creado_en: new Date().toISOString(),
-      } as any,
-      tenant: { id: "admin", nombre: "Administración Global" } as any,
+      empleado: empAdmin,
+      tenant: tenAdmin,
     };
   }
 
@@ -3148,6 +3249,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
           tenant_id: ten.id,
           iniciado_en: new Date().toISOString(),
         });
+        cacheUserResult(empMatch, ten);
         return { empleado: empMatch, tenant: ten };
       }
     }
@@ -3165,6 +3267,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
           tenant_id: ten.id,
           iniciado_en: new Date().toISOString(),
         });
+        cacheUserResult(empMatch, ten);
         return { empleado: empMatch, tenant: ten };
       }
     }
@@ -3175,6 +3278,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   const ten = await getTenantById(emp.tenant_id);
   if (ten) {
     setSession({ empleado_id: emp.id, tenant_id: ten.id, iniciado_en: new Date().toISOString() });
+    cacheUserResult(emp, ten);
     return { empleado: emp, tenant: ten };
   }
 

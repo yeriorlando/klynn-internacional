@@ -51,16 +51,41 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
       };
     }
 
-    const activeSlug = localStorage.getItem("klynn_active_tenant") || "reynita";
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado && parsed?.tenant) return parsed;
+      } catch {}
+    }
+
+    const match = window.location.pathname.match(/^\/t\/([^/]+)/);
+    const activeSlug = match ? match[1] : (localStorage.getItem("klynn_active_tenant") || "reynita");
     const cachedTenantStr = localStorage.getItem(`klynn_tenant_cache_${activeSlug}`);
-    if (session && cachedTenantStr) {
+    if (cachedTenantStr) {
       try {
         const tenant = JSON.parse(cachedTenantStr);
-        const cachedEmpStr = localStorage.getItem(`klynn_emp_id_${session.empleado_id}`);
-        if (cachedEmpStr) {
-          const empleado = JSON.parse(cachedEmpStr);
-          return { empleado, tenant };
+        if (session) {
+          const cachedEmpStr = localStorage.getItem(`klynn_emp_id_${session.empleado_id}`);
+          if (cachedEmpStr) {
+            const empleado = JSON.parse(cachedEmpStr);
+            return { empleado, tenant };
+          }
         }
+        return {
+          empleado: {
+            id: session?.empleado_id || `emp-${tenant.id}-offline`,
+            tenant_id: tenant.id,
+            nombre: "Operador Mostrador",
+            email: "operador@klynn.com.do",
+            password: "***",
+            rol: "ADMIN",
+            activo: true,
+            permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
+            creado_en: new Date().toISOString(),
+          },
+          tenant,
+        };
       } catch {}
     }
     return null;
@@ -71,9 +96,8 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
     async function check() {
       const u = await getCurrentUser();
       if (!u) {
-        // Solo redirigir si no estamos en offline con sesión
-        const session = getSession();
-        if (typeof window !== "undefined" && !navigator.onLine && session) {
+        // En offline, nunca redirigir a login para no bloquear el POS
+        if (typeof window !== "undefined" && !navigator.onLine) {
           setLoading(false);
           return;
         }

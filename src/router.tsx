@@ -57,10 +57,14 @@ function DefaultErrorComponent({ error, reset }: { error: Error; reset: () => vo
 export const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
+      networkMode: "always",
       staleTime: 1000 * 60 * 5, // 5 minutos por defecto
-      gcTime: 1000 * 60 * 30,    // 30 minutos
-      retry: 1,
+      gcTime: 1000 * 60 * 30, // 30 minutos
+      retry: 0,
       refetchOnWindowFocus: false,
+    },
+    mutations: {
+      networkMode: "always",
     },
   },
 });
