@@ -8,18 +8,15 @@ const POLAR_WEBHOOK_SECRET = Deno.env.get("POLAR_WEBHOOK_SECRET")!;
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
 // ============================================================
-// MAPEO DE PRODUCTOS DE POLAR
+// MAPEO ESTÁTICO DE PRODUCTOS DE POLAR (FALLBACK)
 // ============================================================
-// Actualiza estos IDs con los que aparecen en tu Dashboard de Polar
-// bajo Products -> copiar el "Product ID" de cada uno
 const PLAN_MAPPING: Record<string, string> = {
-  "prod_basico_id":    "basico",
-  "prod_pro_id":       "pro",
-  "prod_enterprise_id":"enterprise",
+  "prod_basico_id": "basico",
+  "prod_pro_id": "pro",
+  "prod_enterprise_id": "enterprise",
 };
 
-// IDs de los productos de "Sucursal Extra" en Polar (uno por plan)
-// Cuando alguien paga cualquiera de estos productos, se le suma +1 sucursal
+// IDs de productos de "Sucursal Extra" en Polar
 const SUCURSAL_PRODUCT_IDS: string[] = [
   "prod_sucursal_basico_id",
   "prod_sucursal_pro_id",
@@ -36,7 +33,7 @@ Deno.serve(async (req) => {
   try {
     const payload = await req.text();
 
-    // ── Validar firma de Polar (seguridad) ──────────────────
+    // ── 1. Validar firma de Polar (Seguridad Criptográfica) ──
     let event: any;
     try {
       event = validateEvent(
@@ -51,20 +48,56 @@ Deno.serve(async (req) => {
 
     console.log("Evento recibido de Polar:", event.type);
 
-    // ── Solo procesar pagos completados ─────────────────────
-    if (event.type !== "order.created" && event.type !== "subscription.created") {
-      return new Response("Event not handled", { status: 200 });
+    // ── 2. Filtrar eventos relevantes ───────────────────────
+    if (
+      event.type !== "order.created" &&
+      event.type !== "subscription.created" &&
+      event.type !== "subscription.updated"
+    ) {
+      return new Response(JSON.stringify({ received: true, ignored: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     }
 
-    const data       = event.data;
-    const customerEmail = data.customer?.email || data.user?.email;
-    const productId     = data.product_id || data.product?.id || "";
+    const data = event.data;
+    const metadata = data.metadata || data.checkout_metadata || data.custom_field_data || {};
+    const tenantId = metadata.tenant_id;
+    const metaPlanId = metadata.plan_id;
+    const billingPeriod = metadata.period || metadata.billing_period || (event.data?.recurring_interval === "year" ? "yearly" : "monthly");
+    const customerEmail = data.customer?.email || data.user?.email || data.customer_email || "";
+    const productId = data.product_id || data.product?.id || "";
 
-    if (!customerEmail) {
-      return new Response("No customer email found", { status: 400 });
+    console.log(`Procesando pago — Tenant ID: ${tenantId || 'N/A'} | Email: ${customerEmail} | Producto: ${productId} | Plan Meta: ${metaPlanId || 'N/A'}`);
+
+    if (!tenantId && !customerEmail) {
+      return new Response("Missing tenant identifier (tenant_id or customer email)", { status: 400 });
     }
 
-    console.log(`Procesando pago — Email: ${customerEmail} | Producto: ${productId}`);
+    // ── 3. Localizar el Tenant ───────────────────────────────
+    let tenant: any = null;
+    if (tenantId) {
+      const { data: tById } = await supabase
+        .from("tenants")
+        .select("id, email, plan_id, estado, max_sucursales")
+        .eq("id", tenantId)
+        .maybeSingle();
+      tenant = tById;
+    }
+
+    if (!tenant && customerEmail) {
+      const { data: tByEmail } = await supabase
+        .from("tenants")
+        .select("id, email, plan_id, estado, max_sucursales")
+        .eq("email", customerEmail)
+        .maybeSingle();
+      tenant = tByEmail;
+    }
+
+    if (!tenant) {
+      console.error("Tenant no encontrado en BD para:", { tenantId, customerEmail });
+      return new Response("Tenant not found", { status: 404 });
+    }
 
     // ══════════════════════════════════════════════════════════
     // CASO 1: Pago de SUCURSAL ADICIONAL
@@ -73,20 +106,7 @@ Deno.serve(async (req) => {
       await checkIsSucursalProduct(productId);
 
     if (esSucursalExtra) {
-      // Buscar tenant por email y sumarle +1 a max_sucursales
-      const { data: tenant, error: fetchError } = await supabase
-        .from("tenants")
-        .select("id, max_sucursales")
-        .eq("email", customerEmail)
-        .single();
-
-      if (fetchError || !tenant) {
-        console.error("Tenant no encontrado para sucursal extra:", customerEmail);
-        return new Response("Tenant not found", { status: 404 });
-      }
-
       const nuevoLimite = (tenant.max_sucursales || 1) + 1;
-
       const { error: updateError } = await supabase
         .from("tenants")
         .update({ max_sucursales: nuevoLimite })
@@ -97,8 +117,8 @@ Deno.serve(async (req) => {
         return new Response("Error updating branch limit", { status: 500 });
       }
 
-      console.log(`✅ Sucursal desbloqueada para ${customerEmail} — Nuevo límite: ${nuevoLimite}`);
-      return new Response(JSON.stringify({ ok: true, action: "branch_unlocked", max_sucursales: nuevoLimite }), {
+      console.log(`✅ Sucursal desbloqueada para tenant ${tenant.id} — Nuevo límite: ${nuevoLimite}`);
+      return new Response(JSON.stringify({ ok: true, action: "branch_unlocked", tenant_id: tenant.id, max_sucursales: nuevoLimite }), {
         headers: { "Content-Type": "application/json" },
       });
     }
@@ -106,7 +126,11 @@ Deno.serve(async (req) => {
     // ══════════════════════════════════════════════════════════
     // CASO 2: Pago de PLAN DE SUSCRIPCION
     // ══════════════════════════════════════════════════════════
-    let planId = PLAN_MAPPING[productId];
+    let planId: string | null = metaPlanId || null;
+
+    if (!planId) {
+      planId = PLAN_MAPPING[productId] || null;
+    }
 
     if (!planId) {
       // Buscar por URL del producto almacenada en la tabla planes
@@ -114,7 +138,7 @@ Deno.serve(async (req) => {
         .from("planes")
         .select("id")
         .or(`polar_product_monthly_url.ilike.%${productId}%,polar_product_yearly_url.ilike.%${productId}%`)
-        .single();
+        .maybeSingle();
 
       if (planData) planId = planData.id;
     }
@@ -124,28 +148,48 @@ Deno.serve(async (req) => {
       return new Response("Plan not found", { status: 404 });
     }
 
+    // Calcular fecha de vigencia
+    const expiryDate = new Date();
+    if (billingPeriod === "yearly") {
+      expiryDate.setDate(expiryDate.getDate() + 365); // 1 año (con meses gratis)
+    } else {
+      expiryDate.setDate(expiryDate.getDate() + 30); // 30 días
+    }
+
     const { error: updateError } = await supabase
       .from("tenants")
       .update({
         plan_id: planId,
         estado: "ACTIVO",
         plan_fecha_inicio: new Date().toISOString(),
+        trial_hasta: expiryDate.toISOString(),
+        plan_periodo: billingPeriod,
       })
-      .eq("email", customerEmail);
+      .eq("id", tenant.id);
 
     if (updateError) {
       console.error("Error actualizando plan del tenant:", updateError);
       return new Response("Error updating tenant plan", { status: 500 });
     }
 
-    console.log(`✅ Plan ${planId} activado para ${customerEmail}`);
-    return new Response(JSON.stringify({ ok: true, action: "plan_activated", plan: planId }), {
+    console.log(`✅ Plan ${planId} (${billingPeriod}) activado con éxito para tenant ${tenant.id} (${tenant.email}) hasta ${expiryDate.toISOString()}`);
+    return new Response(JSON.stringify({
+      ok: true,
+      action: "plan_activated",
+      tenant_id: tenant.id,
+      plan: planId,
+      periodo: billingPeriod,
+      trial_hasta: expiryDate.toISOString()
+    }), {
       headers: { "Content-Type": "application/json" },
     });
 
-  } catch (err) {
+  } catch (err: any) {
     console.error("Webhook Error general:", err);
-    return new Response("Internal Server Error", { status: 500 });
+    return new Response(JSON.stringify({ error: err.message || "Internal Server Error" }), {
+      status: 500,
+      headers: { "Content-Type": "application/json" },
+    });
   }
 });
 

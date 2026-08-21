@@ -123,79 +123,213 @@ serve(async (req) => {
                 console.log("Could not write raw webhook log", e)
             }
 
-            // Detect WASender API Event
-            const isWasender = body.event && body.data;
-            
-            if (isWasender) {
-                console.log('WaSender event received:', body.event);
-                
-                if (body.event === 'messages.received') {
+            // Detect provider format
+            const isWasender = body.event === 'messages.received' && body.data;
+            const isEvolution = (body.event === 'messages.upsert' || body.event === 'MESSAGES_UPSERT') && body.data;
+
+            if (isWasender || isEvolution) {
+                console.log(`WhatsApp event received (${isEvolution ? 'Evolution' : 'WASender'}):`, body.event);
+
+                let messageData: any = null;
+                let key: any = null;
+                let from = '';
+                let wamid = '';
+                let pushName = '';
+                let rawMessageObj: any = {};
+                let tenantId = url.searchParams.get('tenant_id') || '';
+
+                if (isWasender) {
                     const rawMessages = body.data?.messages;
                     if (!rawMessages) return new Response('No message data', { status: 200 });
-
-                    // Handle array or single message object format
-                    const messageData = Array.isArray(rawMessages) ? rawMessages[0] : rawMessages;
+                    messageData = Array.isArray(rawMessages) ? rawMessages[0] : rawMessages;
                     if (!messageData) return new Response('No message data', { status: 200 });
+                    key = messageData.key;
+                    if (key?.fromMe) return new Response('Ignore outgoing message', { status: 200 });
 
-                    const key = messageData.key;
-                    if (key?.fromMe) {
-                        return new Response('Ignore outgoing message', { status: 200 });
-                    }
+                    from = key?.cleanedSenderPn || key?.remoteJid?.split('@')[0];
+                    wamid = key?.id;
+                    pushName = messageData.pushName || body.data?.pushName || from;
+                    rawMessageObj = messageData.message || {};
+                } else if (isEvolution) {
+                    messageData = body.data;
+                    key = messageData.key;
+                    if (key?.fromMe) return new Response('Ignore outgoing message', { status: 200 });
 
-                    // Extract cleaned telephone number and ID
-                    const from = key?.cleanedSenderPn || key?.remoteJid?.split('@')[0];
-                    const wamid = key?.id;
-                    const pushName = messageData.pushName || body.data?.pushName || from;
-
-                    // Resolve tenant ID from query parameter
-                    const tenantId = url.searchParams.get('tenant_id');
-                    if (!tenantId) {
-                        console.error('No tenant_id provided in webhook URL');
-                        return new Response('No tenant_id provided', { status: 200 });
-                    }
-
-                    // --- DEDUPLICATION: skip if wamid already exists ---
-                    if (wamid) {
-                        const { data: existing } = await supabase
-                            .from('messages')
-                            .select('id')
-                            .eq('wamid', wamid)
-                            .limit(1);
-                        if (existing && existing.length > 0) {
-                            console.log('Duplicate wamid, skipping:', wamid);
-                            return new Response('Duplicate message', { status: 200 });
+                    pushName = messageData.pushName || body.pushName || '';
+                    let rawSender = key?.remoteJid || '';
+                    
+                    // Si remoteJid es un LID (@lid), buscar el JID real (@s.whatsapp.net)
+                    if (rawSender.endsWith('@lid')) {
+                        const alt = key?.remoteJidAlt || messageData?.remoteJidAlt || key?.participant || key?.cleanedSenderPn;
+                        if (alt && !alt.endsWith('@lid')) {
+                            rawSender = alt;
+                        } else if (body.instance) {
+                            try {
+                                const evoUrl = Deno.env.get('KLYNN_CONNECT_URL') || 'https://wa.klynn.com.do';
+                                const evoKey = Deno.env.get('KLYNN_CONNECT_APIKEY') || 'klynn_evolution_secret_key_2026';
+                                const contRes = await fetch(`${evoUrl}/chat/findContacts/${body.instance}`, {
+                                    method: 'POST',
+                                    headers: { 'apikey': evoKey, 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({})
+                                });
+                                const contData = await contRes.json().catch(() => []);
+                                if (Array.isArray(contData)) {
+                                    // Buscar contacto por pushName o coincidencia
+                                    const match = contData.find((c: any) => 
+                                        c.remoteJid && 
+                                        c.remoteJid.endsWith('@s.whatsapp.net') && 
+                                        pushName && 
+                                        (c.pushName === pushName || c.name === pushName)
+                                    );
+                                    if (match?.remoteJid) {
+                                        rawSender = match.remoteJid;
+                                    }
+                                }
+                            } catch (e) {
+                                console.error("Error resolviendo LID en Evolution:", e);
+                            }
                         }
                     }
 
-                    // --- QUOTED MESSAGE / REPLY DETECTION ---
-                    const quotedWamid = 
-                        messageData.message?.extendedTextMessage?.contextInfo?.stanzaId || 
-                        messageData.message?.imageMessage?.contextInfo?.stanzaId || 
-                        messageData.message?.videoMessage?.contextInfo?.stanzaId || 
-                        messageData.message?.documentMessage?.contextInfo?.stanzaId || 
-                        messageData.message?.audioMessage?.contextInfo?.stanzaId || 
-                        messageData.message?.locationMessage?.contextInfo?.stanzaId;
+                    from = rawSender.split('@')[0].split(':')[0].replace(/\D/g, '');
+                    wamid = key?.id;
+                    if (!pushName) pushName = from;
+                    rawMessageObj = messageData.message || {};
 
-                    let replyToId: string | null = null;
-                    if (quotedWamid) {
-                        const { data: quotedMsg } = await supabase
-                            .from('messages')
-                            .select('id')
-                            .eq('wamid', quotedWamid)
-                            .limit(1);
-                        if (quotedMsg && quotedMsg.length > 0) {
-                            replyToId = quotedMsg[0].id;
+                    // Si no viene tenant_id en query params, resolver por nombre de instancia
+                    if (!tenantId && body.instance) {
+                        const rawSlug = String(body.instance).replace(/^klynn_/, '');
+                        const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(rawSlug);
+                        let matchedTenant: any = null;
+                        if (isUuid) {
+                            const { data } = await supabase.from('tenants').select('id').eq('id', rawSlug).maybeSingle();
+                            matchedTenant = data;
+                        } else {
+                            const { data } = await supabase.from('tenants').select('id').eq('slug', rawSlug).maybeSingle();
+                            matchedTenant = data;
+                        }
+                        if (matchedTenant?.id) {
+                            tenantId = matchedTenant.id;
                         }
                     }
 
-                    // --- MEDIA DETECTION ---
-                    const rawMessageObj = messageData.message || {};
-                    const media = findMedia(rawMessageObj);
-                    let content: string;
+                    // Intentar vincular con cliente o conversación previa si el número es un identificador LID
+                    if (tenantId && (rawSender.endsWith('@lid') || from.length > 12)) {
+                        // 1. Buscar en conversaciones activas previas por nombre
+                        if (pushName) {
+                            const { data: existConv } = await supabase
+                                .from('conversations')
+                                .select('phone')
+                                .eq('tenant_id', tenantId)
+                                .eq('name', pushName)
+                                .limit(1)
+                                .maybeSingle();
+                            if (existConv?.phone && existConv.phone.length <= 11) {
+                                from = existConv.phone;
+                            }
+                        }
+                        
+                        // 2. Buscar en tabla de clientes
+                        if (from.length > 12 && pushName) {
+                            const { data: matchedClient } = await supabase
+                                .from('clientes')
+                                .select('telefono')
+                                .eq('tenant_id', tenantId)
+                                .ilike('nombre', `%${pushName}%`)
+                                .limit(1)
+                                .maybeSingle();
+                            if (matchedClient?.telefono) {
+                                const cleanCliPhone = matchedClient.telefono.replace(/\D/g, '');
+                                if (cleanCliPhone) {
+                                    from = cleanCliPhone.length === 10 ? `1${cleanCliPhone}` : cleanCliPhone;
+                                }
+                            }
+                        }
+                    }
+                }
 
-                    if (media) {
-                        // Try to get the tenant's WaSender API key for decrypt-media
-                        let decryptedUrl: string | null = null;
+                if (!tenantId) {
+                    console.error('No tenant_id resolved for webhook');
+                    return new Response('No tenant_id resolved', { status: 200 });
+                }
+
+                // --- DEDUPLICATION: skip if wamid already exists ---
+                if (wamid) {
+                    const { data: existing } = await supabase
+                        .from('messages')
+                        .select('id')
+                        .eq('wamid', wamid)
+                        .limit(1);
+                    if (existing && existing.length > 0) {
+                        console.log('Duplicate wamid, skipping:', wamid);
+                        return new Response('Duplicate message', { status: 200 });
+                    }
+                }
+
+                // --- QUOTED MESSAGE / REPLY DETECTION ---
+                const quotedWamid = 
+                    rawMessageObj.extendedTextMessage?.contextInfo?.stanzaId || 
+                    rawMessageObj.imageMessage?.contextInfo?.stanzaId || 
+                    rawMessageObj.videoMessage?.contextInfo?.stanzaId || 
+                    rawMessageObj.documentMessage?.contextInfo?.stanzaId || 
+                    rawMessageObj.audioMessage?.contextInfo?.stanzaId || 
+                    rawMessageObj.locationMessage?.contextInfo?.stanzaId;
+
+                let replyToId: string | null = null;
+                if (quotedWamid) {
+                    const { data: quotedMsg } = await supabase
+                        .from('messages')
+                        .select('id')
+                        .eq('wamid', quotedWamid)
+                        .limit(1);
+                    if (quotedMsg && quotedMsg.length > 0) {
+                        replyToId = quotedMsg[0].id;
+                    }
+                }
+
+                // --- CONTENT EXTRACTION & MEDIA DETECTION ---
+                const media = findMedia(rawMessageObj);
+                let content = '';
+
+                if (media) {
+                    let mediaUrl: string | null = null;
+
+                    if (isEvolution) {
+                        let rawB64 = body.data?.base64 || 
+                                     body.data?.message?.base64 || 
+                                     messageData?.base64 || 
+                                     rawMessageObj?.base64 || 
+                                     media.mediaInfo?.base64;
+
+                        // Si no viene en el webhook, obtenerlo directamente de Evolution API
+                        if (!rawB64 && body.instance) {
+                            try {
+                                const evoRes = await fetch(`https://wa.klynn.com.do/chat/getBase64FromMediaMessage/${body.instance}`, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Content-Type': 'application/json',
+                                        'apikey': 'klynn_evolution_secret_key_2026',
+                                    },
+                                    body: JSON.stringify({
+                                        message: messageData,
+                                        convertToMp4: false,
+                                    }),
+                                });
+                                if (evoRes.ok) {
+                                    const evoData = await evoRes.json();
+                                    if (evoData.base64) {
+                                        rawB64 = evoData.base64;
+                                        if (evoData.mimetype) media.mediaInfo.mimetype = evoData.mimetype;
+                                        if (evoData.fileName) media.mediaInfo.fileName = evoData.fileName;
+                                    }
+                                }
+                            } catch (err) {
+                                console.error('Error fetching base64 from Evolution:', err);
+                            }
+                        }
+
+                        mediaUrl = `https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}`;
+                    } else if (isWasender) {
                         try {
                             const { data: tenantData } = await supabase
                                 .from('tenants')
@@ -205,7 +339,7 @@ serve(async (req) => {
 
                             const waConfig = tenantData?.config?.whatsapp;
                             if (waConfig?.api_key) {
-                                decryptedUrl = await decryptMedia(
+                                mediaUrl = await decryptMedia(
                                     waConfig.api_key,
                                     key,
                                     rawMessageObj,
@@ -215,107 +349,106 @@ serve(async (req) => {
                         } catch (e) {
                             console.error('Error fetching tenant config for media decrypt:', e);
                         }
+                    }
 
-                        const caption = messageData.messageBody || media.mediaInfo.caption || '';
+                    const caption = messageData.messageBody || media.mediaInfo?.caption || rawMessageObj.imageMessage?.caption || '';
 
-                        if (decryptedUrl) {
-                            // Store as [type] url|filename format for UI rendering
-                            let filenameSuffix = '';
-                            if (media.type === 'document') {
-                                const filename = media.mediaInfo.title || media.mediaInfo.filename || media.mediaInfo.fileName || 'document.pdf';
-                                filenameSuffix = `|${filename}`;
-                            } else if (media.type === 'image') {
-                                const filename = media.mediaInfo.title || media.mediaInfo.filename || media.mediaInfo.fileName || 'imagen.png';
-                                filenameSuffix = `|${filename}`;
-                            }
-                            content = `[${media.type}] ${decryptedUrl}${filenameSuffix}`;
-                            if (caption) content += `\n${caption}`;
-                        } else {
-                            // Fallback: couldn't decrypt, store type indicator
-                            content = caption || `📎 ${media.type === 'image' ? '📷 Imagen' : media.type === 'video' ? '🎥 Video' : media.type === 'audio' ? '🎤 Audio' : '📄 Documento'} recibido`;
+                    if (mediaUrl) {
+                        let filenameSuffix = '';
+                        if (media.type === 'document') {
+                            const filename = media.mediaInfo.title || media.mediaInfo.filename || media.mediaInfo.fileName || 'document.pdf';
+                            filenameSuffix = `|${filename}`;
+                        } else if (media.type === 'image') {
+                            const filename = media.mediaInfo.title || media.mediaInfo.filename || media.mediaInfo.fileName || 'imagen.png';
+                            filenameSuffix = `|${filename}`;
                         }
+                        content = `[${media.type}] ${mediaUrl}${filenameSuffix}`;
+                        if (caption) content += `\n${caption}`;
                     } else {
-                        // Plain text message
-                        content = messageData.messageBody || messageData.message?.conversation || '(mensaje vacío)';
+                        content = caption || `📎 ${media.type === 'image' ? '📷 Imagen' : media.type === 'video' ? '🎥 Video' : media.type === 'audio' ? '🎤 Audio' : '📄 Documento'} recibido`;
                     }
-
-                    // 1. Resolve or create Conversation
-                    const { data: convs, error: selectErr } = await supabase
-                        .from('conversations')
-                        .select('id, unread')
-                        .eq('tenant_id', tenantId)
-                        .eq('phone', from)
-                        .order('time', { ascending: false });
-
-                    if (selectErr) {
-                        console.error('Error selecting conversation:', selectErr);
-                    }
-
-                    let conversation = convs && convs.length > 0 ? convs[0] : null;
-
-                    // Short display text for conversation list (no URL)
-                    const lastMsgPreview = media 
-                        ? `📎 ${media.type === 'image' ? '📷 Imagen' : media.type === 'video' ? '🎥 Video' : media.type === 'audio' ? '🎤 Audio' : '📄 Documento'}`
-                        : content.substring(0, 100);
-
-                    if (!conversation) {
-                        const { data: newConv, error: insertErr } = await supabase
-                            .from('conversations')
-                            .insert({
-                                tenant_id: tenantId,
-                                name: pushName,
-                                phone: from,
-                                status: 'activa',
-                                agent: 'humano',
-                                unread: 0,
-                                last_msg: lastMsgPreview,
-                                time: new Date().toISOString()
-                            })
-                            .select()
-                            .single()
-                        
-                        if (insertErr) {
-                            console.error('Error inserting conversation:', insertErr);
-                            throw insertErr;
-                        }
-                        conversation = newConv;
-                    }
-
-                    if (!conversation) throw new Error('Failed to resolve conversation')
-
-                    // 2. Insert Message into database
-                    const { error: msgInsertErr } = await supabase.from('messages').insert({
-                        tenant_id: tenantId,
-                        conversation_id: conversation.id,
-                        role: 'user',
-                        content: content,
-                        time: new Date().toISOString(),
-                        wamid: wamid,
-                        payload: body,
-                        status: 'delivered',
-                        reply_to_id: replyToId
-                    })
-
-                    if (msgInsertErr) {
-                        console.error('Error inserting message:', msgInsertErr);
-                        throw msgInsertErr;
-                    }
-
-                    // 3. Update Conversation details
-                    const { error: convUpdateErr } = await supabase.from('conversations').update({
-                        last_msg: lastMsgPreview,
-                        time: new Date().toISOString(),
-                        unread: (conversation.unread || 0) + 1,
-                        status: 'activa'
-                    }).eq('id', conversation.id)
-
-                    if (convUpdateErr) {
-                        console.error('Error updating conversation:', convUpdateErr);
-                        throw convUpdateErr;
-                    }
+                } else {
+                    content = messageData.messageBody || 
+                              rawMessageObj.conversation || 
+                              rawMessageObj.extendedTextMessage?.text || 
+                              '(mensaje vacío)';
                 }
-                
-                return new Response('ok', { status: 200 })
+
+                // 1. Resolve or create Conversation
+                const { data: convs, error: selectErr } = await supabase
+                    .from('conversations')
+                    .select('id, unread')
+                    .eq('tenant_id', tenantId)
+                    .eq('phone', from)
+                    .order('time', { ascending: false });
+
+                if (selectErr) {
+                    console.error('Error selecting conversation:', selectErr);
+                }
+
+                let conversation = convs && convs.length > 0 ? convs[0] : null;
+
+                const lastMsgPreview = media 
+                    ? `📎 ${media.type === 'image' ? '📷 Imagen' : media.type === 'video' ? '🎥 Video' : media.type === 'audio' ? '🎤 Audio' : '📄 Documento'}`
+                    : content.substring(0, 100);
+
+                if (!conversation) {
+                    const { data: newConv, error: insertErr } = await supabase
+                        .from('conversations')
+                        .insert({
+                            tenant_id: tenantId,
+                            name: pushName,
+                            phone: from,
+                            status: 'activa',
+                            agent: 'humano',
+                            unread: 0,
+                            last_msg: lastMsgPreview,
+                            time: new Date().toISOString()
+                        })
+                        .select()
+                        .single();
+                    
+                    if (insertErr) {
+                        console.error('Error inserting conversation:', insertErr);
+                        throw insertErr;
+                    }
+                    conversation = newConv;
+                }
+
+                if (!conversation) throw new Error('Failed to resolve conversation');
+
+                // 2. Insert Message into database
+                const { error: msgInsertErr } = await supabase.from('messages').insert({
+                    tenant_id: tenantId,
+                    conversation_id: conversation.id,
+                    role: 'user',
+                    content: content,
+                    time: new Date().toISOString(),
+                    wamid: wamid,
+                    payload: body,
+                    status: 'delivered',
+                    reply_to_id: replyToId
+                });
+
+                if (msgInsertErr) {
+                    console.error('Error inserting message:', msgInsertErr);
+                    throw msgInsertErr;
+                }
+
+                // 3. Update Conversation details
+                const { error: convUpdateErr } = await supabase.from('conversations').update({
+                    last_msg: lastMsgPreview,
+                    time: new Date().toISOString(),
+                    unread: (conversation.unread || 0) + 1,
+                    status: 'activa'
+                }).eq('id', conversation.id);
+
+                if (convUpdateErr) {
+                    console.error('Error updating conversation:', convUpdateErr);
+                    throw convUpdateErr;
+                }
+
+                return new Response('ok', { status: 200 });
             }
 
             return new Response('Event ignored', { status: 200 })

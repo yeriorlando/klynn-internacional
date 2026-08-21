@@ -48,6 +48,9 @@ export interface GlobalConfig {
   defaultPlanId: PlanId;
   bankDetails?: BankDetails;
   requireEmployeeOtp?: boolean;
+  whatsapp_engine?: "klynn_connect" | "wasender";
+  klynn_connect_url?: string;
+  klynn_connect_apikey?: string;
 }
 
 export type RolEmpleado =
@@ -184,8 +187,13 @@ export function getDefaultEstanteriaZonas(): EstanteriaZona[] {
 export interface WhatsAppConfig {
   enabled: boolean;
   api_key: string;
-  instance: string; // nombre de instancia WapiSender
-  base_url?: string; // por defecto https://wasenderapi.com
+  instance: string; // nombre de instancia WapiSender o Klynn Connect
+  base_url?: string; // por defecto https://wasenderapi.com o https://wa.klynn.com.do
+  provider?: "klynn_connect" | "wasender";
+  klynn_connect_status?: "open" | "close" | "connecting" | "disconnected";
+  klynn_connect_phone?: string;
+  klynn_connect_profile_pic?: string;
+  klynn_connect_profile_name?: string;
   notif_orden_creada: boolean;
   notif_orden_lista: boolean;
   notif_orden_entregada: boolean;
@@ -702,11 +710,11 @@ export const DEFAULT_CONFIG: TenantConfig = {
 {ticket_pie}
 {ticket_nota}`,
     plantilla_lista:
-      "Hola 👋, {cliente} ✨, tu orden {numero} de {detalle} en {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
+      "Hola 👋, {cliente} ✨, tu orden {numero} de:\n\n{detalle}\n\nEn {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
     plantilla_entregada:
       "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
     plantilla_sin_retirar:
-      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} ({detalle}) lleva {dias} días lista en {lavanderia}. Saldo pendiente: {saldo}. ¡Pasa a retirarla cuando gustes en {lavanderia_dir}!",
+      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} de:\n\n{detalle}\n\nLleva {dias} días lista en {lavanderia}. Saldo pendiente: {saldo}.\n¡Pasa a retirarla cuando gustes en {lavanderia_dir}!",
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
@@ -932,10 +940,10 @@ export async function getPlans(): Promise<Plan[]> {
               : (localMatch?.modulos?.logistica !== undefined ? !!localMatch.modulos.logistica : !!staticMatch?.modulos?.logistica),
             procesos: p.procesos !== undefined && p.procesos !== null
               ? !!p.procesos
-              : (localMatch?.modulos?.procesos !== undefined ? !!localMatch.modulos.procesos : (staticMatch?.modulos?.procesos ?? true)),
+              : (localMatch?.modulos?.procesos !== undefined ? !!localMatch.modulos.procesos : (staticMatch?.modulos?.procesos ?? false)),
             estanteria: p.estanteria !== undefined && p.estanteria !== null
               ? !!p.estanteria
-              : (localMatch?.modulos?.estanteria !== undefined ? !!localMatch.modulos.estanteria : (staticMatch?.modulos?.estanteria ?? true)),
+              : (localMatch?.modulos?.estanteria !== undefined ? !!localMatch.modulos.estanteria : (staticMatch?.modulos?.estanteria ?? false)),
             pos_offline: p.pos_offline !== undefined && p.pos_offline !== null
               ? !!p.pos_offline
               : (localMatch?.modulos?.pos_offline !== undefined ? !!localMatch.modulos.pos_offline : (staticMatch?.modulos?.pos_offline ?? false)),
@@ -1729,6 +1737,9 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   trialDays: 14,
   defaultPlanId: "basico",
   requireEmployeeOtp: false,
+  whatsapp_engine: "klynn_connect",
+  klynn_connect_url: "https://wa.klynn.com.do",
+  klynn_connect_apikey: "klynn_evolution_secret_key_2026",
 };
 
 export async function getGlobalConfig(): Promise<GlobalConfig> {
@@ -1753,6 +1764,18 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
           data.require_employee_otp ??
           bank?.require_employee_otp ??
           DEFAULT_GLOBAL_CONFIG.requireEmployeeOtp,
+        whatsapp_engine:
+          bank?.whatsapp_engine ??
+          (data as any)?.whatsapp_engine ??
+          DEFAULT_GLOBAL_CONFIG.whatsapp_engine,
+        klynn_connect_url:
+          bank?.klynn_connect_url ??
+          (data as any)?.klynn_connect_url ??
+          DEFAULT_GLOBAL_CONFIG.klynn_connect_url,
+        klynn_connect_apikey:
+          bank?.klynn_connect_apikey ??
+          (data as any)?.klynn_connect_apikey ??
+          DEFAULT_GLOBAL_CONFIG.klynn_connect_apikey,
       };
     }
   } catch (e) {
@@ -1766,6 +1789,9 @@ export async function saveGlobalConfig(config: GlobalConfig) {
     const bankDetailsToSave = {
       ...(config.bankDetails || {}),
       require_employee_otp: config.requireEmployeeOtp ?? false,
+      whatsapp_engine: config.whatsapp_engine || "klynn_connect",
+      klynn_connect_url: config.klynn_connect_url || "https://wa.klynn.com.do",
+      klynn_connect_apikey: config.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
     };
 
     const { error } = await supabase.from("global_config").upsert({
@@ -2167,37 +2193,53 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
 
 // ============ Clientes (Supabase) ============
 export async function getClientes(tenant_id: string): Promise<Cliente[]> {
+  const realId = resolveTenantId(tenant_id);
+
   // 1. Si no hay conexión, devolver inmediatamente de memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id));
+    const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
     if (local.length > 0) return local;
     try {
       const idbClis = await offlineDB.getAll<Cliente>("clientes");
       if (idbClis && idbClis.length > 0) {
-        return idbClis.filter((c) => isSameTenant(c.tenant_id, tenant_id));
+        return idbClis.filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
       }
     } catch {}
     return local;
   }
 
-  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  // 2. Buscar en Supabase con paginación automática por bloques de 1000
   try {
-    const fetchPromise = supabase
-      .from("clientes")
-      .select("*")
-      .eq("tenant_id", tenant_id)
-      .order("nombre");
+    const PAGE_SIZE = 1000;
+    let allData: Cliente[] = [];
+    let from = 0;
+    let hasMore = true;
 
-    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
-    );
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from("clientes")
+        .select("*")
+        .eq("tenant_id", realId)
+        .order("nombre")
+        .range(from, from + PAGE_SIZE - 1);
 
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+      if (error || !data || data.length === 0) {
+        hasMore = false;
+        break;
+      }
 
-    if (!error && data) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    }
+
+    if (allData.length > 0) {
       if (isBrowser()) {
-        const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id));
-        const combined = [...data];
+        const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
+        const combined = [...allData];
         local.forEach((lc) => {
           if (!combined.some((sc) => sc.id === lc.id)) combined.push(lc);
         });
@@ -2205,13 +2247,13 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
         try { offlineDB.putMany("clientes", combined); } catch {}
         return combined;
       }
-      return data;
+      return allData;
     }
   } catch (e) {
     console.warn("Aviso al consultar clientes en Supabase:", e);
   }
 
-  return read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id));
+  return read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
 }
 
 export async function saveCliente(c: Cliente) {
@@ -2270,41 +2312,57 @@ export async function getClienteById(id: string): Promise<Cliente | undefined> {
 
 // ============ Órdenes (Supabase) ============
 export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
+  const realId = resolveTenantId(tenant_id);
+
   // 1. Si no hay conexión, devolver inmediatamente de memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<Orden[]>(KEY.ordenes, [])
-      .filter((o) => isSameTenant(o.tenant_id, tenant_id))
+      .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
       .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
     if (local.length > 0) return local;
     try {
       const idbOrds = await offlineDB.getAll<Orden>("ordenes");
       if (idbOrds && idbOrds.length > 0) {
         return idbOrds
-          .filter((o) => isSameTenant(o.tenant_id, tenant_id))
+          .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
           .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
       }
     } catch {}
     return local;
   }
 
-  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  // 2. Buscar en Supabase con paginación automática por bloques de 1000 para superar el límite de PostgREST
   try {
-    const fetchPromise = supabase
-      .from("ordenes")
-      .select("*")
-      .eq("tenant_id", tenant_id)
-      .order("creado_en", { ascending: false });
+    const PAGE_SIZE = 1000;
+    let allData: Orden[] = [];
+    let from = 0;
+    let hasMore = true;
 
-    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
-    );
+    while (hasMore) {
+      const { data, error } = await supabase
+        .from("ordenes")
+        .select("*")
+        .eq("tenant_id", realId)
+        .order("creado_en", { ascending: false })
+        .range(from, from + PAGE_SIZE - 1);
 
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+      if (error || !data || data.length === 0) {
+        hasMore = false;
+        break;
+      }
 
-    if (!error && data) {
+      allData.push(...data);
+      if (data.length < PAGE_SIZE) {
+        hasMore = false;
+      } else {
+        from += PAGE_SIZE;
+      }
+    }
+
+    if (allData.length > 0) {
       if (isBrowser()) {
-        const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id));
-        const combined = [...data];
+        const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
+        const combined = [...allData];
         local.forEach((lo) => {
           if (!combined.some((co) => co.id === lo.id)) combined.push(lo);
         });
@@ -2313,14 +2371,14 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
         try { offlineDB.putMany("ordenes", sorted); } catch {}
         return sorted;
       }
-      return data;
+      return allData;
     }
   } catch (e) {
     console.warn("Aviso al consultar órdenes en Supabase:", e);
   }
 
   return read<Orden[]>(KEY.ordenes, [])
-    .filter((o) => isSameTenant(o.tenant_id, tenant_id))
+    .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
     .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
 }
 
@@ -2330,6 +2388,7 @@ export async function getOrdenesByPeriod(filters: {
   desde?: string;
   hasta?: string;
 }): Promise<Orden[]> {
+  const realId = resolveTenantId(filters.tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
     const all = await getOrdenes(filters.tenant_id);
     return all.filter((o) => {
@@ -2341,7 +2400,7 @@ export async function getOrdenesByPeriod(filters: {
   }
 
   try {
-    let query = supabase.from("ordenes").select("*").eq("tenant_id", filters.tenant_id);
+    let query = supabase.from("ordenes").select("*").eq("tenant_id", realId);
 
     if (filters.empleado_id && filters.empleado_id !== "all") {
       query = query.eq("empleado_id", filters.empleado_id);
@@ -2355,12 +2414,7 @@ export async function getOrdenesByPeriod(filters: {
       query = query.lte("creado_en", filters.hasta + "T23:59:59Z");
     }
 
-    const fetchPromise = query.order("creado_en", { ascending: false });
-    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
-    );
-
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+    const { data, error } = await query.order("creado_en", { ascending: false }).range(0, 4999);
     if (!error && data) return data;
   } catch (e) {}
 
@@ -2477,55 +2531,74 @@ export async function getOrdenById(id: string): Promise<Orden | undefined> {
 }
 
 export async function nextOrdenNumero(tenant_id: string): Promise<string> {
+  const realId = resolveTenantId(tenant_id);
   const d = new Date();
   const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
 
   // 1. Si no hay conexión, calcular secuencial local de inmediato en 0ms
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
     let next = 1;
     if (local.length > 0) {
       const highest = local.reduce((max, o) => {
-        const match = (o.numero || "").match(/-(\d+)$/);
-        return match ? Math.max(max, parseInt(match[1])) : max;
+        const match = (o.numero || "").match(new RegExp(`^KL-${ym}-(\\d+)$`));
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num < 8000) return Math.max(max, num);
+        }
+        return max;
       }, 0);
-      next = highest + 1;
+      next = highest > 0 ? highest + 1 : local.length + 1;
     }
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   }
 
-  // 2. Intentar buscar en Supabase con timeout de 1500ms
+  // 2. Buscar en Supabase las órdenes del mes actual para obtener la secuencia correcta
   try {
-    const fetchPromise = supabase
+    const { data, error } = await supabase
       .from("ordenes")
       .select("numero")
-      .eq("tenant_id", tenant_id)
+      .eq("tenant_id", realId)
+      .ilike("numero", `KL-${ym}-%`)
       .order("creado_en", { ascending: false })
-      .limit(1);
-
-    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
-    );
-
-    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
+      .limit(50);
 
     let next = 1;
     if (!error && data && data.length > 0) {
-      const lastNum = data[0].numero;
-      const match = lastNum.match(/-(\d+)$/);
-      if (match) next = parseInt(match[1]) + 1;
+      let maxNum = 0;
+      for (const row of data) {
+        const match = (row.numero || "").match(new RegExp(`^KL-${ym}-(\\d+)$`));
+        if (match) {
+          const num = parseInt(match[1]);
+          if (num < 8000) {
+            maxNum = Math.max(maxNum, num);
+          }
+        }
+      }
+      if (maxNum > 0) {
+        next = maxNum + 1;
+      } else {
+        const { count } = await supabase
+          .from("ordenes")
+          .select("id", { count: "exact", head: true })
+          .eq("tenant_id", realId)
+          .gte("creado_en", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01T00:00:00Z`);
+        next = (count || 0) + 1;
+      }
     } else {
-      const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+      const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
       next = local.length + 1;
     }
 
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   } catch (e) {
-    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => o.tenant_id === tenant_id);
+    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
     const next = local.length + 1;
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   }
 }
+
+export const nextNumeroOrden = nextOrdenNumero;
 
 // ============ Caja (Supabase) ============
 export async function getCajas(tenant_id: string): Promise<Caja[]> {
@@ -3087,14 +3160,15 @@ export async function savePlan(p: Plan) {
       precio_anual: p.precio_anual,
       limite_empleados: p.limite_empleados,
       limite_ordenes_mes: p.limite_ordenes_mes,
-      whatsapp: !!p.modulos.whatsapp,
-      facturacion_fiscal: !!p.modulos.facturacion_fiscal,
-      multisucursal: !!p.modulos.multisucursal,
-      logistica: !!p.modulos.logistica,
-      procesos: p.modulos.procesos !== undefined ? !!p.modulos.procesos : true,
-      estanteria: p.modulos.estanteria !== undefined ? !!p.modulos.estanteria : true,
+      whatsapp: !!p.modulos?.whatsapp,
+      facturacion_fiscal: !!p.modulos?.facturacion_fiscal,
+      multisucursal: !!p.modulos?.multisucursal,
+      logistica: !!p.modulos?.logistica,
+      procesos: !!p.modulos?.procesos,
+      estanteria: !!p.modulos?.estanteria,
+      pos_offline: !!p.modulos?.pos_offline,
       limite_whatsapp_mes: p.limite_whatsapp_mes,
-      destacado: p.destacado,
+      destacado: !!p.destacado,
       es_especial: !!p.es_especial,
       titulo_especial: p.titulo_especial || "Plan especial",
       polar_product_monthly_url: p.polar_product_monthly_url,
@@ -3104,30 +3178,7 @@ export async function savePlan(p: Plan) {
       limite_sucursales_adicionales: p.limite_sucursales_adicionales,
     });
     if (error) {
-      console.warn(
-        "Fallo al guardar columnas extendidas en Supabase (posiblemente falta migrar). Reintentando con campos base:",
-        error,
-      );
-      // Fallback: retry without newer columns that may not exist in Supabase yet
-      const { error: fallbackError } = await supabase.from("planes").upsert({
-        id: p.id,
-        nombre: p.nombre,
-        precio_mensual: p.precio_mensual,
-        precio_anual: p.precio_anual,
-        limite_empleados: p.limite_empleados,
-        limite_ordenes_mes: p.limite_ordenes_mes,
-        whatsapp: !!p.modulos.whatsapp,
-        facturacion_fiscal: !!p.modulos.facturacion_fiscal,
-        multisucursal: !!p.modulos.multisucursal,
-        logistica: !!p.modulos.logistica,
-        limite_whatsapp_mes: p.limite_whatsapp_mes,
-        destacado: p.destacado,
-        polar_product_monthly_url: p.polar_product_monthly_url,
-        polar_product_yearly_url: p.polar_product_yearly_url,
-      });
-      if (fallbackError) {
-        console.error("Fallback save also failed:", fallbackError);
-      }
+      console.error("Error upserting plan in Supabase:", error);
     }
   } catch (e) {
     console.error("Error saving plan:", e);
@@ -3293,8 +3344,20 @@ export async function login(
 }
 
 export async function logout() {
-  await supabase.auth.signOut();
+  try {
+    await supabase.auth.signOut();
+  } catch (e) {
+    console.warn("Error signing out from Supabase:", e);
+  }
   setSession(null);
+  if (typeof window !== "undefined") {
+    try {
+      localStorage.removeItem("klynn_last_auth_user");
+      localStorage.removeItem("klynn_active_tenant");
+      localStorage.removeItem("lvx:session");
+      localStorage.removeItem("klynn_emp_id_admin");
+    } catch {}
+  }
 }
 
 export async function switchSession(tenantId: string, email: string): Promise<boolean> {

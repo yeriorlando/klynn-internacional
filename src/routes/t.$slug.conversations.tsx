@@ -28,6 +28,8 @@ import { useRequireAuth } from "@/lib/useRequireAuth";
 import { toast } from "sonner";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
+import { useGlobalConfig } from "@/hooks/use-queries";
+import { getKlynnConnectInstanceName } from "@/lib/whatsapp";
 
 function BoringAvatar({ name, size }: { name: string; size: number }) {
   const colors = ["#00686c", "#32c2b9", "#edecb3", "#fad928", "#ff9915"];
@@ -94,7 +96,8 @@ function BoringAvatar({ name, size }: { name: string; size: number }) {
 
 function formatPhoneNumber(phone: string): string {
   if (!phone) return "";
-  const clean = phone.replace(/\D/g, "");
+  const str = String(phone);
+  const clean = str.replace(/\D/g, "");
   
   if (clean.length === 11 && clean.startsWith("1")) {
     return `+1 (${clean.slice(1, 4)}) ${clean.slice(4, 7)}-${clean.slice(7)}`;
@@ -102,7 +105,7 @@ function formatPhoneNumber(phone: string): string {
     return `(${clean.slice(0, 3)}) ${clean.slice(3, 6)}-${clean.slice(6)}`;
   }
   
-  return phone.startsWith("+") ? phone : `+${phone}`;
+  return str.startsWith("+") ? str : `+${str}`;
 }
 
 interface DBConversation {
@@ -263,34 +266,75 @@ function ConversationsPage() {
   const tenant = user && user.tenant && user.tenant.id !== '__loading__' ? user.tenant : null;
   const tenantId = tenant?.id;
   const wa = tenant?.config?.whatsapp;
+  const { data: globalCfg } = useGlobalConfig();
+  const engine = globalCfg?.whatsapp_engine || "klynn_connect";
+  const isKlynnConnect = engine === "klynn_connect";
 
-  const getProxiedUrl = (url: string) => {
+  const getProxiedUrl = (url: string, msgId?: string) => {
     if (!url) return "";
+    if (url.startsWith("data:")) return url;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
     if (url.includes("wasenderapi.com")) {
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
       const apiKey = wa?.api_key || "";
       return `${supabaseUrl}/functions/v1/wasender-proxy?action=media&url=${encodeURIComponent(url)}&api_key=${encodeURIComponent(apiKey)}`;
+    }
+    if ((url.includes("mmg.whatsapp.net") || isKlynnConnect) && msgId) {
+      return `${supabaseUrl}/functions/v1/klynn-connect-proxy?action=media&msg_id=${encodeURIComponent(msgId)}`;
     }
     return url;
   };
 
+  const handleOpenDocument = (url: string, filename: string) => {
+    const proxied = getProxiedUrl(url);
+    if (proxied.startsWith('data:')) {
+      try {
+        const parts = proxied.split(';base64,');
+        const contentType = parts[0].replace('data:', '') || 'application/pdf';
+        const raw = window.atob(parts[1]);
+        const rawLength = raw.length;
+        const uInt8Array = new Uint8Array(rawLength);
+        for (let i = 0; i < rawLength; ++i) {
+          uInt8Array[i] = raw.charCodeAt(i);
+        }
+        const blob = new Blob([uInt8Array], { type: contentType });
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || 'documento.pdf';
+        a.target = '_blank';
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(() => {
+          document.body.removeChild(a);
+          URL.revokeObjectURL(blobUrl);
+        }, 2000);
+      } catch (err) {
+        console.error('Error opening base64 document:', err);
+        window.open(proxied, '_blank');
+      }
+    } else {
+      window.open(proxied, '_blank');
+    }
+  };
+
   const formatLastMsg = (msg: string | null | undefined) => {
     if (!msg) return "";
-    if (msg.startsWith("[image]")) {
-      const parts = msg.replace("[image]", "").trim().split("|");
+    const m = String(msg);
+    if (m.startsWith("[image]")) {
+      const parts = m.replace("[image]", "").trim().split("|");
       return `📷 Imagen${parts[1] ? ': ' + parts[1] : ''}`;
     }
-    if (msg.startsWith("[video]")) {
+    if (m.startsWith("[video]")) {
       return "🎥 Video";
     }
-    if (msg.startsWith("[audio]")) {
+    if (m.startsWith("[audio]")) {
       return "🎙️ Nota de voz";
     }
-    if (msg.startsWith("[document]")) {
-      const parts = msg.replace("[document]", "").trim().split("|");
+    if (m.startsWith("[document]")) {
+      const parts = m.replace("[document]", "").trim().split("|");
       return `📄 ${parts[1] || "Documento"}`;
     }
-    return msg;
+    return m;
   };
 
   // 1. Fetch Conversations
@@ -605,43 +649,50 @@ function ConversationsPage() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const type = file.type.startsWith('image/') ? 'image' : 
-                 file.type.startsWith('video/') ? 'video' : 'document';
+    const fileType = file.type || '';
+    const type = fileType.startsWith('image/') ? 'image' : 
+                 fileType.startsWith('video/') ? 'video' : 
+                 fileType.startsWith('audio/') ? 'audio' : 'document';
     
     await uploadAndSendMedia(file, type);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
   const uploadAndSendMedia = async (file: File | Blob, type: string) => {
-    if (!wa || !wa.enabled || !wa.api_key) {
+    if (!isKlynnConnect && (!wa || !wa.enabled || !wa.api_key)) {
       toast.error("❌ WhatsApp no está configurado en tu sucursal");
       return;
     }
     setUploading(true);
     try {
       const base64Data = await fileToBase64(file);
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const filename = file instanceof File ? file.name : (type === 'audio' ? 'audio.mp3' : 'archivo');
 
-      // Upload through proxy to avoid CORS
-      const response = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=upload`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          api_key: wa.api_key,
-          base_url: wa.base_url || 'https://wasenderapi.com',
-          base64: base64Data
-        }),
-      });
+      if (isKlynnConnect) {
+        await handleSend(type, base64Data, filename);
+      } else {
+        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+        // Upload through proxy to avoid CORS
+        const response = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=upload`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ 
+            api_key: wa.api_key,
+            base_url: wa.base_url || 'https://wasenderapi.com',
+            base64: base64Data
+          }),
+        });
 
-      const result = await response.json().catch(() => ({}));
-      const success = result.success === true;
-      const publicUrl = result.publicUrl || result.data?.url || result.url;
+        const result = await response.json().catch(() => ({}));
+        const success = result.success === true;
+        const publicUrl = result.publicUrl || result.data?.url || result.url;
 
-      if (!success || !publicUrl) {
-        throw new Error(result.message || result.error || "Error al subir archivo");
+        if (!success || !publicUrl) {
+          throw new Error(result.message || result.error || "Error al subir archivo");
+        }
+
+        await handleSend(type, publicUrl, filename);
       }
-
-      await handleSend(type, publicUrl, file instanceof File ? file.name : 'audio.ogg');
     } catch (err: any) {
       console.error("Upload error:", err);
       toast.error(`❌ Error al subir archivo: ${err.message}`);
@@ -652,7 +703,7 @@ function ConversationsPage() {
 
   // --- SEND MESSAGE LOGIC ---
   const handleSend = async (type = 'text', mediaUrl?: string, filename?: string) => {
-    if ((type === 'text' && !messageText.trim()) || !selectedConvId) return;
+    if ((type === 'text' && !messageText.trim()) || !selectedConvId || !tenant) return;
 
     const currentMsg = messageText;
     const originalReplyingTo = replyingTo;
@@ -665,7 +716,7 @@ function ConversationsPage() {
     }
     setReplyingTo(null);
 
-    if (!wa || !wa.enabled || !wa.api_key) {
+    if (!isKlynnConnect && (!wa || !wa.enabled || !wa.api_key)) {
       toast.error("❌ WhatsApp no está configurado o habilitado en Configuración");
       if (type === 'text') setMessageText(currentMsg);
       return;
@@ -675,54 +726,99 @@ function ConversationsPage() {
     if (!selectedConv) return;
 
     const cleanPhone = selectedConv.phone.replace(/\D/g, '');
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
     
-    // Build request body using WaSender's unified /api/send-message format
-    let requestBody: any = { 
-      api_key: wa.api_key,
-      base_url: wa.base_url || 'https://wasenderapi.com',
-      to: cleanPhone, 
-      instance_id: wa.instance 
+    // Optimistic UI Update: render message immediately in 0ms!
+    const tempId = `temp_${Date.now()}`;
+    const initialDisplayContent = type === 'text' ? currentMsg : `[${type}] ${mediaUrl}${filename ? '|' + filename : ''}`;
+    const optimisticMsg: DBMessage = {
+      id: tempId,
+      conversation_id: selectedConvId,
+      role: 'assistant',
+      content: initialDisplayContent,
+      wamid: tempId,
+      status: 'pending',
+      reply_to_id: originalReplyingTo ? originalReplyingTo.id : null,
+      time: new Date().toISOString(),
+      created_at: new Date().toISOString()
     };
-
-    if (type === 'text') {
-      requestBody.text = currentMsg;
-    } else if (type === 'image') {
-      requestBody.imageUrl = mediaUrl;
-    } else if (type === 'audio') {
-      requestBody.audioUrl = mediaUrl;
-      requestBody.ptt = true;
-    } else if (type === 'video') {
-      requestBody.videoUrl = mediaUrl;
-    } else if (type === 'document') {
-      requestBody.documentUrl = mediaUrl;
-      requestBody.filename = filename || 'document';
-    }
-
-    if (originalReplyingTo && originalReplyingTo.wamid) {
-      const parsedId = parseInt(originalReplyingTo.wamid, 10);
-      if (!isNaN(parsedId)) {
-        requestBody.replyTo = parsedId;
-      }
-    }
+    setMessages(prev => [...prev, optimisticMsg]);
+    setConversations(prev => prev.map(c => c.id === selectedConvId ? { ...c, last_msg: initialDisplayContent, time: new Date().toISOString() } : c));
 
     try {
-      // Send through proxy to avoid CORS
-      const res = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=send`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(requestBody),
-      });
+      let resData: any = {};
+      let wamid = `wamsg_${Date.now()}`;
 
-      const resData = await res.json().catch(() => ({}));
-      if (!res.ok || resData.status === 'error') {
-        throw new Error(resData.message || `HTTP ${res.status}`);
+      if (isKlynnConnect) {
+        const action = type === 'text' ? 'send_message' : 'send_media';
+        const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=${action}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            instance_name: wa?.instance || getKlynnConnectInstanceName(tenant),
+            number: cleanPhone,
+            text: currentMsg,
+            mediaUrl,
+            mediaType: type,
+            fileName: filename,
+            server_url: globalCfg?.klynn_connect_url || 'https://wa.klynn.com.do',
+            api_key: globalCfg?.klynn_connect_apikey || 'klynn_evolution_secret_key_2026',
+          }),
+        });
+
+        resData = await res.json().catch(() => ({}));
+        if (!res.ok || resData.ok === false) {
+          throw new Error(resData.error || resData.message || `HTTP ${res.status}`);
+        }
+        wamid = resData.data?.key?.id || `kc_${Date.now()}`;
+      } else {
+        // WaSender proxy flow
+        let requestBody: any = { 
+          api_key: wa?.api_key,
+          base_url: wa?.base_url || 'https://wasenderapi.com',
+          to: cleanPhone, 
+          instance_id: wa?.instance 
+        };
+
+        if (type === 'text') {
+          requestBody.text = currentMsg;
+        } else if (type === 'image') {
+          requestBody.imageUrl = mediaUrl;
+        } else if (type === 'audio') {
+          requestBody.audioUrl = mediaUrl;
+          requestBody.ptt = true;
+        } else if (type === 'video') {
+          requestBody.videoUrl = mediaUrl;
+        } else if (type === 'document') {
+          requestBody.documentUrl = mediaUrl;
+          requestBody.filename = filename || 'document';
+        }
+
+        if (originalReplyingTo && originalReplyingTo.wamid) {
+          const parsedId = parseInt(originalReplyingTo.wamid, 10);
+          if (!isNaN(parsedId)) {
+            requestBody.replyTo = parsedId;
+          }
+        }
+
+        const res = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(requestBody),
+        });
+
+        resData = await res.json().catch(() => ({}));
+        if (!res.ok || resData.status === 'error') {
+          throw new Error(resData.message || `HTTP ${res.status}`);
+        }
+        wamid = resData.data?.id || `wsnd_${Date.now()}`;
       }
 
-      const wamid = resData.data?.id || `wsnd_${Date.now()}`;
-      const displayContent = type === 'text' ? currentMsg : `[${type}] ${mediaUrl}${filename ? '|' + filename : ''}`;
+      // Store lightweight reference in DB
+      let finalStoredContent = initialDisplayContent;
+      if (type !== 'text' && isKlynnConnect) {
+        finalStoredContent = `[${type}] https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}${filename ? '|' + filename : ''}`;
+      }
 
       // Insert message into DB from client
       const { data: newMsg, error: insertErr } = await supabase
@@ -731,7 +827,7 @@ function ConversationsPage() {
           tenant_id: tenant.id,
           conversation_id: selectedConvId,
           role: 'assistant',
-          content: displayContent,
+          content: finalStoredContent,
           wamid: wamid,
           payload: resData,
           status: 'sent',
@@ -741,22 +837,28 @@ function ConversationsPage() {
         .select()
         .single();
 
-      if (insertErr) throw insertErr;
+      if (insertErr) {
+        console.error("Error inserting message:", insertErr);
+      }
+
+      if (newMsg) {
+        setMessages(prev => prev.map(m => m.id === tempId ? newMsg : m));
+      } else {
+        setMessages(prev => prev.map(m => m.id === tempId ? { ...m, status: 'sent', wamid } : m));
+      }
 
       // Update conversation in DB
       await supabase
         .from('conversations')
         .update({
-          last_msg: displayContent,
+          last_msg: finalStoredContent,
           time: new Date().toISOString()
         })
         .eq('id', selectedConvId);
 
-      // Let real-time handle adding the message to UI.
-      // As fallback (if real-time not active), refetch all messages.
-      fetchMessages(selectedConvId);
-      fetchConversations();
     } catch (err: any) {
+      // Remove optimistic message if failed
+      setMessages(prev => prev.filter(m => m.id !== tempId));
       toast.error(`❌ Error al enviar mensaje: ${err.message}`);
       if (type === 'text') setMessageText(currentMsg);
     }
@@ -974,12 +1076,12 @@ function ConversationsPage() {
             </div>
 
             {/* Config Warning banner if API not ready */}
-            {(!wa || !wa.enabled || !wa.api_key) && (
+            {!isKlynnConnect && (!wa || !wa.enabled || !wa.api_key) && (
               <div className="bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/40 p-3 px-5 flex items-start gap-3 text-amber-800 dark:text-amber-400 text-xs shrink-0 select-none z-10">
                 <AlertTriangle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
                 <div>
                   <p className="font-bold">WhatsApp no está conectado</p>
-                  <p className="mt-0.5 opacity-80">Por favor, ve a Configuración &gt; pestaña WhatsApp y configura tus credenciales de WASenderAPI para habilitar el chat interactivo en vivo.</p>
+                  <p className="mt-0.5 opacity-80">Por favor, ve a Configuración &gt; pestaña WhatsApp y vincula tu número para habilitar el chat interactivo en vivo.</p>
                 </div>
               </div>
             )}
@@ -1008,13 +1110,14 @@ function ConversationsPage() {
                   const repliedMsg = msg.reply_to_id ? messages.find(m => m.id === msg.reply_to_id) : null;
 
                   // Render link if message content is an attachment
-                  const isMedia = msg.content.startsWith('[image]') || msg.content.startsWith('[video]') || msg.content.startsWith('[audio]') || msg.content.startsWith('[document]');
+                  const contentStr = msg.content || "";
+                  const isMedia = contentStr.startsWith('[image]') || contentStr.startsWith('[video]') || contentStr.startsWith('[audio]') || contentStr.startsWith('[document]');
                   let mediaType = "";
                   let mediaUrl = "";
                   let mediaCaption = "";
                   let mediaFilename = "";
                   if (isMedia) {
-                    const lines = msg.content.split('\n');
+                    const lines = contentStr.split('\n');
                     const match = lines[0].match(/^\[(\w+)\]\s*(.*)$/);
                     if (match) {
                       mediaType = match[1];
@@ -1078,10 +1181,10 @@ function ConversationsPage() {
                             <div className="space-y-1 my-0.5">
                               {mediaType === 'image' && (
                                 <img 
-                                  src={getProxiedUrl(mediaUrl)} 
+                                  src={getProxiedUrl(mediaUrl, msg.id)} 
                                   alt="WhatsApp attachment" 
                                   className="rounded-xl max-h-60 object-cover max-w-full hover:scale-[1.01] transition-transform shadow-sm cursor-pointer" 
-                                  onClick={() => setActiveMediaModalUrl(getProxiedUrl(mediaUrl))} 
+                                  onClick={() => setActiveMediaModalUrl(getProxiedUrl(mediaUrl, msg.id))} 
                                   onError={(e) => {
                                     const target = e.currentTarget;
                                     const retries = parseInt(target.getAttribute('data-retry') || '0', 10);
@@ -1104,7 +1207,7 @@ function ConversationsPage() {
                               )}
                               {mediaType === 'video' && (
                                 <video 
-                                  src={getProxiedUrl(mediaUrl)} 
+                                  src={getProxiedUrl(mediaUrl, msg.id)} 
                                   controls 
                                   className="rounded-xl max-h-60 max-w-full shadow-sm" 
                                   onError={(e) => {
@@ -1128,13 +1231,17 @@ function ConversationsPage() {
                                 />
                               )}
                               {mediaType === 'audio' && (
-                                <audio src={getProxiedUrl(mediaUrl)} controls className="max-w-full scale-95 origin-left" />
+                                <audio src={getProxiedUrl(mediaUrl, msg.id)} controls className="max-w-full scale-95 origin-left" />
                               )}
                               {mediaType === 'document' && (
-                                <a href={getProxiedUrl(mediaUrl)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2.5 p-2 bg-black/5 hover:bg-black/10 rounded-xl transition-colors text-xs font-bold max-w-full">
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenDocument(mediaUrl, mediaFilename || 'documento.pdf')}
+                                  className="flex items-center gap-2.5 p-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 rounded-xl transition-colors text-xs font-bold max-w-full text-left cursor-pointer border border-black/5"
+                                >
                                   <FileText className="h-5 w-5 text-primary shrink-0" />
-                                  <span className="truncate">{mediaFilename || mediaUrl.split('/').pop() || 'Ver Documento'}</span>
-                                </a>
+                                  <span className="truncate">{mediaFilename || 'Ver Documento'}</span>
+                                </button>
                               )}
                               {mediaCaption && (
                                 <p className="leading-relaxed whitespace-pre-wrap text-sm mt-1">{mediaCaption}</p>

@@ -3179,12 +3179,11 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         ncf: finalNCF,
         ncf_vencimiento: finalNcfVencimiento,
         tipo_ecf: finalTipoECF,
-        ecf_status: finalEcfStatus,
         ecf_id: finalEcfId,
         ecf_qr: finalEcfQr,
         ecf_security_code: finalEcfSecurityCode,
         ecf_signature_date: finalEcfSignatureDate,
-        ecf_status: finalEcfSecurityCode?.startsWith("SBX") ? "PENDING_OFFLINE_TRANSMISSION" : (orden as any).ecf_status,
+        ecf_status: finalEcfStatus || (finalEcfSecurityCode?.startsWith("SBX") ? "PENDING_OFFLINE_TRANSMISSION" : (orden as any).ecf_status),
         pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : orden.pago_referencia
       });
 

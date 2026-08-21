@@ -27,13 +27,13 @@ import {
 import {
   saveTenant, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
-  getTenantPlan, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence,
+  getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence,
   isModuleEnabled,
   type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
 import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC } from "@/lib/fiscal";
-import { notificarWhatsApp } from "@/lib/whatsapp";
+import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -46,7 +46,7 @@ import {
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
-  Percent, Scale, Wallet, Shirt, Maximize2, Server
+  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink
 } from "lucide-react";
 import {
   connectBluetoothDevice,
@@ -413,12 +413,22 @@ Característica escritura: —
     if (params.get('polar_success') === 'true') {
       setShowSuccess(true);
       window.history.replaceState({}, '', window.location.pathname);
+      const targetTenantId = auth?.tenant?.id;
+      if (targetTenantId && targetTenantId !== '__loading__') {
+        getTenantById(targetTenantId).then((fresh) => {
+          if (fresh) {
+            setTenant(fresh);
+            queryClient.invalidateQueries();
+            toast.success("¡Tu suscripción se ha sincronizado correctamente!");
+          }
+        });
+      }
     }
     const t = params.get('tab');
     if (t && ['perfil', 'apariencia', 'factura', 'caja', 'fiscal', 'whatsapp', 'plan'].includes(t)) {
       setActiveTab(t);
     }
-  }, []);
+  }, [auth?.tenant?.id, queryClient]);
 
   if (!auth || auth.tenant.id === '__loading__' || !tenant) {
     return <GlobalPageLoader text="Cargando configuración..." />;
@@ -2528,6 +2538,10 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             period={billingPeriod}
             bank={globalConfig?.bankDetails}
             tenant={tenant}
+            onTenantUpdated={(fresh) => {
+              setTenant(fresh);
+              queryClient.invalidateQueries();
+            }}
             onSuccess={() => { setShowCheckout(false); setShowSuccess(true); }}
           />
 
@@ -2576,6 +2590,11 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   tenant: Tenant; wa: WhatsAppConfig; saveWA: (w: Partial<WhatsAppConfig>) => void; enabled: boolean; onTabChange: (t: string) => void;
 }) {
   const { data: plans = [] } = usePlans();
+  const { data: globalCfg } = useGlobalConfig();
+  const engine = globalCfg?.whatsapp_engine || "klynn_connect";
+  const isKlynnConnect = engine === "klynn_connect";
+  const instanceName = wa.instance || getKlynnConnectInstanceName(tenant);
+
   const [draft, setDraft] = useState<WhatsAppConfig>(() => {
     const baseWa = { ...DEFAULT_CONFIG.whatsapp, ...wa };
     if (baseWa.base_url?.includes("wapisender")) {
@@ -2583,6 +2602,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     }
     return {
       ...baseWa,
+      instance: baseWa.instance || instanceName,
       plantilla_creada: wa.plantilla_creada || DEFAULT_CONFIG.whatsapp.plantilla_creada,
       plantilla_lista: wa.plantilla_lista || DEFAULT_CONFIG.whatsapp.plantilla_lista,
       plantilla_entregada: wa.plantilla_entregada || DEFAULT_CONFIG.whatsapp.plantilla_entregada,
@@ -2591,42 +2611,172 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
       plantilla_sin_retirar: wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar,
     };
   });
+
   const [testPhone, setTestPhone] = useState(tenant.telefono || "");
   const [sending, setSending] = useState(false);
 
+  // Estados Klynn Connect
+  const [kcStatus, setKcStatus] = useState<"checking" | "open" | "close" | "connecting">("checking");
+  const [kcPhone, setKcPhone] = useState<string>(wa.klynn_connect_phone || "");
+  const [kcProfilePic, setKcProfilePic] = useState<string>(wa.klynn_connect_profile_pic || "");
+  const [qrModalOpen, setQrModalOpen] = useState(false);
+  const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
+  const [loadingQr, setLoadingQr] = useState(false);
+  const [disconnecting, setDisconnecting] = useState(false);
+  const pollIntervalRef = useRef<any>(null);
+
+  // Consultar estado de conexión
+  const checkStatus = async () => {
+    try {
+      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=get_status`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instance_name: instanceName,
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        const state = data.state === "open" ? "open" : (data.state === "connecting" ? "connecting" : "close");
+        setKcStatus(state);
+        if (data.phone) setKcPhone(data.phone);
+        if (data.profilePic) setKcProfilePic(data.profilePic);
+        return state;
+      }
+    } catch (e) {
+      console.error("Error comprobando estado de Klynn Connect:", e);
+    }
+    setKcStatus("close");
+    return "close";
+  };
+
+  useEffect(() => {
+    if (isKlynnConnect && enabled) {
+      checkStatus();
+    }
+  }, [isKlynnConnect, enabled, instanceName]);
+
+  // Iniciar vinculación y abrir modal QR
+  async function handleStartConnect() {
+    setLoadingQr(true);
+    setQrCodeBase64(null);
+    setQrModalOpen(true);
+
+    try {
+      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instance_name: instanceName,
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok) {
+        if (data.state === "open") {
+          setKcStatus("open");
+          setQrModalOpen(false);
+          toast.success("¡WhatsApp ya se encuentra conectado!");
+          return;
+        }
+        if (data.qrcode) {
+          setQrCodeBase64(data.qrcode.startsWith("data:") ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
+        }
+      }
+    } catch (err) {
+      toast.error("Error al generar código QR de conexión");
+    } finally {
+      setLoadingQr(false);
+    }
+
+    // Polling cada 2.5 segundos mientras el modal esté abierto
+    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    pollIntervalRef.current = setInterval(async () => {
+      const st = await checkStatus();
+      if (st === "open") {
+        clearInterval(pollIntervalRef.current);
+        setQrModalOpen(false);
+        toast.success("¡WhatsApp conectado exitosamente a Klynn Connect! 🎉");
+        const nextWa = { ...draft, enabled: true, instance: instanceName, klynn_connect_status: "open" as const };
+        setDraft(nextWa);
+        saveWA(nextWa);
+      }
+    }, 2500);
+  }
+
+  // Refrescar QR manualmente
+  async function handleRefreshQr() {
+    setLoadingQr(true);
+    try {
+      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=get_qr`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instance_name: instanceName,
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (data.ok && data.qrcode) {
+        setQrCodeBase64(data.qrcode.startsWith("data:") ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
+        toast.success("Código QR actualizado");
+      }
+    } catch (e) {
+      toast.error("Error al refrescar código QR");
+    } finally {
+      setLoadingQr(false);
+    }
+  }
+
+  // Desvincular sesión
+  async function handleDisconnect() {
+    setDisconnecting(true);
+    try {
+      await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          instance_name: instanceName,
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+        }),
+      });
+      setKcStatus("close");
+      setKcPhone("");
+      setKcProfilePic("");
+      toast.success("WhatsApp desvinculado de Klynn Connect");
+    } catch (e) {
+      toast.error("Error al desvincular");
+    } finally {
+      setDisconnecting(false);
+    }
+  }
+
+  useEffect(() => {
+    return () => {
+      if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+    };
+  }, []);
+
   async function probar() {
+    if (!testPhone) {
+      toast.error("Ingresa un número para enviar la prueba");
+      return;
+    }
     setSending(true);
     saveWA(draft);
-    const ordenDemo = {
-      id: "demo", tenant_id: tenant.id, numero: "KL-202605-0003", cliente_id: "demo",
-      empleado_id: "demo", servicios: [], 
-      items: [
-        { descripcion: "Body de bebé", cantidad: 1, precio_unitario: 70 },
-        { descripcion: "Manta de bebé", cantidad: 1, precio_unitario: 140 },
-        { descripcion: "Camisa manga corta", cantidad: 1, precio_unitario: 150 },
-        { descripcion: "Camisa manga larga", cantidad: 1, precio_unitario: 180 }
-      ], 
-      subtotal: 540, itbis: 0, descuento: 0,
-      total: 540, pagado: 540, saldo: 0, metodo_pago: "EFECTIVO", estado: "RECIBIDA",
-      fecha_entrega: "11/5/2026",
-      es_urgente: false,
-      creado_en: new Date().toISOString(),
-    } as any;
-    const cliDemo = { 
-      id: "demo", 
-      tenant_id: tenant.id, 
-      nombre: "Yeri", 
-      telefono: testPhone, 
-      direccion: "Los Arroyos Del Norte #51",
-      tipo: "REGULAR", 
-      limite_credito: 0, 
-      creado_en: "" 
-    } as any;
-    const tenantDraft = { ...tenant, config: { ...(tenant.config || {}), whatsapp: draft } } as Tenant;
-    const r = await notificarWhatsApp(tenantDraft, cliDemo, ordenDemo, "creada");
+    const r = await sendTestWhatsAppMessage(
+      tenant,
+      testPhone,
+      `*Prueba de Conexión Klynn*\n\n¡Hola! Tu WhatsApp ha sido configurado correctamente en *${tenant.nombre}*. Ya puedes enviar recibos y avisos automáticos a tus clientes.`
+    );
     setSending(false);
-    if (r.ok) toast.success("Mensaje enviado ✓");
-    else toast.error("Error: " + (r.reason || "desconocido"));
+    if (r.ok) toast.success("¡Mensaje de prueba enviado con éxito! ✓");
+    else toast.error("Error al enviar: " + (r.reason || "desconocido"));
   }
 
   if (!enabled) {
@@ -2650,237 +2800,374 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   }
 
   return (
-    <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card overflow-hidden animate-in fade-in duration-300`}>
-      {/* Barra de progreso de uso */}
-      {(() => {
-        const waPlan = plans.find((p) => p.id === tenant?.plan_id) || getTenantPlan(tenant, plans);
-        const waLimit = waPlan?.limite_whatsapp_mes ?? 0;
-        const waSent = tenant?.whatsapp_sent_month || 0;
-        
-        if (waLimit <= 0) return null;
-
-        const usageRatio = waSent / waLimit;
-
-        return (
-          <div className="px-6 py-4 bg-slate-50/80 dark:bg-slate-900/60 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex-1">
-              <div className="flex justify-between items-end mb-1.5">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Uso Mensual de WhatsApp</span>
-                <span className="text-xs font-bold text-primary">
-                  {waSent} / {waLimit.toLocaleString()}
-                </span>
-              </div>
-              <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                <div 
-                  className={`h-full transition-all duration-500 ${
-                    usageRatio > 0.9 ? 'bg-red-500' : 'bg-primary'
-                  }`}
-                  style={{ width: `${Math.min(100, usageRatio * 100)}%` }}
-                />
-              </div>
-            </div>
-            <div className="flex items-center gap-2">
-              {usageRatio > 0.8 && (
-                <span className="text-[10px] bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-300 px-2 py-0.5 rounded font-bold animate-pulse">LÍMITE CERCA</span>
-              )}
-              <Button 
-                variant="outline" 
-                size="sm" 
-                className="h-8 text-[11px] rounded-xl font-bold border-primary/20 hover:bg-primary/5 cursor-pointer"
-                onClick={() => onTabChange("plan")}
-              >
-                MEJORAR PLAN
-              </Button>
-            </div>
-          </div>
-        );
-      })()}
-
-      <div className="p-6 md:p-8 space-y-6">
-        {/* Header Principal WhatsApp */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
-          <div className="flex items-center gap-3.5">
-            <div className="h-11 w-11 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
-              <svg className="h-5.5 w-5.5 fill-white" viewBox="0 0 24 24">
-                <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.197 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
-              </svg>
-            </div>
-            <div>
-              <h3 className="font-display font-bold text-lg text-foreground leading-tight">
-                Notificaciones por WhatsApp
-              </h3>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                Envía avisos automáticos a tus clientes desde tu propio número con{" "}
-                <a className="text-primary hover:underline font-semibold" href="https://wasenderapi.com/api-docs" target="_blank" rel="noreferrer">WASenderAPI</a>.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3 self-end sm:self-center">
-            <span className="text-xs font-bold text-muted-foreground">Activar WhatsApp</span>
-            <Switch checked={draft.enabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
-          </div>
-        </div>
-
-        {/* Campos de Conexión API */}
-        <div className="grid gap-5 md:grid-cols-2">
-          <Field label="API Token (Personal Access Token)" icon={Key} span>
-            <Input 
-              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-              type="password" 
-              placeholder="Tu token de wasenderapi.com" 
-              value={draft.api_key} 
-              onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} 
-            />
-          </Field>
-          <Field label="Session ID / Instance (Opcional)" hint="Solo si utilizas múltiples sesiones" icon={Smartphone}>
-            <Input 
-              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-              placeholder="default" 
-              value={draft.instance} 
-              onChange={(e) => setDraft({ ...draft, instance: e.target.value })} 
-            />
-          </Field>
-          <Field label="Base URL (Servidor)" icon={Globe}>
-            <Input 
-              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-              placeholder="https://wasenderapi.com" 
-              value={draft.base_url || ""} 
-              onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} 
-            />
-          </Field>
-        </div>
-
-        {/* Webhook Configuration for Incoming Messages */}
-        <div className="p-5 rounded-2xl border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10 space-y-3">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
-              <CheckCircle2 className="h-4.5 w-4.5" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-foreground">Enlace de Webhook para Mensajes Entrantes</h4>
-              <p className="text-[11px] text-muted-foreground">Configura este enlace en tu panel de WASenderAPI para sincronizar respuestas y chat en vivo.</p>
-            </div>
-          </div>
+    <>
+      <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card overflow-hidden animate-in fade-in duration-300`}>
+        {/* Barra de progreso de uso */}
+        {(() => {
+          const waPlan = plans.find((p) => p.id === tenant?.plan_id) || getTenantPlan(tenant, plans);
+          const waLimit = waPlan?.limite_whatsapp_mes ?? 0;
+          const waSent = tenant?.whatsapp_sent_month || 0;
           
-          <div className="flex items-center gap-2 bg-background border border-border rounded-xl p-2 shadow-xs">
-            <code className="flex-1 text-[11px] font-mono break-all text-slate-700 dark:text-slate-300 select-all leading-normal px-2">
-              {`${import.meta.env.VITE_SUPABASE_URL || "https://lqtjwcphidbwiwrnqbac.supabase.co"}/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`}
-            </code>
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              className="h-8 w-8 rounded-lg shrink-0 hover:bg-emerald-50 hover:text-emerald-700 dark:hover:bg-emerald-950 border-border cursor-pointer"
-              onClick={() => {
-                const urlStr = `${import.meta.env.VITE_SUPABASE_URL || "https://lqtjwcphidbwiwrnqbac.supabase.co"}/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`;
-                navigator.clipboard.writeText(urlStr);
-                toast.success("¡Enlace de Webhook copiado al portapapeles!");
-              }}
-            >
-              <Copy className="h-3.5 w-3.5" />
-            </Button>
-          </div>
-          <p className="text-[11px] text-emerald-700 dark:text-emerald-300 leading-normal font-medium">
-            <strong>Instrucciones:</strong> En wasenderapi.com edita tu sesión, activa la opción <strong>Webhook</strong> y pega este enlace. Habilita los eventos <code className="bg-emerald-100 dark:bg-emerald-950/70 px-1 py-0.5 rounded font-mono text-[10px]">messages.received</code> o <code className="bg-emerald-100 dark:bg-emerald-950/70 px-1 py-0.5 rounded font-mono text-[10px]">messages.upsert</code>.
-          </p>
-        </div>
+          if (waLimit <= 0) return null;
 
-        {/* Eventos automáticos con IconBoxes */}
-        <div className="space-y-3 pt-2">
-          <div className="flex items-center gap-2">
-            <Label className="font-bold text-xs text-slate-700 dark:text-slate-200">Eventos de Notificación Automática</Label>
+          const usageRatio = waSent / waLimit;
+
+          return (
+            <div className="px-6 py-4 bg-slate-50/80 dark:bg-slate-900/60 border-b border-border flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex justify-between items-end mb-1.5">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Uso Mensual de WhatsApp</span>
+                  <span className="text-xs font-bold text-primary">
+                    {waSent} / {waLimit.toLocaleString()}
+                  </span>
+                </div>
+                <div className="h-2 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full transition-all duration-500 ${
+                      usageRatio > 0.9 ? 'bg-red-500' : 'bg-primary'
+                    }`}
+                    style={{ width: `${Math.min(100, usageRatio * 100)}%` }}
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {usageRatio > 0.8 && (
+                  <span className="text-[10px] bg-red-100 text-red-600 dark:bg-red-950/60 dark:text-red-300 px-2 py-0.5 rounded font-bold animate-pulse">LÍMITE CERCA</span>
+                )}
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8 text-[11px] rounded-xl font-bold border-primary/20 hover:bg-primary/5 cursor-pointer"
+                  onClick={() => onTabChange("plan")}
+                >
+                  MEJORAR PLAN
+                </Button>
+              </div>
+            </div>
+          );
+        })()}
+
+        <div className="p-6 md:p-8 space-y-6">
+          {/* Header Principal WhatsApp */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
+            <div className="flex items-center gap-3.5">
+              <div className="h-11 w-11 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <svg className="h-5.5 w-5.5 fill-white" viewBox="0 0 24 24">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.148-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.197 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.05 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z" />
+                </svg>
+              </div>
+              <div>
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                  {isKlynnConnect ? "Klynn Connect — WhatsApp" : "Notificaciones por WhatsApp"}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  {isKlynnConnect 
+                    ? "Conexión nativa e instantánea para enviar tickets y avisos a tus clientes desde tu celular."
+                    : "Envía avisos automáticos a tus clientes desde tu propio número con WASenderAPI."}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3 self-end sm:self-center">
+              <span className="text-xs font-bold text-muted-foreground">Activar Notificaciones</span>
+              <Switch checked={draft.enabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
+            </div>
           </div>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            {[
-              { k: "notif_orden_creada", label: "Al crear orden", desc: "Envía recibo digital", icon: PlusCircle },
-              { k: "notif_orden_lista", label: "Cuando esté lista", desc: "Aviso de retiro", icon: Sparkles },
-              { k: "notif_orden_entregada", label: "Al entregar orden", desc: "Agradecimiento", icon: CheckCircle2 },
-              { k: "notif_orden_sin_retirar", label: "Prendas no retiradas", desc: "Recordatorio", icon: Clock },
-            ].map((it) => (
-              <div key={it.k} className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <it.icon className="h-4.5 w-4.5" />
+
+          {/* CUADRO DE CONEXIÓN KLYNN CONNECT */}
+          {isKlynnConnect ? (
+            <div className="space-y-4">
+              {kcStatus === "open" ? (
+                <div className="p-5 sm:p-6 rounded-2xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
+                  <div className="flex items-center gap-4">
+                    <div className="h-11 w-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                      <MessageCircle className="h-5.5 w-5.5 fill-emerald-500/20 text-emerald-600 dark:text-emerald-400" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300 font-bold text-[10px] uppercase tracking-wide">
+                          Conectado
+                        </Badge>
+                        <span className="text-[11px] font-mono text-muted-foreground">Instancia: {instanceName}</span>
+                      </div>
+                      <h4 className="text-sm md:text-base font-bold text-foreground mt-1">
+                        {kcPhone ? `Teléfono: ${(() => {
+                          const d = kcPhone.replace(/\D/g, "");
+                          if (d.length === 11 && d.startsWith("1")) {
+                            return `+1 (${d.slice(1, 4)}) ${d.slice(4, 7)}-${d.slice(7)}`;
+                          }
+                          if (d.length === 10) {
+                            return `+1 (${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+                          }
+                          return `+${d}`;
+                        })()}` : "WhatsApp vinculado correctamente"}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Tus clientes recibirán los tickets, avisos de ropa lista y mensajes directamente desde este número.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <span className="text-xs font-bold text-foreground block">{it.label}</span>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">{it.desc}</p>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <Button
+                      size="sm"
+                      className="bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-xl font-semibold text-xs h-9 px-3.5 shadow-none border-0 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      onClick={checkStatus}
+                    >
+                      <RefreshCw className="h-3.5 w-3.5" />
+                      <span>Verificar Estado</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white rounded-xl font-semibold text-xs h-9 px-3.5 shadow-none border-0 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      disabled={disconnecting}
+                      onClick={handleDisconnect}
+                    >
+                      {disconnecting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+                      <span>Desvincular</span>
+                    </Button>
                   </div>
                 </div>
-                <Switch
-                  checked={(draft as any)[it.k]}
-                  onCheckedChange={(v) => setDraft({ ...draft, [it.k]: v } as WhatsAppConfig)}
-                />
-              </div>
-            ))}
-          </div>
-        </div>
+              ) : (
+                <div className="p-5 md:p-6 rounded-2xl border border-dashed border-emerald-500/30 bg-emerald-50/30 dark:bg-emerald-950/15 flex flex-col sm:flex-row sm:items-center justify-between gap-5 transition-all">
+                  <div className="flex items-start gap-4">
+                    <div className="h-11 w-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                      <QrCode className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className="bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 font-semibold text-[10px] uppercase tracking-wide">
+                          Desconectado
+                        </Badge>
+                      </div>
+                      <h4 className="text-sm md:text-base font-bold text-foreground leading-snug">
+                        Vincular WhatsApp de mi Lavandería
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-xl leading-relaxed">
+                        Escanea el código QR desde tu celular (WhatsApp Web) para activar el envío automático de tickets, avisos de entrega y recibir respuestas de tus clientes en tiempo real.
+                      </p>
+                    </div>
+                  </div>
 
-        {/* Plantillas de Textos con auto-expansión al hacer clic/foco */}
-        <div className="space-y-4 pt-2">
-          <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {entrega} {web_url}">
-            <ExpandingTextarea 
-              value={draft.plantilla_creada} 
-              onChange={(e: any) => setDraft({ ...draft, plantilla_creada: e.target.value })} 
-            />
-          </Field>
-
-          <Field label="Plantilla — Orden lista" hint="Variables: {lavanderia} {numero} {cliente} {total} {saldo} {web_url}">
-            <ExpandingTextarea 
-              value={draft.plantilla_lista} 
-              onChange={(e: any) => setDraft({ ...draft, plantilla_lista: e.target.value })} 
-            />
-          </Field>
-
-          <Field label="Plantilla — Orden entregada" hint="Variables: {lavanderia} {numero} {cliente}">
-            <ExpandingTextarea 
-              value={draft.plantilla_entregada} 
-              onChange={(e: any) => setDraft({ ...draft, plantilla_entregada: e.target.value })} 
-            />
-          </Field>
-
-          <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables: {lavanderia} {numero} {cliente} {dias} {saldo}">
-            <ExpandingTextarea 
-              value={draft.plantilla_sin_retirar} 
-              onChange={(e: any) => setDraft({ ...draft, plantilla_sin_retirar: e.target.value })} 
-            />
-          </Field>
-        </div>
-
-        {/* Footer: Pruebas y Guardar */}
-        <div className="pt-6 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-3 w-full sm:w-auto">
-            <div className="w-full sm:w-56">
-              <Field label="Probar al número" icon={Phone}>
+                  <Button
+                    onClick={handleStartConnect}
+                    className="bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl font-semibold text-xs md:text-sm h-10 px-4.5 transition-colors shrink-0 flex items-center gap-2 cursor-pointer shadow-none border-0"
+                  >
+                    <QrCode className="h-4 w-4" />
+                    <span>Escanear Código QR</span>
+                  </Button>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Campos de Conexión Manual WASenderAPI */
+            <div className="grid gap-5 md:grid-cols-2">
+              <Field label="API Token (Personal Access Token)" icon={Key} span>
                 <Input 
                   className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                  value={testPhone} 
-                  onChange={(e) => setTestPhone(formatPhoneRD(e.target.value))} 
-                  placeholder="829-000-0000" 
+                  type="password" 
+                  placeholder="Tu token de wasenderapi.com" 
+                  value={draft.api_key} 
+                  onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} 
+                />
+              </Field>
+              <Field label="Session ID / Instance (Opcional)" hint="Solo si utilizas múltiples sesiones" icon={Smartphone}>
+                <Input 
+                  className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                  placeholder="default" 
+                  value={draft.instance} 
+                  onChange={(e) => setDraft({ ...draft, instance: e.target.value })} 
+                />
+              </Field>
+              <Field label="Base URL (Servidor)" icon={Globe}>
+                <Input 
+                  className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                  placeholder="https://wasenderapi.com" 
+                  value={draft.base_url || ""} 
+                  onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} 
                 />
               </Field>
             </div>
-            <Button 
-              variant="outline" 
-              className="h-10 rounded-xl font-bold border-border hover:bg-accent cursor-pointer gap-2 mt-6 shrink-0" 
-              disabled={sending || !draft.api_key} 
-              onClick={probar}
-            >
-              {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-              <span>Enviar prueba</span>
-            </Button>
+          )}
+
+          {/* Eventos automáticos */}
+          <div className="space-y-3 pt-2">
+            <div className="flex items-center gap-2">
+              <Label className="font-bold text-xs text-slate-700 dark:text-slate-200">Eventos de Notificación Automática</Label>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {[
+                { k: "notif_orden_creada", label: "Al crear orden", desc: "Envía recibo digital con NCF", icon: PlusCircle },
+                { k: "notif_orden_lista", label: "Cuando esté lista", desc: "Aviso de retiro", icon: Sparkles },
+                { k: "notif_orden_entregada", label: "Al entregar orden", desc: "Agradecimiento al cliente", icon: CheckCircle2 },
+                { k: "notif_orden_sin_retirar", label: "Prendas no retiradas", desc: "Recordatorio de almacén", icon: Clock },
+              ].map((it) => (
+                <div key={it.k} className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <it.icon className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">{it.label}</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{it.desc}</p>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={(draft as any)[it.k]}
+                    onCheckedChange={(v) => setDraft({ ...draft, [it.k]: v } as WhatsAppConfig)}
+                  />
+                </div>
+              ))}
+            </div>
           </div>
 
-          <Button 
-            className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 mt-2 sm:mt-0" 
-            onClick={() => saveWA(draft)}
-          >
-            <Save className="h-4 w-4" />
-            <span>Guardar cambios</span>
-          </Button>
+          {/* Plantillas de Textos */}
+          <div className="space-y-4 pt-2">
+            <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {ncf} {entrega} {detalle}">
+              <ExpandingTextarea 
+                value={draft.plantilla_creada} 
+                onChange={(e: any) => setDraft({ ...draft, plantilla_creada: e.target.value })} 
+              />
+            </Field>
+
+            <Field label="Plantilla — Orden lista" hint="Variables: {lavanderia} {numero} {cliente} {total} {saldo}">
+              <ExpandingTextarea 
+                value={draft.plantilla_lista} 
+                onChange={(e: any) => setDraft({ ...draft, plantilla_lista: e.target.value })} 
+              />
+            </Field>
+
+            <Field label="Plantilla — Orden entregada" hint="Variables: {lavanderia} {numero} {cliente}">
+              <ExpandingTextarea 
+                value={draft.plantilla_entregada} 
+                onChange={(e: any) => setDraft({ ...draft, plantilla_entregada: e.target.value })} 
+              />
+            </Field>
+
+            <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables: {lavanderia} {numero} {cliente} {dias} {saldo}">
+              <ExpandingTextarea 
+                value={draft.plantilla_sin_retirar} 
+                onChange={(e: any) => setDraft({ ...draft, plantilla_sin_retirar: e.target.value })} 
+              />
+            </Field>
+          </div>
+
+          {/* Footer: Pruebas y Guardar */}
+          <div className="pt-6 border-t border-border/70 flex flex-col sm:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-3 w-full sm:w-auto">
+              <div className="w-full sm:w-56">
+                <Field label="Probar al número" icon={Phone}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    value={testPhone} 
+                    onChange={(e) => setTestPhone(formatPhoneRD(e.target.value))} 
+                    placeholder="829-000-0000" 
+                  />
+                </Field>
+              </div>
+              <Button 
+                variant="outline" 
+                className="h-10 rounded-xl font-bold border-border hover:bg-accent cursor-pointer gap-2 mt-6 shrink-0" 
+                disabled={sending} 
+                onClick={probar}
+              >
+                {sending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                <span>Enviar prueba</span>
+              </Button>
+            </div>
+
+            <Button 
+              className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-6 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 mt-2 sm:mt-0" 
+              onClick={() => {
+                saveWA(draft);
+                toast.success("Configuración guardada correctamente");
+              }}
+            >
+              <Save className="h-4 w-4" />
+              <span>Guardar cambios</span>
+            </Button>
+          </div>
         </div>
-      </div>
-    </Card>
+      </Card>
+
+      {/* DIÁLOGO MODAL PARA ESCANEAR CÓDIGO QR (COMPACTO Y MODERNO) */}
+      <Dialog open={qrModalOpen} onOpenChange={setQrModalOpen}>
+        <DialogContent className="sm:max-w-[360px] p-0 rounded-2xl overflow-hidden border border-border/80 bg-card shadow-2xl">
+          {/* Header */}
+          <div className="px-5 pt-5 pb-3 border-b border-border/60 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
+                <QrCode className="h-5 w-5" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-foreground leading-tight">Vincular WhatsApp</h3>
+                <p className="text-[11px] text-muted-foreground mt-0.5">Escanea con tu celular</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Body */}
+          <div className="p-5 flex flex-col items-center space-y-3.5">
+            {/* QR Card */}
+            <div className="relative p-2.5 bg-white rounded-xl border border-slate-200/80 shadow-xs flex items-center justify-center min-h-[190px] min-w-[190px]">
+              {loadingQr ? (
+                <div className="flex flex-col items-center justify-center space-y-2 py-8">
+                  <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+                  <span className="text-[11px] text-muted-foreground font-medium">Generando QR...</span>
+                </div>
+              ) : qrCodeBase64 ? (
+                <img
+                  src={qrCodeBase64}
+                  alt="Código QR de WhatsApp"
+                  className="w-44 h-44 object-contain rounded-md"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center space-y-2 py-8">
+                  <AlertTriangle className="h-7 w-7 text-amber-500" />
+                  <span className="text-[11px] text-muted-foreground font-medium">Esperando QR...</span>
+                </div>
+              )}
+            </div>
+
+            {/* Compact Steps */}
+            <div className="w-full bg-muted/40 rounded-xl p-2.5 border border-border/60 text-[11px] text-muted-foreground space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">1</span>
+                <span>Abre <strong>WhatsApp</strong> en tu celular</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">2</span>
+                <span>Ve a <strong>Ajustes ⚙️</strong> &gt; <strong>Dispositivos vinculados</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="h-4 w-4 rounded-full bg-emerald-600/15 text-emerald-700 dark:text-emerald-400 font-bold text-[10px] flex items-center justify-center shrink-0">3</span>
+                <span>Toca <strong>Vincular dispositivo</strong> y apunta tu cámara</span>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="w-full flex items-center gap-2 pt-1">
+              <Button
+                size="sm"
+                className="flex-1 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white rounded-xl h-9.5 text-xs font-semibold shadow-none border-0 cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
+                onClick={handleRefreshQr}
+                disabled={loadingQr}
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${loadingQr ? 'animate-spin' : ''}`} />
+                <span>Actualizar QR</span>
+              </Button>
+              <Button
+                size="sm"
+                className="bg-slate-100 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700 active:bg-slate-300 text-slate-700 dark:text-slate-200 rounded-xl h-9.5 text-xs font-semibold shadow-none border-0 px-4.5 cursor-pointer flex items-center justify-center gap-1.5 transition-colors"
+                onClick={() => setQrModalOpen(false)}
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Cerrar</span>
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
@@ -2898,7 +3185,7 @@ function PlanBadge({ id }: { id: string }) {
   );
 }
 
-function SubscriptionModal({ open, onOpenChange, plan, period, bank, tenant, onSuccess }: {
+function SubscriptionModal({ open, onOpenChange, plan, period, bank, tenant, onSuccess, onTenantUpdated }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   plan: Plan | null;
@@ -2906,153 +3193,304 @@ function SubscriptionModal({ open, onOpenChange, plan, period, bank, tenant, onS
   bank?: BankDetails;
   tenant: Tenant;
   onSuccess: () => void;
+  onTenantUpdated?: (fresh: Tenant) => void;
 }) {
+  const [step, setStep] = useState<"options" | "waiting_polar">("options");
+  const [verifying, setVerifying] = useState(false);
+  const [lastCheckoutUrl, setLastCheckoutUrl] = useState<string>("");
+
+  useEffect(() => {
+    if (!open) {
+      setStep("options");
+      setVerifying(false);
+    }
+  }, [open]);
+
+  // Polling cada 3 segundos cuando está en modo de espera
+  useEffect(() => {
+    if (!open || step !== "waiting_polar" || !tenant?.id || !plan?.id) return;
+
+    let isMounted = true;
+    const intervalId = setInterval(async () => {
+      try {
+        const freshTenant = await getTenantById(tenant.id);
+        if (isMounted && freshTenant && freshTenant.plan_id === plan.id && freshTenant.estado === "ACTIVO") {
+          clearInterval(intervalId);
+          onTenantUpdated?.(freshTenant);
+          toast.success(`¡Suscripción ${plan.nombre} activada con éxito!`);
+          onSuccess();
+        }
+      } catch (e) {
+        console.error("Error polling tenant subscription status:", e);
+      }
+    }, 3000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [open, step, tenant?.id, plan?.id, plan?.nombre, onSuccess, onTenantUpdated]);
+
   if (!plan) return null;
 
   const price = period === "monthly" ? plan.precio_mensual : (plan.precio_anual || plan.precio_mensual * 12 * 0.85);
   const polarUrl = period === "monthly" ? plan.polar_product_monthly_url : plan.polar_product_yearly_url;
 
+  const handleCardCheckout = () => {
+    if (!polarUrl) {
+      toast.error("Enlace de pago no configurado para este plan.");
+      return;
+    }
+    try {
+      const checkoutUrl = new URL(polarUrl);
+      if (tenant.email) {
+        checkoutUrl.searchParams.set("customer_email", tenant.email);
+      }
+      checkoutUrl.searchParams.set("checkout_metadata[tenant_id]", tenant.id);
+      checkoutUrl.searchParams.set("checkout_metadata[plan_id]", plan.id);
+      checkoutUrl.searchParams.set("checkout_metadata[period]", period);
+
+      const fullUrl = checkoutUrl.toString();
+      setLastCheckoutUrl(fullUrl);
+      window.open(fullUrl, "_blank");
+      setStep("waiting_polar");
+      toast.info("Redirigiendo a Polar.sh...", {
+        description: "Completa el pago en la nueva pestaña. Tu cuenta se activará automáticamente al finalizar.",
+        duration: 6000,
+      });
+    } catch (err) {
+      console.error("Error parsing polar checkout url:", err);
+      window.open(polarUrl, "_blank");
+      setLastCheckoutUrl(polarUrl);
+      setStep("waiting_polar");
+    }
+  };
+
+  const handleVerifyNow = async () => {
+    if (!tenant?.id || !plan?.id) return;
+    setVerifying(true);
+    const loadingToast = toast.loading("Consultando estado de activación...");
+    try {
+      const freshTenant = await getTenantById(tenant.id);
+      toast.dismiss(loadingToast);
+      if (freshTenant && freshTenant.plan_id === plan.id && freshTenant.estado === "ACTIVO") {
+        onTenantUpdated?.(freshTenant);
+        toast.success(`¡Suscripción ${plan.nombre} activada con éxito!`);
+        onSuccess();
+      } else {
+        toast.info("Aún no detectamos la confirmación del pago.", {
+          description: "Si acabas de completar el pago en Polar, suele tomar unos segundos en confirmarse. Puedes verificar nuevamente en un instante.",
+        });
+      }
+    } catch (e) {
+      toast.dismiss(loadingToast);
+      toast.error("Error al consultar el estado de activación.");
+    } finally {
+      setVerifying(false);
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[400px] rounded-[1.5rem] border-none shadow-elegant p-0 overflow-hidden">
-        <div className="bg-gradient-primary p-6 text-white relative overflow-hidden">
-          <div className="absolute top-0 right-0 p-4 opacity-10">
+        {/* HEADER ORIGINAL CON GRADIENTE KLYNN */}
+        <div className="bg-gradient-primary p-4.5 px-5 text-white relative overflow-hidden">
+          <div className="absolute top-0 right-0 p-3 opacity-10 pointer-events-none">
             <CreditCard className="h-16 w-16 rotate-12" />
           </div>
           <div className="relative">
             <div className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-0.5">Pasarela de Pago Segura</div>
-            <h2 className="text-2xl font-display leading-tight">Suscripción {plan.nombre}</h2>
-            <div className="mt-3 flex items-baseline gap-2">
-              <span className="text-3xl font-bold">{formatRD(price).replace("DOP", "RD$")}</span>
+            <h2 className="text-xl font-display leading-tight">Suscripción {plan.nombre}</h2>
+            <div className="mt-1.5 flex items-baseline gap-2">
+              <span className="text-2xl font-bold">{formatRD(price).replace("DOP", "RD$")}</span>
               <span className="text-xs opacity-70">/{period === "monthly" ? "mes" : "año"}</span>
             </div>
           </div>
         </div>
 
-        <div className="p-5 space-y-4 bg-surface">
-          <div className="grid grid-cols-1 gap-3">
-            {/* OPCIÓN 1: TARJETA */}
-            <button 
-              onClick={() => {
-                if (polarUrl) {
-                  const checkoutUrl = new URL(polarUrl);
-                  checkoutUrl.searchParams.set('customer_email', tenant.email);
-                  window.open(checkoutUrl.toString(), "_blank");
-                  toast.info("Esperando confirmación de pago...", {
-                    description: "Una vez completado el pago en Polar, tu plan se activará automáticamente.",
-                    duration: 6000
-                  });
-                } else {
-                  toast.error("Enlace de pago no configurado para este plan.");
-                }
-              }}
-              className="flex items-center gap-4 w-full p-4 rounded-2xl border-2 border-primary/10 bg-primary/5 hover:border-primary hover:bg-primary/10 transition-all text-left group relative overflow-hidden shadow-sm hover:shadow-md"
-            >
-              <div className="h-12 w-12 rounded-xl bg-primary flex items-center justify-center text-white shadow-lg shadow-primary/20 group-hover:scale-110 transition-transform duration-300">
-                <CreditCard className="h-5 w-5" />
-              </div>
-              <div className="flex-1">
-                <div className="font-bold text-base text-foreground mb-0.5">Pago con Tarjeta</div>
-                <div className="text-[10px] text-muted-foreground uppercase tracking-tight font-medium">Débito o Crédito vía Polar.sh</div>
-              </div>
-              <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
-                <ArrowRight className="h-3 w-3 text-primary" />
-              </div>
-            </button>
-
-            {/* OPCIÓN 2: TRANSFERENCIA */}
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <button className="flex items-center gap-4 w-full p-4 rounded-2xl border-2 border-border bg-surface hover:border-primary/50 transition-all text-left group shadow-sm hover:shadow-md">
-                  <div className="h-12 w-12 rounded-xl bg-accent flex items-center justify-center text-primary group-hover:scale-110 transition-transform duration-300">
-                    <Banknote className="h-5 w-5" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="font-bold text-base text-foreground mb-0.5">Transferencia</div>
-                    <div className="text-[10px] text-muted-foreground uppercase tracking-tight font-medium">Pago directo a cuenta local</div>
-                  </div>
-                  <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all -translate-x-2 group-hover:translate-x-0">
-                    <ArrowRight className="h-3 w-3 text-primary" />
-                  </div>
-                </button>
-              </AlertDialogTrigger>
-              <AlertDialogContent className="rounded-[2rem] border-none shadow-elegant max-w-[420px] p-0 overflow-hidden">
-                <div className="p-8">
-                  <AlertDialogHeader className="mb-6">
-                    <div className="h-12 w-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-4">
-                      <Banknote className="h-6 w-6 text-primary" />
-                    </div>
-                    <AlertDialogTitle className="text-2xl font-display">Datos Bancarios</AlertDialogTitle>
-                    <AlertDialogDescription className="text-sm leading-relaxed">
-                      Realiza la transferencia y envíanos el comprobante por WhatsApp para activar tu plan de inmediato.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  
-                  {bank ? (
-                    <div className="bg-accent/40 rounded-3xl p-6 space-y-5 border border-border/50 relative overflow-hidden">
-                      <div className="absolute top-0 right-0 p-4 opacity-5">
-                        <Building2 className="h-20 w-20" />
-                      </div>
-                      <div className="space-y-1 relative">
-                        <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Institución Bancaria</div>
-                        <div className="font-bold text-lg flex items-center justify-between">
-                          {bank.banco}
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { navigator.clipboard.writeText(bank.banco); toast.success("Copiado"); }}>
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="space-y-1 relative">
-                        <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Número de Cuenta</div>
-                        <div className="font-mono text-2xl font-bold flex items-center justify-between text-primary tracking-tighter">
-                          {bank.numero_cuenta}
-                          <Button variant="ghost" size="icon" className="h-8 w-8 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { navigator.clipboard.writeText(bank.numero_cuenta); toast.success("Copiado"); }}>
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-6 relative">
-                        <div className="space-y-1">
-                          <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Tipo</div>
-                          <div className="font-bold text-sm">{bank.tipo_cuenta}</div>
-                        </div>
-                        <div className="space-y-1">
-                          <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">RNC / Cédula</div>
-                          <div className="font-bold text-sm">{bank.rnc}</div>
-                        </div>
-                      </div>
-                      <div className="space-y-1 border-t border-border/50 pt-4 relative">
-                        <div className="text-[10px] uppercase font-bold text-muted-foreground tracking-widest mb-1">Titular de la Cuenta</div>
-                        <div className="font-bold text-sm uppercase tracking-wide">{bank.titular}</div>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="p-8 text-center bg-accent/20 rounded-3xl border border-dashed border-border/50">
-                      <p className="text-sm text-muted-foreground">Los datos bancarios no han sido configurados por el administrador.</p>
-                    </div>
-                  )}
-
-                  <div className="grid gap-2 mt-6">
-                    <Button 
-                      className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl font-bold h-11 shadow-md shadow-[#25D366]/10 text-sm transition-transform active:scale-95"
-                      onClick={() => {
-                        const text = encodeURIComponent(`Hola Klynn, acabo de realizar la transferencia para el plan ${plan.nombre} (${tenant.nombre}). Aquí envío el comprobante.`);
-                        window.open(`https://wa.me/18299416546?text=${text}`, "_blank");
-                      }}
-                    >
-                      <MessageCircle className="mr-2 h-4 w-4" /> ENVIAR COMPROBANTE
-                    </Button>
-                    <AlertDialogCancel className="w-full rounded-xl border-none bg-accent/50 h-10 font-bold text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">Cerrar</AlertDialogCancel>
-                  </div>
+        {step === "waiting_polar" ? (
+          <div className="p-4.5 space-y-3.5 bg-surface">
+            {/* RADAR Y SPINNER CENTRADO ORIGINAL */}
+            <div className="flex flex-col items-center text-center space-y-2 pt-0.5">
+              <div className="relative">
+                <div className="h-13 w-13 rounded-2xl bg-primary/10 flex items-center justify-center text-primary">
+                  <Loader2 className="h-6.5 w-6.5 animate-spin text-primary" />
                 </div>
-              </AlertDialogContent>
-            </AlertDialog>
+                <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-emerald-500 rounded-full animate-ping" />
+                <div className="absolute -top-1 -right-1 h-3.5 w-3.5 bg-emerald-500 rounded-full border-2 border-white" />
+              </div>
+
+              <div>
+                <h3 className="font-display text-base font-bold text-foreground">
+                  Esperando confirmación de Polar...
+                </h3>
+                <p className="text-xs text-muted-foreground mt-0.5 max-w-[300px] leading-relaxed">
+                  Hemos abierto la pasarela en una nueva pestaña. En cuanto completes el pago, tu cuenta se activará automáticamente sin recargar.
+                </p>
+              </div>
+            </div>
+
+            {/* RESUMEN */}
+            <div className="bg-slate-50 dark:bg-slate-900/60 rounded-2xl p-3 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Plan a activar:</span>
+                <span className="font-bold text-foreground">{plan.nombre}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Periodo:</span>
+                <span className="font-bold text-foreground">{period === "monthly" ? "Mensual" : "Anual (2 meses gratis)"}</span>
+              </div>
+              <div className="flex items-center justify-between text-muted-foreground">
+                <span>Monto a pagar:</span>
+                <span className="font-bold text-primary">{formatRD(price)}</span>
+              </div>
+            </div>
+
+            {/* BOTONES: VERIFICAR ARRIBA + 2 COLUMNAS ABAJO */}
+            <div className="space-y-2 pt-0.5">
+              <Button
+                className="w-full bg-primary hover:bg-primary/90 text-white rounded-xl font-bold h-10 shadow-sm text-sm"
+                onClick={handleVerifyNow}
+                disabled={verifying}
+              >
+                {verifying ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" /> Verificar activación ahora
+                  </>
+                )}
+              </Button>
+
+              <div className="grid grid-cols-2 gap-2">
+                {lastCheckoutUrl && (
+                  <Button
+                    variant="ghost"
+                    className="w-full rounded-xl bg-primary/10 hover:bg-primary/15 text-primary border border-primary/20 h-9.5 font-bold text-xs shadow-xs transition-all px-2"
+                    onClick={() => window.open(lastCheckoutUrl, "_blank")}
+                  >
+                    <ExternalLink className="mr-1.5 h-3.5 w-3.5 shrink-0" /> Reabrir Polar
+                  </Button>
+                )}
+
+                <Button
+                  variant="ghost"
+                  className={`w-full rounded-xl bg-slate-100 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/80 dark:border-slate-700 h-9.5 font-bold text-xs shadow-xs transition-all px-2 ${!lastCheckoutUrl ? "col-span-2" : ""}`}
+                  onClick={() => setStep("options")}
+                >
+                  <ArrowLeft className="mr-1.5 h-3.5 w-3.5 shrink-0" /> Cambiar método
+                </Button>
+              </div>
+            </div>
           </div>
-          <p className="text-center text-[10px] text-muted-foreground px-6 pb-6 leading-relaxed">
-            Al suscribirte aceptas nuestros <Link to="/terminos" className="underline hover:text-primary">Términos de Servicio</Link> y <Link to="/privacidad" className="underline hover:text-primary">Políticas de Privacidad</Link>. 
-            Los cargos se realizarán mensualmente de forma automática.
-          </p>
-        </div>
+        ) : (
+          <div className="p-5 space-y-3.5 bg-surface">
+            <div className="grid grid-cols-1 gap-2.5">
+              {/* OPCIÓN 1: TARJETA */}
+              <button 
+                onClick={handleCardCheckout}
+                className="flex items-center gap-3.5 w-full p-3.5 rounded-2xl border-2 border-primary/10 bg-primary/5 hover:border-primary hover:bg-primary/10 transition-all text-left group relative overflow-hidden shadow-sm hover:shadow-md cursor-pointer"
+              >
+                <div className="h-10 w-10 rounded-xl bg-primary flex items-center justify-center text-white shadow-md shadow-primary/20 group-hover:scale-105 transition-transform duration-300">
+                  <CreditCard className="h-4.5 w-4.5" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="font-bold text-sm text-foreground mb-0.5">Pago con Tarjeta</div>
+                  <div className="text-[10px] text-muted-foreground uppercase tracking-tight font-medium">Débito o Crédito vía Polar.sh</div>
+                </div>
+                <div className="h-6 w-6 rounded-full bg-primary/10 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0">
+                  <ArrowRight className="h-3 w-3 text-primary" />
+                </div>
+              </button>
+
+              {/* OPCIÓN 2: TRANSFERENCIA */}
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <button className="flex items-center gap-3.5 w-full p-3.5 rounded-2xl border-2 border-border bg-surface hover:border-primary/50 transition-all text-left group shadow-sm hover:shadow-md cursor-pointer">
+                    <div className="h-10 w-10 rounded-xl bg-accent flex items-center justify-center text-primary group-hover:scale-105 transition-transform duration-300">
+                      <Banknote className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-bold text-sm text-foreground mb-0.5">Transferencia</div>
+                      <div className="text-[10px] text-muted-foreground uppercase tracking-tight font-medium">Pago directo a cuenta local</div>
+                    </div>
+                    <div className="h-6 w-6 rounded-full bg-accent flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all -translate-x-1 group-hover:translate-x-0">
+                      <ArrowRight className="h-3 w-3 text-primary" />
+                    </div>
+                  </button>
+                </AlertDialogTrigger>
+                <AlertDialogContent className="rounded-[1.5rem] border-none shadow-elegant max-w-[390px] p-0 overflow-hidden">
+                  <div className="p-6">
+                    <AlertDialogHeader className="mb-4">
+                      <div className="h-10 w-10 rounded-2xl bg-primary/10 flex items-center justify-center mb-3">
+                        <Banknote className="h-5 w-5 text-primary" />
+                      </div>
+                      <AlertDialogTitle className="text-xl font-display">Datos Bancarios</AlertDialogTitle>
+                      <AlertDialogDescription className="text-xs leading-relaxed">
+                        Realiza la transferencia y envíanos el comprobante por WhatsApp para activar tu plan de inmediato.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    
+                    {bank ? (
+                      <div className="bg-accent/40 rounded-2xl p-4 space-y-3.5 border border-border/50 relative overflow-hidden text-xs">
+                        <div className="space-y-0.5 relative">
+                          <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Institución Bancaria</div>
+                          <div className="font-bold text-base flex items-center justify-between">
+                            {bank.banco}
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { navigator.clipboard.writeText(bank.banco); toast.success("Copiado"); }}>
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="space-y-0.5 relative border-t border-border/50 pt-2.5">
+                          <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Número de Cuenta ({bank.tipo_cuenta})</div>
+                          <div className="font-mono text-lg font-bold flex items-center justify-between text-primary tracking-tighter">
+                            {bank.numero_cuenta}
+                            <Button variant="ghost" size="icon" className="h-7 w-7 rounded-lg hover:bg-primary/10 hover:text-primary" onClick={() => { navigator.clipboard.writeText(bank.numero_cuenta); toast.success("Copiado"); }}>
+                              <Copy className="h-3.5 w-3.5" />
+                            </Button>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-3 border-t border-border/50 pt-2.5">
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">RNC / Cédula</div>
+                            <div className="font-bold text-xs">{bank.rnc}</div>
+                          </div>
+                          <div>
+                            <div className="text-[9px] uppercase font-bold text-muted-foreground tracking-widest">Titular</div>
+                            <div className="font-bold text-xs truncate">{bank.titular}</div>
+                          </div>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="p-6 text-center bg-accent/20 rounded-2xl border border-dashed border-border/50">
+                        <p className="text-xs text-muted-foreground">Los datos bancarios no han sido configurados por el administrador.</p>
+                      </div>
+                    )}
+
+                    <div className="grid gap-2 mt-4">
+                      <Button 
+                        className="w-full bg-[#25D366] hover:bg-[#128C7E] text-white rounded-xl font-bold h-10 shadow-md shadow-[#25D366]/10 text-xs transition-transform active:scale-95"
+                        onClick={() => {
+                          const text = encodeURIComponent(`Hola Klynn, acabo de realizar la transferencia para el plan ${plan.nombre} (${tenant.nombre}). Aquí envío el comprobante.`);
+                          window.open(`https://wa.me/18299416546?text=${text}`, "_blank");
+                        }}
+                      >
+                        <MessageCircle className="mr-2 h-4 w-4" /> ENVIAR COMPROBANTE
+                      </Button>
+                      <AlertDialogCancel className="w-full rounded-xl border-none bg-accent/50 h-9 font-bold text-xs text-muted-foreground hover:bg-accent hover:text-foreground transition-colors">Cerrar</AlertDialogCancel>
+                    </div>
+                  </div>
+                </AlertDialogContent>
+              </AlertDialog>
+            </div>
+            <p className="text-center text-[10px] text-muted-foreground px-4 pb-2 leading-relaxed">
+              Al suscribirte aceptas nuestros <Link to="/terminos" className="underline hover:text-primary">Términos de Servicio</Link> y <Link to="/privacidad" className="underline hover:text-primary">Políticas de Privacidad</Link>.
+            </p>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

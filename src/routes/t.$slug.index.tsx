@@ -20,6 +20,7 @@ import {
   saveOrden,
   updateOrdenEstado,
   crearNotificacion,
+  getTenantById,
   type Orden,
   type Gasto,
   type Cliente,
@@ -150,6 +151,25 @@ function DashboardPage() {
 
   const [currentPage, setCurrentPage] = useState(1);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('polar_success') === 'true') {
+      window.history.replaceState({}, '', window.location.pathname);
+      const targetTenantId = user?.tenant?.id;
+      if (targetTenantId && targetTenantId !== '__loading__') {
+        getTenantById(targetTenantId).then((fresh) => {
+          if (fresh) {
+            queryClient.invalidateQueries();
+            toast.success("¡Suscripción confirmada y activada con éxito!", {
+              description: `Tu cuenta ahora tiene acceso completo al plan ${(fresh.plan_id || '').toUpperCase()}.`,
+              duration: 8000,
+            });
+          }
+        });
+      }
+    }
+  }, [user?.tenant?.id, queryClient]);
 
   useEffect(() => {
     if (!openMenuId) return;

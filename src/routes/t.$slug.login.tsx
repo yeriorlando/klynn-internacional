@@ -1,7 +1,6 @@
 /* Hallmark · redesign: tenant-login · genre: modern-minimal · theme: custom (#1B4B73 / #F0B900) */
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
 import { 
   ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
   MapPin, ShieldCheck 
@@ -124,11 +123,8 @@ function TenantLoginPage() {
       <div className="absolute w-[500px] h-[500px] rounded-full bg-[#1B4B73]/20 blur-[100px] pointer-events-none z-0" />
 
       {/* Tarjeta de Inicio de Sesión Hallmark Glassmorphism Proporcional */}
-      <motion.div 
-        initial={{ opacity: 0, y: 14, scale: 0.98 }}
-        animate={{ opacity: 1, y: 0, scale: 1 }}
-        transition={{ duration: 0.32, ease: "easeOut" }}
-        className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-white/70 dark:border-slate-800 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10"
+      <div 
+        className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-white/70 dark:border-slate-800 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300"
       >
         <div className="text-center">
           {/* Contenedor de Logo de la Lavandería */}
@@ -222,19 +218,12 @@ function TenantLoginPage() {
             </div>
 
             {/* Mensaje de Error */}
-            <AnimatePresence>
-              {error && (
-                <motion.div
-                  initial={{ opacity: 0, y: -4 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -4 }}
-                  className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-400"
-                >
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                  <span>{error}</span>
-                </motion.div>
-              )}
-            </AnimatePresence>
+            {error && (
+              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-400 animate-in fade-in duration-200">
+                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                <span>{error}</span>
+              </div>
+            )}
 
             {/* Botón Principal INGRESAR AL SISTEMA con Animación Signature */}
             <div className="pt-1">
@@ -298,7 +287,7 @@ function TenantLoginPage() {
           </div>
 
         </div>
-      </motion.div>
+      </div>
     </div>
   );
 }

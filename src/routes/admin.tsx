@@ -5,7 +5,7 @@ import {
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
-  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff
+  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -496,23 +496,12 @@ function AdminPage() {
 
   async function handleLogout() {
     const slug = user?.tenant?.slug || (typeof window !== "undefined" ? localStorage.getItem("klynn_active_tenant") : null);
-    setIsLoggingOut(true);
     await logout();
-    setTimeout(() => {
-      if (slug && slug !== "admin") {
-        window.location.assign(`/t/${slug}/login`);
-      } else {
-        window.location.assign("/login");
-      }
-    }, 450);
-  }
-
-  if (isLoggingOut) {
-    return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
-      </div>
-    );
+    if (slug && slug !== "admin") {
+      window.location.assign(`/t/${slug}/login`);
+    } else {
+      window.location.assign("/login");
+    }
   }
 
   if (!user || user.empleado.id === '__loading__') {
@@ -631,11 +620,11 @@ function AdminPage() {
             </TabsTrigger>
 
             <TabsTrigger 
-              value="seguridad"
+              value="addons"
               className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
             >
-              <Lock className="h-4 w-4 shrink-0 text-blue-500" />
-              <span>Seguridad</span>
+              <Boxes className="h-4 w-4 shrink-0 text-violet-500" />
+              <span>Add-ons</span>
             </TabsTrigger>
           </TabsList>
 
@@ -2219,51 +2208,105 @@ function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="seguridad" className="space-y-6 mt-6">
-            {/* Header de la sección de Seguridad */}
+          <TabsContent value="addons" className="space-y-6 mt-6">
+            {/* Header de la sección de Add-ons */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-5 sm:p-6 rounded-2xl border border-border/60 shadow-sm">
               <div className="space-y-1">
                 <div className="flex items-center gap-2">
                   <h2 className="text-xl font-display font-bold text-foreground flex items-center gap-2">
-                    <Lock className="h-5 w-5 text-blue-500" />
-                    Seguridad & Control de Acceso
+                    <Boxes className="h-5 w-5 text-violet-500" />
+                    Add-ons & Módulos Globales
                   </h2>
-                  <Badge variant="outline" className="bg-blue-50 dark:bg-blue-950/50 text-blue-800 dark:text-blue-300 border-blue-300 font-extrabold text-[10px] uppercase">
-                    Módulos Globales
+                  <Badge variant="outline" className="bg-violet-50 dark:bg-violet-950/50 text-violet-800 dark:text-violet-300 border-violet-300 font-extrabold text-[10px] uppercase tracking-wider">
+                    Configuración Global
                   </Badge>
                 </div>
                 <p className="text-xs sm:text-sm text-muted-foreground max-w-2xl">
-                  Configura y expande las políticas de autenticación, verificación de dos pasos y auditoría para toda la plataforma Klynn.
+                  Configura y expande los motores de mensajería, autenticación y add-ons para todo el ecosistema Klynn.
                 </p>
               </div>
             </div>
 
-            {/* Grid de 5 Columnas de Módulos de Seguridad */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3.5 sm:gap-4 items-stretch">
-              {/* Tarjeta 1: Verificación OTP para Nuevos Empleados (ACTIVO / CONFIGURABLE) */}
-              <Card className="p-4.5 rounded-2xl border-border/70 bg-surface shadow-xs hover:border-primary/50 hover:shadow-md transition-all flex flex-col justify-between h-full group">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="h-10 w-10 rounded-2xl bg-blue-50 dark:bg-blue-950/60 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/60 dark:border-blue-900/40 shadow-2xs group-hover:scale-105 transition-transform">
+            {/* Grid de 4 Columnas de Add-ons */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4.5 items-stretch">
+              {/* Tarjeta 1: Motor WhatsApp Plataforma */}
+              <Card className="p-5 rounded-2xl border border-border/70 bg-card shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-full group">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20 shadow-2xs group-hover:scale-105 transition-transform">
+                      <MessageCircle className="h-5 w-5" />
+                    </div>
+                    <Badge variant="outline" className={`text-[10px] font-bold px-2 py-0.5 ${(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border-blue-300'}`}>
+                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? "⚡ Klynn Connect" : "☁️ WASender"}
+                    </Badge>
+                  </div>
+
+                  <div>
+                    <h3 className="font-bold text-sm text-foreground">
+                      Motor WhatsApp Plataforma
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
+                        ? "Conexión nativa con código QR en wa.klynn.com.do para envío de tickets, recibos y avisos automáticos sin costo por mensaje."
+                        : "Envío mediante API en la nube con API Key e ID de instancia personalizada."}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="pt-4 mt-4 border-t border-border/50 flex items-center justify-between">
+                  <div className="space-y-0.5 min-w-0 pr-2">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? "Klynn Connect" : "WASenderAPI"}
+                    </span>
+                    <span className="text-[10.5px] text-muted-foreground block truncate">
+                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? "Nativo sin costo" : "API en la nube"}
+                    </span>
+                  </div>
+                  <Switch
+                    checked={(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'}
+                    onCheckedChange={async (v) => {
+                      const newEngine = v ? 'klynn_connect' : 'wasender';
+                      const updated = { ...globalConfig, whatsapp_engine: newEngine };
+                      setGlobalConfig(updated);
+                      await saveGlobalConfig(updated);
+                      toast.success(v ? "Klynn Connect activado como motor WhatsApp" : "WASenderAPI activado como motor WhatsApp");
+                    }}
+                    className="cursor-pointer shrink-0"
+                  />
+                </div>
+              </Card>
+
+              {/* Tarjeta 2: Verificación OTP para Nuevos Empleados */}
+              <Card className="p-5 rounded-2xl border border-border/70 bg-card shadow-sm hover:shadow-md transition-all flex flex-col justify-between h-full group">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-10 w-10 rounded-xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-500/20 shadow-2xs group-hover:scale-105 transition-transform">
                       <ShieldCheck className="h-5 w-5" />
                     </div>
-                    <Badge variant="outline" className={`text-[10px] font-bold ${globalConfig.requireEmployeeOtp ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-600 border-slate-200'}`}>
+                    <Badge variant="outline" className={`text-[10px] font-bold px-2 py-0.5 ${globalConfig.requireEmployeeOtp ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300' : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border-slate-200'}`}>
                       {globalConfig.requireEmployeeOtp ? "Activo" : "Inactivo"}
                     </Badge>
                   </div>
 
-                  <h3 className="font-bold text-sm text-foreground leading-snug">
-                    Verificación OTP para Nuevos Empleados
-                  </h3>
-                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                    Exige un código de confirmación de 6 dígitos enviado al correo del empleado cada vez que un administrador lo cree en <code className="font-mono text-[11px] text-primary font-bold">/personal</code>.
-                  </p>
+                  <div>
+                    <h3 className="font-bold text-sm text-foreground">
+                      Verificación OTP para Empleados
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Exige un código de confirmación de 6 dígitos enviado al correo del empleado cada vez que un administrador lo cree en <code className="font-mono text-[10.5px] text-primary font-bold">/personal</code>.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="pt-3.5 mt-3.5 border-t border-border/50 flex items-center justify-between">
-                  <span className="text-[11px] font-bold text-muted-foreground">
-                    {globalConfig.requireEmployeeOtp ? "Habilitado" : "Deshabilitado"}
-                  </span>
+                <div className="pt-4 mt-4 border-t border-border/50 flex items-center justify-between">
+                  <div className="space-y-0.5 min-w-0 pr-2">
+                    <span className="text-xs font-bold text-foreground block truncate">
+                      {globalConfig.requireEmployeeOtp ? "Obligatorio" : "Deshabilitado"}
+                    </span>
+                    <span className="text-[10.5px] text-muted-foreground block truncate">
+                      {globalConfig.requireEmployeeOtp ? "Código OTP activo" : "Creación directa"}
+                    </span>
+                  </div>
                   <Switch
                     checked={Boolean(globalConfig.requireEmployeeOtp)}
                     onCheckedChange={async (v) => {
@@ -2272,100 +2315,79 @@ function AdminPage() {
                       await saveGlobalConfig(updated);
                       toast.success(v ? "Verificación OTP activada correctamente" : "Verificación OTP desactivada");
                     }}
-                    className="cursor-pointer"
+                    className="cursor-pointer shrink-0"
                   />
                 </div>
               </Card>
 
-              {/* Tarjeta 2: 2FA Super Admin (Próximamente) */}
-              <Card className="p-4.5 rounded-2xl border-dashed border-border/80 bg-surface/40 shadow-2xs flex flex-col justify-between h-full opacity-75 hover:opacity-100 transition-opacity">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="h-10 w-10 rounded-2xl bg-amber-50 dark:bg-amber-950/60 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-200/60 dark:border-amber-900/40 shadow-2xs">
-                      <Key className="h-5 w-5" />
+              {/* Tarjeta 3: Pasarelas de Pago Online */}
+              <Card className="p-5 rounded-2xl border border-border/60 bg-card/60 shadow-none hover:border-amber-500/40 hover:shadow-xs transition-all flex flex-col justify-between h-full group">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center border border-amber-500/20 shadow-2xs group-hover:scale-105 transition-transform">
+                      <CreditCard className="h-5 w-5" />
                     </div>
-                    <Badge variant="secondary" className="text-[9.5px] font-bold text-muted-foreground bg-muted/60">
+                    <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-amber-50 text-amber-700 dark:bg-amber-950/60 dark:text-amber-300 border-amber-200">
                       Próximamente
                     </Badge>
                   </div>
 
-                  <h3 className="font-bold text-sm text-foreground leading-snug">
-                    2FA para Super Admin
-                  </h3>
-                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                    Autenticación en dos pasos obligatoria con Google Authenticator o correo al ingresar al panel <code className="font-mono text-[11px] text-primary font-bold">/admin</code>.
-                  </p>
+                  <div>
+                    <h3 className="font-bold text-sm text-foreground">
+                      Pasarelas de Pago Online
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Integración con Cardnet y Azul para cobro digital de órdenes con tarjeta de crédito, débito y links de pago para delivery.
+                    </p>
+                  </div>
                 </div>
 
-                <div className="pt-3.5 mt-3.5 border-t border-border/40 flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground">En desarrollo</span>
-                  <Switch disabled checked={false} />
+                <div className="pt-4 mt-4 border-t border-border/40 flex items-center justify-between opacity-60">
+                  <div className="space-y-0.5 min-w-0 pr-2">
+                    <span className="text-xs font-bold text-muted-foreground block truncate">
+                      En desarrollo
+                    </span>
+                    <span className="text-[10.5px] text-muted-foreground block truncate">
+                      Próximo lanzamiento
+                    </span>
+                  </div>
+                  <Switch disabled checked={false} className="shrink-0 opacity-50" />
                 </div>
               </Card>
 
-              {/* Tarjeta 3: Bloqueo de Intentos Fallidos (Próximamente) */}
-              <Card className="p-4.5 rounded-2xl border-dashed border-border/80 bg-surface/40 shadow-2xs flex flex-col justify-between h-full opacity-75 hover:opacity-100 transition-opacity">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 flex items-center justify-center border border-rose-200/60 dark:border-rose-900/40 shadow-2xs">
-                      <AlertCircle className="h-5 w-5" />
+              {/* Tarjeta 4: Notificaciones SMS Directas */}
+              <Card className="p-5 rounded-2xl border border-border/60 bg-card/60 shadow-none hover:border-indigo-500/40 hover:shadow-xs transition-all flex flex-col justify-between h-full group">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="h-10 w-10 rounded-xl bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center border border-indigo-500/20 shadow-2xs group-hover:scale-105 transition-transform">
+                      <Send className="h-5 w-5" />
                     </div>
-                    <Badge variant="secondary" className="text-[9.5px] font-bold text-muted-foreground bg-muted/60">
+                    <Badge variant="outline" className="text-[10px] font-bold px-2 py-0.5 bg-indigo-50 text-indigo-700 dark:bg-indigo-950/60 dark:text-indigo-300 border-indigo-200">
                       Próximamente
                     </Badge>
                   </div>
 
-                  <h3 className="font-bold text-sm text-foreground leading-snug">
-                    Bloqueo por Intentos Fallidos
-                  </h3>
-                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                    Suspende temporalmente el acceso tras 5 intentos fallidos consecutivos de contraseña para evitar ataques de fuerza bruta.
-                  </p>
-                </div>
-
-                <div className="pt-3.5 mt-3.5 border-t border-border/40 flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground">En desarrollo</span>
-                  <Switch disabled checked={false} />
-                </div>
-              </Card>
-
-              {/* Tarjeta 4: Registro de Auditoría (Próximamente) */}
-              <Card className="p-4.5 rounded-2xl border-dashed border-border/80 bg-surface/40 shadow-2xs flex flex-col justify-between h-full opacity-75 hover:opacity-100 transition-opacity">
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="h-10 w-10 rounded-2xl bg-purple-50 dark:bg-purple-950/60 text-purple-600 dark:text-purple-400 flex items-center justify-center border border-purple-200/60 dark:border-purple-900/40 shadow-2xs">
-                      <Clock className="h-5 w-5" />
-                    </div>
-                    <Badge variant="secondary" className="text-[9.5px] font-bold text-muted-foreground bg-muted/60">
-                      Próximamente
-                    </Badge>
+                  <div>
+                    <h3 className="font-bold text-sm text-foreground">
+                      Notificaciones SMS Directas
+                    </h3>
+                    <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                      Envío alternativo de tickets y avisos de retiro mediante mensajería SMS para clientes que no cuenten con conexión de WhatsApp.
+                    </p>
                   </div>
-
-                  <h3 className="font-bold text-sm text-foreground leading-snug">
-                    Auditoría de Inicios de Sesión
-                  </h3>
-                  <p className="text-[11.5px] text-muted-foreground mt-1.5 leading-relaxed">
-                    Historial detallado de IP, navegadores y horas de conexión de administradores y cajeros en cada lavandería.
-                  </p>
                 </div>
 
-                <div className="pt-3.5 mt-3.5 border-t border-border/40 flex items-center justify-between">
-                  <span className="text-[11px] font-medium text-muted-foreground">En desarrollo</span>
-                  <Switch disabled checked={false} />
+                <div className="pt-4 mt-4 border-t border-border/40 flex items-center justify-between opacity-60">
+                  <div className="space-y-0.5 min-w-0 pr-2">
+                    <span className="text-xs font-bold text-muted-foreground block truncate">
+                      En desarrollo
+                    </span>
+                    <span className="text-[10.5px] text-muted-foreground block truncate">
+                      Próximo lanzamiento
+                    </span>
+                  </div>
+                  <Switch disabled checked={false} className="shrink-0 opacity-50" />
                 </div>
-              </Card>
-
-              {/* Tarjeta 5: Tarjeta para Agregar Nuevas Opciones */}
-              <Card className="p-4.5 rounded-2xl border-dashed border-2 border-primary/25 bg-primary/5 shadow-2xs flex flex-col items-center justify-center text-center h-full min-h-[190px] hover:bg-primary/10 transition-colors">
-                <div className="h-10 w-10 rounded-2xl bg-primary/15 text-primary flex items-center justify-center mb-2.5">
-                  <Plus className="h-5 w-5" />
-                </div>
-                <h3 className="font-bold text-xs text-foreground">
-                  Espacio para Nuevo Módulo
-                </h3>
-                <p className="text-[11px] text-muted-foreground mt-1 max-w-[160px]">
-                  Listo para integrar más herramientas de protección a medida que crezca Klynn.
-                </p>
               </Card>
             </div>
           </TabsContent>
@@ -3016,8 +3038,8 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         multisucursal: !!f.modulos?.multisucursal,
         pos_offline: !!f.modulos?.pos_offline,
         logistica: !!f.modulos?.logistica,
-        procesos: f.modulos?.procesos !== undefined ? !!f.modulos?.procesos : true,
-        estanteria: f.modulos?.estanteria !== undefined ? !!f.modulos?.estanteria : true,
+        procesos: !!f.modulos?.procesos,
+        estanteria: !!f.modulos?.estanteria,
       },
       destacado: f.destacado,
       es_especial: !!f.es_especial,

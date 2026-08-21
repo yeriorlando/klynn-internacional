@@ -5,7 +5,7 @@
 
 import { supabase } from "@/lib/supabase";
 import { offlineDB, type SyncOutboxItem } from "@/lib/offline-db";
-import { read, write, KEY, type Cliente, type Orden, getECFConfig, getTenantById, getClienteById } from "@/lib/storage";
+import { read, write, KEY, type Cliente, type Orden, getECFConfig, getTenantById, getClienteById, nextNumeroOrden } from "@/lib/storage";
 import { emitirECF } from "@/lib/fiscal";
 
 export type SyncState = "online" | "offline" | "syncing" | "error";
@@ -327,8 +327,7 @@ class SyncManager {
 
       // Garantizar que la orden tenga un número válido no nulo
       if (!data.numero) {
-        const yymm = new Date().toISOString().slice(0, 7).replace("-", "");
-        data.numero = `KL-${yymm}-${String(Math.floor(1000 + Math.random() * 9000))}`;
+        data.numero = await nextNumeroOrden(data.tenant_id);
       }
 
       // A. Garantizar que el Cliente existe en Supabase
@@ -435,7 +434,6 @@ class SyncManager {
             const fiscalUpdates = {
               ncf: result.encf,
               tipo_ecf: data.tipo_ecf || "E32",
-              ecf_status: "SIGNED",
               ecf_id: result.document?.id,
               ecf_qr: result.stamp_url || (result.document as any)?.document_stamp_url || "",
               ecf_security_code: result.security_code || "",

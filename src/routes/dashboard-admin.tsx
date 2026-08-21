@@ -453,23 +453,12 @@ function DashboardAdminPage() {
 
   async function handleLogout() {
     const slug = auth?.tenant?.slug || myTenants[0]?.slug || (typeof window !== "undefined" ? localStorage.getItem("klynn_active_tenant") : null);
-    setIsLoggingOut(true);
     await logout();
-    setTimeout(() => {
-      if (slug && slug !== "admin") {
-        navigate({ to: "/t/$slug/login", params: { slug } });
-      } else {
-        navigate({ to: "/login" });
-      }
-    }, 450);
-  }
-
-  if (isLoggingOut) {
-    return (
-      <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
-        <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
-      </div>
-    );
+    if (slug && slug !== "admin") {
+      window.location.assign(`/t/${slug}/login`);
+    } else {
+      window.location.assign("/login");
+    }
   }
 
   if (!auth || auth.empleado.id === '__loading__') {

@@ -461,40 +461,8 @@ export function TenantShell() {
         }
       }
 
-      // Órdenes entregadas recientemente (últimas 48h) con prioridad en la campanita
-      const deliveredOrders = orders.filter((o) => o.estado === "ENTREGADA");
-      
-      // Detección en tiempo real de nuevas órdenes entregadas en producción
-      if (isFirstDeliveredRunRef.current) {
-        deliveredOrders.forEach((o) => knownDeliveredMapRef.current.add(o.id));
-        isFirstDeliveredRunRef.current = false;
-      } else {
-        for (const o of deliveredOrders) {
-          if (!knownDeliveredMapRef.current.has(o.id)) {
-            knownDeliveredMapRef.current.add(o.id);
-            if (!isRepartidorUser) {
-              const cleanNum = (o.numero || "").replace(/^#/, "");
-              let receptorTxt = " (Titular)";
-              if (o.pod_receptor && !o.pod_receptor.toLowerCase().startsWith("titular")) {
-                receptorTxt = ` • Recibió: **${o.pod_receptor}**`;
-              }
-              let cobroInfo = " • Pagado";
-              if (o.pod_cobro_monto && o.pod_cobro_monto > 0) {
-                cobroInfo = ` • Cobrado: **${formatRD(o.pod_cobro_monto)}** (${o.pod_cobro_metodo || "EFECTIVO"})`;
-              } else if (o.saldo > 0) {
-                cobroInfo = ` • Saldo pendiente: **${formatRD(o.saldo)}**`;
-              }
-              const clientName = clientMap.get(o.cliente_id) || "Cliente";
-
-              handleIncomingNotif({
-                titulo: `Orden #${cleanNum} Entregada`,
-                mensaje: `Cliente: **${clientName}**${receptorTxt}${cobroInfo}`,
-                tipo: "SUCCESS",
-              });
-            }
-          }
-        }
-      }
+      // Órdenes entregadas a domicilio recientemente (últimas 48h) desde Logística / POD
+      const deliveredOrders = orders.filter((o) => o.estado === "ENTREGADA" && (o.entrega_domicilio || o.pod_fecha));
 
       for (const o of deliveredOrders) {
         const cleanNum = (o.numero || "").replace(/^#/, "");
@@ -531,7 +499,7 @@ export function TenantShell() {
             virtualNotifs.push({
               id: vId,
               tenant_id: tenantId,
-              titulo: `Orden #${cleanNum} Entregada`,
+              titulo: `Orden #${cleanNum} Entregada por Delivery 🛵`,
               mensaje: `Cliente: **${clientName}**${receptorTxt}${cobroInfo}`,
               tipo: "SUCCESS",
               leida: readVirtuals.includes(vId),
@@ -570,7 +538,7 @@ export function TenantShell() {
       )
       .subscribe();
 
-    // 2. Supabase Postgres Realtime changes directo en la tabla ORDENES
+    // 2. Supabase Postgres Realtime changes directo en la tabla ORDENES (Solo para Logística / POD)
     const ordersChannel = supabase
       .channel("ordenes-realtime-shell")
       .on(
@@ -580,7 +548,13 @@ export function TenantShell() {
           const newOrder = payload.new as Orden;
           const oldOrder = payload.old as Partial<Orden>;
           if (newOrder && newOrder.tenant_id === tenantId) {
-            if (newOrder.estado === "ENTREGADA" && oldOrder?.estado !== "ENTREGADA") {
+            // SOLO disparar toast si la orden fue entregada por delivery en el módulo de Logística (con POD)
+            const isLogisticsDelivery =
+              (newOrder.entrega_domicilio || !!newOrder.pod_fecha) &&
+              !!newOrder.pod_fecha &&
+              newOrder.pod_fecha !== oldOrder?.pod_fecha;
+
+            if (isLogisticsDelivery && !isRepartidorUser) {
               const cleanNum = (newOrder.numero || "").replace(/^#/, "");
               let receptorTxt = " (Titular)";
               if (newOrder.pod_receptor) {
@@ -596,7 +570,7 @@ export function TenantShell() {
               }
 
               handleIncomingNotif({
-                titulo: `Orden #${cleanNum} Entregada`,
+                titulo: `Orden #${cleanNum} Entregada por Delivery 🛵`,
                 mensaje: `Cliente: **${newOrder.cliente_nombre || "Cliente"}**${receptorTxt}${cobroInfo}`,
                 tipo: "SUCCESS",
               });
