@@ -2253,26 +2253,43 @@ function AdminPage() {
                   </div>
                 </div>
 
-                <div className="pt-4 mt-4 border-t border-border/50 flex items-center justify-between">
-                  <div className="space-y-0.5 min-w-0 pr-2">
-                    <span className="text-xs font-bold text-foreground block truncate">
-                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? "Klynn Connect" : "WASenderAPI"}
-                    </span>
-                    <span className="text-[10.5px] text-muted-foreground block truncate">
-                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? "Nativo sin costo" : "API en la nube"}
-                    </span>
+                <div className="pt-4 mt-4 border-t border-border/50 space-y-2.5">
+                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/50">
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if ((globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect') return;
+                        const updated = { ...globalConfig, whatsapp_engine: 'klynn_connect' as const };
+                        setGlobalConfig(updated);
+                        await saveGlobalConfig(updated);
+                        toast.success("⚡ Klynn Connect activado como motor WhatsApp");
+                      }}
+                      className={`text-[11px] font-bold py-1.5 px-2 rounded-lg transition-all cursor-pointer text-center ${
+                        (globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      ⚡ Klynn Connect
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (globalConfig.whatsapp_engine === 'wasender') return;
+                        const updated = { ...globalConfig, whatsapp_engine: 'wasender' as const };
+                        setGlobalConfig(updated);
+                        await saveGlobalConfig(updated);
+                        toast.success("☁️ WASenderAPI activado como motor WhatsApp");
+                      }}
+                      className={`text-[11px] font-bold py-1.5 px-2 rounded-lg transition-all cursor-pointer text-center ${
+                        globalConfig.whatsapp_engine === 'wasender'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      ☁️ WASenderAPI
+                    </button>
                   </div>
-                  <Switch
-                    checked={(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'}
-                    onCheckedChange={async (v) => {
-                      const newEngine = v ? 'klynn_connect' : 'wasender';
-                      const updated = { ...globalConfig, whatsapp_engine: newEngine };
-                      setGlobalConfig(updated);
-                      await saveGlobalConfig(updated);
-                      toast.success(v ? "Klynn Connect activado como motor WhatsApp" : "WASenderAPI activado como motor WhatsApp");
-                    }}
-                    className="cursor-pointer shrink-0"
-                  />
                 </div>
               </Card>
 

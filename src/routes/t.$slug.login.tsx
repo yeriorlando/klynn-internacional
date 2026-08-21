@@ -38,6 +38,14 @@ function TenantLoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [isEntering, setIsEntering] = useState(false);
 
+  // Asegurar que el login siempre se renderice en modo nítido y claro sin flash oscuro
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
+    }
+  }, []);
+
   // Inyectar colores del tenant en CSS variables locales
   const brandStyle = useMemo(() => {
     if (!tenant) return undefined;
@@ -45,12 +53,6 @@ function TenantLoginPage() {
       "--brand-primary": tenant.color_primario || "#1B4B73",
       "--brand-secondary": tenant.color_secundario || tenant.color_primario || "#F0B900",
     } as React.CSSProperties;
-  }, [tenant]);
-
-  useEffect(() => {
-    if (tenant) {
-      setActiveTenant(tenant.slug);
-    }
   }, [tenant]);
 
   async function onSubmit(e: React.FormEvent) {
@@ -114,7 +116,7 @@ function TenantLoginPage() {
         <img 
           src="/login.webp" 
           alt="Laundry background" 
-          className="w-full h-full object-cover blur-[10px] scale-105 opacity-90 dark:opacity-40 brightness-95"
+          className="w-full h-full object-cover blur-[10px] scale-105 opacity-90 brightness-95"
         />
         <div className="absolute inset-0 bg-gradient-to-tr from-slate-950/70 via-slate-900/40 to-slate-950/60" />
       </div>
@@ -124,7 +126,7 @@ function TenantLoginPage() {
 
       {/* Tarjeta de Inicio de Sesión Hallmark Glassmorphism Proporcional */}
       <div 
-        className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl border border-white/70 dark:border-slate-800 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300"
+        className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/70 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300"
       >
         <div className="text-center">
           {/* Contenedor de Logo de la Lavandería */}
@@ -137,15 +139,15 @@ function TenantLoginPage() {
                   alt={tenant.nombre} 
                 />
               ) : (
-                <div className="h-12 w-12 rounded-2xl bg-blue-50 dark:bg-blue-950/60 border border-blue-200/70 dark:border-blue-900/50 flex items-center justify-center shadow-2xs">
-                  <Building2 className="h-6 w-6 text-[#1B4B73] dark:text-sky-400" />
+                <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200/70 flex items-center justify-center shadow-2xs">
+                  <Building2 className="h-6 w-6 text-[#1B4B73]" />
                 </div>
               )}
             </div>
 
             {/* Badge con Ubicación / Sucursal */}
             {(tenant.direccion || tenant.provincia) && (
-              <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100/90 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 text-[10.5px] font-semibold text-slate-600 dark:text-slate-300 shadow-2xs">
+              <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100/90 border border-slate-200/80 text-[10.5px] font-semibold text-slate-600 shadow-2xs">
                 <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
                 <span className="truncate max-w-[250px]">
                   {tenant.direccion ? `${tenant.direccion}${tenant.provincia ? ` · ${tenant.provincia}` : ""}` : tenant.provincia}
@@ -155,29 +157,29 @@ function TenantLoginPage() {
           </div>
 
           {/* Título & Subtítulo */}
-          <h1 className="text-[22px] font-black tracking-tight text-slate-900 dark:text-white leading-tight">
+          <h1 className="text-[22px] font-black tracking-tight text-slate-900 leading-tight">
             Iniciar sesión
           </h1>
-          <p className="mt-0.5 text-xs text-slate-500 dark:text-slate-400 font-medium">
-            Acceso operativo para <span className="font-bold text-slate-700 dark:text-slate-300">{tenant.nombre}</span>
+          <p className="mt-0.5 text-xs text-slate-500 font-medium">
+            Acceso operativo para <span className="font-bold text-slate-700">{tenant.nombre}</span>
           </p>
 
           {/* Formulario de Login */}
           <form onSubmit={onSubmit} className="mt-4.5 space-y-3 text-left">
             {/* Campo Email */}
             <div className="space-y-1.5">
-              <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+              <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700">
                 Correo electrónico
               </Label>
               <div className="relative group">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] dark:group-focus-within:text-sky-400 transition-colors" />
+                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] transition-colors" />
                 <Input
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   type="email"
                   required
                   placeholder="ejemplo@lavanderia.do"
-                  className="pl-10 h-10.5 bg-slate-50/60 dark:bg-slate-800/50 border-slate-200/90 dark:border-slate-700/80 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium"
+                  className="pl-10 h-10.5 bg-slate-50/70 border-slate-200/90 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400"
                 />
               </div>
             </div>
@@ -185,31 +187,31 @@ function TenantLoginPage() {
             {/* Campo Contraseña */}
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700">
                   Contraseña
                 </Label>
                 <Link 
                   to="/recuperar" 
                   search={{ redirect: `/t/${tenant.slug}/login` } as any}
-                  className="text-[10.5px] font-bold text-[#1B4B73] dark:text-sky-400 hover:underline"
+                  className="text-[10.5px] font-bold text-[#1B4B73] hover:underline"
                 >
                   ¿Olvidaste tu contraseña?
                 </Link>
               </div>
               <div className="relative group">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] dark:group-focus-within:text-sky-400 transition-colors" />
+                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] transition-colors" />
                 <Input
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type={showPassword ? "text" : "password"}
                   required
                   placeholder="••••••••"
-                  className="pl-10 pr-10 h-10.5 bg-slate-50/60 dark:bg-slate-800/50 border-slate-200/90 dark:border-slate-700/80 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium"
+                  className="pl-10 pr-10 h-10.5 bg-slate-50/70 border-slate-200/90 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1B4B73] dark:hover:text-sky-400 transition-colors p-1"
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1B4B73] transition-colors p-1"
                   title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
@@ -219,7 +221,7 @@ function TenantLoginPage() {
 
             {/* Mensaje de Error */}
             {error && (
-              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 dark:border-rose-950 dark:bg-rose-950/40 dark:text-rose-400 animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 animate-in fade-in duration-200">
                 <AlertCircle className="h-3.5 w-3.5 shrink-0" />
                 <span>{error}</span>
               </div>
@@ -267,15 +269,15 @@ function TenantLoginPage() {
           </form>
 
           {/* Sección Inferior: Cambiar de Lavandería */}
-          <div className="mt-4.5 border-t border-slate-100 dark:border-slate-800/90 pt-3.5 text-center">
-            <p className="text-[11.5px] font-semibold text-slate-500 dark:text-slate-400 mb-2">
+          <div className="mt-4.5 border-t border-slate-100 pt-3.5 text-center">
+            <p className="text-[11.5px] font-semibold text-slate-500 mb-2">
               ¿No trabajas en {tenant.nombre}?
             </p>
             <Link 
               to="/login" 
-              className="w-full h-9.5 inline-flex items-center justify-center gap-2 px-3.5 rounded-xl border border-slate-200/90 dark:border-slate-700/80 bg-slate-50/80 dark:bg-slate-800/60 hover:bg-slate-100 dark:hover:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 transition-all shadow-2xs hover:border-[#1B4B73]/40 cursor-pointer"
+              className="w-full h-9.5 inline-flex items-center justify-center gap-2 px-3.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all shadow-2xs hover:border-[#1B4B73]/40 cursor-pointer"
             >
-              <Building2 className="h-3.5 w-3.5 text-[#1B4B73] dark:text-sky-400" />
+              <Building2 className="h-3.5 w-3.5 text-[#1B4B73]" />
               <span>Cambiar de lavandería</span>
             </Link>
           </div>

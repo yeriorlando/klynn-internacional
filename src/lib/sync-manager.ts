@@ -157,7 +157,8 @@ class SyncManager {
    * Obtiene un ID de empleado válido en Supabase para satisfacer la clave foránea
    */
   private async getValidEmployeeId(tenantId?: string): Promise<string | null> {
-    const tid = tenantId && tenantId !== "undefined" ? tenantId : "8423be36-736f-4233-b933-1c1225042857";
+    const tid = tenantId && tenantId !== "undefined" ? tenantId : "";
+    if (!tid) return null;
 
     if (this.activeTenantEmployeeCache[tid]) {
       return this.activeTenantEmployeeCache[tid];
@@ -177,7 +178,7 @@ class SyncManager {
       }
     } catch {}
 
-    return "d13ef7f6-549b-40be-846c-65fb173318b6"; // Default Reyna employee
+    return null;
   }
 
   /**
@@ -185,18 +186,16 @@ class SyncManager {
    */
   private async resolveRealTenantId(tenantIdOrSlug?: string): Promise<string> {
     if (!tenantIdOrSlug || tenantIdOrSlug === "undefined") {
-      const active = read<string>(KEY.active, "reynita");
-      if (active === "reynita") return "8423be36-736f-4233-b933-1c1225042857";
+      const active = read<string>(KEY.active, "");
       tenantIdOrSlug = active;
     }
+    if (!tenantIdOrSlug) return "";
 
-    if (tenantIdOrSlug && tenantIdOrSlug.length === 36 && !tenantIdOrSlug.startsWith("ten-")) {
+    if (tenantIdOrSlug.length === 36 && !tenantIdOrSlug.startsWith("ten-")) {
       return tenantIdOrSlug;
     }
 
     const clean = tenantIdOrSlug.replace("ten-", "").replace("tenant-", "").toLowerCase();
-    if (clean === "reynita") return "8423be36-736f-4233-b933-1c1225042857";
-
     try {
       const { data, error } = await supabase
         .from("tenants")
@@ -209,7 +208,7 @@ class SyncManager {
       }
     } catch {}
 
-    return "8423be36-736f-4233-b933-1c1225042857";
+    return tenantIdOrSlug;
   }
 
   /**
@@ -426,7 +425,7 @@ class SyncManager {
             cliente,
             ecfCfg?.pronesoft_tenant_id,
             tenant?.config || ({} as any),
-            tenant || ({ id: data.tenant_id, slug: "reynita" } as any),
+            tenant || ({ id: data.tenant_id, slug: "" } as any),
             data.tipo_ecf
           );
 

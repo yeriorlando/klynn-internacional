@@ -2980,32 +2980,75 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
             </div>
           ) : (
             /* Campos de Conexión Manual WASenderAPI */
-            <div className="grid gap-5 md:grid-cols-2">
-              <Field label="API Token (Personal Access Token)" icon={Key} span>
-                <Input 
-                  className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                  type="password" 
-                  placeholder="Tu token de wasenderapi.com" 
-                  value={draft.api_key} 
-                  onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} 
-                />
-              </Field>
-              <Field label="Session ID / Instance (Opcional)" hint="Solo si utilizas múltiples sesiones" icon={Smartphone}>
-                <Input 
-                  className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                  placeholder="default" 
-                  value={draft.instance} 
-                  onChange={(e) => setDraft({ ...draft, instance: e.target.value })} 
-                />
-              </Field>
-              <Field label="Base URL (Servidor)" icon={Globe}>
-                <Input 
-                  className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                  placeholder="https://wasenderapi.com" 
-                  value={draft.base_url || ""} 
-                  onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} 
-                />
-              </Field>
+            <div className="space-y-5">
+              <div className="grid gap-5 md:grid-cols-2">
+                <Field label="API Token (Personal Access Token)" icon={Key} span>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    type="password" 
+                    placeholder="Tu token de wasenderapi.com" 
+                    value={draft.api_key} 
+                    onChange={(e) => setDraft({ ...draft, api_key: e.target.value })} 
+                  />
+                </Field>
+                <Field label="Session ID / Instance (Opcional)" hint="Solo si utilizas múltiples sesiones" icon={Smartphone}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    placeholder="default" 
+                    value={draft.instance} 
+                    onChange={(e) => setDraft({ ...draft, instance: e.target.value })} 
+                  />
+                </Field>
+                <Field label="Base URL (Servidor)" icon={Globe}>
+                  <Input 
+                    className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+                    placeholder="https://wasenderapi.com" 
+                    value={draft.base_url || ""} 
+                    onChange={(e) => setDraft({ ...draft, base_url: e.target.value })} 
+                  />
+                </Field>
+              </div>
+
+              {/* Enlace de Webhook para Mensajes Entrantes */}
+              <div className="p-5 rounded-2xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 space-y-3 shadow-2xs">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+                    <CheckCircle2 className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                      Enlace de Webhook para Mensajes Entrantes
+                    </h4>
+                    <p className="text-[11.5px] text-muted-foreground font-sans">
+                      Configura este enlace en tu panel de WASenderAPI para sincronizar respuestas y chat en vivo.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 shadow-2xs">
+                  <code className="flex-1 text-[11px] font-mono break-all text-slate-700 dark:text-slate-300 select-all leading-normal px-1">
+                    {`https://api.klynn.com.do/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`}
+                  </code>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="icon"
+                    className="h-8 w-8 rounded-lg shrink-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 border-slate-200/80 cursor-pointer"
+                    onClick={() => {
+                      const urlStr = `https://api.klynn.com.do/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`;
+                      navigator.clipboard.writeText(urlStr);
+                      toast.success("¡Enlace de Webhook copiado!");
+                    }}
+                    title="Copiar enlace de Webhook"
+                  >
+                    <Copy className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                <p className="text-[11px] text-emerald-700 dark:text-emerald-400 leading-normal font-sans">
+                  <strong>Instrucciones:</strong> En wasenderapi.com edita tu sesión, activa la opción <strong>Webhook</strong> y pega este enlace. Habilita los eventos <code className="bg-emerald-100/80 dark:bg-emerald-950 px-1.5 py-0.5 rounded font-mono font-bold text-[10px]">messages.received</code> o <code className="bg-emerald-100/80 dark:bg-emerald-950 px-1.5 py-0.5 rounded font-mono font-bold text-[10px]">messages.upsert</code>.
+                </p>
+              </div>
             </div>
           )}
 

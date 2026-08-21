@@ -1,16 +1,38 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 
 interface GlobalPageLoaderProps {
   text?: string;
   minHeight?: string;
   compact?: boolean;
+  delayMs?: number; // Umbral de milisegundos antes de mostrar el loader
 }
 
 export function GlobalPageLoader({
   text,
   minHeight = "min-h-[75vh] flex-1",
   compact = false,
+  delayMs = 200,
 }: GlobalPageLoaderProps) {
+  const [show, setShow] = useState(delayMs <= 0);
+  const [isSlow, setIsSlow] = useState(false);
+
+  useEffect(() => {
+    if (delayMs <= 0) {
+      setShow(true);
+    } else {
+      const showTimer = setTimeout(() => setShow(true), delayMs);
+      return () => clearTimeout(showTimer);
+    }
+  }, [delayMs]);
+
+  useEffect(() => {
+    // Si la carga tarda más de 4.5 segundos, avisar al usuario sobre la latencia de la red
+    const slowTimer = setTimeout(() => setIsSlow(true), 4500);
+    return () => clearTimeout(slowTimer);
+  }, []);
+
+  if (!show) return null;
+
   if (compact) {
     return (
       <div className="flex items-center justify-center p-2.5 space-x-2.5 text-[#1B4B73] dark:text-[#38bdf8] animate-in fade-in duration-200">
@@ -30,7 +52,7 @@ export function GlobalPageLoader({
 
   return (
     <div
-      className={`${minHeight} flex flex-col items-center justify-center p-4 text-center animate-in fade-in duration-300 w-full`}
+      className={`${minHeight} flex flex-col items-center justify-center p-4 text-center animate-in fade-in duration-300 w-full select-none`}
     >
       <div className="relative flex items-center justify-center w-32 sm:w-36 h-auto select-none pointer-events-none drop-shadow-xs">
         <img
@@ -44,8 +66,14 @@ export function GlobalPageLoader({
           {text}
         </p>
       )}
+      {isSlow && (
+        <p className="mt-2 text-[11px] text-muted-foreground max-w-xs leading-relaxed animate-in fade-in duration-300">
+          La conexión a internet está un poco lenta. Sincronizando con el servidor...
+        </p>
+      )}
     </div>
   );
 }
 
 export default GlobalPageLoader;
+

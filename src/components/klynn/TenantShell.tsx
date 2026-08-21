@@ -99,7 +99,7 @@ import { OfflineStatusBadge } from "@/components/klynn/OfflineStatusBadge";
 import { PWAInstallButton } from "@/components/klynn/PWAInstallButton";
 import { TourManager, resetTours } from "@/components/klynn/onboarding/TourManager";
 import { queryClient } from "@/router";
-import { useCajaAbierta } from "@/hooks/use-queries";
+import { useCajaAbierta, prefetchTenantData } from "@/hooks/use-queries";
 import ThemeSwitch from "@/components/theme-switch";
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
 import { UserAvatar } from "@/components/klynn/UserAvatar";
@@ -177,6 +177,13 @@ export function TenantShell() {
   const [unreadCount, setUnreadCount] = useState(0);
   const prevUnreadRef = useRef(-1);
   const tenantId = user?.tenant?.id;
+
+  // Precarga automática e inteligente de datos en segundo plano
+  useEffect(() => {
+    if (tenantId && tenantId !== "__loading__") {
+      prefetchTenantData(queryClient, tenantId);
+    }
+  }, [tenantId]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
@@ -619,6 +626,16 @@ export function TenantShell() {
   // Protección de rutas — DEBE estar antes del return condicional
   useEffect(() => {
     if (!user || user.tenant.id === "__loading__") return;
+
+    // 0. Protección estricta de aislamiento de Tenant: Si la URL /t/:slug no corresponde al tenant del usuario
+    const match = typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+    const urlSlug = match ? match[1] : null;
+    const isSuperAdmin = user.empleado.id === "admin" || user.tenant.id === "admin";
+    if (urlSlug && urlSlug !== "admin" && !isSuperAdmin && user.tenant.slug && user.tenant.slug !== urlSlug) {
+      console.warn(`[TenantShell] Acceso no autorizado al slug "${urlSlug}". Redirigiendo a "${user.tenant.slug}"`);
+      navigate({ to: `/t/${user.tenant.slug}` });
+      return;
+    }
 
     if (pathname.includes("/conversations") && !hasWhatsApp) {
       navigate({ to: `/t/${user.tenant.slug}` });

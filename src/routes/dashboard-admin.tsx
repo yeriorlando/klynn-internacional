@@ -148,11 +148,10 @@ function DashboardAdminPage() {
       for (const t of tenants) {
         const ords = await getOrdenes(t.id);
         const ordsArr = Array.isArray(ords) ? ords : [];
-        const activeOrds = ordsArr.filter((o: any) => o.estado !== "ANULADA");
-        const ingr = activeOrds.reduce((s, o) => s + (o.total || 0), 0);
-        tStats[t.id] = { count: activeOrds.length, total: ingr };
+        const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
+        tStats[t.id] = { count: ordsArr.length, total: ingr };
         totalIngresos += ingr;
-        totalOrdenesCount += activeOrds.length;
+        totalOrdenesCount += ordsArr.length;
         if (t.estado !== "CANCELADO") activasCount++;
       }
       setTenantStats(tStats);
@@ -191,7 +190,7 @@ function DashboardAdminPage() {
           getCajas(selectedInspectTenant.id)
         ]);
         setInspectData({
-          ordenes: (oList || []).filter((o: any) => o.estado !== "ANULADA"),
+          ordenes: oList || [],
           gastos: gList || [],
           empleados: eList || [],
           movimientos: mList || [],

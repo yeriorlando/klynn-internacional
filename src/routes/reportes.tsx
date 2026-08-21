@@ -412,7 +412,7 @@ function ReportesPage() {
         ]);
 
         setInspectData({
-          ordenes: (oList || []).filter((o: any) => o.estado !== "ANULADA"),
+          ordenes: oList || [],
           gastos: gList || [],
           empleados: eList || [],
           movimientos: mList || [],

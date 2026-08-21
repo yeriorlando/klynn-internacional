@@ -578,29 +578,20 @@ export function getTenantPlan(tenant: Tenant | null, dynamicPlans?: Plan[]): Pla
 
 export function resolveTenantId(idOrSlug?: string): string {
   if (!idOrSlug || idOrSlug === "undefined" || idOrSlug === "__loading__") {
-    return "8423be36-736f-4233-b933-1c1225042857";
+    return "";
   }
   if (idOrSlug.length === 36 && !idOrSlug.startsWith("ten-")) {
     return idOrSlug;
   }
-  const clean = idOrSlug.replace("ten-", "").replace("tenant-", "").toLowerCase();
-  if (clean === "reynita") return "8423be36-736f-4233-b933-1c1225042857";
   return idOrSlug;
 }
 
 export function isSameTenant(tid1?: string, tid2?: string): boolean {
-  if (!tid1 || !tid2) return true;
+  if (!tid1 || !tid2) return false;
   if (tid1 === tid2) return true;
   const clean1 = tid1.replace("ten-", "").replace("tenant-", "").toLowerCase();
   const clean2 = tid2.replace("ten-", "").replace("tenant-", "").toLowerCase();
-  if (clean1 === clean2) return true;
-  if (
-    (clean1 === "reynita" || tid1 === "8423be36-736f-4233-b933-1c1225042857") &&
-    (clean2 === "reynita" || tid2 === "8423be36-736f-4233-b933-1c1225042857")
-  ) {
-    return true;
-  }
-  return false;
+  return clean1 === clean2;
 }
 
 export function isModuleEnabled(
@@ -1470,6 +1461,7 @@ export async function deleteTenant(id: string) {
 }
 
 export async function getTenantBySlug(slug: string): Promise<Tenant | undefined> {
+  if (!slug || slug === "__loading__") return undefined;
   const cleanSlug = slug.toLowerCase();
   const cacheKey = `klynn_tenant_cache_${cleanSlug}`;
 
@@ -1514,35 +1506,11 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
     }
   }
 
-  // 4. Modo Resiliencia Offline: Si no hay conexión o falló el server, generar estructura base para que nunca se quede cargando
-  const defaultTenant: Tenant = {
-    id: cleanSlug === "reynita" ? "8423be36-736f-4233-b933-1c1225042857" : (resolveTenantId(cleanSlug) || `ten-${cleanSlug}`),
-    nombre: cleanSlug.charAt(0).toUpperCase() + cleanSlug.slice(1),
-    slug: cleanSlug,
-    rnc: "131-00000-0",
-    telefono: "809-000-0000",
-    direccion: "Sucursal Principal",
-    ciudad: "Santo Domingo",
-    provincia: "Distrito Nacional",
-    email: `contacto@${cleanSlug}.com.do`,
-    color_primario: "#1B4B73",
-    color_secundario: "#F0B900",
-    plan_id: "pro",
-    estado: "TRIAL",
-    trial_hasta: new Date(Date.now() + 30 * 86400000).toISOString(),
-    creado_en: new Date().toISOString(),
-    config: { ...DEFAULT_CONFIG },
-  };
-
-  if (typeof window !== "undefined") {
-    localStorage.setItem(cacheKey, JSON.stringify(defaultTenant));
-    localStorage.setItem(`klynn_tenant_id_${defaultTenant.id}`, JSON.stringify(defaultTenant));
-  }
-
-  return defaultTenant;
+  return undefined;
 }
 
 export async function getTenantById(id: string): Promise<Tenant | undefined> {
+  if (!id || id === "__loading__" || id === "undefined") return undefined;
   const cacheKey = `klynn_tenant_id_${id}`;
 
   if (typeof window !== "undefined" && !navigator.onLine) {
@@ -1554,7 +1522,7 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.tenant?.id === id || parsed?.tenant) return parsed.tenant;
+        if (parsed?.tenant?.id === id) return parsed.tenant;
       } catch {}
     }
   }
@@ -1584,7 +1552,7 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.tenant?.id === id || parsed?.tenant) return parsed.tenant;
+        if (parsed?.tenant?.id === id) return parsed.tenant;
       } catch {}
     }
   }
@@ -1914,7 +1882,9 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado) return [parsed.empleado];
+        if (parsed?.empleado && (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))) {
+          return [parsed.empleado];
+        }
       } catch {}
     }
     const local = read<Empleado[]>(KEY.empleados, []);
@@ -1955,7 +1925,9 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado) return [parsed.empleado];
+        if (parsed?.empleado && (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))) {
+          return [parsed.empleado];
+        }
       } catch {}
     }
   }
@@ -2143,6 +2115,7 @@ export async function deleteEmpleado(id: string) {
 }
 
 export async function getEmpleadoById(id: string): Promise<Empleado | undefined> {
+  if (!id || id === "__loading__" || id === "undefined") return undefined;
   const cacheKey = `klynn_emp_id_${id}`;
 
   if (typeof window !== "undefined" && !navigator.onLine) {
@@ -2154,7 +2127,7 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado?.id === id || parsed?.empleado) return parsed.empleado;
+        if (parsed?.empleado?.id === id) return parsed.empleado;
       } catch {}
     }
   }
@@ -2183,7 +2156,7 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado?.id === id || parsed?.empleado) return parsed.empleado;
+        if (parsed?.empleado?.id === id) return parsed.empleado;
       } catch {}
     }
   }
@@ -3352,10 +3325,26 @@ export async function logout() {
   setSession(null);
   if (typeof window !== "undefined") {
     try {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.classList.add("light");
       localStorage.removeItem("klynn_last_auth_user");
       localStorage.removeItem("klynn_active_tenant");
       localStorage.removeItem("lvx:session");
+      localStorage.removeItem("lvx:active_tenant");
       localStorage.removeItem("klynn_emp_id_admin");
+      localStorage.removeItem("klynn_read_virtuals");
+      localStorage.removeItem("klynn_deleted_virtuals");
+      // Limpiar cachés de tenants y empleados para evitar filtración de perfiles
+      Object.keys(localStorage).forEach((key) => {
+        if (
+          key.startsWith("klynn_tenant_cache_") ||
+          key.startsWith("klynn_tenant_id_") ||
+          key.startsWith("klynn_emp_id_") ||
+          key.startsWith("klynn_empleados_")
+        ) {
+          localStorage.removeItem(key);
+        }
+      });
     } catch {}
   }
 }
@@ -3394,12 +3383,12 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     } catch {}
   }
 
-  // 1. Si estamos sin conexión, recuperar la sesión directamente desde la memoria local
+  // 1. Si estamos sin conexión, recuperar la sesión estrictamente desde sesión activa verificada
   if (typeof window !== "undefined" && !navigator.onLine) {
     if (session?.empleado_id && session?.tenant_id) {
       const emp = await getEmpleadoById(session.empleado_id);
       const ten = await getTenantById(session.tenant_id);
-      if (emp && ten) {
+      if (emp && ten && emp.activo && isSameTenant(emp.tenant_id, ten.id)) {
         cacheUserResult(emp, ten);
         return { empleado: emp, tenant: ten };
       }
@@ -3408,41 +3397,20 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant && parsed.empleado.nombre !== "Operador Mostrador") {
+        if (parsed?.empleado && parsed?.tenant && parsed.empleado.activo && isSameTenant(parsed.empleado.tenant_id, parsed.tenant.id)) {
           return parsed;
         }
       } catch {}
     }
-    const match = window.location.pathname.match(/^\/t\/([^/]+)/);
-    const slug = match ? match[1] : (localStorage.getItem("klynn_active_tenant") || "reynita");
-    if (slug && slug !== "admin") {
-      const ten = await getTenantBySlug(slug);
-      if (ten) {
-        const emps = await getEmpleados(ten.id);
-        const activeEmp = emps.find(e => e.rol === "ADMIN" && e.activo) || emps.find(e => e.activo) || emps[0];
-        const fallbackEmp: Empleado = activeEmp || {
-          id: session?.empleado_id || (slug === "reynita" ? "d13ef7f6-549b-40be-846c-65fb173318b6" : `emp-${ten.id}-admin`),
-          tenant_id: ten.id,
-          nombre: slug === "reynita" ? "Reyna Mancebo" : (ten.nombre || "Administrador"),
-          email: slug === "reynita" ? "reynamancebo@gmail.com" : (ten.email || "admin@klynn.com.do"),
-          password: "***",
-          rol: "ADMIN",
-          activo: true,
-          permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
-          creado_en: new Date().toISOString(),
-        };
-        cacheUserResult(fallbackEmp, ten);
-        return { empleado: fallbackEmp, tenant: ten };
-      }
-    }
+    return null;
   }
 
-  // 2. Intentar consultar usuario en Supabase con timeout de 2.5s
+  // 2. Consultar usuario autenticado real en Supabase con timeout de seguridad
   let user: any = null;
   try {
     const fetchUser = supabase.auth.getUser();
     const timeoutUser = new Promise<{ data: any }>((resolve) =>
-      setTimeout(() => resolve({ data: { user: null } }), 2500)
+      setTimeout(() => resolve({ data: { user: null } }), 4000)
     );
     const res = await Promise.race([fetchUser, timeoutUser]);
     user = res.data?.user;
@@ -3450,56 +3418,33 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     console.warn("Aviso al verificar usuario en Supabase Auth:", e);
   }
 
-  // 3. Si no hay respuesta de red o falló Auth pero hay sesión activa previa, usar fallback local
+  // 3. Si no hay usuario autenticado en Supabase
   if (!user) {
-    if (session?.empleado_id && session?.tenant_id) {
-      const emp = await getEmpleadoById(session.empleado_id);
-      const ten = await getTenantById(session.tenant_id);
-      if (emp && ten && emp.nombre !== "Operador Mostrador") {
-        cacheUserResult(emp, ten);
-        return { empleado: emp, tenant: ten };
-      }
-    }
-    const lastAuthStr = isBrowser() ? localStorage.getItem("klynn_last_auth_user") : null;
-    if (lastAuthStr) {
-      try {
-        const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant && parsed.empleado.nombre !== "Operador Mostrador") {
-          return parsed;
+    // Si estamos sin conexión en este instante, permitir sesión offline verificada
+    if (typeof window !== "undefined" && !navigator.onLine) {
+      if (session?.empleado_id && session?.tenant_id) {
+        const emp = await getEmpleadoById(session.empleado_id);
+        const ten = await getTenantById(session.tenant_id);
+        if (emp && ten && emp.activo && isSameTenant(emp.tenant_id, ten.id)) {
+          cacheUserResult(emp, ten);
+          return { empleado: emp, tenant: ten };
         }
-      } catch {}
-    }
-    const match = typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
-    const slug = match ? match[1] : (isBrowser() ? (localStorage.getItem("klynn_active_tenant") || "reynita") : null);
-    if (slug && slug !== "admin") {
-      const ten = await getTenantBySlug(slug);
-      if (ten) {
-        const emps = await getEmpleados(ten.id);
-        const activeEmp = emps.find(e => e.rol === "ADMIN" && e.activo) || emps.find(e => e.activo) || emps[0];
-        const fallbackEmp: Empleado = activeEmp || {
-          id: session?.empleado_id || (slug === "reynita" ? "d13ef7f6-549b-40be-846c-65fb173318b6" : `emp-${ten.id}-admin`),
-          tenant_id: ten.id,
-          nombre: slug === "reynita" ? "Reyna Mancebo" : (ten.nombre || "Administrador"),
-          email: slug === "reynita" ? "reynamancebo@gmail.com" : (ten.email || "admin@klynn.com.do"),
-          password: "***",
-          rol: "ADMIN",
-          activo: true,
-          permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
-          creado_en: new Date().toISOString(),
-        };
-        cacheUserResult(fallbackEmp, ten);
-        return { empleado: fallbackEmp, tenant: ten };
       }
+    }
+    // Si estamos online pero Supabase no tiene sesión, limpiar la sesión
+    if (isBrowser()) {
+      localStorage.removeItem(KEY.session);
+      localStorage.removeItem("lvx:session");
+      localStorage.removeItem("klynn_last_auth_user");
     }
     return null;
   }
 
-  const email = user.email?.toLowerCase();
+  const email = user.email?.toLowerCase().trim();
   const isSuperAdmin = email && ADMIN_EMAILS.includes(email);
 
   // Caso 1: Es Super Admin
   if (isSuperAdmin) {
-    // Si tiene un tenant_id en la sesión, usar ese
     if (session?.tenant_id && session.tenant_id !== "admin") {
       const ten = await getTenantById(session.tenant_id);
       if (ten) {
@@ -3518,7 +3463,6 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
         return { empleado: emp, tenant: ten };
       }
     }
-    // Si no, devolver sin tenant específico (o el primero que encuentre)
     const empAdmin = {
       id: "admin",
       tenant_id: "admin",
@@ -3537,24 +3481,28 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     };
   }
 
-  // Caso 2: Usuario regular
-  const { data: empsRaw } = await supabase
+  // Caso 2: Usuario regular (buscar sus perfiles de empleado activos)
+  const { data: empsRaw, error: empsErr } = await supabase
     .from("empleados")
     .select("*")
     .eq("email", email)
     .eq("activo", true);
 
-  if (!empsRaw || empsRaw.length === 0) {
-    if (isBrowser()) localStorage.removeItem("lvx:session");
+  if (empsErr || !empsRaw || empsRaw.length === 0) {
+    if (isBrowser()) {
+      localStorage.removeItem(KEY.session);
+      localStorage.removeItem("lvx:session");
+      localStorage.removeItem("klynn_last_auth_user");
+    }
     return null;
   }
 
-  // Priorizar cuentas ADMIN sobre otros roles para evitar degradación de privilegios
+  // Priorizar cuentas ADMIN sobre otros roles
   const emps = [...empsRaw].sort((a, b) => (a.rol === "ADMIN" ? -1 : b.rol === "ADMIN" ? 1 : 0));
 
-  // 1. Intentar hacer match con el tenant_id de la sesión guardada
+  // A. Buscar coincidencia con la sesión previa guardada
   if (session?.tenant_id) {
-    const empMatch = emps.find((e) => e.tenant_id === session.tenant_id);
+    const empMatch = emps.find((e) => isSameTenant(e.tenant_id, session!.tenant_id));
     if (empMatch) {
       const ten = await getTenantById(empMatch.tenant_id);
       if (ten) {
@@ -3569,12 +3517,13 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     }
   }
 
-  // 2. Intentar hacer match con el slug activo (activeTenant)
-  const activeSlug = isBrowser() ? localStorage.getItem(KEY.active) : null;
-  if (activeSlug) {
-    const ten = await getTenantBySlug(activeSlug);
+  // B. Buscar coincidencia con el slug en la URL actual
+  const urlMatch = typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+  const currentSlug = urlMatch ? urlMatch[1] : (isBrowser() ? localStorage.getItem(KEY.active) : null);
+  if (currentSlug && currentSlug !== "admin") {
+    const ten = await getTenantBySlug(currentSlug);
     if (ten) {
-      const empMatch = emps.find((e) => e.tenant_id === ten.id);
+      const empMatch = emps.find((e) => isSameTenant(e.tenant_id, ten.id));
       if (empMatch) {
         setSession({
           empleado_id: empMatch.id,
@@ -3587,7 +3536,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     }
   }
 
-  // 3. Fallback al primer empleado encontrado
+  // C. Fallback a la primera lavandería autorizada para este usuario
   const emp = emps[0];
   const ten = await getTenantById(emp.tenant_id);
   if (ten) {
@@ -4006,299 +3955,8 @@ export async function migrateLocalDataToSupabase(tenant_id: string) {
 
 // ============ Demo seed enriquecido ============
 export async function seedDemoIfEmpty() {
-  if (!isBrowser()) return;
-  await getPlans();
-  const existingTenants = await getTenants();
-  if (existingTenants.length > 0) return;
-
-  const tenantId = uid("ten");
-  const tenant: Tenant = {
-    id: tenantId,
-    nombre: "Lavandería La Burbuja",
-    slug: "laburbuja",
-    rnc: "131-12345-6",
-    telefono: "809-555-0142",
-    direccion: "Av. Lope de Vega #45, Naco",
-    ciudad: "Santo Domingo",
-    email: "admin@laburbuja.do",
-    color_primario: "#1B4B73",
-    color_secundario: "#F0B900",
-    plan_id: "pro",
-    estado: "TRIAL",
-    trial_hasta: new Date(Date.now() + 14 * 86400000).toISOString(),
-    creado_en: new Date(Date.now() - 30 * 86400000).toISOString(),
-    config: { ...DEFAULT_CONFIG },
-  };
-  await saveTenant(tenant);
-
-  const adminId = uid("emp");
-  await saveEmpleado({
-    id: adminId,
-    tenant_id: tenantId,
-    nombre: "María González",
-    email: "admin@laburbuja.do",
-    password: "demo1234",
-    rol: "ADMIN",
-    activo: true,
-    creado_en: new Date().toISOString(),
-    pin: "1234",
-  });
-  await saveEmpleado({
-    id: uid("emp"),
-    tenant_id: tenantId,
-    nombre: "Carlos Rodríguez",
-    email: "vendedor@laburbuja.do",
-    password: "demo1234",
-    rol: "VENDEDOR",
-    activo: true,
-    creado_en: new Date().toISOString(),
-    pin: "5678",
-  });
-  await saveEmpleado({
-    id: uid("emp"),
-    tenant_id: tenantId,
-    nombre: "Luis Fernández",
-    email: "repartidor@laburbuja.do",
-    password: "demo1234",
-    rol: "REPARTIDOR",
-    activo: true,
-    creado_en: new Date().toISOString(),
-  });
-
-  // Servicios
-  const servSeed: Array<Omit<Servicio, "id" | "tenant_id">> = [
-    {
-      nombre: "Lavado y secado",
-      descripcion: "Lavado completo + secadora",
-      icono: "🧺",
-      activo: true,
-      precio: 0,
-    },
-    {
-      nombre: "Solo lavado",
-      descripcion: "Solo lavado en agua",
-      icono: "💧",
-      activo: true,
-      precio: 0,
-    },
-    {
-      nombre: "Solo secado",
-      descripcion: "Únicamente secadora",
-      icono: "🌬️",
-      activo: true,
-      precio: 0,
-    },
-    {
-      nombre: "Planchado",
-      descripcion: "Planchado profesional",
-      icono: "♨️",
-      activo: true,
-      precio: 0,
-    },
-    {
-      nombre: "Lavado en seco",
-      descripcion: "Dry cleaning para prendas delicadas",
-      icono: "✨",
-      activo: true,
-      precio: 50,
-    },
-    {
-      nombre: "Sastrería",
-      descripcion: "Arreglos y costura",
-      icono: "🪡",
-      activo: true,
-      precio: 100,
-    },
-    {
-      nombre: "Tapicería",
-      descripcion: "Limpieza de muebles y tapizados",
-      icono: "🛋️",
-      activo: true,
-      precio: 500,
-    },
-    {
-      nombre: "Alfombras",
-      descripcion: "Lavado de alfombras y tapetes",
-      icono: "🟫",
-      activo: true,
-      precio: 300,
-    },
-  ];
-  for (const s of servSeed) {
-    await saveServicio({ ...s, id: uid("srv"), tenant_id: tenantId });
-  }
-
-  // Clientes
-  const clientesData = [
-    {
-      nombre: "Juan Pérez",
-      telefono: "809-321-4567",
-      email: "juan@email.com",
-      direccion: "Calle Duarte 12, Piantini",
-      tipo: "Consumidor Final" as const,
-      limite_credito: 0,
-    },
-    {
-      nombre: "Ana Martínez",
-      telefono: "829-555-1122",
-      email: "ana@email.com",
-      direccion: "Av. 27 de Febrero 88, Bella Vista",
-      tipo: "Consumidor Final" as const,
-      limite_credito: 5000,
-    },
-    {
-      nombre: "Pedro Jiménez",
-      telefono: "849-777-3344",
-      direccion: "Calle El Sol 5, Gazcue",
-      tipo: "Empresa" as const,
-      limite_credito: 3000,
-    },
-    {
-      nombre: "Luisa Reyes",
-      telefono: "809-444-9988",
-      email: "luisa@email.com",
-      tipo: "Consumidor Final" as const,
-      limite_credito: 0,
-    },
-    {
-      nombre: "Roberto Núñez",
-      telefono: "809-222-5566",
-      direccion: "Av. Sarasota 200, Bella Vista",
-      tipo: "Consumidor Final" as const,
-      limite_credito: 0,
-    },
-  ];
-  const clientesIds: string[] = [];
-  for (const c of clientesData) {
-    const id = uid("cli");
-    clientesIds.push(id);
-    await saveCliente({
-      ...c,
-      id,
-      tenant_id: tenantId,
-      creado_en: new Date(Date.now() - Math.random() * 60 * 86400000).toISOString(),
-    });
-  }
-
-  // Caja abierta
-  const cajaId = uid("caj");
-  await saveCaja({
-    id: cajaId,
-    tenant_id: tenantId,
-    empleado_id: adminId,
-    monto_inicial: 2000,
-    estado: "ABIERTA",
-    abierta_en: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
-    notas_apertura: "Apertura turno mañana",
-  });
-  await saveMovimiento({
-    id: uid("mov"),
-    tenant_id: tenantId,
-    caja_id: cajaId,
-    empleado_id: adminId,
-    tipo: "INGRESO",
-    concepto: "Apertura de caja",
-    monto: 2000,
-    creado_en: new Date(new Date().setHours(8, 0, 0, 0)).toISOString(),
-  });
-
-  // Algunas órdenes históricas y de hoy
-  const items1: OrdenItem[] = [
-    { descripcion: "Camisa manga larga", cantidad: 2, precio_unitario: 150 },
-    { descripcion: "Pantalón de vestir", cantidad: 1, precio_unitario: 200 },
-  ];
-  const items2: OrdenItem[] = [
-    { descripcion: "Lavado por libra", cantidad: 4.5, precio_unitario: 80, es_libra: true },
-  ];
-  const items3: OrdenItem[] = [
-    { descripcion: "Edredón matrimonial", cantidad: 1, precio_unitario: 450 },
-    { descripcion: "Sábana king", cantidad: 2, precio_unitario: 280 },
-  ];
-
-  async function crearOrden(
-    idx: number,
-    items: OrdenItem[],
-    estado: EstadoOrden,
-    metodo: MetodoPago,
-    hoursAgo: number,
-    urgente = false,
-  ) {
-    const subtotal = items.reduce((s, it) => s + it.cantidad * it.precio_unitario, 0);
-    const itbis = +(subtotal * 0.18).toFixed(2);
-    const total = +(subtotal + itbis).toFixed(2);
-    const pagado = metodo === "CREDITO" ? 0 : total;
-    const saldo = total - pagado;
-    const id = uid("ord");
-    const numero = await nextOrdenNumero(tenantId);
-    const creado = new Date(Date.now() - hoursAgo * 3600 * 1000).toISOString();
-    await saveOrden({
-      id,
-      tenant_id: tenantId,
-      numero,
-      cliente_id: clientesIds[idx % clientesIds.length],
-      empleado_id: adminId,
-      servicios: ["Lavado y secado"],
-      items,
-      subtotal,
-      itbis,
-      descuento: 0,
-      total,
-      pagado,
-      saldo,
-      metodo_pago: metodo,
-      estado,
-      fecha_entrega: new Date(Date.now() + 2 * 86400000).toISOString(),
-      es_urgente: urgente,
-      creado_en: creado,
-    });
-    if (metodo !== "CREDITO" && estado !== "ANULADA") {
-      await saveMovimiento({
-        id: uid("mov"),
-        tenant_id: tenantId,
-        caja_id: cajaId,
-        empleado_id: adminId,
-        tipo: "VENTA",
-        concepto: `Venta ${numero}`,
-        monto: total,
-        metodo,
-        orden_id: id,
-        creado_en: creado,
-      });
-    }
-  }
-
-  await crearOrden(0, items1, "ENTREGADA", "EFECTIVO", 5);
-  await crearOrden(1, items2, "LISTA", "TARJETA", 3);
-  await crearOrden(2, items3, "EN_PROCESO", "CREDITO", 2);
-  await crearOrden(3, items1, "RECIBIDA", "EFECTIVO", 1, true);
-  await crearOrden(4, items2, "EN_PROCESO", "TRANSFERENCIA", 0.5);
-
-  // Gastos
-  await saveGasto({
-    id: uid("gas"),
-    tenant_id: tenantId,
-    empleado_id: adminId,
-    categoria: "Suministros",
-    descripcion: "Detergente líquido 5gal",
-    monto: 850,
-    metodo_pago: "Efectivo",
-    proveedor: "Distribuidora Sol",
-    fecha: new Date().toISOString(),
-    aprobado: true,
-  });
-  await saveGasto({
-    id: uid("gas"),
-    tenant_id: tenantId,
-    empleado_id: adminId,
-    categoria: "Servicios (luz, agua, internet)",
-    descripcion: "Factura EDESUR",
-    monto: 4200,
-    metodo_pago: "Transferencia",
-    fecha: new Date(Date.now() - 86400000).toISOString(),
-    aprobado: true,
-  });
-
-  setActiveTenant(tenant.slug);
+  // En producción SaaS Multi-Tenant no se inyectan datos de prueba falsos en localStorage del usuario
+  return;
 }
 
 /** Incrementa el contador de WhatsApp del tenant y maneja reinicios mensuales */

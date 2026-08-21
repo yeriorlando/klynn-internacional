@@ -116,6 +116,29 @@ export function useECFSequences(tenantId: string) {
   });
 }
 
+import type { QueryClient } from "@tanstack/react-query";
+
+/** Precarga en memoria RAM y en paralelo todas las consultas principales del tenant */
+export function prefetchTenantData(queryClient: QueryClient, tenantId: string) {
+  if (!tenantId || tenantId === "__loading__") return;
+
+  // Precargar en segundo plano sin bloquear el hilo principal
+  try {
+    queryClient.prefetchQuery({ queryKey: ["ordenes", tenantId], queryFn: () => getOrdenes(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["clientes", tenantId], queryFn: () => getClientes(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["servicios", tenantId], queryFn: () => getServicios(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["catalogo", tenantId], queryFn: () => getCatalogo(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["caja-abierta", tenantId], queryFn: () => getCajaAbierta(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["gastos", tenantId], queryFn: () => getGastos(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["empleados", tenantId], queryFn: () => getEmpleados(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["ecf-config", tenantId], queryFn: () => getECFConfig(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["global-config"], queryFn: () => getGlobalConfig() });
+    queryClient.prefetchQuery({ queryKey: ["plans"], queryFn: () => getPlans() });
+  } catch (e) {
+    console.warn("Aviso en prefetchTenantData:", e);
+  }
+}
+
 
 
 

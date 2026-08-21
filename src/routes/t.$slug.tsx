@@ -14,7 +14,12 @@ function TenantLayout() {
   const isLoginPage = routerState.location.pathname.endsWith("/login");
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
+    <ThemeProvider 
+      attribute="class" 
+      defaultTheme="light" 
+      enableSystem={false}
+      forcedTheme={isLoginPage ? "light" : undefined}
+    >
       {isLoginPage ? <Outlet /> : <TenantShell />}
     </ThemeProvider>
   );

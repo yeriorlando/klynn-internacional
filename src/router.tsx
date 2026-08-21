@@ -70,12 +70,13 @@ export const queryClient = new QueryClient({
 });
 
 export const getRouter = () => {
-
   const router = createRouter({
     routeTree,
     context: { queryClient },
     scrollRestoration: true,
-    defaultPreloadStaleTime: 0,
+    defaultPreload: "intent",
+    defaultPreloadDelay: 50,
+    defaultPreloadStaleTime: 1000 * 60 * 5,
     defaultErrorComponent: DefaultErrorComponent,
   });
 
