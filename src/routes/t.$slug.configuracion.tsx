@@ -2623,6 +2623,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   const [qrCodeBase64, setQrCodeBase64] = useState<string | null>(null);
   const [loadingQr, setLoadingQr] = useState(false);
   const [disconnecting, setDisconnecting] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const pollIntervalRef = useRef<any>(null);
 
   // Consultar estado de conexión
@@ -2650,6 +2651,21 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     }
     setKcStatus("close");
     return "close";
+  };
+
+  const handleManualCheckStatus = async () => {
+    if (verifying) return;
+    setVerifying(true);
+    try {
+      const state = await checkStatus();
+      if (state === "open") {
+        toast.success("WhatsApp está conectado y operativo");
+      } else {
+        toast.error("La sesión de WhatsApp está desconectada. Por favor escanea el código QR.");
+      }
+    } finally {
+      setVerifying(false);
+    }
   };
 
   useEffect(() => {
@@ -2883,11 +2899,14 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                       <MessageCircle className="h-5.5 w-5.5 fill-emerald-500/20 text-emerald-600 dark:text-emerald-400" />
                     </div>
                     <div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
                         <Badge variant="outline" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950/80 dark:text-emerald-300 border-emerald-300 font-bold text-[10px] uppercase tracking-wide">
                           Conectado
                         </Badge>
-                        <span className="text-[11px] font-mono text-muted-foreground">Instancia: {instanceName}</span>
+                        <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-900 dark:text-emerald-200 text-[11px]">
+                          <span className="text-muted-foreground font-medium">Instancia:</span>
+                          <span className="font-mono font-bold text-foreground">{instanceName}</span>
+                        </div>
                       </div>
                       <h4 className="text-sm md:text-base font-bold text-foreground mt-1">
                         {kcPhone ? `Teléfono: ${(() => {
@@ -2910,11 +2929,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                   <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                     <Button
                       size="sm"
+                      disabled={verifying}
                       className="bg-slate-900 hover:bg-slate-800 active:bg-black dark:bg-slate-100 dark:hover:bg-slate-200 text-white dark:text-slate-900 rounded-xl font-semibold text-xs h-9 px-3.5 shadow-none border-0 flex items-center gap-1.5 cursor-pointer transition-colors"
-                      onClick={checkStatus}
+                      onClick={handleManualCheckStatus}
                     >
-                      <RefreshCw className="h-3.5 w-3.5" />
-                      <span>Verificar Estado</span>
+                      <RefreshCw className={`h-3.5 w-3.5 ${verifying ? "animate-spin" : ""}`} />
+                      <span>{verifying ? "Verificando..." : "Verificar Estado"}</span>
                     </Button>
                     <Button
                       size="sm"
