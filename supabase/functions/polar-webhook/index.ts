@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { validateEvent } from "https://esm.sh/@polar-sh/sdk/webhooks";
+import { Webhook } from "https://esm.sh/standardwebhooks@1.0.0";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -14,6 +15,7 @@ const PLAN_MAPPING: Record<string, string> = {
   "prod_basico_id": "basico",
   "prod_pro_id": "pro",
   "prod_enterprise_id": "enterprise",
+  "prod_inicial_id": "inicial",
 };
 
 // IDs de productos de "Sucursal Extra" en Polar
@@ -32,18 +34,25 @@ Deno.serve(async (req) => {
 
   try {
     const payload = await req.text();
+    const headers = Object.fromEntries(req.headers);
 
     // ── 1. Validar firma de Polar (Seguridad Criptográfica) ──
     let event: any;
     try {
       event = validateEvent(
         payload,
-        Object.fromEntries(req.headers),
+        headers,
         POLAR_WEBHOOK_SECRET,
       );
-    } catch (_) {
-      console.error("Firma inválida de Polar — petición rechazada");
-      return new Response("Unauthorized", { status: 401 });
+    } catch (sdkErr: any) {
+      // Fallback a StandardWebhooks por si el schema de la versión del SDK difiere
+      try {
+        const wh = new Webhook(POLAR_WEBHOOK_SECRET);
+        event = wh.verify(payload, headers);
+      } catch (standardErr: any) {
+        console.error("Firma criptográfica inválida de Polar — petición rechazada:", standardErr?.message || standardErr);
+        return new Response("Unauthorized", { status: 401 });
+      }
     }
 
     console.log("Evento recibido de Polar:", event.type);

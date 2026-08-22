@@ -102,46 +102,66 @@ function RootShell({ children }: { children: React.ReactNode }) {
     <html lang="es" suppressHydrationWarning>
       <head>
         <HeadContent />
-        {/* Google Analytics */}
-        <script async src="https://www.googletagmanager.com/gtag/js?id=G-9NWT8WTTL9"></script>
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              window.dataLayer = window.dataLayer || [];
-              function gtag(){dataLayer.push(arguments);}
-              gtag('js', new Date());
-
-              gtag('config', 'G-9NWT8WTTL9');
-            `,
-          }}
-        />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function(h,o,t,j,a,r){
-                  h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
-                  h._hjSettings={hjid:6708717,hjsv:6};
-                  a=o.getElementsByTagName('head')[0];
-                  r=o.createElement('script');r.async=1;
-                  r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
-                  a.appendChild(r);
-              })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
-            `,
-          }}
-        />
+        {/* Google Analytics & Hotjar (Solo en Producción) */}
+        {import.meta.env.PROD && (
+          <>
+            <script async src="https://www.googletagmanager.com/gtag/js?id=G-9NWT8WTTL9"></script>
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
+                  window.dataLayer = window.dataLayer || [];
+                  function gtag(){dataLayer.push(arguments);}
+                  gtag('js', new Date());
+                  gtag('config', 'G-9NWT8WTTL9');
+                `,
+              }}
+            />
+            <script
+              dangerouslySetInnerHTML={{
+                __html: `
+                  (function(h,o,t,j,a,r){
+                      h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
+                      h._hjSettings={hjid:6708717,hjsv:6};
+                      a=o.getElementsByTagName('head')[0];
+                      r=o.createElement('script');r.async=1;
+                      r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;
+                      a.appendChild(r);
+                  })(window,document,'https://static.hotjar.com/c/hotjar-','.js?sv=');
+                `,
+              }}
+            />
+          </>
+        )}
         {/* Service Worker Registration for PWA and Offline Support */}
         <script
           dangerouslySetInnerHTML={{
             __html: `
               if (typeof window !== 'undefined' && 'serviceWorker' in navigator) {
-                window.addEventListener('load', function() {
-                  navigator.serviceWorker.register('/sw.js').then(function(reg) {
-                    reg.update();
-                    console.log('[Klynn PWA] Service Worker activo y actualizado');
-                  }).catch(function(err) {
-                    console.warn('[Klynn PWA] Fallo al registrar Service Worker:', err);
+                if (${import.meta.env.DEV}) {
+                  // En desarrollo: limpiar cualquier Service Worker activo y caché residual
+                  navigator.serviceWorker.getRegistrations().then(function(registrations) {
+                    for (var r of registrations) {
+                      r.unregister();
+                    }
                   });
-                });
+                  if ('caches' in window) {
+                    caches.keys().then(function(names) {
+                      for (var name of names) {
+                        caches.delete(name);
+                      }
+                    });
+                  }
+                } else {
+                  // En producción: registrar PWA Service Worker
+                  window.addEventListener('load', function() {
+                    navigator.serviceWorker.register('/sw.js').then(function(reg) {
+                      reg.update();
+                      console.log('[Klynn PWA] Service Worker activo y actualizado');
+                    }).catch(function(err) {
+                      console.warn('[Klynn PWA] Fallo al registrar Service Worker:', err);
+                    });
+                  });
+                }
               }
             `,
           }}

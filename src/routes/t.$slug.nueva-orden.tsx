@@ -1,4 +1,4 @@
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { encodeEscPos, printDirectRaw } from "@/lib/impresora";
 import { supabase } from "@/lib/supabase";
 import { useMemo, useState, useEffect, useRef } from "react";

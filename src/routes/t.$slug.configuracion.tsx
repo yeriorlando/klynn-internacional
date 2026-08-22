@@ -4802,6 +4802,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
 function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'electronic', sequences = [] }: {
   open: boolean; onOpenChange: (o: boolean) => void; tenantId: string; onCreated: () => void; mode?: 'electronic' | 'traditional'; sequences?: ECFSequence[];
 }) {
+  const queryClient = useQueryClient();
   const [loading, setLoading] = useState(false);
   const [seq, setSeq] = useState<Partial<ECFSequence>>({
     tenant_id: tenantId,
