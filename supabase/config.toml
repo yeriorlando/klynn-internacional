@@ -18,7 +18,9 @@ verify_jwt = false
 
 [functions.pronesoft-webhook]
 enabled = true
-verify_jwt = true
+# Pronesoft no envía un JWT de Supabase. La función valida la firma HMAC con
+# PRONESOFT_WEBHOOK_SECRET antes de procesar el payload.
+verify_jwt = false
 import_map = "./functions/pronesoft-webhook/deno.json"
 # Uncomment to specify a custom file path to the entrypoint.
 # Supported file extensions are: .ts, .js, .mjs, .jsx, .tsx
@@ -26,3 +28,6 @@ entrypoint = "./functions/pronesoft-webhook/index.ts"
 # Specifies static files to be bundled with the function. Supports glob patterns.
 # For example, if you want to serve static HTML pages in your function:
 # static_files = [ "./functions/pronesoft-webhook/*.html" ]
+
+[functions.pronesoft-proxy]
+verify_jwt = true

@@ -1,5 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { IntegrationClient, Environment } from "npm:@pronesoft-rd/ecf-sdk@0.0.7"
+import { IntegrationClient, Environment } from "npm:@pronesoft-rd/ecf-sdk@0.0.9"
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -8,13 +8,79 @@ const corsHeaders = {
   'Access-Control-Max-Age': '86400',
 }
 
+function validateElectronicDocument(payload: any) {
+  if (!payload || typeof payload !== 'object') throw new Error('Payload e-CF inválido.');
+  if (!Array.isArray(payload.paymentForms) || payload.paymentForms.length === 0) {
+    throw new Error('paymentForms es obligatorio y debe contener la forma de pago real.');
+  }
+  const total = Number(payload.totals?.totalAmount);
+  if (!Number.isFinite(total) || total <= 0) throw new Error('totals.totalAmount debe ser un monto positivo.');
+  const paid = payload.paymentForms.reduce((sum: number, form: any) => {
+    if (!['1', '2', '3', '4', '5'].includes(String(form?.method))) {
+      throw new Error('paymentForms.method debe ser 1 (efectivo), 2 (cheque), 3 (tarjeta), 4 (crédito) o 5 (transferencia).');
+    }
+    const amount = Number(form?.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new Error('Cada paymentForms.amount debe ser mayor que cero.');
+    return sum + amount;
+  }, 0);
+  if (Math.abs(Math.round((paid - total) * 100)) > 0) {
+    throw new Error('La suma de paymentForms debe coincidir exactamente con totals.totalAmount.');
+  }
+}
+
+type PronesoftEnvironmentName = 'TesteCF' | 'CerteCF' | 'eCF';
+
+function normalizeEnvironment(value: unknown): PronesoftEnvironmentName {
+  return value === 'CerteCF' || value === 'eCF' ? value : 'TesteCF';
+}
+
+async function resolveEnvironment(config: any): Promise<PronesoftEnvironmentName> {
+  const requested = normalizeEnvironment(config?.ecfEnv);
+  const supabaseUrl = Deno.env.get('SUPABASE_URL');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || Deno.env.get('SUPABASE_SERVICE_KEY');
+  if (!supabaseUrl || !serviceKey) return requested;
+
+  const headers = { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` };
+  try {
+    const globalResponse = await fetch(
+      `${supabaseUrl}/rest/v1/global_config?id=eq.1&select=fiscal_environment_policy`,
+      { headers },
+    );
+    if (globalResponse.ok) {
+      const [globalConfig] = await globalResponse.json();
+      const policy = globalConfig?.fiscal_environment_policy;
+      if (policy === 'TesteCF' || policy === 'CerteCF' || policy === 'eCF') return policy;
+    }
+
+    const filter = config?.klynnTenantId
+      ? `tenant_id=eq.${encodeURIComponent(config.klynnTenantId)}`
+      : config?.tenantId
+        ? `pronesoft_tenant_id=eq.${encodeURIComponent(config.tenantId)}`
+        : '';
+    if (!filter) return requested;
+
+    const tenantResponse = await fetch(
+      `${supabaseUrl}/rest/v1/ecf_config?${filter}&select=pronesoft_environment,ambiente&limit=1`,
+      { headers },
+    );
+    if (!tenantResponse.ok) return requested;
+    const [tenantConfig] = await tenantResponse.json();
+    if (tenantConfig?.pronesoft_environment) return normalizeEnvironment(tenantConfig.pronesoft_environment);
+    return tenantConfig?.ambiente === 'produccion' ? 'eCF' : requested;
+  } catch (error) {
+    console.warn('[pronesoft-proxy] No se pudo resolver la política de ambiente; se usará el ambiente solicitado.', error);
+    return requested;
+  }
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders, status: 200 })
   }
 
   try {
-    const { action, payload, config } = await req.json()
+    const { action, payload, config: requestConfig } = await req.json()
+    const config = requestConfig || {};
 
     // Acción pública de consulta RNC (Microservicio)
     if (action === 'get-rnc') {
@@ -27,16 +93,29 @@ serve(async (req) => {
     }
 
     // Configuración base
-    const baseUrl = config.baseUrl || 'https://api.ecf.pronesoft.com/api/v1';
-    const ecfEnv = config.ecfEnv || 'TesteCF';
+    const ecfEnv = await resolveEnvironment(config);
+    const usesSandboxCredentials = ecfEnv === 'TesteCF' || ecfEnv === 'CerteCF';
+    const baseUrl = usesSandboxCredentials
+      ? 'https://api.ecf.sandbox.pronesoft.com/api/v1'
+      : 'https://api.ecf.pronesoft.com/api/v1';
+    const clientId = usesSandboxCredentials
+      ? Deno.env.get('PRONESOFT_SANDBOX_CLIENT_ID')
+      : Deno.env.get('PRONESOFT_PRODUCTION_CLIENT_ID') || Deno.env.get('PRONESOFT_CLIENT_ID');
+    const clientSecret = usesSandboxCredentials
+      ? Deno.env.get('PRONESOFT_SANDBOX_CLIENT_SECRET')
+      : Deno.env.get('PRONESOFT_PRODUCTION_CLIENT_SECRET') || Deno.env.get('PRONESOFT_CLIENT_SECRET');
+    if (!clientId || !clientSecret) {
+      const prefix = usesSandboxCredentials ? 'PRONESOFT_SANDBOX' : 'PRONESOFT_PRODUCTION';
+      throw new Error(`Faltan los secretos ${prefix}_CLIENT_ID y ${prefix}_CLIENT_SECRET en la Edge Function.`);
+    }
 
-    console.log(`[pronesoft-proxy] 🚀 Inicializando IntegrationClient SDK para: ${config.clientId.substring(0, 10)}...`);
+    console.log(`[pronesoft-proxy] Inicializando IntegrationClient SDK en ${ecfEnv} con credenciales de servidor.`);
     
     // Inicializar el SDK oficial
     const sdk = new IntegrationClient({
       baseUrl,
-      clientId: config.clientId.trim(),
-      clientSecret: config.clientSecret.trim(),
+      clientId,
+      clientSecret,
     });
 
     // Si hay tenantId para delegación multicompañía, obtenemos el cliente scoped
@@ -52,6 +131,7 @@ serve(async (req) => {
     let result;
 
     if (action === 'submit') {
+      validateElectronicDocument(payload);
       console.log("[pronesoft-proxy] 📤 Enviando eCF a DGII con el SDK...");
       
       // Convertir issueDate a Date object porque el SDK espera Date y nosotros recibimos string en el JSON
@@ -64,11 +144,6 @@ serve(async (req) => {
         payload.referenceInfo.modifiedInvoiceDate = new Date(payload.referenceInfo.modifiedInvoiceDate);
       }
 
-      // Garantizar que paymentForms sea siempre un arreglo válido para evitar errores del SDK (.map)
-      if (!payload.paymentForms || !Array.isArray(payload.paymentForms) || payload.paymentForms.length === 0) {
-        payload.paymentForms = [{ method: '1', amount: payload.totals?.totalAmount || 1000 }];
-      }
-      
       result = await client.ecfSubmission.submitEcf({
         environment: environmentValue,
         electronicDocument: payload
@@ -81,21 +156,24 @@ serve(async (req) => {
       
       result = await client.ecfSubmission.getEcfStatus({
         environment: environmentValue,
-        trackId: payload.documentId
+        id: payload.documentId
       });
 
     } else if (action === 'register-company') {
       console.log("[pronesoft-proxy] 🏢 Registrando empresa asociada con el SDK...");
+      if (!payload?.rnc || !payload?.name) throw new Error('rnc y name son obligatorios para registrar una empresa.');
       
       const printerTypeValue = "thermal_80"; // A4, thermal_80, thermal_58
+      const accountKey = String(config.klynnTenantId || payload.rnc).replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+      const generatedPassword = `K!${crypto.randomUUID().replace(/-/g, '')}a1`;
 
       const res = await sdk.associatedCompanies.createAssociatedCompany({
-        email: payload.email || `laundry-${payload.rnc}@klynn.com`,
-        password: payload.password || "Klynn2026!",
+        email: payload.email || `ecf-${accountKey}@klynn.com.do`,
+        password: payload.password || generatedPassword,
         name: payload.name,
         rnc: payload.rnc,
-        phone: payload.phone || "809-555-5555",
-        address: payload.address || "Calle Principal Klynn",
+        phone: payload.phone || "8090000000",
+        address: payload.address || "República Dominicana",
         city: payload.city || "Santo Domingo",
         country: payload.country || "DO",
         printerType: printerTypeValue as any
@@ -122,70 +200,20 @@ serve(async (req) => {
       result = { ok: true, ...res };
 
     } else if (action === 'import-sequences') {
-      console.log("[pronesoft-proxy] 📦 Importando secuencias (Bypass compatibilidad)...");
-      
-      // Dado que el SDK oficial no expone directamente un método de importación masiva por XML,
-      // utilizamos fetch directo autenticado de forma interna y transparente para mayor compatibilidad.
-      const token = await sdk.getValidToken(false);
-      const headers: any = {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      };
-      if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
-
-      const res = await fetch(`${baseUrl}/tax-sequences/import`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify(payload)
-      });
-      
-      const text = await res.text();
-      if (!res.ok) throw new Error(`Error de Importación: ${text}`);
-      result = JSON.parse(text);
+      throw new Error('El SDK oficial 0.0.9 no ofrece importación masiva de secuencias. Registra cada rango autorizado con Crear secuencia.');
 
     } else if (action === 'list-associated-companies') {
       console.log("[pronesoft-proxy] 🏢 Listando empresas asociadas...");
-      try {
-        let res: any;
-        if (sdk.associatedCompanies && typeof (sdk.associatedCompanies as any).listAssociatedCompanies === 'function') {
-          res = await (sdk.associatedCompanies as any).listAssociatedCompanies({
-            page: payload?.page || 1,
-            limit: payload?.limit || 50,
-          });
-        } else if (client.companies && typeof (client.companies as any).listCompanies === 'function') {
-          res = await client.companies.listCompanies({
-            page: payload?.page || 1,
-            limit: payload?.limit || 50,
-          });
-        }
-        if (res) {
-          result = res;
-        } else {
-          throw new Error("SDK method listAssociatedCompanies no disponible, ejecutando REST");
-        }
-      } catch (sdkErr: any) {
-        console.warn("[pronesoft-proxy] ⚠️ Fallback a REST para list-associated-companies:", sdkErr?.message);
-        const token = await sdk.getValidToken(false);
-        const headers: any = {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        };
-        if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
+      result = await sdk.associatedCompanies.listAssociatedCompanies({
+        page: payload?.page || 1,
+        limit: payload?.limit || 50,
+      });
 
-        const page = payload?.page || 1;
-        const limit = payload?.limit || 50;
-        const res = await fetch(`${baseUrl}/associated-companies?page=${page}&limit=${limit}`, {
-          method: "GET",
-          headers,
-        });
-
-        const text = await res.text();
-        if (!res.ok) {
-          console.warn("[pronesoft-proxy] Fallback REST retornó código:", res.status, text);
-          throw new Error(`Error en API Pronesoft (${res.status}): ${text}`);
-        }
-        result = text ? JSON.parse(text) : [];
-      }
+    } else if (action === 'delete-associated-company') {
+      if (!payload?.companyId) throw new Error('companyId es obligatorio para eliminar una empresa asociada.');
+      result = await sdk.associatedCompanies.deleteAssociatedCompany({
+        companyId: payload.companyId,
+      });
 
     } else if (action === 'list-sequences') {
       console.log("[pronesoft-proxy] 📋 Listando secuencias fiscales con el SDK...");
@@ -227,6 +255,10 @@ serve(async (req) => {
       const targetType = type || invoiceType;
       let targetSeqId = sequenceId;
 
+      if (!targetSeqId) {
+        throw new Error('sequenceId es obligatorio para anular un rango e-NCF. Sin él no se puede garantizar la secuencia correcta.');
+      }
+
       if (!targetSeqId && targetType) {
         try {
           const sequencesRes = await client.taxSequences.listTaxSequences({
@@ -263,86 +295,55 @@ serve(async (req) => {
 
     } else if (action === 'test-connection') {
       console.log("[pronesoft-proxy] ⚡ Probando conexión y autenticación con el SDK...");
-      // Intentamos validar obteniendo un token del SDK de forma real
-      const token = await sdk.getValidToken(true);
-      if (token) {
-        result = { ok: true, message: "Conexión estable y token del SDK generado" };
-      } else {
-        throw new Error("No se pudo obtener el token de Pronesoft a través del SDK");
-      }
+      // Una lectura mínima fuerza OAuth dentro del SDK sin acceder a métodos privados.
+      await sdk.associatedCompanies.listAssociatedCompanies({ page: 1, limit: 1 });
+      result = { ok: true, message: "Conexión estable y autenticación SDK verificada", environment: ecfEnv, sdkVersion: "0.0.9" };
     } else if (action === 'list-sent-documents') {
       console.log("[pronesoft-proxy] 📤 Listando documentos enviados con el SDK...");
-      try {
-        const res = await client.documentsSent.listSentDocuments({
-          environment: environmentValue,
-          page: payload?.page || 1,
-          pageSize: payload?.pageSize || 50,
-          type: payload?.type
-        });
-        result = res;
-      } catch (sdkErr: any) {
-        console.warn("[pronesoft-proxy] ⚠️ Fallback a REST para list-sent-documents:", sdkErr?.message);
-        const token = await sdk.getValidToken(false);
-        const headers: any = {
-          "Authorization": `Bearer ${token}`,
-          "Content-Type": "application/json",
-        };
-        if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
+      result = await client.documentsSent.listSentDocuments({
+        env: environmentValue,
+        page: payload?.page || 1,
+        limit: payload?.pageSize || 50,
+        type: payload?.type
+      });
 
-        const envMap: Record<number, string> = { 1: 'TesteCF', 2: 'CerteCF', 3: 'eCF' };
-        const apiEnv = envMap[environmentValue as unknown as number] || 'TesteCF';
+    } else if (action === 'get-sent-document') {
+      if (!payload?.documentId) throw new Error('documentId es obligatorio para consultar el detalle del e-CF.');
+      result = await client.documentsSent.getSentDocumentById({
+        id: payload.documentId,
+      });
 
-        const page = payload?.page || 1;
-        const pageSize = payload?.pageSize || 50;
-        const res = await fetch(`${baseUrl}/documents/sent?environment=${apiEnv}&page=${page}&pageSize=${pageSize}`, {
-          method: "GET",
-          headers,
-        });
-        const text = await res.text();
-        result = text ? JSON.parse(text) : { data: [], total: 0 };
-      }
+    } else if (action === 'get-sent-document-logs') {
+      if (!payload?.documentId) throw new Error('documentId es obligatorio para consultar los logs del e-CF.');
+      result = await client.documentsSent.getSentDocumentLogs({
+        id: payload.documentId,
+      });
 
     } else if (action === 'list-received-documents') {
       console.log("[pronesoft-proxy] 📥 Listando documentos recibidos con el SDK...");
       try {
-        const res = await client.documentsReceived.listReceivedDocuments({
-          environment: environmentValue,
+        result = await client.documentsReceived.listReceivedDocuments({
           page: payload.page || 1,
-          pageSize: payload.pageSize || 50,
+          limit: payload.pageSize || 50,
         });
-        result = res;
-      } catch (sdkErr: any) {
-        console.warn("[pronesoft-proxy] ⚠️ Aviso en list-received-documents:", sdkErr?.message);
-        result = { data: [], total: 0 };
+      } catch (receivedError: any) {
+        // El SDK 0.0.9 falla intermitentemente en esta lectura con un error
+        // genÃ©rico de interceptor. No debe convertir una emisiÃ³n exitosa en 502.
+        console.warn('[pronesoft-proxy] No se pudieron listar recibidos:', receivedError?.message || receivedError);
+        result = { data: [], total: 0, warning: 'Pronesoft no pudo listar temporalmente los documentos recibidos.' };
       }
     } else if (action === 'commercial-approval') {
-      console.log("[pronesoft-proxy] ✍️ Procesando aprobación comercial...");
-      // Aprobación comercial mediante REST directo temporal ya que no está explícito en esta v. del SDK
-      const token = await sdk.getValidToken(false);
-      const headers: any = {
-        "Authorization": `Bearer ${token}`,
-        "Content-Type": "application/json",
-      };
-      if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
-
-      const envMap: Record<number, string> = { 1: 'TesteCF', 2: 'CerteCF', 3: 'eCF' };
-      const apiEnv = envMap[environmentValue as unknown as number] || 'TesteCF';
-
-      // payload: { documentId: string, status: 'ACCEPTED' | 'REJECTED', details?: string }
-      const res = await fetch(`${baseUrl}/commercial-approvals`, {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          environment: apiEnv,
-          documentId: payload.documentId,
-          status: payload.status, // ej. 'ACCEPTED' o 'REJECTED'
-          details: payload.details || ''
-        })
+      throw new Error('El SDK oficial 0.0.9 permite consultar aprobaciones comerciales, pero no expone una operación para enviarlas.');
+    } else if (action === 'list-webhooks') {
+      if (!payload?.rnc) throw new Error('rnc es obligatorio para listar webhooks.');
+      result = await client.webhooks.listWebhooks({ rnc: payload.rnc });
+    } else if (action === 'webhook-stats') {
+      if (!payload?.rnc || !payload?.webhookId) throw new Error('rnc y webhookId son obligatorios.');
+      result = await client.webhooks.getWebhookStats({
+        rnc: payload.rnc,
+        webhookId: payload.webhookId,
+        period: payload.period || 'all',
       });
-      
-      const text = await res.text();
-      if (!res.ok) throw new Error(`Error en aprobación comercial: ${text}`);
-      result = text ? JSON.parse(text) : { ok: true };
     } else if (action === 'export-606') {
       console.log("[pronesoft-proxy] 📊 Exportando reporte 606...");
       const period = payload.period;
@@ -351,31 +352,12 @@ serve(async (req) => {
       const from = new Date(year, month - 1, 1);
       const to = new Date(year, month, 0);
 
-      try {
-        const blob = await client.reports.export606({
-          from,
-          to,
-          format: 'TXT'
-        });
-        const text = await blob.text();
-        result = { text, type: blob.type || 'text/plain' };
-      } catch (sdkErr: any) {
-        console.warn("[pronesoft-proxy] ⚠️ Fallback a REST directo para reporte 606:", sdkErr?.message);
-        const token = await sdk.getValidToken(false);
-        const headers: any = {
-          "Authorization": `Bearer ${token}`,
-        };
-        if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
-
-        const res = await fetch(`${baseUrl}/reports/format-606?period=${period}`, {
-          method: "GET",
-          headers,
-        });
-
-        const text = await res.text();
-        if (!res.ok) throw new Error(`Error descargando Formato 606: ${text}`);
-        result = { text, type: 'text/plain' };
-      }
+      const text = await client.reports.export606({
+        from,
+        to,
+        format: 'txt'
+      });
+      result = { text, type: 'text/plain' };
 
     } else if (action === 'export-sent-documents') {
       console.log("[pronesoft-proxy] 📊 Exportando documentos enviados...");
@@ -385,45 +367,18 @@ serve(async (req) => {
       const from = new Date(year, month - 1, 1);
       const to = new Date(year, month, 0);
 
-      try {
-        const blob = await client.reports.exportSentDocuments({
-          from,
-          to,
-          env: environmentValue
-        });
-        const buffer = await blob.arrayBuffer();
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        result = { base64: btoa(binary), type: blob.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
-      } catch (sdkErr: any) {
-        console.warn("[pronesoft-proxy] ⚠️ Fallback a REST directo para comprobantes enviados:", sdkErr?.message);
-        const token = await sdk.getValidToken(false);
-        const headers: any = {
-          "Authorization": `Bearer ${token}`,
-        };
-        if (config.tenantId) headers["x-tenant-id"] = config.tenantId;
-
-        const res = await fetch(`${baseUrl}/reports/sent?period=${period}`, {
-          method: "GET",
-          headers,
-        });
-
-        const buffer = await res.arrayBuffer();
-        if (!res.ok) {
-          const text = new TextDecoder().decode(buffer);
-          throw new Error(`Error descargando comprobantes enviados: ${text}`);
-        }
-
-        let binary = '';
-        const bytes = new Uint8Array(buffer);
-        for (let i = 0; i < bytes.byteLength; i++) {
-          binary += String.fromCharCode(bytes[i]);
-        }
-        result = { base64: btoa(binary), type: res.headers.get("content-type") || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
+      const blob = await client.reports.exportSentDocuments({
+        from,
+        to,
+        env: environmentValue
+      });
+      const buffer = await blob.arrayBuffer();
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      for (let i = 0; i < bytes.byteLength; i++) {
+        binary += String.fromCharCode(bytes[i]);
       }
+      result = { base64: btoa(binary), type: blob.type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" };
     } else {
       throw new Error(`Acción desconocida en el proxy: ${action}`);
     }
@@ -435,21 +390,28 @@ serve(async (req) => {
 
   } catch (error: any) {
     let errorMessage = error.message || String(error);
+    let responseStatus = Number(error?.response?.status || error?.status || 502);
     
     if (error.response && typeof error.response.text === 'function') {
       try {
         const bodyText = await error.response.text();
         console.error("[pronesoft-proxy] ❌ Response Error Body:", bodyText);
-        errorMessage = `${errorMessage}: ${bodyText}`;
+        try {
+          const parsed = JSON.parse(bodyText);
+          errorMessage = parsed?.message || parsed?.error || errorMessage;
+        } catch {
+          errorMessage = `${errorMessage}: ${bodyText}`;
+        }
       } catch (e) {
         console.error("[pronesoft-proxy] Failed to read response body:", e);
       }
     }
 
     console.error("[pronesoft-proxy] ❌ ERROR:", errorMessage);
+    if (!Number.isInteger(responseStatus) || responseStatus < 400 || responseStatus > 599) responseStatus = 502;
     return new Response(JSON.stringify({ error: errorMessage }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
+      status: responseStatus
     });
   }
 })

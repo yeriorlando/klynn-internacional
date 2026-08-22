@@ -122,7 +122,7 @@ import {
   type Tenant,
   NCF_NOMBRES,
 } from "@/lib/storage";
-import { emitirECF } from "@/lib/fiscal";
+import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { PlanLimitModal } from "@/components/klynn/PlanLimitModal";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
@@ -145,6 +145,12 @@ import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDia
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
 });
+
+function isConnectivityFailure(error: unknown): boolean {
+  if (typeof navigator !== "undefined" && !navigator.onLine) return true;
+  const message = error instanceof Error ? error.message : String(error || "");
+  return /failed to fetch|networkerror|network request failed|load failed|connection (?:refused|reset)|err_(?:internet_disconnected|network_changed|connection)/i.test(message);
+}
 
 const OPCIONES_CREDITO = [
   { dias: 10, label: "10 días" },
@@ -301,7 +307,21 @@ function NuevaOrdenPage() {
   }, [activeSequences, isElectronic]);
 
   const catalogo = useMemo(() => catalogoData.filter((i) => i.activo), [catalogoData]);
-  const servicios = useMemo(() => serviciosData.filter((s) => s.activo), [serviciosData]);
+  const servicios = useMemo(() => {
+    const byName = new Map<string, Servicio>();
+    for (const service of serviciosData.filter((item) => item.activo)) {
+      const key = service.nombre
+        .trim()
+        .toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '');
+      const current = byName.get(key);
+      if (!current || (Number(service.precio || 0) > 0 && Number(current.precio || 0) <= 0)) {
+        byName.set(key, service);
+      }
+    }
+    return Array.from(byName.values());
+  }, [serviciosData]);
   const filteredClients = useMemo(() => {
     return clientes.filter(
       (c) =>
@@ -1340,13 +1360,10 @@ function NuevaOrdenPage() {
             // Solo consultar secuencias locales si estamos en PRODUCCION
             // En Sandbox/Pruebas, Pronesoft genera y gestiona las secuencias de prueba automáticamente
             if (freshFiscalConfig?.ambiente === "produccion") {
-              try {
-                const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
-                nextNCF = ncf;
-                ncfVencimiento = expiration_date;
-              } catch (seqErr) {
-                console.warn("Aviso al obtener secuencia local:", seqErr);
-              }
+              const nextResult = await getNextNumberPronesoft(tenant.id, activeTipo);
+              const nextData = nextResult?.data || nextResult;
+              nextNCF = nextData?.nextNumber;
+              if (!nextNCF) throw new Error(`Pronesoft no devolvió un e-NCF disponible para ${activeTipo}.`);
             }
 
             const result = await emitirECF(
@@ -1361,8 +1378,10 @@ function NuevaOrdenPage() {
             const fiscalFields = {
               ncf: result.encf,
               tipo_ecf: activeTipo,
-              ecf_status: "SIGNED",
-              ecf_id: result.document.id,
+              ecf_status: result.legal_status === "ACCEPTED" ? "ACCEPTED"
+                : result.legal_status === "ACCEPTED_WITH_OBSERVATIONS" ? "ACCEPTED_WITH_OBSERVATIONS"
+                : "REGISTERED",
+              ecf_id: result.document.track_id || result.document.pronesoft_id || result.document.id,
               ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || "",
               ecf_security_code: result.security_code || "",
               ecf_signature_date: (result.document as any).signature_date || new Date().toISOString(),
@@ -1371,19 +1390,38 @@ function NuevaOrdenPage() {
 
             ordenActualizada = { ...orden, ...fiscalFields };
             await saveOrden(ordenActualizada);
-            toast.success(`✅ Comprobante ${result.encf} emitido`);
+            if (result.legal_status === "ACCEPTED" || result.legal_status === "ACCEPTED_WITH_OBSERVATIONS") {
+              toast.success(`Comprobante ${result.encf} aceptado por DGII`);
+            } else {
+              toast.info(`e-CF ${result.encf} registrado en Pronesoft. Validación DGII pendiente.`);
+            }
           } catch (fErr: any) {
             console.error("Error Fiscal:", fErr);
-            // Fallback resiliente: Pre-factura offline si falla la conexión en el momento
-            ordenActualizada = {
-              ...orden,
-              ncf: undefined,
-              tipo_ecf: activeTipo,
-              ecf_status: "PENDING_OFFLINE_TRANSMISSION",
-              ncf_vencimiento: ncfVencimiento,
-            };
-            await saveOrden(ordenActualizada);
-            toast.warning("Aviso de red: Se generó Pre-Factura. Se timbrará con DGII al sincronizar.");
+            if (isConnectivityFailure(fErr)) {
+              // Solo una caída real de conectividad entra a la cola offline.
+              ordenActualizada = {
+                ...orden,
+                ncf: undefined,
+                tipo_ecf: activeTipo,
+                ecf_status: "PENDING_OFFLINE_TRANSMISSION",
+                ncf_vencimiento: ncfVencimiento,
+              };
+              await saveOrden(ordenActualizada);
+              toast.warning("Sin conexión: se generó una pre-factura pendiente de transmisión a Pronesoft.");
+            } else {
+              // Un rechazo fiscal/configuración no debe disfrazarse de modo offline.
+              ordenActualizada = {
+                ...orden,
+                ncf: undefined,
+                tipo_ecf: activeTipo,
+                ecf_status: "ERROR",
+                ncf_vencimiento: ncfVencimiento,
+              };
+              await saveOrden(ordenActualizada);
+              toast.error(`No se pudo emitir el e-CF en Pronesoft: ${fErr?.message || "Error fiscal desconocido"}`, {
+                duration: 10000,
+              });
+            }
           }
         }
       } else {
@@ -1936,7 +1974,9 @@ function NuevaOrdenPage() {
                               <button
                                 key={s.id}
                                 onClick={() => {
-                                  setServiciosSel((arr) => [...arr, s.nombre]);
+                                  setServiciosSel((arr) =>
+                                    arr.includes(s.nombre) ? arr : [...arr, s.nombre],
+                                  );
                                   setDesgloseServiceName(s.nombre);
                                   setIndexDesglose(-1);
                                   if (enablePrendas) {
@@ -2270,7 +2310,7 @@ function NuevaOrdenPage() {
                   {/* Servicios Seleccionados en Carrito POS */}
                   {servicios
                     .filter((s) => serviciosSel.includes(s.nombre))
-                    .map((srv, idx) => {
+                    .map((srv) => {
                       const count = serviciosSel.filter((x) => x === srv.nombre).length;
                       const unitPrice =
                         customServicePrices[srv.nombre] !== undefined
@@ -2287,7 +2327,7 @@ function NuevaOrdenPage() {
                       const isActiveService = desgloseServiceName === srv.nombre;
 
                       return (
-                        <div key={"pos-srv-" + idx} className="space-y-2 mb-3">
+                        <div key={`pos-srv-${srv.id || srv.nombre}`} className="space-y-2 mb-3">
                           <div
                             className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all animate-in fade-in duration-200 ${isActiveService ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 shadow-md ring-2 ring-emerald-400/50" : "border-primary/20 bg-primary/5"}`}
                           >
@@ -3121,7 +3161,7 @@ function NuevaOrdenPage() {
                     {/* Servicios Seleccionados para desglose */}
                     {servicios
                       .filter((s) => serviciosSel.includes(s.nombre))
-                      .map((srv, idx) => {
+                      .map((srv) => {
                         const count = serviciosSel.filter((x) => x === srv.nombre).length;
                         const unitPrice =
                           customServicePrices[srv.nombre] !== undefined
@@ -3129,7 +3169,7 @@ function NuevaOrdenPage() {
                             : srv.precio || 0;
                         return (
                           <div
-                            key={"srv-" + idx}
+                            key={`srv-${srv.id || srv.nombre}`}
                             className="flex items-center justify-between gap-3 rounded-lg border border-primary/20 bg-primary/5 p-3 animate-in fade-in duration-200"
                           >
                             <div className="flex-1">
@@ -3361,7 +3401,7 @@ function NuevaOrdenPage() {
                     <div className="space-y-0 divide-y divide-dashed divide-slate-200 dark:divide-slate-800">
                       {servicios
                         .filter((s) => serviciosSel.includes(s.nombre))
-                        .map((srv, idx) => {
+                        .map((srv) => {
                           const count = serviciosSel.filter((x) => x === srv.nombre).length;
                           const sPrice =
                             customServicePrices[srv.nombre] !== undefined
@@ -3369,7 +3409,7 @@ function NuevaOrdenPage() {
                               : srv.precio || 0;
                           return (
                             <div
-                              key={`srv-${idx}`}
+                              key={`summary-srv-${srv.id || srv.nombre}`}
                               className="flex justify-between items-center py-3 first:pt-0 last:pb-0 text-sm group"
                             >
                               <div className="flex items-center gap-3 min-w-0">

@@ -58,6 +58,8 @@ import {
   listSentDocumentsPronesoft,
   listReceivedDocumentsPronesoft,
   submitCommercialApprovalPronesoft,
+  sincronizarEstadoECF,
+  getSentDocumentDiagnosticsPronesoft,
 } from "@/lib/fiscal";
 
 export const Route = createFileRoute("/t/$slug/fiscal")({
@@ -89,6 +91,9 @@ function CentroFiscalPage() {
   const [loadingSent, setLoadingSent] = useState(false);
   const [searchSent, setSearchSent] = useState("");
   const [pageSent, setPageSent] = useState(1);
+  const [diagnosticDoc, setDiagnosticDoc] = useState<any | null>(null);
+  const [diagnosticLogs, setDiagnosticLogs] = useState<any[]>([]);
+  const [loadingDiagnostic, setLoadingDiagnostic] = useState(false);
 
   // Tab 2: Recibidos
   const [receivedDocs, setReceivedDocs] = useState<any[]>([]);
@@ -133,10 +138,20 @@ function CentroFiscalPage() {
   async function loadSentDocuments() {
     if (!tenant || tenant.id === "__loading__") return;
     setLoadingSent(true);
-    try {
-      // 1. Cargar datos locales de Supabase
-      const localOrds = rawOrds;
-      const localEcf = rawEcfDocs;
+      try {
+        // 1. Cargar datos locales de Supabase
+        const localOrds = rawOrds;
+        const localEcf = rawEcfDocs;
+
+        // Pronesoft es la autoridad para documentos pendientes. Actualizamos
+        // antes de pintar el centro fiscal para no mostrar como aceptado algo
+        // que sigue en cola o fue rechazado por DGII.
+        await Promise.allSettled(
+          localEcf
+            .filter((doc: any) => doc.track_id && doc.status === 'pending')
+            .slice(0, 25)
+            .map((doc: any) => sincronizarEstadoECF(tenant.id, doc)),
+        );
 
       const fiscalOrds = (localOrds || []).filter((o: any) => o.ncf);
 
@@ -167,6 +182,11 @@ function CentroFiscalPage() {
 
           const localOrd: any = ordsMap.get(encf);
           const localEcf: any = ecfDocsMap.get(encf);
+          const remoteStatus = String(pd.legalStatus || pd.status || '').toUpperCase();
+          const normalizedStatus = remoteStatus === 'APPROVED' ? 'ACCEPTED'
+            : remoteStatus === 'CONDITIONALLY_APPROVED' ? 'ACCEPTED_WITH_OBSERVATIONS'
+            : remoteStatus || 'REGISTERED';
+          const stampUrl = localOrd?.ecf_qr || localEcf?.qr_content || pd.documentStampUrl;
 
           mergedList.push({
             id: pd.id || localEcf?.id || localOrd?.id,
@@ -176,10 +196,11 @@ function CentroFiscalPage() {
             buyerRnc: localOrd?.cliente_rnc || localEcf?.rnc_receptor || pd.buyerRnc || pd.buyer?.taxId || 'Consumidor Final',
             totalAmount: localOrd?.total ?? localEcf?.monto_total ?? pd.totalAmount ?? pd.totals?.totalAmount ?? 0,
             totalItbis: localOrd?.itbis ?? localEcf?.monto_itbis ?? pd.totalItbis ?? pd.totals?.totalITBIS ?? 0,
-            status: pd.status === 'ACCEPTED' || pd.statusLabel === 'Aceptado' ? 'ACCEPTED' : (localEcf?.status === 'accepted' ? 'ACCEPTED' : (pd.status || 'ACCEPTED')),
+            status: normalizedStatus,
             createdAt: pd.createdAt || pd.receivedAt || localOrd?.creado_en || localEcf?.fecha_emision || new Date().toISOString(),
             pdfUrl: localEcf?.pdf_url || pd.fileUrl || pd.pdfUrl || pd.pdf,
-            documentStampUrl: localOrd?.ecf_qr || localEcf?.qr_content || pd.documentStampUrl,
+            documentStampUrl: normalizedStatus === 'ACCEPTED' || normalizedStatus === 'ACCEPTED_WITH_OBSERVATIONS' ? stampUrl : undefined,
+            remoteDocumentId: pd.id,
           });
         }
       }
@@ -198,7 +219,9 @@ function CentroFiscalPage() {
             buyerRnc: (ord as any).cliente_rnc || 'Consumidor Final',
             totalAmount: ord.total || 0,
             totalItbis: ord.itbis || 0,
-            status: 'ACCEPTED',
+            status: localEcf?.status === 'accepted' ? 'ACCEPTED'
+              : localEcf?.status === 'accepted_with_reservations' ? 'ACCEPTED_WITH_OBSERVATIONS'
+              : localEcf?.status === 'rejected' ? 'REJECTED' : 'REGISTERED',
             createdAt: ord.creado_en || localEcf?.fecha_emision || new Date().toISOString(),
             pdfUrl: localEcf?.pdf_url,
             documentStampUrl: ord.ecf_qr || localEcf?.qr_content,
@@ -218,7 +241,7 @@ function CentroFiscalPage() {
             buyerRnc: doc.rnc_receptor || 'Consumidor Final',
             totalAmount: doc.monto_total || 0,
             totalItbis: doc.monto_itbis || 0,
-            status: doc.status === 'accepted' ? 'ACCEPTED' : (doc.status?.toUpperCase() || 'ACCEPTED'),
+            status: doc.status === 'accepted' ? 'ACCEPTED' : (doc.status?.toUpperCase() || 'REGISTERED'),
             createdAt: doc.fecha_emision,
             pdfUrl: doc.pdf_url,
             documentStampUrl: doc.qr_content,
@@ -276,6 +299,21 @@ function CentroFiscalPage() {
       setReceivedDocs([]);
     } finally {
       setLoadingReceived(false);
+    }
+  }
+
+  async function showDocumentDiagnostics(document: any) {
+    if (!tenant || !document?.remoteDocumentId) return;
+    setDiagnosticDoc(document);
+    setDiagnosticLogs([]);
+    setLoadingDiagnostic(true);
+    try {
+      const result = await getSentDocumentDiagnosticsPronesoft(tenant.id, document.remoteDocumentId);
+      setDiagnosticLogs(result.logs);
+    } catch (error: any) {
+      toast.error(error?.message || 'No se pudo consultar el motivo en Pronesoft.');
+    } finally {
+      setLoadingDiagnostic(false);
     }
   }
 
@@ -536,9 +574,13 @@ function CentroFiscalPage() {
                           <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold">
                             OBSERVADO
                           </Badge>
-                        ) : (
+                        ) : d.status === 'ACCEPTED' || d.status === 'accepted' ? (
                           <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold">
                             ACEPTADO
+                          </Badge>
+                        ) : (
+                          <Badge className="bg-blue-50 text-blue-700 hover:bg-blue-50 border-blue-200 text-[10px] font-bold">
+                            PENDIENTE
                           </Badge>
                         )}
                       </td>
@@ -549,7 +591,18 @@ function CentroFiscalPage() {
                               <FileText className="h-4 w-4" />
                             </Button>
                           )}
-                          {d.documentStampUrl && (
+                          {(d.status === 'REJECTED' || d.status === 'rejected') && d.remoteDocumentId && (
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="h-8 w-8 text-rose-600"
+                              title="Ver motivo de rechazo"
+                              onClick={() => showDocumentDiagnostics(d)}
+                            >
+                              <AlertCircle className="h-4 w-4" />
+                            </Button>
+                          )}
+                          {d.documentStampUrl && (d.status === 'ACCEPTED' || d.status === 'ACCEPTED_WITH_OBSERVATIONS') && (
                             <Button size="icon" variant="ghost" className="h-8 w-8 text-emerald-600" onClick={() => window.open(d.documentStampUrl, '_blank')}>
                               <QrCode className="h-4 w-4" />
                             </Button>
@@ -817,6 +870,36 @@ function CentroFiscalPage() {
       )}
 
       {/* Modal de Transmisión de Aprobación Comercial */}
+      <Dialog open={!!diagnosticDoc} onOpenChange={(open) => !open && setDiagnosticDoc(null)}>
+        <DialogContent className="sm:max-w-2xl rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-rose-600" /> Motivo del rechazo DGII
+            </DialogTitle>
+            <DialogDescription>
+              e-NCF <strong className="font-mono text-foreground">{diagnosticDoc?.encf}</strong>
+            </DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[55vh] overflow-y-auto space-y-3 py-2">
+            {loadingDiagnostic ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" /> Consultando logs de Pronesoft...
+              </div>
+            ) : diagnosticLogs.length > 0 ? diagnosticLogs.map((log: any) => (
+              <div key={log.id || `${log.createdAt}-${log.message}`} className={`rounded-xl border p-3 text-sm ${log.type === 'ERROR' ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                <div className="mb-1 text-[10px] font-bold uppercase opacity-70">{log.type || 'INFO'} · {log.createdAt ? new Date(log.createdAt).toLocaleString('es-DO') : ''}</div>
+                <div className="whitespace-pre-wrap break-words">{log.message || 'Sin detalle adicional.'}</div>
+              </div>
+            )) : (
+              <div className="py-8 text-center text-sm text-muted-foreground">Pronesoft no devolvió detalles adicionales.</div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setDiagnosticDoc(null)} className="rounded-xl">Cerrar</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       <Dialog open={!!selectedDocForApproval} onOpenChange={(open) => !open && setSelectedDocForApproval(null)}>
         <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-card">
           <DialogHeader>

@@ -3,8 +3,16 @@ import {
   getClientes, getOrdenes, getCatalogo, getServicios, 
   getCajaAbierta, getGastos, getEmpleados, getMovimientos,
   getECFConfig, getCajas, getECFDocuments, getPlans, 
-  getGlobalConfig, getECFSequences 
+  getGlobalConfig, getECFSequences, getMetasServicios 
 } from "@/lib/storage";
+
+export function useMetasServicios(tenantId: string) {
+  return useQuery({
+    queryKey: ['metas-servicios', tenantId],
+    queryFn: () => getMetasServicios(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
 
 export function useClientes(tenantId: string) {
   return useQuery({

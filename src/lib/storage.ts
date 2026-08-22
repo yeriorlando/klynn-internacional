@@ -40,6 +40,16 @@ export interface BankDetails {
   rnc: string;
   tipo_cuenta: string;
   numero_cuenta: string;
+  standby_sync_frequency?: "1h" | "2h" | "4h" | "6h" | "12h" | "24h";
+  standby_last_sync_at?: string;
+  standby_last_sync_duration?: string;
+  standby_last_sync_status?: "OK" | "ERROR" | "RUNNING";
+  standby_last_sync_metrics?: {
+    tenants?: number;
+    clientes?: number;
+    ordenes?: number;
+    functions?: number;
+  };
 }
 
 export interface GlobalConfig {
@@ -51,6 +61,17 @@ export interface GlobalConfig {
   whatsapp_engine?: "klynn_connect" | "wasender";
   klynn_connect_url?: string;
   klynn_connect_apikey?: string;
+  fiscal_environment_policy?: "per_tenant" | "TesteCF" | "CerteCF" | "eCF";
+  standby_sync_frequency?: "1h" | "2h" | "4h" | "6h" | "12h" | "24h";
+  standby_last_sync_at?: string;
+  standby_last_sync_duration?: string;
+  standby_last_sync_status?: "OK" | "ERROR" | "RUNNING";
+  standby_last_sync_metrics?: {
+    tenants?: number;
+    clientes?: number;
+    ordenes?: number;
+    functions?: number;
+  };
 }
 
 export type RolEmpleado =
@@ -336,7 +357,9 @@ export interface ECFConfig {
   certificate_data?: string;
   certificate_password?: string;
   certificate_expiry?: string;
+  certificate_uploaded_at?: string;
   ambiente: "pruebas" | "produccion";
+  pronesoft_environment?: "TesteCF" | "CerteCF" | "eCF";
   is_active: boolean;
   api_auth_token?: string;
   api_token_expires_at?: string;
@@ -346,6 +369,7 @@ export interface ECFConfig {
   pronesoft_client_id?: string;
   pronesoft_client_secret?: string;
   updated_at: string;
+  created_at?: string;
 }
 
 export interface ECFDocumentRecibido {
@@ -366,6 +390,7 @@ export interface ECFDocumentRecibido {
 
 export interface ECFSequence {
   id: string;
+  pronesoft_sequence_id?: string;
   tenant_id: string;
   tipo_ecf: string;
   prefijo: string;
@@ -1708,6 +1733,10 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   whatsapp_engine: "klynn_connect",
   klynn_connect_url: "https://wa.klynn.com.do",
   klynn_connect_apikey: "klynn_evolution_secret_key_2026",
+  fiscal_environment_policy: "per_tenant",
+  standby_sync_frequency: "2h",
+  standby_last_sync_status: "OK",
+  standby_last_sync_duration: "14s",
 };
 
 export async function getGlobalConfig(): Promise<GlobalConfig> {
@@ -1744,6 +1773,27 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
           bank?.klynn_connect_apikey ??
           (data as any)?.klynn_connect_apikey ??
           DEFAULT_GLOBAL_CONFIG.klynn_connect_apikey,
+        fiscal_environment_policy:
+          (data as any)?.fiscal_environment_policy ??
+          DEFAULT_GLOBAL_CONFIG.fiscal_environment_policy,
+        standby_sync_frequency:
+          bank?.standby_sync_frequency ??
+          (data as any)?.standby_sync_frequency ??
+          DEFAULT_GLOBAL_CONFIG.standby_sync_frequency,
+        standby_last_sync_at:
+          bank?.standby_last_sync_at ??
+          (data as any)?.standby_last_sync_at,
+        standby_last_sync_duration:
+          bank?.standby_last_sync_duration ??
+          (data as any)?.standby_last_sync_duration ??
+          DEFAULT_GLOBAL_CONFIG.standby_last_sync_duration,
+        standby_last_sync_status:
+          bank?.standby_last_sync_status ??
+          (data as any)?.standby_last_sync_status ??
+          DEFAULT_GLOBAL_CONFIG.standby_last_sync_status,
+        standby_last_sync_metrics:
+          bank?.standby_last_sync_metrics ??
+          (data as any)?.standby_last_sync_metrics,
       };
     }
   } catch (e) {
@@ -1760,6 +1810,11 @@ export async function saveGlobalConfig(config: GlobalConfig) {
       whatsapp_engine: config.whatsapp_engine || "klynn_connect",
       klynn_connect_url: config.klynn_connect_url || "https://wa.klynn.com.do",
       klynn_connect_apikey: config.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+      standby_sync_frequency: config.standby_sync_frequency || "2h",
+      standby_last_sync_at: config.standby_last_sync_at,
+      standby_last_sync_duration: config.standby_last_sync_duration || "14s",
+      standby_last_sync_status: config.standby_last_sync_status || "OK",
+      standby_last_sync_metrics: config.standby_last_sync_metrics,
     };
 
     const { error } = await supabase.from("global_config").upsert({
@@ -1767,14 +1822,79 @@ export async function saveGlobalConfig(config: GlobalConfig) {
       require_plan_on_registration: config.requirePlanOnRegistration,
       trial_days: config.trialDays,
       default_plan_id: config.defaultPlanId,
+      fiscal_environment_policy: config.fiscal_environment_policy || "per_tenant",
       bank_details: bankDetailsToSave,
       updated_at: new Date().toISOString(),
     });
-    if (error) console.error("Error saving global config to Supabase:", error);
+    if (error) throw error;
   } catch (e) {
     console.error("Error saving global config:", e);
+    throw e;
   }
   write(KEY.globalConfig, config);
+}
+
+export async function triggerStandbySync(): Promise<{
+  success: boolean;
+  message?: string;
+  duration?: string;
+  timestamp?: string;
+  status?: string;
+  metrics?: {
+    tenants: number;
+    clientes: number;
+    ordenes: number;
+    functions: number;
+  };
+}> {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/sync-standby`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({ action: "sync" }),
+    });
+
+    const data = await res.json();
+    return data;
+  } catch (err: any) {
+    console.error("Error triggering standby sync:", err);
+    return {
+      success: false,
+      message: err.message || "Error al comunicarse con la función de sincronización",
+    };
+  }
+}
+
+export async function updateStandbyFrequency(frequency: string): Promise<boolean> {
+  try {
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+    await fetch(`${supabaseUrl}/functions/v1/sync-standby`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${supabaseAnonKey}`,
+      },
+      body: JSON.stringify({ action: "schedule", frequency }),
+    }).catch(console.warn);
+
+    const current = await getGlobalConfig();
+    await saveGlobalConfig({
+      ...current,
+      standby_sync_frequency: frequency as any,
+    });
+    return true;
+  } catch (err) {
+    console.error("Error updating standby frequency:", err);
+    return false;
+  }
 }
 
 export async function sendEmployeeSignUpOtp(
@@ -3059,13 +3179,39 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
+  const deduplicate = (services: Servicio[]): Servicio[] => {
+    const byName = new Map<string, Servicio>();
+    for (const service of services) {
+      const key = normalize(String(service.nombre || '').trim());
+      if (!key) continue;
+      const current = byName.get(key);
+      if (!current) {
+        byName.set(key, service);
+        continue;
+      }
+
+      const serviceIsTenantOwned = service.tenant_id !== 'admin';
+      const currentIsTenantOwned = current.tenant_id !== 'admin';
+      const serviceHasPrice = Number(service.precio || 0) > 0;
+      const currentHasPrice = Number(current.precio || 0) > 0;
+
+      if (
+        (serviceIsTenantOwned && !currentIsTenantOwned) ||
+        (serviceIsTenantOwned === currentIsTenantOwned && serviceHasPrice && !currentHasPrice)
+      ) {
+        byName.set(key, service);
+      }
+    }
+    return Array.from(byName.values());
+  };
+
   const realId = resolveTenantId(tenant_id);
 
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<Servicio[]>(KEY.servicios, []);
     const relevant = local.filter((s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin");
-    if (relevant.length > 0) return relevant;
-    return SERVICIOS_PREDEFINIDOS as any;
+    if (relevant.length > 0) return deduplicate(relevant);
+    return deduplicate(SERVICIOS_PREDEFINIDOS as any);
   }
 
   try {
@@ -3086,23 +3232,7 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data && data.length > 0) {
-      const finalItems: Servicio[] = [];
-      const namesSet = new Set<string>();
-
-      data
-        .filter((s: any) => s.tenant_id !== "admin")
-        .forEach((s: any) => {
-          finalItems.push(s);
-          namesSet.add(normalize(s.nombre));
-        });
-
-      data
-        .filter((s: any) => s.tenant_id === "admin")
-        .forEach((s: any) => {
-          if (!namesSet.has(normalize(s.nombre))) {
-            finalItems.push(s);
-          }
-        });
+      const finalItems = deduplicate(data as Servicio[]);
 
       write(KEY.servicios, finalItems);
       try { offlineDB.putMany("catalogo_servicios", finalItems); } catch {}
@@ -3114,8 +3244,8 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
 
   const local = read<Servicio[]>(KEY.servicios, []);
   const relevant = local.filter((s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin");
-  if (relevant.length > 0) return relevant;
-  return SERVICIOS_PREDEFINIDOS as any;
+  if (relevant.length > 0) return deduplicate(relevant);
+  return deduplicate(SERVICIOS_PREDEFINIDOS as any);
 }
 
 export async function saveServicio(s: Servicio) {
@@ -4388,7 +4518,7 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
     // 1. Obtener la config fiscal para saber si tiene pronesoft_tenant_id y está activo
     const { data: config } = await supabase
       .from("ecf_config")
-      .select("is_active, pronesoft_tenant_id, ambiente, usar_credenciales_propias, pronesoft_client_id, pronesoft_client_secret")
+      .select("is_active, pronesoft_tenant_id, ambiente, pronesoft_environment, usar_credenciales_propias, pronesoft_client_id, pronesoft_client_secret")
       .eq("tenant_id", tenantId)
       .maybeSingle();
 
@@ -4397,9 +4527,14 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
     if (config?.is_active && isUUID) {
       const pronesoft = getProneSoftClient(
         config.pronesoft_tenant_id,
-        config.ambiente === "pruebas" ? "sandbox" : "production",
+        config.pronesoft_environment === "CerteCF"
+          ? "homologacion"
+          : config.pronesoft_environment === "eCF" || config.ambiente === "produccion"
+            ? "production"
+            : "sandbox",
         config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
+        tenantId
       );
       const res = await pronesoft.listReceivedDocuments(1, 100);
 
@@ -4468,9 +4603,14 @@ export async function updateEstadoComercialECF(
       if (config?.is_active) {
         const pronesoft = getProneSoftClient(
           config.pronesoft_tenant_id,
-          config.ambiente === "pruebas" ? "sandbox" : "production",
+          config.pronesoft_environment === "CerteCF"
+            ? "homologacion"
+            : config.pronesoft_environment === "eCF" || config.ambiente === "produccion"
+              ? "production"
+              : "sandbox",
           config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-          config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+          config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
+          tenantId
         );
         await pronesoft.submitCommercialApproval(id, estado === "APROBADO" ? "ACCEPTED" : "REJECTED");
       }
@@ -4798,4 +4938,44 @@ export async function deleteInvitacion(id: string): Promise<boolean> {
   const filtered = all.filter((x) => x.id !== id);
   write(KEY.invitaciones, filtered);
   return true;
+}
+
+export interface MetaServicio {
+  id?: string;
+  tenant_id: string;
+  servicio_nombre: string;
+  meta_diaria: number;
+  activo: boolean;
+}
+
+export async function getMetasServicios(tenantId: string): Promise<Record<string, { meta_diaria: number; activo: boolean }>> {
+  if (!tenantId || tenantId === "__loading__") return {};
+  try {
+    const tenant = await getTenantById(tenantId);
+    return (tenant?.config as any)?.metas_servicios || {};
+  } catch {
+    return {};
+  }
+}
+
+export async function saveMetaServicio(
+  tenantId: string,
+  servicioNombre: string,
+  metaDiaria: number,
+  activo: boolean = true
+): Promise<void> {
+  if (!tenantId || tenantId === "__loading__") return;
+  try {
+    const tenant = await getTenantById(tenantId);
+    if (tenant) {
+      const current = (tenant.config as any)?.metas_servicios || {};
+      current[servicioNombre] = { meta_diaria: metaDiaria, activo };
+      await saveTenant({
+        ...tenant,
+        config: { ...tenant.config, metas_servicios: current }
+      });
+    }
+  } catch (e) {
+    console.warn("Error guardando meta en tenant.config:", e);
+  }
 }

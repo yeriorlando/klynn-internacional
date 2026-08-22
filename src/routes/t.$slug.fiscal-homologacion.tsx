@@ -61,12 +61,12 @@ function HomologacionPage() {
     
     try {
       const caso = casos.find(c => c.id === casoId)!;
-      const proneEnv = config.ambiente === 'produccion' ? 'production' : 'sandbox';
       const client = getProneSoftClient(
         config.pronesoft_tenant_id || undefined,
-        proneEnv,
+        'homologacion',
         config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined
+        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
+        tenant.id
       );
 
       const invoiceType = caso.tipo_ecf.replace('E', '') as any;

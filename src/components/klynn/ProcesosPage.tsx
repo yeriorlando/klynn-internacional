@@ -1,4 +1,3 @@
-/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V5 */
 import { useState, useEffect, useMemo } from "react";
 import { Link } from "@tanstack/react-router";
 import {
@@ -22,6 +21,9 @@ import {
   Lock,
   Printer,
   Tag,
+  Target,
+  TrendingUp,
+  X,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -39,7 +41,7 @@ import {
   type EstadoOrden,
 } from "@/lib/storage";
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
-import { usePlans, useOrdenes, useClientes, useEmpleados } from "@/hooks/use-queries";
+import { usePlans, useOrdenes, useClientes, useEmpleados, useServicios, useMetasServicios } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { notificarWhatsApp, calcularDiasEnAlmacen } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
@@ -48,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { toast } from "sonner";
 import { motion, AnimatePresence } from "framer-motion";
+import { LotesServicioModal } from "@/components/klynn/procesos/LotesServicioModal";
 
 // Definición de Fases Operativas del Kanban (3 COLUMNAS: RECIBIDO, EN PROCESO, TERMINADO)
 export interface FaseOperativa {
@@ -114,17 +117,36 @@ export function ProcesosPage() {
   const { data: rawOrdenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
   const { data: clientes = [] } = useClientes(tenantId);
   const { data: empleados = [] } = useEmpleados(tenantId);
+  const { data: servicios = [] } = useServicios(tenantId);
+  const { data: metasConfig = {} } = useMetasServicios(tenantId);
 
+  const [showLotesModal, setShowLotesModal] = useState(false);
+  const [loteLimiteCantidad, setLoteLimiteCantidad] = useState<number | null>(null);
+  const [loteServicioActivo, setLoteServicioActivo] = useState<string | null>(null);
+
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [printProduccionOrden, setPrintProduccionOrden] = useState<Orden | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [servicioFilter, setServicioFilter] = useState<string>("todos");
   const [soloUrgentes, setSoloUrgentes] = useState(false);
   const [processingId, setProcessingId] = useState<string | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
   const [notaModalOrden, setNotaModalOrden] = useState<Orden | null>(null);
   const [diasAlmacen, setDiasAlmacen] = useState<number>(
     user?.tenant?.config?.dias_almacenamiento_sin_retirar || user?.tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5
   );
+
+  const handleFiltrarLote = (servicioNombre: string, limite?: number) => {
+    setServicioFilter(servicioNombre);
+    setLoteServicioActivo(servicioNombre);
+    setLoteLimiteCantidad(limite || null);
+    toast.success(`Filtro aplicado: Lote de "${servicioNombre}" (${limite || "todas"} órdenes máx) 🎯`);
+  };
+
+  const handleLimpiarLote = () => {
+    setServicioFilter("todos");
+    setLoteServicioActivo(null);
+    setLoteLimiteCantidad(null);
+  };
 
   useEffect(() => {
     if (user?.tenant?.config) {
@@ -144,6 +166,28 @@ export function ProcesosPage() {
       return tieneArrayServicios || tieneItemServicios;
     });
   }, [rawOrdenes]);
+
+  // Estadísticas del lote activo en tiempo real
+  const loteActivoStats = useMemo(() => {
+    if (!loteServicioActivo) return null;
+    const target = loteServicioActivo.toLowerCase();
+
+    const ordenesSrv = (ordenes || []).filter((o) => {
+      if (o.estado === "ANULADA") return false;
+      const tieneSrv = Array.isArray(o.servicios) && o.servicios.some((s) => (typeof s === "string" ? s : (s as any)?.nombre || "").toLowerCase().includes(target));
+      const tieneItem = Array.isArray(o.items) && o.items.some((it) => (it.servicio_origen || "").toLowerCase().includes(target) || (it.nombre || "").toLowerCase().includes(target));
+      return tieneSrv || tieneItem;
+    });
+
+    const total = ordenesSrv.length;
+    const listas = ordenesSrv.filter((o) => o.estado === "LISTA" || o.estado === "ENTREGADA").length;
+    const enCola = ordenesSrv.filter((o) => o.estado === "RECIBIDA" || o.estado === "EN_PROCESO").length;
+    const meta = loteLimiteCantidad || 25;
+    const porcentaje = meta > 0 ? Math.min(100, Math.round((listas / meta) * 100)) : 0;
+    const isCumplida = listas >= meta && meta > 0;
+
+    return { total, listas, enCola, meta, porcentaje, isCumplida };
+  }, [ordenes, loteServicioActivo, loteLimiteCantidad]);
 
   const loadData = () => {
     queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
@@ -232,7 +276,7 @@ export function ProcesosPage() {
 
   // Filtrado de órdenes por búsqueda, servicio real y urgencia
   const ordenesFiltradas = useMemo(() => {
-    return ordenes.filter((o) => {
+    const matched = ordenes.filter((o) => {
       if (soloUrgentes && !o.es_urgente) return false;
 
       // La búsqueda por texto filtra ÚNICAMENTE las órdenes en la columna RECIBIDO
@@ -253,16 +297,27 @@ export function ProcesosPage() {
 
       if (servicioFilter !== "todos") {
         const target = servicioFilter.toLowerCase();
-        const matchServArray = o.servicios?.some((s) => s.toLowerCase() === target);
+        const matchServArray = o.servicios?.some((s) => (typeof s === "string" ? s : (s as any)?.nombre || "").toLowerCase().includes(target));
         const matchItemServ = o.items?.some(
-          (it) => (it.servicio_origen || "").toLowerCase() === target,
+          (it) => (it.servicio_origen || "").toLowerCase().includes(target) || (it.nombre || "").toLowerCase().includes(target),
         );
         if (!matchServArray && !matchItemServ) return false;
       }
 
       return true;
     });
-  }, [ordenes, searchQuery, servicioFilter, soloUrgentes, clienteMap]);
+
+    if (loteLimiteCantidad && loteLimiteCantidad > 0) {
+      // Separar las órdenes pendientes (RECIBIDA / EN_PROCESO) y limitar su cantidad a la meta diaria
+      const pendientes = matched.filter((o) => o.estado === "RECIBIDA" || o.estado === "EN_PROCESO");
+      const terminadas = matched.filter((o) => o.estado === "LISTA");
+      
+      const lotePendientes = pendientes.slice(0, loteLimiteCantidad);
+      return [...lotePendientes, ...terminadas];
+    }
+
+    return matched;
+  }, [ordenes, searchQuery, servicioFilter, soloUrgentes, clienteMap, loteLimiteCantidad]);
 
   const [localAutoSend, setLocalAutoSend] = useState<boolean | null>(null);
 
@@ -597,24 +652,14 @@ export function ProcesosPage() {
             </PopoverContent>
           </Popover>
 
-          {/* BOTÓN PANTALLA COMPLETA EN COLOR PRIMARIO Y ALTURA ESTÁNDAR H-10 */}
-          <Button
-            onClick={toggleFullscreen}
-            className="rounded-xl h-10 px-4 sm:px-5 bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold text-xs sm:text-sm flex items-center gap-2 shadow-xs transition-all active:scale-95 border border-[#1B4B73] cursor-pointer shrink-0"
-            title={isFullscreen ? "Salir de Pantalla Completa" : "Modo Pantalla Completa"}
-          >
-            {isFullscreen ? (
-              <>
-                <Minimize2 className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Salir Pantalla Completa</span>
-              </>
-            ) : (
-              <>
-                <Maximize2 className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Pantalla Completa</span>
-              </>
-            )}
-          </Button>
+          {/* BOTÓN LOTES POR SERVICIO CON DISPARADOR INSTANTÁNEO */}
+          <LotesServicioModal
+            tenantId={tenantId}
+            servicios={servicios}
+            ordenes={ordenes}
+            metasConfig={metasConfig}
+            onFiltrarLote={handleFiltrarLote}
+          />
 
           <Button
             variant="outline"
@@ -730,6 +775,76 @@ export function ProcesosPage() {
           />
         </button>
       </div>
+
+      {/* SECCIÓN DE 2 COLUMNAS: CONTROL DE LOTE + AVANCE EN TIEMPO REAL */}
+      {loteServicioActivo && loteActivoStats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 max-w-5xl mx-auto w-full animate-in fade-in slide-in-from-top-2 duration-200">
+          {/* TARJETA 1: INFO Y CONTROL DEL LOTE */}
+          <div className="p-3 px-4 rounded-2xl bg-amber-500/10 dark:bg-amber-950/40 border border-amber-500/30 flex items-center justify-between shadow-xs">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="p-2 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 border border-amber-500/30 shrink-0">
+                <Target className="h-5 w-5" />
+              </div>
+              <div className="min-w-0">
+                <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-2 truncate">
+                  <span>Lote Activo:</span>
+                  <span className="text-amber-600 dark:text-amber-400 font-extrabold truncate">{loteServicioActivo}</span>
+                  <Badge className="bg-amber-600 text-white text-[9px] font-black px-1.5 py-0 shrink-0">
+                    {loteLimiteCantidad} máx
+                  </Badge>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+                  Mostrando las {loteLimiteCantidad} órdenes prioritarias para hoy.
+                </p>
+              </div>
+            </div>
+
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleLimpiarLote}
+              className="h-8 px-3 text-xs font-bold rounded-xl border-amber-500/30 hover:bg-amber-500/20 text-amber-900 dark:text-amber-200 cursor-pointer shadow-2xs shrink-0 active:scale-95 transition-all ml-2"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              <span>Quitar</span>
+            </Button>
+          </div>
+
+          {/* TARJETA 2: PROGRESO Y AVANCE EN TIEMPO REAL */}
+          <div className="p-3 px-4 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex flex-col justify-center space-y-1.5">
+            <div className="flex items-center justify-between text-xs font-bold">
+              <span className="text-slate-700 dark:text-slate-200 flex items-center gap-1.5 truncate">
+                <TrendingUp className="h-4 w-4 text-primary shrink-0" />
+                <span>Avance de hoy: <strong className="text-foreground">{loteActivoStats.listas} / {loteActivoStats.meta}</strong> listas</span>
+                {loteActivoStats.enCola > 0 && (
+                  <span className="text-amber-600 dark:text-amber-400 font-bold ml-1 text-[11px]">
+                    ({loteActivoStats.enCola} en cola)
+                  </span>
+                )}
+              </span>
+
+              <span className={`font-black text-xs shrink-0 ${loteActivoStats.isCumplida ? "text-emerald-600 dark:text-emerald-400" : "text-primary"}`}>
+                {loteActivoStats.isCumplida ? "🎉 Meta Lista" : `${loteActivoStats.porcentaje}%`}
+              </span>
+            </div>
+
+            {/* Barra de progreso */}
+            <div className="w-full bg-muted rounded-full h-2 overflow-hidden border border-border/40">
+              <div
+                className={`h-full transition-all duration-300 rounded-full ${
+                  loteActivoStats.isCumplida
+                    ? "bg-emerald-500"
+                    : loteActivoStats.porcentaje > 50
+                    ? "bg-[#1B4B73]"
+                    : "bg-[#F0B900]"
+                }`}
+                style={{ width: `${loteActivoStats.porcentaje}%` }}
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* TABLERO KANBAN DE 3 COLUMNAS FIJAS */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-start flex-1">

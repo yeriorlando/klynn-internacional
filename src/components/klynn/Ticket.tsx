@@ -81,20 +81,20 @@ export function Ticket({
 
   // Detección de comprobante electrónico (e-CF)
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
-  const isPendingECF = isECF && (
-    !orden.ecf_security_code ||
-    orden.ecf_security_code === "null" ||
-    orden.ecf_security_code.trim() === "" ||
-    (orden as any).ecf_status === "PENDING_OFFLINE_TRANSMISSION"
-  );
+  const ecfStatus = String((orden as any).ecf_status || '').toUpperCase();
+  const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
+  const isAcceptedECF = isECF && (ecfStatus === 'ACCEPTED' || ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS');
+  const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
 
   const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
-  const qrData = !isPendingECF && (actualQR || (isECF && orden.ncf ? `https://fc.dgii.gov.do/testecf/consultatimbrefc?rncemisor=${tenant.rnc}&encf=${orden.ncf}&montototal=${orden.total}&codigoseguridad=${encodeURIComponent(orden.ecf_security_code && orden.ecf_security_code !== "null" ? orden.ecf_security_code : '')}` : ""));
+  const qrData = isAcceptedECF ? actualQR : "";
 
   let tipoDocumento = "RECIBO";
   if (!esProduccion) {
     if (orden.nota_credito_ncf) {
       tipoDocumento = isECF ? "NOTA DE CRÉDITO ELECTRÓNICA" : "NOTA DE CRÉDITO";
+    } else if (isRejectedECF) {
+      tipoDocumento = "COMPROBANTE E-CF RECHAZADO - NO VÁLIDO";
     } else if (isPendingECF) {
       const tipo = orden.tipo_ecf || (orden.ncf ? orden.ncf.substring(0, 3) : "E32");
       if (tipo === "E31") {
@@ -359,7 +359,11 @@ export function Ticket({
           </>
         ) : (
           <>
-            {isPendingECF ? (
+            {isRejectedECF ? (
+              <div className="font-bold">
+                <b>e-NCF:</b> <span>{orden.ncf || 'Rechazado por DGII'}</span>
+              </div>
+            ) : isPendingECF ? (
               <div>
                 <b>e-NCF:</b> <span className="font-semibold text-black">Pendiente de timbrado</span>
               </div>
@@ -609,7 +613,13 @@ export function Ticket({
             </div>
           )}
 
-          {isECF && !isPendingECF && qrData && (
+          {isRejectedECF && (
+            <div className="mt-2 text-center text-[10px] font-black border-2 border-black p-1.5 leading-snug">
+              DOCUMENTO RECHAZADO POR DGII. NO ES UN COMPROBANTE FISCAL VÁLIDO.
+            </div>
+          )}
+
+          {isAcceptedECF && qrData && (
             <div className="mt-2 flex flex-col items-center gap-1">
               <div className="text-[9px] font-bold uppercase text-center">
                 {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : ""}

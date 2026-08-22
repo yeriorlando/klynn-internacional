@@ -1184,7 +1184,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
 
                 finalNCF = result.encf;
                 finalTipoECF = tipoECFDefault;
-                finalEcfId = result.document.id;
+                finalEcfId = result.document.track_id || result.document.pronesoft_id || result.document.id;
                 finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
                 finalEcfSecurityCode = result.security_code || '';
                 finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();

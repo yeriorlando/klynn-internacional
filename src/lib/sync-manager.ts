@@ -422,7 +422,7 @@ class SyncManager {
 
           const result = await emitirECF(
             data,
-            cliente,
+            cliente ?? null,
             ecfCfg?.pronesoft_tenant_id,
             tenant?.config || ({} as any),
             tenant || ({ id: data.tenant_id, slug: "" } as any),
@@ -437,7 +437,9 @@ class SyncManager {
               ecf_qr: result.stamp_url || (result.document as any)?.document_stamp_url || "",
               ecf_security_code: result.security_code || "",
               ecf_signature_date: (result.document as any)?.signature_date || new Date().toISOString(),
-              ecf_status: "TRANSMITTED",
+              ecf_status: result.legal_status === "ACCEPTED" ? "ACCEPTED"
+                : result.legal_status === "ACCEPTED_WITH_OBSERVATIONS" ? "ACCEPTED_WITH_OBSERVATIONS"
+                : "REGISTERED",
             };
 
             await supabase.from("ordenes").update(fiscalUpdates).eq("id", data.id);

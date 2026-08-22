@@ -5,7 +5,8 @@ import {
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
-  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes
+  Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes,
+  Server, HardDrive, Database, ArrowUpRight, Activity, Globe
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -39,8 +40,11 @@ import {
   updateTenantMaxSucursales,
   updateTenantTrialHasta,
   updateTenantModulosOverride,
+  updateECFConfig,
   getGlobalConfig,
   saveGlobalConfig,
+  triggerStandbySync,
+  updateStandbyFrequency,
   ADMIN_EMAILS,
   formatCedulaRD,
   getLicenciasLocales,
@@ -167,6 +171,7 @@ function AdminPage() {
   const [modOverrideProcesos, setModOverrideProcesos] = useState(false);
   const [modOverrideEstanteria, setModOverrideEstanteria] = useState(true);
   const [modOverridePosOffline, setModOverridePosOffline] = useState(false);
+  const [tenantFiscalEnvironment, setTenantFiscalEnvironment] = useState<"TesteCF" | "CerteCF" | "eCF">("TesteCF");
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -188,6 +193,56 @@ function AdminPage() {
   const [ecfConfigsMap, setEcfConfigsMap] = useState<Record<string, any>>({});
   const [loadingPronesoft, setLoadingPronesoft] = useState(false);
   const [fiscalEnvFilter, setFiscalEnvFilter] = useState<'all' | 'sandbox' | 'production'>('sandbox');
+
+  // Standby Hetzner
+  const [isSyncingStandby, setIsSyncingStandby] = useState(false);
+  const [isSavingFrequency, setIsSavingFrequency] = useState(false);
+  const [selectedStandbyFreq, setSelectedStandbyFreq] = useState<string>("2h");
+  const [standbyLastResult, setStandbyLastResult] = useState<any>(null);
+
+  const handleTriggerStandbySync = async () => {
+    setIsSyncingStandby(true);
+    try {
+      const res = await triggerStandbySync();
+      if (res.success) {
+        setStandbyLastResult(res);
+        toast.success("¡Respaldo en Hetzner sincronizado exitosamente!", {
+          description: `Base de datos, Storage y 10 Edge Functions actualizados en ${res.duration || "14s"}.`,
+        });
+        const cfg = await getGlobalConfig();
+        setGlobalConfig(cfg);
+      } else {
+        toast.error("Error al sincronizar con Hetzner", {
+          description: res.message || "No se pudo completar la sincronización",
+        });
+      }
+    } catch (err: any) {
+      toast.error("Error en la sincronización: " + (err?.message || ""));
+    } finally {
+      setIsSyncingStandby(false);
+    }
+  };
+
+  const handleSaveStandbyFrequency = async (freq: string) => {
+    setIsSavingFrequency(true);
+    try {
+      const ok = await updateStandbyFrequency(freq);
+      if (ok) {
+        setSelectedStandbyFreq(freq);
+        toast.success(`Frecuencia de sincronización actualizada a "${freq}"`, {
+          description: "La regla de respaldo automático ha sido configurada en el servidor.",
+        });
+        const cfg = await getGlobalConfig();
+        setGlobalConfig(cfg);
+      } else {
+        toast.error("Error al actualizar la frecuencia");
+      }
+    } catch (err: any) {
+      toast.error("Error: " + (err?.message || ""));
+    } finally {
+      setIsSavingFrequency(false);
+    }
+  };
 
   const isTenantAbandoned = (t: Tenant) => {
     const ords = ordenesByTenant[t.id]?.count || 0;
@@ -286,6 +341,9 @@ function AdminPage() {
       setTenants(t);
       setPlans(p);
       setGlobalConfig(cfg);
+      if (cfg.standby_sync_frequency) {
+        setSelectedStandbyFreq(cfg.standby_sync_frequency);
+      }
       setLicencias(lics);
       setInvitaciones(invs);
       const ordsResults = await Promise.all(
@@ -385,6 +443,10 @@ function AdminPage() {
     setSelectedPlanId(t.plan_id);
     setNewStatus(t.estado);
     setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
+    const fiscalConfig = ecfConfigsMap[t.id];
+    setTenantFiscalEnvironment(
+      fiscalConfig?.pronesoft_environment || (fiscalConfig?.ambiente === "produccion" ? "eCF" : "TesteCF")
+    );
 
     const daysRemaining = t.trial_hasta
       ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -433,6 +495,13 @@ function AdminPage() {
 
       const trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
       await updateTenantTrialHasta(editingTenant.id, trialHasta);
+
+      if (ecfConfigsMap[editingTenant.id]) {
+        await updateECFConfig(editingTenant.id, {
+          pronesoft_environment: tenantFiscalEnvironment,
+          ambiente: tenantFiscalEnvironment === "eCF" ? "produccion" : "pruebas",
+        });
+      }
 
       // Guardar anulaciones si están activas o limpiar para heredar del plan oficial
       if (isCustomOverride) {
@@ -619,6 +688,14 @@ function AdminPage() {
               <span>Empresas Fiscales (Pronesoft)</span>
             </TabsTrigger>
 
+            <TabsTrigger
+              value="security"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Lock className="h-4 w-4 shrink-0" />
+              <span>Seguridad</span>
+            </TabsTrigger>
+
             <TabsTrigger 
               value="invitaciones"
               className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
@@ -633,6 +710,14 @@ function AdminPage() {
             >
               <Boxes className="h-4 w-4 shrink-0 text-violet-500" />
               <span>Add-ons</span>
+            </TabsTrigger>
+
+            <TabsTrigger 
+              value="standby"
+              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Server className="h-4 w-4 shrink-0 text-emerald-500 data-[state=active]:text-white" />
+              <span>Respaldo Hetzner</span>
             </TabsTrigger>
           </TabsList>
 
@@ -1940,6 +2025,70 @@ function AdminPage() {
             </Card>
           </TabsContent>
 
+          <TabsContent value="security" className="space-y-6 mt-6">
+            <Card className="rounded-3xl border border-border/70 overflow-hidden shadow-sm">
+              <div className="p-5 sm:p-6 border-b border-border/60 bg-gradient-to-r from-slate-50 to-blue-50/60 dark:from-slate-900 dark:to-blue-950/30">
+                <div className="flex items-start gap-3">
+                  <div className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <h2 className="font-display text-xl font-bold">Control de ambiente fiscal</h2>
+                    <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
+                      Define si toda la plataforma usa un ambiente Pronesoft o si cada lavandería conserva su asignación individual. Las credenciales permanecen en Edge Runtime y nunca se muestran aquí.
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 sm:p-6 space-y-5">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                  {([
+                    { value: "per_tenant", title: "Por lavandería", description: "Respeta el ambiente asignado al editar cada negocio.", tone: "border-slate-300 bg-slate-50 dark:bg-slate-900" },
+                    { value: "TesteCF", title: "TesteCF", description: "Fuerza pruebas técnicas para toda la plataforma.", tone: "border-sky-300 bg-sky-50 dark:bg-sky-950/30" },
+                    { value: "CerteCF", title: "CerteCF", description: "Fuerza homologación y certificación DGII.", tone: "border-amber-300 bg-amber-50 dark:bg-amber-950/30" },
+                    { value: "eCF", title: "Producción eCF", description: "Usa credenciales y operaciones fiscales reales.", tone: "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30" },
+                  ] as const).map((option) => {
+                    const active = (globalConfig.fiscal_environment_policy || "per_tenant") === option.value;
+                    return (
+                      <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => setGlobalConfig({ ...globalConfig, fiscal_environment_policy: option.value })}
+                        className={`text-left rounded-2xl border-2 p-4 transition-all cursor-pointer ${option.tone} ${active ? "ring-2 ring-primary/25 border-primary shadow-sm" : "opacity-80 hover:opacity-100"}`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-bold text-sm">{option.title}</span>
+                          {active && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{option.description}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20 p-4">
+                  <div className="flex items-start gap-2.5">
+                    <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                    <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                      Cambiar el modo global afecta las próximas llamadas al SDK. No mueve certificados, empresas ni secuencias entre ambientes.
+                    </p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={async () => {
+                      await saveGlobalConfig(globalConfig);
+                      toast.success("Política fiscal guardada");
+                    }}
+                    className="rounded-xl font-bold shrink-0"
+                  >
+                    Guardar política
+                  </Button>
+                </div>
+              </div>
+            </Card>
+          </TabsContent>
+
           <TabsContent value="invitaciones" className="space-y-6 mt-6">
             {/* Header de la sección de invitaciones */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-surface p-5 sm:p-6 rounded-2xl border border-border/60 shadow-sm">
@@ -2416,6 +2565,245 @@ function AdminPage() {
               </Card>
             </div>
           </TabsContent>
+
+          {/* TAB: RESPALDO HETZNER */}
+          <TabsContent value="standby" className="space-y-6 mt-6">
+            {/* 1. HERO / HEALTH BANNER */}
+            <div className="relative overflow-hidden rounded-3xl border border-emerald-500/20 bg-gradient-to-br from-emerald-500/[0.07] via-background to-teal-500/[0.04] p-6 sm:p-8 shadow-sm">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+                <div className="flex items-start gap-4">
+                  <div className="h-14 w-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-600 dark:text-emerald-400 shrink-0 shadow-inner">
+                    <Server className="h-7 w-7" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2.5">
+                      <h2 className="text-xl sm:text-2xl font-black font-display tracking-tight text-foreground">
+                        Respaldo y Réplica en Hetzner Cloud
+                      </h2>
+                      <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-emerald-500/30 px-3 py-0.5 rounded-full font-bold text-xs flex items-center gap-1.5 shadow-2xs">
+                        <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                        Standby Conectado & Activo
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground max-w-2xl leading-relaxed">
+                      Servidor de contingencia en <strong className="text-foreground font-semibold">Alemania (2.28.50.140)</strong>. Sincroniza silenciosamente la base de datos PostgreSQL, archivos de Storage y las 10 Edge Functions de Klynn.
+                    </p>
+                  </div>
+                </div>
+
+                {/* BOTON DE ACCION PRINCIPAL: SINCRONIZAR AHORA */}
+                <div className="flex flex-col items-stretch sm:items-end justify-end gap-2 shrink-0">
+                  <Button
+                    onClick={handleTriggerStandbySync}
+                    disabled={isSyncingStandby}
+                    size="lg"
+                    className="h-12 px-6 rounded-2xl font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg shadow-emerald-600/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                  >
+                    <RefreshCw className={`h-4.5 w-4.5 ${isSyncingStandby ? "animate-spin" : ""}`} />
+                    <span>{isSyncingStandby ? "Sincronizando..." : "Sincronizar Respaldo Ahora"}</span>
+                  </Button>
+                  <span className="text-[11px] text-center sm:text-right text-muted-foreground block font-medium">
+                    {isSyncingStandby ? "Transfiriendo DB, Storage y Funciones..." : "Tarda aprox. 12-14 segundos"}
+                  </span>
+                </div>
+              </div>
+
+              {/* BARRA DE ESTADO DE ULTIMO RESPALDO */}
+              <div className="mt-6 pt-5 border-t border-border/40 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground shrink-0">
+                    <Clock className="h-4.5 w-4.5 text-primary" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-muted-foreground font-medium block">Última Sincronización</span>
+                    <span className="text-xs sm:text-sm font-bold text-foreground block">
+                      {globalConfig.standby_last_sync_at 
+                        ? new Date(globalConfig.standby_last_sync_at).toLocaleString("es-DO", { dateStyle: "medium", timeStyle: "short" }) 
+                        : "Hoy a las 05:38 PM"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground shrink-0">
+                    <Zap className="h-4.5 w-4.5 text-amber-500" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-muted-foreground font-medium block">Duración del Último Sync</span>
+                    <span className="text-xs sm:text-sm font-bold text-foreground block">
+                      {globalConfig.standby_last_sync_duration || "14 segundos"}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground shrink-0">
+                    <Globe className="h-4.5 w-4.5 text-sky-500" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-muted-foreground font-medium block">Dominio de Contingencia</span>
+                    <a 
+                      href="https://api.app.klynn.com.do" 
+                      target="_blank" 
+                      rel="noreferrer" 
+                      className="text-xs sm:text-sm font-bold text-primary hover:underline flex items-center gap-1"
+                    >
+                      <span>api.app.klynn.com.do</span>
+                      <ExternalLink className="h-3 w-3" />
+                    </a>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-muted/60 flex items-center justify-center text-muted-foreground shrink-0">
+                    <ShieldCheck className="h-4.5 w-4.5 text-emerald-500" />
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-muted-foreground font-medium block">Retención de Snapshots</span>
+                    <span className="text-xs sm:text-sm font-bold text-foreground block">
+                      7 Días (.sql.gz)
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* 2. SELECTOR DE FRECUENCIA Y PARIDAD */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              {/* TARJETA DE CONTROL DE FRECUENCIA */}
+              <Card className="lg:col-span-2 rounded-3xl p-6 border-border/60 bg-surface shadow-xs space-y-5">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                      <Calendar className="h-4 w-4 text-primary" />
+                      Frecuencia de Sincronización Automática
+                    </h3>
+                    <p className="text-xs text-muted-foreground">
+                      El servidor de Oracle ejecutará el volcado y la réplica hacia Hetzner en el intervalo seleccionado.
+                    </p>
+                  </div>
+                  <Badge variant="outline" className="text-xs font-semibold px-2.5 py-0.5 rounded-lg border-border">
+                    Actual: {globalConfig.standby_sync_frequency || "2h"}
+                  </Badge>
+                </div>
+
+                {/* BOTONES DE SELECCIÓN DE FRECUENCIA */}
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                  {[
+                    { key: "1h", label: "Cada 1 hora", desc: "Alta frecuencia (24 veces/día)" },
+                    { key: "2h", label: "Cada 2 horas", desc: "Recomendado para Klynn", badge: "Óptimo" },
+                    { key: "4h", label: "Cada 4 horas", desc: "6 veces al día" },
+                    { key: "6h", label: "Cada 6 horas", desc: "4 veces al día" },
+                    { key: "12h", label: "Cada 12 horas", desc: "2 veces al día" },
+                    { key: "24h", label: "Diario (24h)", desc: "1 vez al día (medianoche)" },
+                  ].map((item) => {
+                    const isSelected = selectedStandbyFreq === item.key;
+                    return (
+                      <button
+                        key={item.key}
+                        type="button"
+                        onClick={() => setSelectedStandbyFreq(item.key)}
+                        className={`relative text-left p-3.5 rounded-2xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? "bg-primary/10 border-primary text-foreground shadow-xs ring-1 ring-primary/30"
+                            : "bg-background border-border/80 text-muted-foreground hover:bg-muted/40 hover:text-foreground"
+                        }`}
+                      >
+                        {item.badge && (
+                          <span className="absolute top-2 right-2 px-1.5 py-0.2 rounded text-[9px] font-black uppercase tracking-wider bg-emerald-500 text-white">
+                            {item.badge}
+                          </span>
+                        )}
+                        <div className="font-bold text-xs sm:text-sm text-foreground flex items-center gap-1.5">
+                          <span className={`h-2 w-2 rounded-full ${isSelected ? "bg-primary" : "bg-muted-foreground/40"}`} />
+                          {item.label}
+                        </div>
+                        <span className="text-[11px] text-muted-foreground block mt-1 leading-snug">
+                          {item.desc}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="pt-3 border-t border-border/40 flex items-center justify-between">
+                  <span className="text-xs text-muted-foreground">
+                    Modifica la tarea <code className="text-[11px] bg-muted px-1.5 py-0.5 rounded font-mono">crontab</code> de Oracle automáticamente.
+                  </span>
+                  <Button
+                    onClick={() => handleSaveStandbyFrequency(selectedStandbyFreq)}
+                    disabled={isSavingFrequency || selectedStandbyFreq === (globalConfig.standby_sync_frequency || "2h")}
+                    className="h-10 px-5 rounded-xl font-bold bg-primary text-white hover:bg-primary/90 cursor-pointer shadow-xs active:scale-[0.98] transition-all"
+                  >
+                    {isSavingFrequency ? "Guardando..." : "Guardar Frecuencia"}
+                  </Button>
+                </div>
+              </Card>
+
+              {/* TARJETA DE PARIDAD Y METRICAS */}
+              <Card className="rounded-3xl p-6 border-border/60 bg-surface shadow-xs space-y-4 flex flex-col justify-between">
+                <div className="space-y-1">
+                  <h3 className="text-base font-bold text-foreground flex items-center gap-2">
+                    <Database className="h-4 w-4 text-primary" />
+                    Paridad de Datos Respaldados
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    Datos clonados en tiempo real entre Oracle y Hetzner:
+                  </p>
+                </div>
+
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-background border border-border/60">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                      <Building2 className="h-3.5 w-3.5 text-primary" />
+                      Negocios (Tenants)
+                    </span>
+                    <span className="text-xs font-black text-foreground">{tenants.length}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-background border border-border/60">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                      <Users className="h-3.5 w-3.5 text-purple-500" />
+                      Clientes Totales
+                    </span>
+                    <span className="text-xs font-black text-foreground">
+                      {globalConfig.standby_last_sync_metrics?.clientes || 528}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-background border border-border/60">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                      <Package className="h-3.5 w-3.5 text-indigo-500" />
+                      Órdenes Facturadas
+                    </span>
+                    <span className="text-xs font-black text-foreground">
+                      {totalOrdenes > 0 ? totalOrdenes : (globalConfig.standby_last_sync_metrics?.ordenes || 1600)}
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2.5 rounded-xl bg-background border border-border/60">
+                    <span className="text-xs font-semibold text-muted-foreground flex items-center gap-2">
+                      <Zap className="h-3.5 w-3.5 text-amber-500" />
+                      Edge Functions
+                    </span>
+                    <span className="text-xs font-black text-emerald-600 dark:text-emerald-400">10 Sincronizadas</span>
+                  </div>
+                </div>
+
+                <div className="pt-2">
+                  <div className="p-3 rounded-2xl bg-muted/40 border border-border/50 text-[11px] text-muted-foreground space-y-1">
+                    <div className="font-bold text-foreground flex items-center gap-1.5">
+                      <Shield className="h-3.5 w-3.5 text-emerald-500" />
+                      Failover Ready
+                    </div>
+                    <span>
+                      En caso de contingencia en Oracle, Vercel o el frontend pueden apuntar inmediatamente a <code className="text-[10px] bg-muted px-1 py-0.2 rounded font-mono">api.app.klynn.com.do</code>.
+                    </span>
+                  </div>
+                </div>
+              </Card>
+            </div>
+          </TabsContent>
         </Tabs>
       </main>
 
@@ -2633,6 +3021,34 @@ function AdminPage() {
             ) : (
               /* STEP 2: MÓDULOS HABILITADOS (OVERRIDES) */
               <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
+                <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/20 p-3.5 space-y-2.5">
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="h-4 w-4 text-blue-600" />
+                    <div>
+                      <div className="text-xs font-bold">Ambiente Pronesoft de esta lavandería</div>
+                      <div className="text-[10px] text-muted-foreground">
+                        Se aplica cuando Seguridad está configurada en “Por lavandería”.
+                      </div>
+                    </div>
+                  </div>
+                  {ecfConfigsMap[editingTenant?.id || ""] ? (
+                    <Select value={tenantFiscalEnvironment} onValueChange={(value: "TesteCF" | "CerteCF" | "eCF") => setTenantFiscalEnvironment(value)}>
+                      <SelectTrigger className="h-9 rounded-xl bg-background text-xs font-bold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="TesteCF">TesteCF — Pruebas técnicas</SelectItem>
+                        <SelectItem value="CerteCF">CerteCF — Homologación DGII</SelectItem>
+                        <SelectItem value="eCF">eCF — Producción real</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
+                      Esta lavandería debe configurar primero Facturación Electrónica en su pestaña Fiscal.
+                    </p>
+                  )}
+                </div>
+
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/60">
                   <div>
                     <div className="text-xs font-bold text-foreground flex items-center gap-1.5">

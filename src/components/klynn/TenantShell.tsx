@@ -158,6 +158,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
 ];
 
 export function TenantShell() {
+  const [hasHydrated, setHasHydrated] = useState(false);
   const user = useRequireAuth();
   const navigate = useNavigate();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
@@ -190,6 +191,10 @@ export function TenantShell() {
 
   const [isOnline, setIsOnline] = useState(true);
   const [isInstalled, setIsInstalled] = useState(false);
+
+  useEffect(() => {
+    setHasHydrated(true);
+  }, []);
 
   useEffect(() => {
     if (typeof navigator !== "undefined") {
@@ -719,7 +724,7 @@ export function TenantShell() {
     };
   }, [user?.tenant?.slug, navigate]);
 
-  if (isLoggingOut) {
+  if (!hasHydrated || isLoggingOut) {
     return (
       <div className="fixed inset-0 flex flex-col items-center justify-center bg-background z-[9999]">
         <GlobalPageLoader text="Cerrando Sesión..." minHeight="min-h-screen" />
@@ -1252,7 +1257,7 @@ export function TenantShell() {
               </button>
             )}
 
-            {pathname.endsWith("/nueva-orden") && (
+            {(pathname.endsWith("/nueva-orden") || pathname.endsWith("/procesos")) && (
               <button
                 type="button"
                 onClick={toggleFullscreen}

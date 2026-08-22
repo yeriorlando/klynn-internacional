@@ -1,119 +1,85 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-};
+const jsonHeaders = { 'Content-Type': 'application/json' };
+
+function toHex(bytes: ArrayBuffer) {
+  return Array.from(new Uint8Array(bytes)).map((byte) => byte.toString(16).padStart(2, '0')).join('');
+}
+
+async function verifySignature(req: Request, rawBody: string): Promise<boolean> {
+  const secret = Deno.env.get('PRONESOFT_WEBHOOK_SECRET');
+  // Fail closed: never accept unauthenticated fiscal status updates.
+  if (!secret) return false;
+  const received = req.headers.get('x-pronesoft-signature') || req.headers.get('x-webhook-signature');
+  if (!received) return false;
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
+  const signature = toHex(await crypto.subtle.sign('HMAC', key, new TextEncoder().encode(rawBody)));
+  return received.replace(/^sha256=/i, '').toLowerCase() === signature;
+}
+
+function mapDocumentStatus(status?: string, legalStatus?: string) {
+  if (legalStatus === 'ACCEPTED') return 'accepted';
+  if (legalStatus === 'ACCEPTED_WITH_OBSERVATIONS') return 'accepted_with_reservations';
+  if (legalStatus === 'REJECTED' || status === 'ERROR') return 'rejected';
+  return 'pending';
+}
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
-  }
-
+  if (req.method !== 'POST') return new Response('Method not allowed', { status: 405 });
   try {
-    const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '' // Service role for bypass RLS
-    );
-
-    const payload = await req.json();
-    console.log("[pronesoft-webhook] 📥 Payload recibido:", JSON.stringify(payload));
-
+    const rawBody = await req.text();
+    if (!(await verifySignature(req, rawBody))) return new Response('Invalid webhook signature', { status: 401 });
+    const payload = JSON.parse(rawBody);
     const { event, data } = payload;
-    
-    // Pronesoft webhook payload example:
-    // event: "DOCUMENT_ACCEPTED", "DOCUMENT_REJECTED", "RECEIVED_DOCUMENT"
-    // data: { documentId: "...", trackId: "...", rnc: "...", encf: "...", environment: "...", ... }
+    if (!event || !data) return new Response('Invalid payload', { status: 400 });
 
-    if (!event || !data) {
-      return new Response("Invalid payload", { status: 400 });
-    }
+    const supabase = createClient(Deno.env.get('SUPABASE_URL') ?? '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '');
+    const internalId = data.documentId || data.id;
+    const trackId = data.trackId;
+    const encf = data.encf || data.eNcf;
+    const status = data.status || (event === 'document.status_changed' ? undefined : event);
+    const legalStatus = data.legalStatus || (event === 'DOCUMENT_ACCEPTED' ? 'ACCEPTED' : event === 'DOCUMENT_REJECTED' ? 'REJECTED' : undefined);
 
-    const { documentId, trackId, encf, status } = data;
-    let tenantId = null;
-
-    if (event === 'DOCUMENT_ACCEPTED' || event === 'DOCUMENT_REJECTED') {
-      // 1. Encontrar la factura local usando trackId (o encf/documentId)
-      const { data: ecfDoc, error: ecfErr } = await supabaseClient
-        .from('ecf_documentos')
-        .select('id, tenant_id, e_ncf, track_id')
-        .eq('track_id', trackId || '') // Si no hay trackId, probar con document_id si lo guardamos
-        .single();
-      
-      let docToUpdate = ecfDoc;
-
-      // Intentar buscar por e_ncf si no hay track_id match
-      if (!docToUpdate && encf) {
-        const { data: ecfByEncf } = await supabaseClient
-          .from('ecf_documentos')
-          .select('id, tenant_id, e_ncf, track_id')
-          .eq('e_ncf', encf)
-          .single();
-        docToUpdate = ecfByEncf;
-      }
-
-      if (docToUpdate) {
-        tenantId = docToUpdate.tenant_id;
-        const newStatus = event === 'DOCUMENT_ACCEPTED' ? 'Aprobado' : 'Rechazado';
-        
-        // 2. Actualizar estado
-        await supabaseClient
-          .from('ecf_documentos')
-          .update({ estado_dgii: newStatus, error_dgii: data.errorDetails || null })
-          .eq('id', docToUpdate.id);
-
-        console.log(`[pronesoft-webhook] ✅ Documento ${docToUpdate.id} actualizado a ${newStatus}`);
-
-        // 3. Crear notificación
-        await supabaseClient.from('notificaciones').insert({
-          tenant_id: tenantId,
-          titulo: `Comprobante ${newStatus}`,
-          mensaje: `El e-CF ${docToUpdate.e_ncf || 'enviado'} ha sido ${newStatus.toLowerCase()} por la DGII.`,
-          tipo: newStatus === 'Aprobado' ? 'SUCCESS' : 'ERROR',
-          link: '/reportes' // o /ordenes
-        });
-      }
-    } else if (event === 'RECEIVED_DOCUMENT') {
-      // Evento cuando recibimos una factura de proveedor
-      // Como buscar el tenant? Por el RNC comprador
-      const rncComprador = data.buyerRnc;
-      
-      if (rncComprador) {
-        const { data: config } = await supabaseClient
-          .from('ecf_configuracion')
-          .select('tenant_id')
-          .eq('is_active', true)
-          // Asumiendo que podemos deducir el tenant_id si guardáramos el RNC en tenant.
-          // Por simplicidad, si la lavandería recibe, es una notificación.
-          // *Nota: esto requiere tener el rnc en ecf_configuracion o tenant. 
-          // Si no, podríamos insertar la factura y la próxima vez que el usuario entre a /gastos se sincroniza.
-          .limit(1)
-          .single();
-        
+    if (event === 'document.received' || event === 'RECEIVED_DOCUMENT') {
+      const buyerRnc = String(data.buyerRnc || data.buyer?.taxId || '').replace(/\D/g, '');
+      if (buyerRnc) {
+        const { data: config } = await supabase.from('ecf_config').select('tenant_id').eq('rnc_emisor', buyerRnc).eq('is_active', true).maybeSingle();
         if (config) {
-          tenantId = config.tenant_id;
-          await supabaseClient.from('notificaciones').insert({
-            tenant_id: tenantId,
-            titulo: `Nueva Factura Recibida`,
-            mensaje: `Has recibido un e-CF de tu proveedor ${data.sellerName || 'desconocido'}.`,
-            tipo: 'INFO',
-            link: '/gastos'
-          });
+          await supabase.from('ecf_documentos_recibidos').upsert({
+            id: data.id || crypto.randomUUID(), tenant_id: config.tenant_id, pronesoft_id: internalId || trackId || null,
+            encf: encf || '', rnc_emisor: data.issuerRnc || data.sellerRnc || '', nombre_emisor: data.issuerName || data.sellerName || null,
+            tipo_ecf: data.documentType || data.type || String(encf || '').slice(0, 3), fecha_emision: data.issueDate || new Date().toISOString(),
+            monto_total: data.totalAmount || data.totals?.totalAmount || 0, monto_itbis: data.totalItbis || data.totals?.totalITBIS || 0,
+            estado_comercial: data.commercialStatus || 'PENDIENTE', pdf_url: data.pdfUrl || data.fileUrl || null,
+          }, { onConflict: 'id' });
         }
       }
+      return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
     }
 
-    return new Response(JSON.stringify({ ok: true }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 200
-    });
+    let query = supabase.from('ecf_documents').select('id, tenant_id, order_id, encf, track_id, pronesoft_id').limit(1);
+    if (internalId) query = query.eq('pronesoft_id', internalId);
+    else if (trackId) query = query.eq('track_id', trackId);
+    else if (encf) query = query.eq('encf', encf);
+    else return new Response('Document identifier required', { status: 400 });
+    const { data: docs, error } = await query;
+    if (error) throw error;
+    const document = docs?.[0];
+    if (!document) return new Response(JSON.stringify({ ok: true, ignored: true }), { headers: jsonHeaders });
 
-  } catch (error: any) {
-    console.error("[pronesoft-webhook] ❌ Error:", error.message);
-    return new Response(JSON.stringify({ error: error.message }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      status: 500
-    });
+    const documentStatus = mapDocumentStatus(status, legalStatus);
+    await supabase.from('ecf_documents').update({
+      status: documentStatus, legal_status: legalStatus || null,
+      dgii_response: data, qr_content: data.documentStampUrl || null,
+    }).eq('id', document.id);
+    if (document.order_id) {
+      const orderStatus = legalStatus === 'ACCEPTED' ? 'ACCEPTED' : legalStatus === 'ACCEPTED_WITH_OBSERVATIONS' ? 'ACCEPTED_WITH_OBSERVATIONS' : legalStatus === 'REJECTED' ? 'REJECTED' : status || 'REGISTERED';
+      await supabase.from('ordenes').update({ ecf_status: orderStatus }).eq('id', document.order_id);
+    }
+    return new Response(JSON.stringify({ ok: true }), { headers: jsonHeaders });
+  } catch (error) {
+    console.error('[pronesoft-webhook]', error);
+    return new Response(JSON.stringify({ error: error instanceof Error ? error.message : String(error) }), { headers: jsonHeaders, status: 500 });
   }
 });

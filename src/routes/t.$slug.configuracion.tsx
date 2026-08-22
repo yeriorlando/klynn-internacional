@@ -28,12 +28,12 @@ import {
 import {
   saveTenant, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
-  getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence,
+  getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
   isModuleEnabled,
   type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, importSequencesToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC } from "@/lib/fiscal";
+import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC, ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC } from "@/lib/fiscal";
 import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,7 +47,7 @@ import {
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
-  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink
+  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock
 } from "lucide-react";
 import {
   connectBluetoothDevice,
@@ -3683,6 +3683,20 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   const [certFileName, setCertFileName] = useState<string>("");
 
   const queryClient = useQueryClient();
+  const { data: globalFiscalConfig } = useGlobalConfig();
+
+  const assignedEnvironment: "TesteCF" | "CerteCF" | "eCF" =
+    config?.pronesoft_environment
+    || (config?.ambiente === "produccion" ? "eCF" : "TesteCF");
+  const environmentPolicy = globalFiscalConfig?.fiscal_environment_policy || "per_tenant";
+  const effectiveEnvironment: "TesteCF" | "CerteCF" | "eCF" =
+    environmentPolicy === "per_tenant" ? assignedEnvironment : environmentPolicy;
+  const isProductionEnvironment = effectiveEnvironment === "eCF";
+  const environmentLabel = effectiveEnvironment === "eCF"
+    ? "PRODUCCIÓN eCF"
+    : effectiveEnvironment === "CerteCF"
+      ? "HOMOLOGACIÓN CerteCF"
+      : "PRUEBAS TesteCF";
 
   const [draft, setDraft] = useState<Partial<ECFConfig>>(() => config ? {
     ...config,
@@ -3694,6 +3708,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     rnc_emisor: tenant.rnc || "",
     razon_social: tenant.nombre,
     ambiente: "pruebas",
+    pronesoft_environment: "TesteCF",
     is_active: isCurrentlyElectronic,
   });
 
@@ -3705,8 +3720,9 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     const raw = (target || "").trim().toUpperCase();
     if (!raw) return;
 
-    // Si estamos en ambiente de pruebas o el RNC empieza con SBX:
-    if (draft.ambiente === 'pruebas' || raw.startsWith('SBX')) {
+    // Los RNC SBX conservan el comportamiento normal del Sandbox. Un RNC
+    // numÃ©rico continÃºa hacia la consulta DGII y no se transforma automÃ¡ticamente.
+    if (raw.startsWith('SBX')) {
       const sandboxContrib = await consultarRNC(raw, 'pruebas');
       if (sandboxContrib) {
         setDraft((prev) => ({
@@ -3735,6 +3751,11 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
           razon_social: contrib.name,
         }));
         toast.success(`Contribuyente DGII: ${contrib.name} ✅`, { id: "dgii-config-toast" });
+      } else if (!isProductionEnvironment && ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC) {
+        // Prueba temporal: si la consulta no responde, conservamos exactamente
+        // el RNC numérico escrito y no agregamos el prefijo SBX.
+        setDraft((prev) => ({ ...prev, rnc_emisor: clean }));
+        toast.info(`RNC ${clean} conservado manualmente para la prueba Sandbox.`, { id: "dgii-config-toast" });
       } else {
         toast.error("No se encontró el contribuyente en DGII", { id: "dgii-config-toast" });
       }
@@ -3766,27 +3787,30 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     setDraft(d => ({ ...d, is_active: activeValue }));
 
     try {
-      // 1. En pruebas, asegurar el formato SBX para el mock sandbox de Pronesoft.
-      // En producción, limpiar a dígitos reales y validar obligatoriedad de Certificado Digital.
+      // 1. En pruebas normalmente se usa SBX. La excepción temporal permite
+      // conservar un RNC numérico de 9/11 dígitos para diagnosticar el XSD.
+      // En producción, limpiar a dígitos reales y validar el certificado.
       let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').trim().toUpperCase();
-      if (draft.ambiente === 'pruebas') {
+      if (!isProductionEnvironment) {
         if (!cleanRNC.startsWith('SBX')) {
-          const digits = cleanRNC.replace(/\D/g, '') || '987654321';
-          cleanRNC = `SBX${digits}`;
+          const digits = cleanRNC.replace(/\D/g, '');
+          const keepNumeric = ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC
+            && (digits.length === 9 || digits.length === 11);
+          cleanRNC = keepNumeric ? digits : `SBX${digits || '987654321'}`;
         }
       } else {
         cleanRNC = cleanRNC.replace(/\D/g, '');
       }
 
       // VALIDACIÓN ESTRICTA: El modo PRODUCCIÓN exige Certificado Digital y RNC real
-      if (activeValue && draft.ambiente === 'produccion') {
+      if (activeValue && isProductionEnvironment) {
         if (!cleanRNC || (cleanRNC.length !== 9 && cleanRNC.length !== 11)) {
           toast.error("Para operar en PRODUCCIÓN debes ingresar un RNC o Cédula oficial válido (9 u 11 dígitos).");
           setLoading(false);
           return;
         }
 
-        const hasCert = !!(draft.certificate_data || config?.certificate_data);
+        const hasCert = !!(draft.certificate_data || config?.certificate_uploaded_at);
         if (!hasCert) {
           toast.error("⚠️ En modo PRODUCCIÓN es obligatorio subir tu Certificado Digital (.p12 / .pfx) para la firma electrónica ante la DGII.", {
             duration: 6000,
@@ -3795,7 +3819,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
           return;
         }
 
-        const hasPassword = !!(draft.certificate_password || config?.certificate_password);
+        const hasPassword = !!(draft.certificate_password || config?.certificate_uploaded_at);
         if (!hasPassword) {
           toast.error("Debes ingresar la contraseña de tu Certificado Digital (.p12).", {
             duration: 5000,
@@ -3807,6 +3831,14 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
       
       const configPayload: ECFConfig = {
         ...draft,
+        // El ambiente es una asignación administrativa. El formulario fiscal
+        // conserva el valor almacenado y nunca permite al tenant cambiarlo.
+        pronesoft_environment: assignedEnvironment,
+        ambiente: assignedEnvironment === 'eCF' ? 'produccion' : 'pruebas',
+        certificate_data: undefined,
+        certificate_password: undefined,
+        pronesoft_client_id: undefined,
+        pronesoft_client_secret: undefined,
         usar_credenciales_propias: false,
         is_active: activeValue,
         rnc_emisor: cleanRNC,
@@ -3821,18 +3853,21 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
 
       // 2. Si es electrónico y no está usando credenciales propias (Modalidad 1), auto-registrar en Pronesoft silenciosamente
       let pTenantId = draft.pronesoft_tenant_id || config?.pronesoft_tenant_id;
-      if (activeValue && !draft.usar_credenciales_propias && (!pTenantId || pTenantId === 'sandbox-tenant')) {
+      if (activeValue && !draft.usar_credenciales_propias) {
         try {
           pTenantId = await registerTenantInPronesoft(tenant.id, configPayload);
         } catch (pronesoftErr: any) {
-          console.warn("Aviso en registro Pronesoft:", pronesoftErr);
+          await updateECFConfig(tenant.id, { is_active: false });
+          throw new Error(`No se pudo registrar la empresa en Pronesoft: ${pronesoftErr.message || pronesoftErr}`);
         }
       }
+      configPayload.pronesoft_tenant_id = pTenantId;
 
       // 3. Si hay un certificado nuevo para subir (Solo en producción, Sandbox no lo requiere)
-      if (activeValue && draft.ambiente === 'produccion' && draft.certificate_data && (draft.certificate_password || config?.certificate_password)) {
-        const certPass = draft.certificate_password || config?.certificate_password || "";
-        await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, certPass, configPayload);
+      if (activeValue && isProductionEnvironment && draft.certificate_data && draft.certificate_password) {
+        const uploaded = await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, draft.certificate_password, configPayload);
+        if (!uploaded) throw new Error('Pronesoft no confirmó la carga del certificado.');
+        await updateECFConfig(tenant.id, { certificate_uploaded_at: new Date().toISOString() });
       }
 
       // 4. IMPORTANTÍSIMO: Guardar también el RNC y el modo fiscal en el tenant
@@ -3881,13 +3916,16 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   async function testConnection() {
     setLoading(true);
     try {
-      const activeAmbiente = draft.ambiente || config?.ambiente || 'pruebas';
-      const proneSoftEnv = activeAmbiente === 'pruebas' ? 'sandbox' : 'production';
+      const selectedEnvironment = effectiveEnvironment;
+      const proneSoftEnv = selectedEnvironment === 'CerteCF'
+        ? 'homologacion'
+        : selectedEnvironment === 'eCF' ? 'production' : 'sandbox';
       const client = getProneSoftClient(
         draft.pronesoft_tenant_id || config?.pronesoft_tenant_id, 
         proneSoftEnv,
         draft.usar_credenciales_propias ? draft.pronesoft_client_id?.trim() : undefined,
-        draft.usar_credenciales_propias ? draft.pronesoft_client_secret?.trim() : undefined
+        draft.usar_credenciales_propias ? draft.pronesoft_client_secret?.trim() : undefined,
+        tenant.id
       );
       const res = await client.testConnection();
       if (res.ok) {
@@ -4096,7 +4134,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     />
                     <button
                       type="button"
-                      onClick={() => handleSearchRNC()}
+                      onClick={() => handleSearchRNC(undefined, true)}
                       disabled={loadingRNC}
                       className="absolute right-2.5 text-muted-foreground hover:text-primary transition-colors p-1.5 rounded-lg cursor-pointer"
                       title="Buscar en DGII"
@@ -4115,20 +4153,17 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                 </Field>
                 
                 {isElectronic && (
-                  <Field label="Ambiente DGII" hint="Pruebas o Producción" icon={Server}>
-                    <Select value={draft.ambiente} onValueChange={(v: any) => setDraft({ ...draft, ambiente: v })}>
-                      <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-bold`}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="w-[var(--radix-select-trigger-width)]">
-                        <SelectItem value="pruebas" className="cursor-pointer font-bold">
-                          PRUEBAS (SANDBOX)
-                        </SelectItem>
-                        <SelectItem value="produccion" className="cursor-pointer font-bold">
-                          PRODUCCIÓN (EN VIVO)
-                        </SelectItem>
-                      </SelectContent>
-                    </Select>
+                  <Field
+                    label="Ambiente DGII"
+                    hint={environmentPolicy === "per_tenant" ? "Asignado por el administrador" : "Política global administrada por Klynn"}
+                    icon={Server}
+                  >
+                    <div className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-bold flex items-center bg-slate-50 dark:bg-slate-900 cursor-not-allowed`}>
+                      <span className={effectiveEnvironment === "eCF" ? "text-emerald-700 dark:text-emerald-400" : effectiveEnvironment === "CerteCF" ? "text-amber-700 dark:text-amber-400" : "text-sky-700 dark:text-sky-400"}>
+                        {environmentLabel}
+                      </span>
+                      <Lock className="ml-auto h-4 w-4 text-muted-foreground" aria-label="Solo el administrador puede cambiar el ambiente" />
+                    </div>
                   </Field>
                 )}
 
@@ -4516,32 +4551,6 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     </div>
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <input 
-                      type="file" 
-                      id="import-excel" 
-                      className="hidden" 
-                      accept=".xlsx,.xls" 
-                      onChange={async (e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = async (ev) => {
-                            const base64 = ev.target?.result?.toString().split(',')[1];
-                            if (base64) {
-                              toast.promise(importSequencesToPronesoft(tenant.id, base64), {
-                                loading: "Importando secuencias desde Excel...",
-                                success: () => {
-                                  onRefresh();
-                                  return "Secuencias importadas correctamente";
-                                },
-                                error: (err) => "Error al importar: " + err.message
-                              });
-                            }
-                          };
-                          reader.readAsDataURL(file);
-                        }
-                      }} 
-                    />
                     <Button 
                       variant="outline"
                       size="sm" 
@@ -4559,6 +4568,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               const existing = sequences.find(s => s.tipo_ecf === formattedType);
                               await saveECFSequence({
                                 id: existing?.id || crypto.randomUUID(),
+                                pronesoft_sequence_id: item.id,
                                 tenant_id: tenant.id,
                                 tipo_ecf: formattedType,
                                 prefijo: 'E',
@@ -4583,14 +4593,6 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       }}
                     >
                       <RefreshCw className="h-3 w-3 mr-1 stroke-[2.5]" /> Sincronizar
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      size="sm" 
-                      className="h-8 rounded-xl border-emerald-200 bg-emerald-50/50 text-emerald-700 hover:bg-emerald-100/70 hover:text-emerald-800 text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer"
-                      onClick={() => document.getElementById('import-excel')?.click()}
-                    >
-                      <Upload className="h-3 w-3 mr-1 stroke-[2.5]" /> Importar
                     </Button>
                     <Button 
                       variant="outline"
@@ -4739,8 +4741,12 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                 className="rounded-xl bg-red-500 hover:bg-red-600 h-10 font-bold text-sm px-6 transition-all active:scale-95 text-white"
                 onClick={async () => {
                   if(!voidSeq) return;
+                  if (!voidSeq.pronesoft_sequence_id) {
+                    toast.error('Sincroniza la secuencia con Pronesoft antes de anularla.');
+                    return;
+                  }
                   toast.promise(
-                    anularSecuenciasPronesoft(tenant.id, voidSeq.tipo_ecf.replace('E', ''), voidStart, voidEnd, voidReason),
+                    anularSecuenciasPronesoft(tenant.id, voidSeq.pronesoft_sequence_id || '', voidSeq.tipo_ecf.replace('E', ''), voidStart, voidEnd, voidReason),
                     {
                       loading: 'Enviando anulación a DGII...',
                       success: () => {
@@ -4865,22 +4871,20 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
       const tipo = seq.tipo_ecf || (mode === 'traditional' ? 'B02' : 'E32');
       const existing = sequences.find(s => s.tipo_ecf === tipo);
 
-      if (existing) {
-        await deleteECFSequence(existing.id, tenantId);
-      }
+      let pronesoftSequenceId = existing?.pronesoft_sequence_id;
 
       // Si es electrónica, intentamos registrar la secuencia en Pronesoft vía API
       if (mode === 'electronic') {
-        try {
-          await createSequencePronesoft(tenantId, {
-            type: tipo,
-            from: Number(seq.valor_inicial || 1),
-            to: Number(seq.valor_final || 100),
-            expiration: seq.expiration_date || undefined
-          });
-        } catch (proneErr: any) {
-          console.warn("Aviso al registrar secuencia en Pronesoft:", proneErr.message);
-          // Si Pronesoft devuelve un aviso (p.ej. ya existe), continuamos para guardar localmente
+        const created = await createSequencePronesoft(tenantId, {
+          type: tipo,
+          from: Number(seq.valor_inicial || 1),
+          to: Number(seq.valor_final || 100),
+          expiration: seq.expiration_date || undefined
+        });
+        // @pronesoft-rd/ecf-sdk: CreateTaxSequence201Response -> data.id
+        pronesoftSequenceId = created?.data?.id;
+        if (!pronesoftSequenceId) {
+          throw new Error('Pronesoft no devolvió el ID de la secuencia. Sincroniza las secuencias antes de continuar.');
         }
       }
 
@@ -4889,7 +4893,8 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
         id: existing?.id || crypto.randomUUID(),
         tenant_id: tenantId,
         tipo_ecf: tipo,
-        prefijo: mode === 'traditional' ? 'B' : 'E'
+        prefijo: mode === 'traditional' ? 'B' : 'E',
+        pronesoft_sequence_id: pronesoftSequenceId
       } as ECFSequence);
 
       toast.success("Secuencia creada con éxito");

@@ -39,16 +39,12 @@ function metodoPagoToForms(metodo: Orden['metodo_pago'], total: number): Payment
   switch (metodo) {
     case 'EFECTIVO':      return [{ method: '1', amount: total }];
     case 'TARJETA':       return [{ method: '3', amount: total }];
-    case 'TRANSFERENCIA': return [{ method: '2', amount: total }];
+    case 'TRANSFERENCIA': return [{ method: '5', amount: total }];
     case 'CREDITO':       return [{ method: '4', amount: total }];
     case 'PAGO_AL_RETIRAR': return [{ method: '4', amount: total }];
     case 'MIXTO':
-      // Dividimos en efectivo + tarjeta como aproximación
-      return [
-        { method: '1', amount: Math.round(total * 0.5 * 100) / 100 },
-        { method: '3', amount: Math.round(total * 0.5 * 100) / 100 },
-      ];
-    default:              return [{ method: '1', amount: total }];
+      throw new Error('No se puede emitir un e-CF con pago mixto sin registrar los montos reales de cada forma de pago.');
+    default: throw new Error('La orden no tiene una forma de pago fiscal válida.');
   }
 }
 
@@ -75,9 +71,12 @@ export function ordenToECFPayload(
   if (cliente) {
     buyer = { name: cliente.nombre + (cliente.apellido ? ` ${cliente.apellido}` : '') };
     // Si es crédito fiscal (E31), el RNC/Cédula es requerido
-    if ((invoiceType === '31' || invoiceType === '33' || invoiceType === '34') && (cliente.cedula || cliente.email)) {
-      buyer.taxId = cliente.cedula ? cliente.cedula.replace(/[^0-9]/g, '') : undefined;
-    }
+    if (cliente.cedula) buyer.taxId = cliente.cedula.replace(/[^0-9]/g, '');
+  }
+
+  const requiresBuyerTaxId = ['31', '33', '34', '41', '44', '45', '46', '47'].includes(invoiceType);
+  if (requiresBuyerTaxId && (!buyer?.name?.trim() || !buyer.taxId || ![9, 11].includes(buyer.taxId.length))) {
+    throw new Error(`El comprobante E${invoiceType} requiere nombre y RNC/Cédula válido del comprador.`);
   }
 
   // 3. Items
