@@ -57,73 +57,52 @@ import { Label } from "@/components/ui/label";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { Card } from "@/components/ui/card";
 import { 
-  getOrdenes, 
-  getGastos, 
-  getEmpleados, 
-  getMovimientos, 
-  getCajas,
-  getPlans,
   isModuleEnabled,
-  formatRD, 
-  type Orden, 
-  type Gasto, 
-  type Empleado, 
-  type MovimientoCaja,
-  getECFConfig,
-  type ECFConfig
+  formatRD
 } from "@/lib/storage";
+import { 
+  useOrdenes, 
+  useGastos, 
+  useEmpleados, 
+  useMovimientos, 
+  useCajas, 
+  useECFConfig, 
+  usePlans 
+} from "@/hooks/use-queries";
 
 export const Route = createFileRoute("/t/$slug/reportes")({ component: ReportesPage });
 
 function ReportesPage() {
   const user = useRequireAuth();
-  const [ordenes, setOrdenes] = useState<Orden[]>([]);
-  const [gastos, setGastos] = useState<Gasto[]>([]);
-  const [emps, setEmps] = useState<Empleado[]>([]);
-  const [movs, setMovs] = useState<MovimientoCaja[]>([]);
-  const [cajas, setCajas] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const tenant = user?.tenant;
+  const tenantId = tenant?.id || '';
+  const primaryColor = tenant?.color_primario || '#1B4B73';
+
+  const { data: rawOrdenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
+  const { data: gastos = [], isLoading: loadingGastos } = useGastos(tenantId);
+  const { data: emps = [], isLoading: loadingEmps } = useEmpleados(tenantId);
+  const { data: movs = [] } = useMovimientos(tenantId);
+  const { data: cajas = [] } = useCajas(tenantId);
+  const { data: ecfConfig } = useECFConfig(tenantId);
+  const { data: plans = [] } = usePlans();
+
   const [isPrinting, setIsPrinting] = useState(false);
   
   // Estados para exportación DGII
-  const [ecfConfig, setEcfConfig] = useState<ECFConfig | null>(null);
-  const [hasFiscalModule, setHasFiscalModule] = useState<boolean>(true);
   const [showDgiiModal, setShowDgiiModal] = useState(false);
   const [exportType, setExportType] = useState<"606" | "ENVIADOS">("606");
   const [exportYear, setExportYear] = useState(new Date().getFullYear().toString());
   const [exportMonth, setExportMonth] = useState((new Date().getMonth() + 1).toString().padStart(2, '0'));
   const [isExporting, setIsExporting] = useState(false);
 
-  const tenant = user?.tenant;
-  const primaryColor = tenant?.color_primario || '#1B4B73';
+  const activePlan = plans.find((p) => p.id === tenant?.plan_id);
+  const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
 
-  useEffect(() => {
-    async function load() {
-      if (!tenant || tenant.id === '__loading__') return;
-      setLoading(true);
-      const [oList, gList, eList, mList, cList, configList, plansList] = await Promise.all([
-        getOrdenes(tenant.id),
-        getGastos(tenant.id),
-        getEmpleados(tenant.id),
-        getMovimientos(tenant.id),
-        getCajas(tenant.id),
-        getECFConfig(tenant.id),
-        getPlans()
-      ]);
+  const ordenes = useMemo(() => {
+    return (rawOrdenes || []).filter((o) => o.estado !== "ANULADA");
+  }, [rawOrdenes]);
 
-      const plan = plansList.find((p) => p.id === tenant.plan_id);
-      setHasFiscalModule(isModuleEnabled(tenant, "facturacion_fiscal", plan));
-
-      setOrdenes((oList || []).filter((o) => o.estado !== "ANULADA"));
-      setGastos(gList || []);
-      setEmps(eList || []);
-      setMovs(mList || []);
-      setCajas(cList || []);
-      setEcfConfig(configList || null);
-      setLoading(false);
-    }
-    load();
-  }, [tenant?.id, tenant?.plan_id, tenant?.config?.modulos_override]);
+  const loading = loadingOrdenes || loadingGastos || loadingEmps;
 
   const stats = useMemo(() => {
     if (!ordenes || !gastos || !movs || !cajas) return null;
@@ -495,7 +474,9 @@ function ReportesPage() {
     }
   };
 
-  if (!user || user.tenant.id === '__loading__' || loading) {
+  const isInitialLoading = (loadingOrdenes && rawOrdenes.length === 0) || (loadingGastos && gastos.length === 0);
+
+  if (!user || user.tenant.id === '__loading__' || isInitialLoading) {
     return <GlobalPageLoader text="Cargando reportes en tiempo real..." />;
   }
 

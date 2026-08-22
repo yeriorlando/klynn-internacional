@@ -90,7 +90,8 @@ import {
 } from "@/lib/storage";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { usePlans } from "@/hooks/use-queries";
+import { usePlans, useGastos, useECFConfig } from "@/hooks/use-queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -98,20 +99,23 @@ import {
   AlertDialogContent, 
   AlertDialogDescription, 
   AlertDialogFooter, 
-  AlertDialogHeader, 
-  AlertDialogTitle,
-  AlertDialogTrigger
+  AlertDialogHeader,
+  AlertDialogTitle, 
+  AlertDialogTrigger 
 } from "@/components/ui/alert-dialog";
+import { Badge } from "@/components/ui/badge";
 
-export const Route = createFileRoute("/t/$slug/gastos")({ component: GastosPage });
+export const Route = createFileRoute("/t/$slug/gastos")({
+  component: GastosPage,
+});
 
-// Mapeo visual y tipado para Categorías de Gastos
-function getGastoCategoriaVisual(cat: string) {
+// Función para obtener clases visuales modernas para categorías de gastos
+export function getGastoCategoriaVisual(cat: string) {
   const c = (cat || "").toLowerCase();
-  if (c.includes("servicio") || c.includes("luz") || c.includes("agua") || c.includes("internet")) {
+  if (c.includes("servicio") || c.includes("luz") || c.includes("agua") || c.includes("internet") || c.includes("electricidad")) {
     return {
-      label: "Servicios",
-      fullLabel: "Servicios (Luz, Agua, Internet)",
+      label: "Servicios Básicos",
+      fullLabel: "Servicios Básicos (Luz/Agua/Net)",
       icon: Zap,
       bgLight: "bg-amber-50 dark:bg-amber-950/60",
       border: "border-amber-200 dark:border-amber-800",
@@ -119,11 +123,11 @@ function getGastoCategoriaVisual(cat: string) {
       chipBg: "bg-amber-100/80 dark:bg-amber-950 text-amber-800 dark:text-amber-200 border-amber-300/70",
       barColor: "bg-amber-500",
       pillBg: "bg-amber-50 dark:bg-amber-950/50 text-amber-800 dark:text-amber-300 border-amber-200 dark:border-amber-800",
-      pillActive: "bg-amber-500 text-white border-amber-500 shadow-md",
+      pillActive: "bg-amber-600 text-white border-amber-600 shadow-md",
       innerBadge: "bg-amber-200/70 dark:bg-amber-900/60 text-amber-900 dark:text-amber-100",
     };
   }
-  if (c.includes("mantenimiento") || c.includes("reparac")) {
+  if (c.includes("mantenimiento") || c.includes("reparacion") || c.includes("maquinaria") || c.includes("tecnico")) {
     return {
       label: "Mantenimiento",
       fullLabel: "Mantenimiento & Reparaciones",
@@ -188,20 +192,20 @@ function getGastoCategoriaVisual(cat: string) {
       label: "Alquiler",
       fullLabel: "Alquiler de Local",
       icon: Building2,
-      bgLight: "bg-emerald-50 dark:bg-emerald-950/60",
-      border: "border-emerald-200 dark:border-emerald-800",
-      text: "text-emerald-700 dark:text-emerald-300",
-      chipBg: "bg-emerald-100/80 dark:bg-emerald-950 text-emerald-800 dark:text-emerald-200 border-emerald-300/70",
-      barColor: "bg-emerald-500",
-      pillBg: "bg-emerald-50 dark:bg-emerald-950/50 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800",
-      pillActive: "bg-emerald-600 text-white border-emerald-600 shadow-md",
-      innerBadge: "bg-emerald-200/70 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-100",
+      bgLight: "bg-rose-50 dark:bg-rose-950/60",
+      border: "border-rose-200 dark:border-rose-800",
+      text: "text-rose-700 dark:text-rose-300",
+      chipBg: "bg-rose-100/80 dark:bg-rose-950 text-rose-800 dark:text-rose-200 border-rose-300/70",
+      barColor: "bg-rose-500",
+      pillBg: "bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800",
+      pillActive: "bg-rose-600 text-white border-rose-600 shadow-md",
+      innerBadge: "bg-rose-200/70 dark:bg-rose-900/60 text-rose-900 dark:text-rose-100",
     };
   }
-  if (c.includes("transporte") || c.includes("combustible") || c.includes("delivery") || c.includes("gasolina")) {
+  if (c.includes("transporte") || c.includes("combustible") || c.includes("delivery") || c.includes("gasolina") || c.includes("vehiculo")) {
     return {
-      label: "Transporte",
-      fullLabel: "Transporte & Combustible",
+      label: "Logística",
+      fullLabel: "Logística & Combustible",
       icon: Truck,
       bgLight: "bg-orange-50 dark:bg-orange-950/60",
       border: "border-orange-200 dark:border-orange-800",
@@ -213,29 +217,14 @@ function getGastoCategoriaVisual(cat: string) {
       innerBadge: "bg-orange-200/70 dark:bg-orange-900/60 text-orange-900 dark:text-orange-100",
     };
   }
-  if (c.includes("caja chica")) {
-    return {
-      label: "Caja Chica",
-      fullLabel: "Caja Chica (Gastos Menores)",
-      icon: PiggyBank,
-      bgLight: "bg-rose-50 dark:bg-rose-950/60",
-      border: "border-rose-200 dark:border-rose-800",
-      text: "text-rose-700 dark:text-rose-300",
-      chipBg: "bg-rose-100/80 dark:bg-rose-950 text-rose-800 dark:text-rose-200 border-rose-300/70",
-      barColor: "bg-rose-500",
-      pillBg: "bg-rose-50 dark:bg-rose-950/50 text-rose-800 dark:text-rose-300 border-rose-200 dark:border-rose-800",
-      pillActive: "bg-rose-600 text-white border-rose-600 shadow-md",
-      innerBadge: "bg-rose-200/70 dark:bg-rose-900/60 text-rose-900 dark:text-rose-100",
-    };
-  }
   return {
-    label: cat || "Otros",
-    fullLabel: cat || "Otros Gastos",
+    label: cat || "General",
+    fullLabel: cat || "Gastos Generales",
     icon: Tag,
     bgLight: "bg-slate-50 dark:bg-slate-900/60",
-    border: "border-slate-200 dark:border-slate-800",
+    border: "border-slate-200 dark:border-slate-700",
     text: "text-slate-700 dark:text-slate-300",
-    chipBg: "bg-slate-100/80 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-300/70",
+    chipBg: "bg-slate-100 dark:bg-slate-800 text-slate-800 dark:text-slate-200 border-slate-300/70",
     barColor: "bg-slate-500",
     pillBg: "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700",
     pillActive: "bg-slate-700 text-white border-slate-700 shadow-md",
@@ -288,13 +277,17 @@ function getGastoMetodoVisual(metodo: string) {
 
 function GastosPage() {
   const user = useRequireAuth();
+  const tenant = user?.tenant;
+  const tenantId = tenant?.id || "";
+  const queryClient = useQueryClient();
+
+  const { data: rawGastos = [], isLoading: loadingGastos } = useGastos(tenantId);
+  const { data: ecfConfig } = useECFConfig(tenantId);
+  const { data: plans = [] } = usePlans();
+
   const [show, setShow] = useState(false);
-  const [refresh, setRefresh] = useState(0);
-  const [gastos, setGastos] = useState<Gasto[]>([]);
   const [recibidos, setRecibidos] = useState<ECFDocumentRecibido[]>([]);
-  const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("manual");
-  const [isElectronic, setIsElectronic] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
 
   // Filtros interactivos
@@ -307,33 +300,31 @@ function GastosPage() {
   const [customEndDate, setCustomEndDate] = useState<string>("");
   const [isCustomDateOpen, setIsCustomDateOpen] = useState(false);
 
-  const tenant = user?.tenant;
-  const tenantId = tenant?.id || "";
-
   useEffect(() => {
-    async function load() {
+    async function loadRecibidos() {
       if (!tenantId || tenantId === "__loading__") return;
-      setLoading(true);
       try {
-        const [listGastos, listRecibidos, conf] = await Promise.all([
-          getGastos(tenantId),
-          getECFDocumentosRecibidos(tenantId),
-          getECFConfig(tenantId)
-        ]);
-        setGastos(listGastos.sort((a, b) => +new Date(b.fecha) - +new Date(a.fecha)));
-        setRecibidos(listRecibidos);
-        setIsElectronic(!!conf?.is_active);
+        const listRecibidos = await getECFDocumentosRecibidos(tenantId);
+        setRecibidos(listRecibidos || []);
       } catch (err) {
-        console.error("Error cargando datos:", err);
+        console.error("Error cargando recibidos:", err);
       }
-      setLoading(false);
     }
-    load();
-  }, [tenantId, refresh]);
+    loadRecibidos();
+  }, [tenantId]);
 
-  const { data: plans = [] } = usePlans();
+  const gastos = useMemo(() => {
+    return [...rawGastos].sort((a, b) => +new Date(b.fecha) - +new Date(a.fecha));
+  }, [rawGastos]);
+
+  const isElectronic = !!ecfConfig?.is_active;
+
   const plan = plans.find(p => p.id === user?.tenant?.plan_id) || (user ? getTenantPlan(user.tenant) : null);
   const canSeeFiscal = isModuleEnabled(user?.tenant || null, "facturacion_fiscal", plan || undefined);
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["gastos", tenantId] });
+  };
 
   // Segmentación de Gastos
   const manualGastos = useMemo(() => gastos.filter(g => !g.is_caja_chica), [gastos]);
@@ -457,7 +448,7 @@ function GastosPage() {
     };
   }, [activeTab, manualGastos, cajaChicaGastos]);
 
-  if (!user || user.tenant.id === "__loading__" || (loading && gastos.length === 0)) {
+  if (!user || user.tenant.id === "__loading__" || (loadingGastos && rawGastos.length === 0)) {
     return <GlobalPageLoader text="Cargando egresos y gastos..." />;
   }
 

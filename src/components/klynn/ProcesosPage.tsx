@@ -39,7 +39,8 @@ import {
   type EstadoOrden,
 } from "@/lib/storage";
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
-import { usePlans } from "@/hooks/use-queries";
+import { usePlans, useOrdenes, useClientes, useEmpleados } from "@/hooks/use-queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { notificarWhatsApp, calcularDiasEnAlmacen } from "@/lib/whatsapp";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -103,17 +104,18 @@ const FASES_OPERATIVAS: FaseOperativa[] = [
 
 export function ProcesosPage() {
   const user = useRequireAuth();
-  const tenantId = user?.tenant?.id;
+  const tenantId = user?.tenant?.id || "";
+  const queryClient = useQueryClient();
 
   const { data: plans = [] } = usePlans();
   const activePlan = plans.find((p) => p.id === user?.tenant?.plan_id);
   const hasProcesosModule = isModuleEnabled(user?.tenant || null, "procesos", activePlan);
 
-  const [ordenes, setOrdenes] = useState<Orden[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [empleados, setEmpleados] = useState<Empleado[]>([]);
+  const { data: rawOrdenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
+  const { data: clientes = [] } = useClientes(tenantId);
+  const { data: empleados = [] } = useEmpleados(tenantId);
+
   const [printProduccionOrden, setPrintProduccionOrden] = useState<Orden | null>(null);
-  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [servicioFilter, setServicioFilter] = useState<string>("todos");
   const [soloUrgentes, setSoloUrgentes] = useState(false);
@@ -130,6 +132,24 @@ export function ProcesosPage() {
       setDiasAlmacen(cfgVal);
     }
   }, [user?.tenant?.config]);
+
+  const ordenes = useMemo(() => {
+    return (rawOrdenes || []).filter((o) => {
+      if (o.estado === "ENTREGADA" || o.estado === "ANULADA" || o.estado === "PAGADA") {
+        return false;
+      }
+      const tieneArrayServicios = Array.isArray(o.servicios) && o.servicios.length > 0;
+      const tieneItemServicios =
+        Array.isArray(o.items) && o.items.some((it) => !!it.servicio_origen);
+      return tieneArrayServicios || tieneItemServicios;
+    });
+  }, [rawOrdenes]);
+
+  const loadData = () => {
+    queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["empleados", tenantId] });
+  };
 
   const updateDiasAlmacen = async (val: number) => {
     const nuevoVal = Math.max(1, val);
@@ -154,43 +174,6 @@ export function ProcesosPage() {
   const ordenesAlmacenadasCount = useMemo(() => {
     return ordenes.filter((o) => o.estado === "LISTA" && calcularDiasEnAlmacen(o.creado_en) >= diasAlmacen).length;
   }, [ordenes, diasAlmacen]);
-
-  const loadData = async () => {
-    if (!tenantId || tenantId === "__loading__") {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [ords, clis, emps] = await Promise.all([
-        getOrdenes(tenantId), 
-        getClientes(tenantId),
-        getEmpleados(tenantId)
-      ]);
-      const activasConServicio = (ords || []).filter((o) => {
-        if (o.estado === "ENTREGADA" || o.estado === "ANULADA" || o.estado === "PAGADA") {
-          return false;
-        }
-        const tieneArrayServicios = Array.isArray(o.servicios) && o.servicios.length > 0;
-        const tieneItemServicios =
-          Array.isArray(o.items) && o.items.some((it) => !!it.servicio_origen);
-        return tieneArrayServicios || tieneItemServicios;
-      });
-      setOrdenes(activasConServicio);
-      setClientes(clis || []);
-      setEmpleados(emps || []);
-    } catch (err) {
-      console.error("Error cargando procesos:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    if (tenantId && tenantId !== "__loading__") {
-      loadData();
-    }
-  }, [tenantId]);
 
   // Manejo de Pantalla Completa
   const toggleFullscreen = () => {
@@ -396,14 +379,7 @@ export function ProcesosPage() {
       }
 
       await updateOrdenEstado(orden.id, nuevoEstado, etiquetaUbicacion);
-
-      setOrdenes((prev) =>
-        prev.map((item) =>
-          item.id === orden.id
-            ? { ...item, estado: nuevoEstado, ubicacion_ropa: etiquetaUbicacion }
-            : item,
-        ),
-      );
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
 
       const nomFase =
         FASES_OPERATIVAS.find((f) => f.id === siguienteFaseId)?.titulo || siguienteFaseId;
@@ -451,11 +427,11 @@ export function ProcesosPage() {
     return { total, urgentes, enProceso, listas };
   }, [ordenes]);
 
-  if (loading && ordenes.length === 0 && (typeof navigator === "undefined" || navigator.onLine)) {
+  if (loadingOrdenes && rawOrdenes.length === 0 && (typeof navigator === "undefined" || navigator.onLine)) {
     return <GlobalPageLoader text="Cargando operaciones..." />;
   }
 
-  if (!loading && user?.empleado && !can(user.empleado, "procesos")) {
+  if (!loadingOrdenes && user?.empleado && !can(user.empleado, "procesos")) {
     return (
       <div className="p-12 text-center">
         <Shield className="mx-auto mb-3 h-10 w-10 text-muted-foreground" />
@@ -467,7 +443,7 @@ export function ProcesosPage() {
     );
   }
 
-  if (!loading && !hasProcesosModule) {
+  if (!loadingOrdenes && !hasProcesosModule) {
     return (
       <div className="min-h-[70vh] bg-slate-50/50 dark:bg-slate-950 flex flex-col items-center justify-center p-6 text-center">
         <div className="max-w-md w-full rounded-3xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 p-8 shadow-xl space-y-5">
@@ -646,7 +622,7 @@ export function ProcesosPage() {
             className="rounded-xl h-10 w-10 p-0 border border-border/80 bg-surface shadow-xs hover:bg-muted/60 text-foreground flex items-center justify-center shrink-0 cursor-pointer active:scale-95 transition-all"
             title="Refrescar datos"
           >
-            <RefreshCw className={`h-4 w-4 text-primary ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 text-primary ${loadingOrdenes ? "animate-spin" : ""}`} />
           </Button>
         </div>
       </div>

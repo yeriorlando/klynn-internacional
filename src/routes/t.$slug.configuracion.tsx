@@ -2,6 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { compressImage } from "@/lib/compressImage";
 import { useState, useEffect, useRef } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
+import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
@@ -951,7 +952,23 @@ Característica escritura: —
               </div>
 
               {/* Fila 3: Switches estilizados con IconBoxes */}
-              <div className="grid gap-4 md:grid-cols-3 pt-2">
+              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-2">
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Printer className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Mostrar RNC</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Imprimir RNC en recibos.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.ticket_mostrar_rnc ?? true} 
+                    onCheckedChange={(v) => updateCfg({ ticket_mostrar_rnc: v })} 
+                  />
+                </div>
+
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -959,7 +976,7 @@ Característica escritura: —
                     </div>
                     <div>
                       <span className="text-xs font-bold text-foreground block">Mostrar empleado</span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Nombre del cajero en el recibo.</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Nombre del cajero.</p>
                     </div>
                   </div>
                   <Switch 
@@ -975,7 +992,7 @@ Característica escritura: —
                     </div>
                     <div>
                       <span className="text-xs font-bold text-foreground block">Ubicación Conveyor</span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Ganchos, rieles y estantería.</p>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Ganchos y estantería.</p>
                     </div>
                   </div>
                   <Switch 
@@ -990,8 +1007,8 @@ Característica escritura: —
                       <FileEdit className="h-4.5 w-4.5" />
                     </div>
                     <div>
-                      <span className="text-xs font-bold text-foreground block">Notas en ticket cliente</span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Instrucciones y observaciones.</p>
+                      <span className="text-xs font-bold text-foreground block">Notas en ticket</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Instrucciones de cliente.</p>
                     </div>
                   </div>
                   <Switch 
@@ -2715,6 +2732,15 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
       if (st === "open") {
         clearInterval(pollIntervalRef.current);
         setQrModalOpen(false);
+
+        // Limpiar todas las conversaciones y mensajes antiguos de este tenant
+        try {
+          await supabase.from("messages").delete().eq("tenant_id", tenant.id);
+          await supabase.from("conversations").delete().eq("tenant_id", tenant.id);
+        } catch (cleanErr) {
+          console.warn("Aviso al limpiar conversaciones:", cleanErr);
+        }
+
         toast.success("¡WhatsApp conectado exitosamente a Klynn Connect! 🎉");
         const nextWa = { ...draft, enabled: true, instance: instanceName, klynn_connect_status: "open" as const };
         setDraft(nextWa);
@@ -2761,10 +2787,22 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
           api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
         }),
       });
+
+      // Limpiar todas las conversaciones y mensajes de este tenant al desvincular
+      try {
+        await supabase.from("messages").delete().eq("tenant_id", tenant.id);
+        await supabase.from("conversations").delete().eq("tenant_id", tenant.id);
+      } catch (cleanErr) {
+        console.warn("Aviso al limpiar conversaciones al desvincular:", cleanErr);
+      }
+
       setKcStatus("close");
       setKcPhone("");
       setKcProfilePic("");
-      toast.success("WhatsApp desvinculado de Klynn Connect");
+      const nextWa = { ...draft, klynn_connect_status: "close" as const, klynn_connect_phone: "", klynn_connect_profile_pic: "" };
+      setDraft(nextWa);
+      saveWA(nextWa);
+      toast.success("WhatsApp desvinculado y bandeja de chats limpiada");
     } catch (e) {
       toast.error("Error al desvincular");
     } finally {
@@ -4094,20 +4132,6 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   </Field>
                 )}
 
-                {/* Mostrar RNC en Ticket Switch */}
-                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Printer className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-foreground block">Mostrar RNC en Ticket</span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Imprimir el RNC en todos los recibos.</p>
-                    </div>
-                  </div>
-                  <Switch checked={cfg.ticket_mostrar_rnc} onCheckedChange={(v) => updateCfg({ ticket_mostrar_rnc: v })} />
-                </div>
-                
                 <Button 
                   className="w-full h-10 rounded-xl font-bold bg-primary hover:bg-primary/95 text-white shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2" 
                   onClick={() => saveECF(isElectronic)} 

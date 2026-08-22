@@ -2503,70 +2503,98 @@ export async function getOrdenById(id: string): Promise<Orden | undefined> {
   }
 }
 
+export function extractOrderSequenceNumber(numero?: string | null): number | null {
+  if (!numero || typeof numero !== "string") return null;
+  const match = numero.match(/-(\d+)$/);
+  if (match) {
+    const n = parseInt(match[1], 10);
+    return isNaN(n) ? null : n;
+  }
+  return null;
+}
+
+export function computeNextOrderSequence(numbers: (number | null | undefined)[]): number {
+  const valid = numbers
+    .filter((n): n is number => typeof n === "number" && !isNaN(n) && n > 0)
+    .sort((a, b) => b - a);
+
+  if (valid.length === 0) return 1;
+
+  if (valid.length === 1) {
+    return valid[0] > 5000 ? 1 : valid[0] + 1;
+  }
+
+  // Filtrar posibles outliers aislados (un salto anómalo mayor a 100 sin registros intermedios)
+  let maxValid = valid[0];
+  if (valid.length >= 2) {
+    const highest = valid[0];
+    const secondHighest = valid[1];
+    if (highest - secondHighest > 100) {
+      console.warn(`[OrderSeq] Outlier detectado: ${highest} (segundo más alto: ${secondHighest}). Descartando pico.`);
+      maxValid = secondHighest;
+    }
+  }
+
+  return maxValid + 1;
+}
+
 export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   const realId = resolveTenantId(tenant_id);
   const d = new Date();
   const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
 
-  // 1. Si no hay conexión, calcular secuencial local de inmediato en 0ms
-  if (typeof window !== "undefined" && !navigator.onLine) {
-    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
-    let next = 1;
-    if (local.length > 0) {
-      const highest = local.reduce((max, o) => {
-        const match = (o.numero || "").match(new RegExp(`^KL-${ym}-(\\d+)$`));
-        if (match) {
-          const num = parseInt(match[1]);
-          if (num < 8000) return Math.max(max, num);
-        }
-        return max;
-      }, 0);
-      next = highest > 0 ? highest + 1 : local.length + 1;
+  // 1. Recopilar números locales existentes (localStorage y IndexedDB outbox)
+  const localSeqs: number[] = [];
+  try {
+    const local = read<Orden[]>(KEY.ordenes, []).filter(
+      (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId)
+    );
+    for (const o of local) {
+      const n = extractOrderSequenceNumber(o.numero);
+      if (n) localSeqs.push(n);
     }
+  } catch {}
+
+  try {
+    if (typeof window !== "undefined") {
+      const outbox = await offlineDB.getPendingOutbox(realId);
+      for (const item of outbox) {
+        if (item.table_name === "ordenes" && item.payload?.numero) {
+          const n = extractOrderSequenceNumber(item.payload.numero);
+          if (n) localSeqs.push(n);
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Si no hay conexión a internet, resolver con las secuencias locales
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    const next = computeNextOrderSequence(localSeqs);
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   }
 
-  // 2. Buscar en Supabase las órdenes del mes actual para obtener la secuencia correcta
+  // 3. Consultar la base de datos en Supabase para obtener las órdenes recientes del tenant
   try {
     const { data, error } = await supabase
       .from("ordenes")
-      .select("numero")
+      .select("numero, creado_en")
       .eq("tenant_id", realId)
-      .ilike("numero", `KL-${ym}-%`)
       .order("creado_en", { ascending: false })
       .limit(50);
 
-    let next = 1;
+    const remoteSeqs: number[] = [];
     if (!error && data && data.length > 0) {
-      let maxNum = 0;
       for (const row of data) {
-        const match = (row.numero || "").match(new RegExp(`^KL-${ym}-(\\d+)$`));
-        if (match) {
-          const num = parseInt(match[1]);
-          if (num < 8000) {
-            maxNum = Math.max(maxNum, num);
-          }
-        }
+        const n = extractOrderSequenceNumber(row.numero);
+        if (n) remoteSeqs.push(n);
       }
-      if (maxNum > 0) {
-        next = maxNum + 1;
-      } else {
-        const { count } = await supabase
-          .from("ordenes")
-          .select("id", { count: "exact", head: true })
-          .eq("tenant_id", realId)
-          .gte("creado_en", `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01T00:00:00Z`);
-        next = (count || 0) + 1;
-      }
-    } else {
-      const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
-      next = local.length + 1;
     }
 
+    const allSeqs = [...localSeqs, ...remoteSeqs];
+    const next = computeNextOrderSequence(allSeqs);
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   } catch (e) {
-    const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
-    const next = local.length + 1;
+    const next = computeNextOrderSequence(localSeqs);
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   }
 }
@@ -3260,7 +3288,22 @@ export async function login(
           return { ok: true, empleado: matchedEmp, tenant };
         }
       }
-      return { ok: false, error: "Email o contraseña incorrectos" };
+
+      // Consultar si el empleado existe para este tenant
+      try {
+        const { data: empCheck } = await supabase
+          .from("empleados")
+          .select("id")
+          .ilike("email", cleanEmail)
+          .eq("tenant_id", tenant.id)
+          .maybeSingle();
+
+        if (!empCheck) {
+          return { ok: false, error: "No existe ninguna cuenta registrada con este correo en esta lavandería." };
+        }
+      } catch {}
+
+      return { ok: false, error: "Contraseña incorrecta. Verifica tu contraseña o usa '¿Olvidaste tu contraseña?'." };
     }
 
     if (!authData.user) return { ok: false, error: "Error de autenticación" };
@@ -3418,25 +3461,45 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     console.warn("Aviso al verificar usuario en Supabase Auth:", e);
   }
 
-  // 3. Si no hay usuario autenticado en Supabase
+  // 3. Si no hay usuario autenticado devuelto directamente por Supabase Auth (ej. token en renovación)
   if (!user) {
-    // Si estamos sin conexión en este instante, permitir sesión offline verificada
-    if (typeof window !== "undefined" && !navigator.onLine) {
-      if (session?.empleado_id && session?.tenant_id) {
-        const emp = await getEmpleadoById(session.empleado_id);
-        const ten = await getTenantById(session.tenant_id);
-        if (emp && ten && emp.activo && isSameTenant(emp.tenant_id, ten.id)) {
-          cacheUserResult(emp, ten);
-          return { empleado: emp, tenant: ten };
-        }
+    // Si tenemos una sesión local previa activa, recuperar el empleado y tenant sin cerrar la sesión
+    if (session?.empleado_id && session?.tenant_id) {
+      if (session.empleado_id === "admin" && session.tenant_id === "admin") {
+        const empAdmin = {
+          id: "admin",
+          tenant_id: "admin",
+          nombre: "Super Admin",
+          email: "admin@klynn.com.do",
+          rol: "ADMIN",
+          activo: true,
+          permisos: PERMISOS_SISTEMA.map((p) => p.id),
+          creado_en: new Date().toISOString(),
+        } as any;
+        const tenAdmin = { id: "admin", nombre: "Administración Global", slug: "admin" } as any;
+        cacheUserResult(empAdmin, tenAdmin);
+        return { empleado: empAdmin, tenant: tenAdmin };
+      }
+
+      const emp = await getEmpleadoById(session.empleado_id);
+      const ten = await getTenantById(session.tenant_id);
+      if (emp && ten && emp.activo && isSameTenant(emp.tenant_id, ten.id)) {
+        cacheUserResult(emp, ten);
+        return { empleado: emp, tenant: ten };
       }
     }
-    // Si estamos online pero Supabase no tiene sesión, limpiar la sesión
-    if (isBrowser()) {
-      localStorage.removeItem(KEY.session);
-      localStorage.removeItem("lvx:session");
-      localStorage.removeItem("klynn_last_auth_user");
+
+    const lastAuthStr = typeof window !== "undefined" ? localStorage.getItem("klynn_last_auth_user") : null;
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.empleado && parsed?.tenant && parsed.empleado.activo && isSameTenant(parsed.empleado.tenant_id, parsed.tenant.id)) {
+          return parsed;
+        }
+      } catch {}
     }
+
+    // Solo si NO existe absolutamente ninguna sesión previa, retornar null
     return null;
   }
 
@@ -4306,11 +4369,11 @@ export async function nextECFNumero(
 
   // Si estamos online, intentar actualizar Supabase en segundo plano
   if (typeof window === "undefined" || navigator.onLine) {
-    if (seq?.id) {
+    if (seq?.id && !isNaN(Number(seq.id))) {
       supabase
         .from("ecf_sequences")
         .update({ valor_actual: proximo, secuencia_actual: proximo })
-        .eq("id", seq.id)
+        .eq("id", Number(seq.id))
         .then();
     }
   }

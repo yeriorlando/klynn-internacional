@@ -42,16 +42,18 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import {
-  getECFConfig,
-  getOrdenes,
   formatRD,
-  getPlans,
   isModuleEnabled,
-  getECFDocuments,
   getECFDocumentosRecibidos,
   type ECFConfig,
   type Orden
 } from "@/lib/storage";
+import {
+  useECFConfig,
+  usePlans,
+  useOrdenes,
+  useECFDocuments,
+} from "@/hooks/use-queries";
 import {
   listSentDocumentsPronesoft,
   listReceivedDocumentsPronesoft,
@@ -65,11 +67,16 @@ export const Route = createFileRoute("/t/$slug/fiscal")({
 function CentroFiscalPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
+  const tenantId = tenant?.id || "";
   const primaryColor = tenant?.color_primario || "#1B4B73";
 
-  const [hasFiscalModule, setHasFiscalModule] = useState<boolean>(true);
-  const [ecfConfig, setEcfConfig] = useState<ECFConfig | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { data: ecfConfig, isLoading: loadingConfig } = useECFConfig(tenantId);
+  const { data: plans = [] } = usePlans();
+  const { data: rawOrds = [] } = useOrdenes(tenantId);
+  const { data: rawEcfDocs = [] } = useECFDocuments(tenantId);
+
+  const activePlan = plans.find((p) => p.id === tenant?.plan_id);
+  const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
 
   // Estado Pantalla Completa
   const [isFullscreen, setIsFullscreen] = useState(false);
@@ -122,34 +129,14 @@ function CentroFiscalPage() {
     return () => document.removeEventListener("fullscreenchange", handleFSChange);
   }, []);
 
-  // Cargar configuración e-CF
-  useEffect(() => {
-    async function loadConfig() {
-      if (!tenant || tenant.id === "__loading__") return;
-      setLoading(true);
-      const [cfg, plans] = await Promise.all([
-        getECFConfig(tenant.id),
-        getPlans()
-      ]);
-
-      const plan = plans.find(p => p.id === tenant.plan_id);
-      setHasFiscalModule(isModuleEnabled(tenant, "facturacion_fiscal", plan));
-      setEcfConfig(cfg);
-      setLoading(false);
-    }
-    loadConfig();
-  }, [tenant?.id, tenant?.plan_id, tenant?.config?.modulos_override]);
-
   // Cargar e-CF Enviados (Fusionando datos locales de órdenes/ecf_documents con Pronesoft)
   async function loadSentDocuments() {
     if (!tenant || tenant.id === "__loading__") return;
     setLoadingSent(true);
     try {
       // 1. Cargar datos locales de Supabase
-      const [localOrds, localEcfDocs] = await Promise.all([
-        getOrdenes(tenant.id).catch(() => []),
-        getECFDocuments(tenant.id).catch(() => []),
-      ]);
+      const localOrds = rawOrds;
+      const localEcf = rawEcfDocs;
 
       const fiscalOrds = (localOrds || []).filter((o: any) => o.ncf);
 
@@ -157,7 +144,7 @@ function CentroFiscalPage() {
       fiscalOrds.forEach((o: any) => ordsMap.set(o.ncf, o));
 
       const ecfDocsMap = new Map<string, any>();
-      (localEcfDocs || []).forEach((e: any) => ecfDocsMap.set(e.encf, e));
+      (localEcf || []).forEach((e: any) => ecfDocsMap.set(e.encf, e));
 
       // 2. Intentar consultar Pronesoft
       let proneDocs: any[] = [];
@@ -220,7 +207,7 @@ function CentroFiscalPage() {
       }
 
       // 5. Agregar documentos de ecf_documents no listados
-      for (const doc of localEcfDocs) {
+      for (const doc of localEcf) {
         if (doc.encf && !seenNCF.has(doc.encf)) {
           seenNCF.add(doc.encf);
           mergedList.push({
@@ -327,7 +314,7 @@ function CentroFiscalPage() {
     }
   }
 
-  if (!user || user.tenant.id === "__loading__" || loading) {
+  if (!user || user.tenant.id === "__loading__" || (loadingConfig && !ecfConfig)) {
     return <GlobalPageLoader text="Cargando Centro Fiscal e-CF..." />;
   }
 

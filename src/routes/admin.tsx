@@ -288,15 +288,23 @@ function AdminPage() {
       setGlobalConfig(cfg);
       setLicencias(lics);
       setInvitaciones(invs);
-      loadPronesoftData();
+      const ordsResults = await Promise.all(
+        t.map(async (tenant) => {
+          try {
+            const ords = await getOrdenes(tenant.id);
+            const ordsArr = Array.isArray(ords) ? ords : [];
+            const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
+            return { tenantId: tenant.id, count: ordsArr.length, total: ingr };
+          } catch {
+            return { tenantId: tenant.id, count: 0, total: 0 };
+          }
+        })
+      );
       const ordsMap: Record<string, { count: number; total: number }> = {};
       let grandTotal = 0;
-      for (const tenant of t) {
-        const ords = await getOrdenes(tenant.id);
-        const ordsArr = Array.isArray(ords) ? ords : [];
-        const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
-        ordsMap[tenant.id] = { count: ordsArr.length, total: ingr };
-        grandTotal += ordsArr.length;
+      for (const res of ordsResults) {
+        ordsMap[res.tenantId] = { count: res.count, total: res.total };
+        grandTotal += res.count;
       }
       setOrdenesByTenant(ordsMap);
       setTotalOrdenes(grandTotal);

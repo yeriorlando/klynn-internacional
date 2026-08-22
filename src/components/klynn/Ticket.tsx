@@ -324,8 +324,9 @@ export function Ticket({
             <img src={tenant.logo_url} alt="Logo" className="h-24 w-auto max-w-[220px] object-contain filter grayscale" />
           </div>
         )}
-        {!tenant.logo_url && <div className="text-base font-bold uppercase leading-tight">{tenant.nombre}</div>}
-        {cfg?.ncf_facturacion_activa && cfg?.ticket_mostrar_rnc && tenant.rnc && <div><b>RNC:</b> <span className="font-semibold">{tenant.rnc}</span></div>}
+        {(cfg?.ticket_mostrar_rnc ?? true) && (tenant.rnc || cfg?.rnc_emisor) && (
+          <div><b>RNC:</b> <span className="font-semibold">{tenant.rnc || cfg?.rnc_emisor}</span></div>
+        )}
         {tenant.telefono && <div><b>Tel:</b> <span className="font-semibold">{formatPhoneDO(tenant.telefono)}</span></div>}
         {tenant.direccion && <div className="text-[10px] leading-tight font-semibold">{tenant.direccion}</div>}
       </div>

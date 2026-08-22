@@ -138,44 +138,40 @@ function getRoleBadgeClass(rol: RolEmpleado) {
   }
 }
 
+import { useEmpleados, useOrdenes, useGlobalConfig } from "@/hooks/use-queries";
+import { useQueryClient } from "@tanstack/react-query";
+
 export const Route = createFileRoute("/t/$slug/personal")({ component: PersonalPage });
 
 function PersonalPage() {
   const user = useRequireAuth();
-  const [refresh, setRefresh] = useState(0);
+  const tenant = user?.tenant;
+  const tenantId = tenant?.id || "";
+  const queryClient = useQueryClient();
+
+  const { data: emps = [], isLoading: loadingEmps } = useEmpleados(tenantId);
+  const { data: ordenes = [] } = useOrdenes(tenantId);
+  const { data: globalConfig } = useGlobalConfig();
+
   const [edit, setEdit] = useState<Empleado | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [emps, setEmps] = useState<Empleado[]>([]);
-  const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [limits, setLimits] = useState<any>({ employeesReached: false, employeeLimit: 0 });
-  const [loading, setLoading] = useState(true);
-
-  const [globalConfig, setGlobalConfig] = useState<GlobalConfig | null>(null);
-
-  const tenant = user?.tenant;
-  const tenantId = tenant?.id || "";
 
   useEffect(() => {
-    async function load() {
-      if (!user || !tenant || !tenantId || tenantId === "__loading__") return;
-      setLoading(true);
-      const [eList, oList, lim, cfg] = await Promise.all([
-        getEmpleados(tenantId),
-        getOrdenes(tenantId),
-        checkPlanLimits(tenant),
-        getGlobalConfig(),
-      ]);
-      setEmps(eList);
-      setOrdenes(oList);
+    async function checkLimits() {
+      if (!tenant || tenantId === "__loading__") return;
+      const lim = await checkPlanLimits(tenant);
       setLimits(lim);
-      setGlobalConfig(cfg);
-      setLoading(false);
     }
-    load();
-  }, [tenantId, refresh]);
+    checkLimits();
+  }, [tenant, emps.length]);
 
-  if (!user || user.tenant.id === "__loading__" || (loading && emps.length === 0)) {
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["empleados", tenantId] });
+  };
+
+  if (!user || user.tenant.id === "__loading__" || (loadingEmps && emps.length === 0)) {
     return <GlobalPageLoader text="Cargando personal..." />;
   }
 

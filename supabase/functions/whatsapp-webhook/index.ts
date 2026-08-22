@@ -253,6 +253,23 @@ serve(async (req) => {
                     return new Response('No tenant_id resolved', { status: 200 });
                 }
 
+                // 🛑 VALIDACIÓN DE SEGURIDAD ESTRICTA:
+                // Solo procesar e insertar mensajes si la lavandería tiene su WhatsApp activado y CONECTADO
+                const { data: tenantRecord } = await supabase
+                    .from('tenants')
+                    .select('config')
+                    .eq('id', tenantId)
+                    .maybeSingle();
+
+                const wa = tenantRecord?.config?.whatsapp;
+                const isKlynnConnectOpen = Boolean(wa?.enabled && wa?.klynn_connect_status === 'open');
+                const isWasenderConnected = Boolean(wa?.enabled && wa?.is_connected);
+
+                if (!isKlynnConnectOpen && !isWasenderConnected) {
+                    console.log(`[whatsapp-webhook] Lavandería ${tenantId} tiene WhatsApp DESCONECTADO. Mensaje entrante descartado.`);
+                    return new Response('WhatsApp desconectado para este negocio. Mensaje ignorado.', { status: 200 });
+                }
+
                 // --- DEDUPLICATION: skip if wamid already exists ---
                 if (wamid) {
                     const { data: existing } = await supabase

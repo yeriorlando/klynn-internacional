@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { ArrowLeft, Printer, Search, Clock, CheckCircle2, ChevronDown, ChevronUp, CreditCard, Phone, RefreshCw, Timer, MessageCircle, FileText, AlertTriangle, Trash2, Building2, Banknote, Receipt } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -9,13 +9,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, getOrdenes, getClientes, getMovimientos, formatDateTimeRD } from "@/lib/storage";
+import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, formatDateTimeRD } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
 import { notificarWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
-import { useCajaAbierta } from "@/hooks/use-queries";
-import { queryClient } from "@/router";
+import { useCajaAbierta, useOrdenes, useClientes, useMovimientos } from "@/hooks/use-queries";
+import { useQueryClient } from "@tanstack/react-query";
 import { CobrarOrdenDialog, TicketPrintPortal, CondonarDeudaDialog } from "@/components/klynn/OrdenesPage";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -68,126 +68,117 @@ function estadoMora(dias: number, limite: number): CXCOrden["estado_mora"] {
   if (dias <= Math.floor(limite * 0.25))  return "AL_DIA";      // 0-25% del límite
   if (dias <= Math.floor(limite * 0.75))  return "POR_VENCER";  // 25-75% del límite
   if (dias <= limite)                     return "VENCIDA";     // 75-100% del límite
-  return "CRITICA";                                              // superó el límite
+  return "CRITICA";                                             // > 100% del límite
 }
 
-export default function CuentasPorCobrarPage() {
+function CuentasPorCobrarPage() {
   const user = useRequireAuth();
-  const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
-  const navigate = useNavigate();
   const tenantId = user?.tenant?.id || "";
-
+  const queryClient = useQueryClient();
   const { data: cajaAbierta } = useCajaAbierta(tenantId);
-  const [dbClientes, setDbClientes] = useState<Cliente[]>([]);
+  const { data: ordenesRaw = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
+  const { data: dbClients = [], isLoading: loadingClientes } = useClientes(tenantId);
+  const { data: dbMovs = [] } = useMovimientos(tenantId);
+  const loading = loadingOrdenes && ordenesRaw.length === 0;
+
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
   const [cobrarCliente, setCobrarCliente] = useState<ClienteDeuda | null>(null);
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
   const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
 
-  const [loading, setLoading] = useState(true);
   const [enviando, setEnviando] = useState<string | null>(null);
-  const [clientes, setClientes] = useState<ClienteDeuda[]>([]);
   const [search, setSearch] = useState("");
   const [filtroMora, setFiltroMora] = useState<string>("TODOS");
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const [formatoPrint, setFormatoPrint] = useState<"A4" | "80mm">("A4");
   const [limiteDias, setLimiteDias] = useState<number>(user?.tenant?.limite_credito_dias ?? 30);
   const [seccion, setSeccion] = useState<"PENDIENTES" | "SALDADAS">("PENDIENTES");
-  const [ordenesSaldadas, setOrdenesSaldadas] = useState<(Orden & { cliente_nombre: string; cliente_telefono: string })[]>([]);
 
-  async function cargar() {
-    if (!tenantId || tenantId === "__loading__") {
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [ordenesRaw, dbClients, dbMovs] = await Promise.all([
-        getOrdenes(tenantId),
-        getClientes(tenantId),
-        getMovimientos(tenantId),
-      ]);
+  const { clientes, dbClientesList, ordenesSaldadas } = useMemo(() => {
+    const clientsMap = new Map((dbClients || []).map(c => [c.id, c]));
+    
+    // Consultar movimientos del tenant para identificar créditos saldados
+    const creditOrdenIds = new Set(
+      (dbMovs || [])
+        .filter(m => m.tipo === "ABONO" || m.concepto?.includes("Abono inicial") || m.concepto?.includes("Cobro de saldo"))
+        .map(m => m.orden_id)
+        .filter(Boolean)
+    );
 
-      const clientsMap = new Map(dbClients?.map(c => [c.id, c]) || []);
-      
-      // Consultar movimientos del tenant para identificar créditos saldados
-      const creditOrdenIds = new Set(
-        dbMovs
-          ?.filter(m => m.tipo === "ABONO" || m.concepto?.includes("Abono inicial") || m.concepto?.includes("Cobro de saldo"))
-          ?.map(m => m.orden_id)
-          .filter(Boolean) || []
-      );
+    // Filtrar únicamente órdenes a CRÉDITO pendientes (o con movimientos de crédito)
+    const ordenesFiltradas = (ordenesRaw || []).filter(o => 
+      o.saldo > 0 && 
+      o.estado !== "ANULADA" && 
+      (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id))
+    );
 
-      // Filtrar únicamente órdenes a CRÉDITO pendientes (o con movimientos de crédito)
-      const ordenesFiltradas = ordenesRaw.filter(o => 
-        o.saldo > 0 && 
-        o.estado !== "ANULADA" && 
-        (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id))
-      );
+    // Filtrar créditos saldados (originalmente crédito y con saldo 0)
+    const ordenesSaldadasRaw = (ordenesRaw || []).filter(o => 
+      (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id)) && 
+      o.saldo === 0 && 
+      o.estado !== "ANULADA"
+    );
 
-      // Filtrar créditos saldados (originalmente crédito y con saldo 0)
-      const ordenesSaldadasRaw = ordenesRaw.filter(o => 
-        (o.metodo_pago === "CREDITO" || creditOrdenIds.has(o.id)) && 
-        o.saldo === 0 && 
-        o.estado !== "ANULADA"
-      );
+    const map = new Map<string, ClienteDeuda>();
+    const allClientsMap = new Map<string, Cliente>();
+    
+    const sortedOrdenes = [...ordenesFiltradas].sort((a, b) => +new Date(a.creado_en) - +new Date(b.creado_en));
 
-      const map = new Map<string, ClienteDeuda>();
-      const allClientsMap = new Map<string, Cliente>();
-      
-      const sortedOrdenes = [...ordenesFiltradas].sort((a, b) => +new Date(a.creado_en) - +new Date(b.creado_en));
-
-      for (const o of sortedOrdenes) {
-        const c = clientsMap.get(o.cliente_id);
-        if (c) allClientsMap.set(c.id, c);
-        const dias = diasAntiguedad(o.creado_en);
-        const mora = estadoMora(dias, limiteDias);
-        const ord: CXCOrden = { ...o, cliente: c, dias_antiguedad: dias, estado_mora: mora };
-        const cid = o.cliente_id;
-        if (!map.has(cid)) {
-          map.set(cid, {
-            cliente_id: cid,
-            cliente_nombre: c?.nombre || "Sin nombre",
-            cliente_apellido: c?.apellido,
-            cliente_telefono: c?.telefono || "",
-            cliente_email: c?.email,
-            total_deuda: 0,
-            ordenes_count: 0,
-            dias_max: 0,
-            estado_mora: "AL_DIA",
-            ordenes: [],
-          });
-        }
-        const entry = map.get(cid)!;
-        entry.total_deuda += o.saldo;
-        entry.ordenes_count += 1;
-        entry.dias_max = Math.max(entry.dias_max, dias);
-        entry.estado_mora = estadoMora(entry.dias_max, limiteDias);
-        entry.ordenes.push(ord);
+    for (const o of sortedOrdenes) {
+      const c = clientsMap.get(o.cliente_id);
+      if (c) allClientsMap.set(c.id, c);
+      const dias = diasAntiguedad(o.creado_en);
+      const mora = estadoMora(dias, limiteDias);
+      const ord: CXCOrden = { ...o, cliente: c, dias_antiguedad: dias, estado_mora: mora };
+      const cid = o.cliente_id;
+      if (!map.has(cid)) {
+        map.set(cid, {
+          cliente_id: cid,
+          cliente_nombre: c?.nombre || "Sin nombre",
+          cliente_apellido: c?.apellido,
+          cliente_telefono: c?.telefono || "",
+          cliente_email: c?.email,
+          total_deuda: 0,
+          ordenes_count: 0,
+          dias_max: 0,
+          estado_mora: "AL_DIA",
+          ordenes: [],
+        });
       }
-
-      const sortedSaldadas = [...ordenesSaldadasRaw].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-      const saldadasConCliente = sortedSaldadas.map(o => {
-        const c = clientsMap.get(o.cliente_id);
-        return {
-          ...o,
-          cliente_nombre: c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final",
-          cliente_telefono: c?.telefono || ""
-        };
-      });
-
-      setDbClientes(Array.from(allClientsMap.values()));
-      setClientes(Array.from(map.values()).sort((a, b) => b.total_deuda - a.total_deuda));
-      setOrdenesSaldadas(saldadasConCliente);
-    } catch (err: any) {
-      toast.error("Error al cargar cuentas por cobrar");
-    } finally {
-      setLoading(false);
+      const entry = map.get(cid)!;
+      entry.total_deuda += o.saldo;
+      entry.ordenes_count += 1;
+      entry.dias_max = Math.max(entry.dias_max, dias);
+      entry.estado_mora = estadoMora(entry.dias_max, limiteDias);
+      entry.ordenes.push(ord);
     }
-  }
 
-  useEffect(() => { cargar(); }, [tenantId]);
+    const sortedSaldadas = [...ordenesSaldadasRaw].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+    const saldadasConCliente = sortedSaldadas.map(o => {
+      const c = clientsMap.get(o.cliente_id);
+      return {
+        ...o,
+        cliente_nombre: c ? `${c.nombre} ${c.apellido || ""}` : "Consumidor Final",
+        cliente_telefono: c?.telefono || ""
+      };
+    });
+
+    return {
+      dbClientesList: Array.from(allClientsMap.values()),
+      clientes: Array.from(map.values()).sort((a, b) => b.total_deuda - a.total_deuda),
+      ordenesSaldadas: saldadasConCliente
+    };
+  }, [ordenesRaw, dbClients, dbMovs, limiteDias]);
+
+  const dbClientes = dbClientesList;
+
+  function refresh() {
+    queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+  }
+  const cargar = refresh;
 
   const filtered = clientes.filter(c => {
     const q = search.toLowerCase();
@@ -198,6 +189,11 @@ export default function CuentasPorCobrarPage() {
 
   const totalGeneral = filtered.reduce((s, c) => s + c.total_deuda, 0);
   const totalClientes = filtered.length;
+
+  if (!user || tenantId === "__loading__" || (loadingOrdenes && ordenesRaw.length === 0 && (typeof navigator === "undefined" || navigator.onLine))) {
+    return <GlobalPageLoader text="Cargando cuentas por cobrar..." />;
+  }
+
   const totalOrdenes = filtered.reduce((s, c) => s + c.ordenes_count, 0);
 
   const criticas = clientes.filter(c => c.estado_mora === "CRITICA").length;
@@ -432,10 +428,6 @@ export default function CuentasPorCobrarPage() {
     } finally {
       setEnviando(null);
     }
-  }
-
-  if (!user || tenantId === "__loading__" || (loading && clientes.length === 0 && (typeof navigator === "undefined" || navigator.onLine))) {
-    return <GlobalPageLoader text="Cargando cuentas por cobrar..." />;
   }
 
   return (
@@ -1162,12 +1154,14 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
             } else {
               try {
                 let nextNCF: string | undefined = undefined;
-                try {
-                  const { ncf, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
-                  nextNCF = ncf;
-                  finalNcfVencimiento = expiration_date;
-                } catch (seqErr) {
-                  console.warn("Aviso al obtener secuencia local:", seqErr);
+                if (fiscalConfig?.ambiente === "produccion") {
+                  try {
+                    const { ncf, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
+                    nextNCF = ncf;
+                    finalNcfVencimiento = expiration_date;
+                  } catch (seqErr) {
+                    console.warn("Aviso al obtener secuencia local:", seqErr);
+                  }
                 }
 
                 const ordenTemporal: Orden = cleanOrdenCXC({

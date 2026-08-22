@@ -28,7 +28,7 @@ import { useRequireAuth } from "@/lib/useRequireAuth";
 import { toast } from "sonner";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
-import { useGlobalConfig } from "@/hooks/use-queries";
+import { useGlobalConfig, useConversations } from "@/hooks/use-queries";
 import { getKlynnConnectInstanceName } from "@/lib/whatsapp";
 
 function BoringAvatar({ name, size }: { name: string; size: number }) {
@@ -45,20 +45,11 @@ function BoringAvatar({ name, size }: { name: string; size: number }) {
   const color1 = colors[(hash + 1) % colors.length];
   const color2 = colors[(hash + 2) % colors.length];
   
-  const cx1 = 10 + (hash % 20);
-  const cy1 = 10 + ((hash >> 2) % 20);
-  const r1 = 12 + ((hash >> 4) % 12);
-
-  const cx2 = 5 + ((hash >> 6) % 30);
-  const cy2 = 5 + ((hash >> 8) % 30);
-  const r2 = 8 + ((hash >> 10) % 10);
-
   const isSmile = (hash >> 12) % 2 === 0;
   const mouthY = 22 + ((hash >> 14) % 3);
   const mouthPath = isSmile 
     ? `M 15 ${mouthY} Q 20 ${mouthY + 4.5} 25 ${mouthY}`
     : `M 15 ${mouthY + 2} Q 20 ${mouthY} 25 ${mouthY + 2}`;
-
   const eyeXOffset = (hash >> 16) % 3;
   const eyeY = 17 + ((hash >> 18) % 2);
   const faceColor = "#000000";
@@ -75,8 +66,8 @@ function BoringAvatar({ name, size }: { name: string; size: number }) {
       </mask>
       <g mask={`url(#mask-${hash})`}>
         <rect width="40" height="40" fill={bg} />
-        <circle cx={cx1} cy={cy1} r={r1} fill={color1} opacity="0.85" />
-        <circle cx={cx2} cy={cy2} r={r2} fill={color2} opacity="0.75" />
+        <circle cx={10 + (hash % 20)} cy={10 + ((hash >> 2) % 20)} r={12 + ((hash >> 4) % 12)} fill={color1} opacity="0.85" />
+        <circle cx={5 + ((hash >> 6) % 30)} cy={5 + ((hash >> 8) % 30)} r={8 + ((hash >> 10) % 10)} fill={color2} opacity="0.75" />
         
         <g transform={`rotate(${(hash >> 20) % 30 - 15} 20 20)`}>
           <circle cx={15 + eyeXOffset} cy={eyeY} r="1.8" fill={faceColor} />
@@ -183,13 +174,17 @@ function formatShortMessageContent(content: string): string {
 
 function ConversationsPage() {
   const user = useRequireAuth();
-  const [conversations, setConversations] = useState<DBConversation[]>([]);
+  const tenant = user && user.tenant && user.tenant.id !== '__loading__' ? user.tenant : null;
+  const tenantId = tenant?.id;
+
+  const { data: cachedConversations = [], isLoading: isQueryLoading } = useConversations(tenantId || "");
+  const [conversations, setConversations] = useState<DBConversation[]>(() => cachedConversations as any);
   const [messages, setMessages] = useState<DBMessage[]>([]);
-  const [selectedConvId, setSelectedConvId] = useState<string | null>(null);
+  const [selectedConvId, setSelectedConvId] = useState<string | null>(() => (cachedConversations[0]?.id as string) || null);
   const [search, setSearch] = useState("");
   const [messageText, setMessageText] = useState("");
   const [activeMediaModalUrl, setActiveMediaModalUrl] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(() => cachedConversations.length === 0);
   const [replyingTo, setReplyingTo] = useState<DBMessage | null>(null);
   const [switchingAgent, setSwitchingAgent] = useState(false);
   const [showNewChatModal, setShowNewChatModal] = useState(false);
@@ -198,6 +193,16 @@ function ConversationsPage() {
   const [isCreatingChat, setIsCreatingChat] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [convToDeleteId, setConvToDeleteId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (cachedConversations && cachedConversations.length > 0 && conversations.length === 0) {
+      setConversations(cachedConversations as any);
+      if (!selectedConvId) {
+        setSelectedConvId(cachedConversations[0].id);
+      }
+      setIsLoading(false);
+    }
+  }, [cachedConversations]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   
@@ -262,9 +267,6 @@ function ConversationsPage() {
   };
 
   const isDarkTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
-
-  const tenant = user && user.tenant && user.tenant.id !== '__loading__' ? user.tenant : null;
-  const tenantId = tenant?.id;
   const wa = tenant?.config?.whatsapp;
   const { data: globalCfg } = useGlobalConfig();
   const engine = globalCfg?.whatsapp_engine || "klynn_connect";
@@ -949,9 +951,8 @@ function ConversationsPage() {
   );
 
   const selectedConversation = conversations.find(c => c.id === selectedConvId);
-  const isAiMode = selectedConversation?.agent === 'ia';
-
-  if (isLoading) {
+  const hasNoData = (!conversations || conversations.length === 0) && (!cachedConversations || cachedConversations.length === 0);
+  if (isLoading && isQueryLoading && hasNoData) {
     return (
       <GlobalPageLoader 
         text="Cargando centro de mensajes WhatsApp..." 

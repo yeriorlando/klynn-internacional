@@ -66,6 +66,9 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { usePlans } from "@/hooks/use-queries";
+
 export const Route = createFileRoute("/dashboard-admin")({
   head: () => ({ meta: [{ title: "Mis Lavanderías — Klynn" }] }),
   component: DashboardAdminPage,
@@ -98,9 +101,9 @@ function PlanBadge({ id }: { id: string }) {
   return (
     <Badge 
       variant="outline" 
-      className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full uppercase text-[10px] font-extrabold tracking-wider shadow-2xs ${config.className}`}
+      className={`text-xs font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 w-fit ${config.className}`}
     >
-      <Icon className={`h-3 w-3 shrink-0 ${config.iconColor}`} />
+      <Icon className={`h-3 w-3 ${config.iconColor}`} />
       <span>{config.label}</span>
     </Badge>
   );
@@ -109,13 +112,56 @@ function PlanBadge({ id }: { id: string }) {
 function DashboardAdminPage() {
   const auth = useRequireAuth();
   const navigate = useNavigate();
-  const [myTenants, setMyTenants] = useState<Tenant[]>([]);
+  const queryClient = useQueryClient();
+  const userEmail = auth?.empleado.email || "";
+
+  const { data: plans = [] } = usePlans();
+
+  const { data: dashboardData, isLoading: loadingDashboard } = useQuery({
+    queryKey: ["dashboard-admin-data", userEmail],
+    queryFn: async () => {
+      if (!userEmail) return null;
+      const tenants = await getTenantsForUser(userEmail);
+
+      const ordsResults = await Promise.all(
+        tenants.map(async (t) => {
+          try {
+            const ords = await getOrdenes(t.id);
+            const ordsArr = Array.isArray(ords) ? ords : [];
+            const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
+            return { tenantId: t.id, count: ordsArr.length, total: ingr, estado: t.estado };
+          } catch {
+            return { tenantId: t.id, count: 0, total: 0, estado: t.estado };
+          }
+        })
+      );
+
+      let totalIngresos = 0, totalOrdenesCount = 0, activasCount = 0;
+      const tStats: Record<string, { count: number; total: number }> = {};
+      for (const res of ordsResults) {
+        tStats[res.tenantId] = { count: res.count, total: res.total };
+        totalIngresos += res.total;
+        totalOrdenesCount += res.count;
+        if (res.estado !== "CANCELADO") activasCount++;
+      }
+
+      return {
+        tenants,
+        tenantStats: tStats,
+        stats: { totalIngresos, totalOrdenesCount, activasCount }
+      };
+    },
+    enabled: !!userEmail && auth?.empleado.id !== '__loading__',
+    staleTime: 60_000,
+  });
+
+  const myTenants = dashboardData?.tenants || [];
+  const tenantStats = dashboardData?.tenantStats || {};
+  const stats = dashboardData?.stats || { totalIngresos: 0, totalOrdenesCount: 0, activasCount: 0 };
+  const loading = loadingDashboard && myTenants.length === 0;
+
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [tenantStats, setTenantStats] = useState<Record<string, { count: number; total: number }>>({}); 
-  const [stats, setStats] = useState({ totalIngresos: 0, totalOrdenesCount: 0, activasCount: 0 });
-  const [loading, setLoading] = useState(true);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const filteredTenants = useMemo(() => {
@@ -124,7 +170,7 @@ function DashboardAdminPage() {
       const matchesQuery = !q || 
         t.nombre.toLowerCase().includes(q) || 
         t.email?.toLowerCase().includes(q) || 
-        t.telefono?.toLowerCase().includes(q) ||
+        t.telefono?.toLowerCase().includes(q) || 
         t.slug.toLowerCase().includes(q) ||
         (t.rnc && t.rnc.toLowerCase().includes(q));
       
@@ -135,32 +181,6 @@ function DashboardAdminPage() {
       return matchesQuery && matchesStatus;
     });
   }, [myTenants, searchQuery, statusFilter]);
-
-  useEffect(() => {
-    async function load() {
-      if (!auth?.empleado.email || auth.empleado.id === '__loading__') return;
-      setLoading(true);
-      const tenants = await getTenantsForUser(auth.empleado.email);
-      setMyTenants(tenants);
-
-      let totalIngresos = 0, totalOrdenesCount = 0, activasCount = 0;
-      const tStats: Record<string, { count: number; total: number }> = {};
-      for (const t of tenants) {
-        const ords = await getOrdenes(t.id);
-        const ordsArr = Array.isArray(ords) ? ords : [];
-        const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
-        tStats[t.id] = { count: ordsArr.length, total: ingr };
-        totalIngresos += ingr;
-        totalOrdenesCount += ordsArr.length;
-        if (t.estado !== "CANCELADO") activasCount++;
-      }
-      setTenantStats(tStats);
-      setStats({ totalIngresos, totalOrdenesCount, activasCount });
-      setLoading(false);
-    }
-    load();
-    getPlans().then(setPlans);
-  }, [auth?.empleado.email]);
 
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);

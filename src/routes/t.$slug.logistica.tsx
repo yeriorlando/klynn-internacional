@@ -52,6 +52,8 @@ import { LogisticsMap } from "@/components/klynn/logistica/LogisticsMap";
 import { DeliveryManifestPrint } from "@/components/klynn/logistica/DeliveryManifestPrint";
 import { useQueryClient } from "@tanstack/react-query";
 
+import { useOrdenes, useClientes, useEmpleados } from "@/hooks/use-queries";
+
 export const Route = createFileRoute("/t/$slug/logistica")({
   component: LogisticaPage,
 });
@@ -59,11 +61,19 @@ export const Route = createFileRoute("/t/$slug/logistica")({
 function LogisticaPage() {
   const user = useRequireAuth();
   const queryClient = useQueryClient();
+  const tenant = user?.tenant;
+  const tenantId = tenant?.id || "";
+
+  const { data: rawOrds = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
+  const { data: clientes = [] } = useClientes(tenantId);
+  const { data: empleados = [] } = useEmpleados(tenantId);
   
-  const [ordenesRaw, setOrdenesRaw] = useState<Orden[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
-  const [empleados, setEmpleados] = useState<Empleado[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [ordenesRaw, setOrdenesRaw] = useState<Orden[]>(() => rawOrds);
+
+  useEffect(() => {
+    if (rawOrds) setOrdenesRaw(rawOrds);
+  }, [rawOrds]);
+
   const [query, setQuery] = useState("");
   const [filterStatus, setFilterStatus] = useState<EstadoOrden | "TODAS">("TODAS");
   const [filterRepartidor, setFilterRepartidor] = useState<string>("TODOS");
@@ -74,31 +84,12 @@ function LogisticaPage() {
   const [podOrder, setPodOrder] = useState<Orden | null>(null);
   const [incidenciaOrder, setIncidenciaOrder] = useState<Orden | null>(null);
   const [showManifest, setShowManifest] = useState(false);
-  const [refresh, setRefresh] = useState(0);
   const [now, setNow] = useState(new Date());
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 60_000);
     return () => clearInterval(t);
   }, []);
-
-  useEffect(() => {
-    async function load() {
-      const tId = user?.tenant?.id;
-      if (!tId || tId === '__loading__') return;
-      setLoading(true);
-      const [oList, cList, eList] = await Promise.all([
-        getOrdenes(tId),
-        getClientes(tId),
-        getEmpleados(tId),
-      ]);
-      setOrdenesRaw(oList);
-      setClientes(cList);
-      setEmpleados(eList);
-      setLoading(false);
-    }
-    load();
-  }, [user?.tenant?.id, refresh]);
 
   // Rol del usuario actual
   const isRepartidor = user?.empleado?.rol === "REPARTIDOR";
@@ -238,10 +229,9 @@ function LogisticaPage() {
   const selectedClient = useMemo(() => clientes.find(c => c.id === selectedOrder?.cliente_id), [clientes, selectedOrder]);
   const selectedDriver = useMemo(() => empleados.find(e => e.id === selectedOrder?.repartidor_id), [empleados, selectedOrder]);
 
-  if (!user || !user.tenant || user.tenant.id === '__loading__' || (loading && ordenesRaw.length === 0)) {
+  if (!user || !user.tenant || user.tenant.id === '__loading__' || (loadingOrdenes && rawOrds.length === 0)) {
     return <GlobalPageLoader text="Cargando logística..." />;
   }
-  const tenant = user.tenant;
 
   return (
     <div className="min-h-screen bg-slate-50/50 dark:bg-slate-950 pb-20">

@@ -1337,12 +1337,16 @@ function NuevaOrdenPage() {
 
             let nextNCF: string | undefined = undefined;
 
-            try {
-              const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
-              nextNCF = ncf;
-              ncfVencimiento = expiration_date;
-            } catch (seqErr) {
-              console.warn("Aviso al obtener secuencia local:", seqErr);
+            // Solo consultar secuencias locales si estamos en PRODUCCION
+            // En Sandbox/Pruebas, Pronesoft genera y gestiona las secuencias de prueba automáticamente
+            if (freshFiscalConfig?.ambiente === "produccion") {
+              try {
+                const { ncf, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
+                nextNCF = ncf;
+                ncfVencimiento = expiration_date;
+              } catch (seqErr) {
+                console.warn("Aviso al obtener secuencia local:", seqErr);
+              }
             }
 
             const result = await emitirECF(

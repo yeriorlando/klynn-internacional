@@ -87,7 +87,21 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
       if (!isMounted) return;
 
       if (!u) {
-        // En offline, no redirigir si hay sesión guardada para no bloquear el POS
+        // Comprobar si hay sesión en localStorage para no expulsar al usuario por errores de red o token
+        const session = getSession();
+        if (session?.empleado_id && session?.tenant_id) {
+          try {
+            const emp = await getEmpleadoById(session.empleado_id);
+            const ten = await getTenantById(session.tenant_id);
+            if (emp && ten && emp.activo) {
+              setUser({ empleado: emp, tenant: ten });
+              setLoading(false);
+              return;
+            }
+          } catch {}
+        }
+
+        // Si estamos sin conexión, no redirigir si hay sesión guardada para no bloquear el POS
         if (typeof window !== "undefined" && !navigator.onLine) {
           setLoading(false);
           return;

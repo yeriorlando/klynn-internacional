@@ -14,7 +14,6 @@ export function GlobalPageLoader({
   delayMs = 200,
 }: GlobalPageLoaderProps) {
   const [show, setShow] = useState(delayMs <= 0);
-  const [isSlow, setIsSlow] = useState(false);
 
   useEffect(() => {
     if (delayMs <= 0) {
@@ -24,12 +23,6 @@ export function GlobalPageLoader({
       return () => clearTimeout(showTimer);
     }
   }, [delayMs]);
-
-  useEffect(() => {
-    // Si la carga tarda más de 4.5 segundos, avisar al usuario sobre la latencia de la red
-    const slowTimer = setTimeout(() => setIsSlow(true), 4500);
-    return () => clearTimeout(slowTimer);
-  }, []);
 
   if (!show) return null;
 
@@ -64,11 +57,6 @@ export function GlobalPageLoader({
       {text && (
         <p className="mt-1 text-xs sm:text-[13.5px] font-black uppercase tracking-[0.22em] text-[#1B4B73] dark:text-[#38bdf8] select-none animate-pulse">
           {text}
-        </p>
-      )}
-      {isSlow && (
-        <p className="mt-2 text-[11px] text-muted-foreground max-w-xs leading-relaxed animate-in fade-in duration-300">
-          La conexión a internet está un poco lenta. Sincronizando con el servidor...
         </p>
       )}
     </div>

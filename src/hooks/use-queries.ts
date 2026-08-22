@@ -116,6 +116,31 @@ export function useECFSequences(tenantId: string) {
   });
 }
 
+import { supabase } from "@/lib/supabase";
+
+export async function getConversations(tenantId: string) {
+  if (!tenantId || tenantId === '__loading__') return [];
+  try {
+    const { data, error } = await supabase
+      .from('conversations')
+      .select('*')
+      .eq('tenant_id', tenantId)
+      .order('time', { ascending: false });
+    if (error) return [];
+    return data || [];
+  } catch {
+    return [];
+  }
+}
+
+export function useConversations(tenantId: string) {
+  return useQuery({
+    queryKey: ['conversations', tenantId],
+    queryFn: () => getConversations(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
 import type { QueryClient } from "@tanstack/react-query";
 
 /** Precarga en memoria RAM y en paralelo todas las consultas principales del tenant */
@@ -131,6 +156,7 @@ export function prefetchTenantData(queryClient: QueryClient, tenantId: string) {
     queryClient.prefetchQuery({ queryKey: ["caja-abierta", tenantId], queryFn: () => getCajaAbierta(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["gastos", tenantId], queryFn: () => getGastos(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["empleados", tenantId], queryFn: () => getEmpleados(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["conversations", tenantId], queryFn: () => getConversations(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["ecf-config", tenantId], queryFn: () => getECFConfig(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["global-config"], queryFn: () => getGlobalConfig() });
     queryClient.prefetchQuery({ queryKey: ["plans"], queryFn: () => getPlans() });

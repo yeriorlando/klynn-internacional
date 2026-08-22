@@ -49,7 +49,23 @@ function LoginPage() {
 
       if (authError) {
         setLoading(false);
-        setError("Credenciales incorrectas. Verifica tu email y contraseña.");
+        const cleanEmail = email.trim().toLowerCase();
+        
+        try {
+          const { data: emps } = await supabase
+            .from("empleados")
+            .select("id")
+            .ilike("email", cleanEmail)
+            .limit(1);
+
+          if ((!emps || emps.length === 0) && !ADMIN_EMAILS.includes(cleanEmail)) {
+            setError("No existe ninguna lavandería ni cuenta registrada con este correo electrónico.");
+          } else {
+            setError("Contraseña incorrecta. Verifica tu contraseña o usa '¿Olvidaste tu contraseña?'.");
+          }
+        } catch {
+          setError("Credenciales incorrectas. Verifica tu email y contraseña.");
+        }
         return;
       }
 
