@@ -465,9 +465,6 @@ function NuevaOrdenPage() {
   const [showAllClothingCategories, setShowAllClothingCategories] = useState(false);
   const [posSearch, setPosSearch] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
-  const [isCatalogHeaderVisible, setIsCatalogHeaderVisible] = useState(true);
-  const catalogScrollTopRef = useRef(0);
-
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
 
   // --- Estados de Cobro Profesional y Modalidades ---
@@ -645,7 +642,6 @@ function NuevaOrdenPage() {
     fiscalConfigData?.is_active || 
     tenant.config?.modo_facturacion === "electronica"
   );
-
   useEffect(() => {
     if (isElectronic) {
       setTipoECF((prev) => (prev && prev.startsWith("E") ? prev : "E32"));
@@ -654,10 +650,12 @@ function NuevaOrdenPage() {
     }
   }, [isElectronic]);
 
-  // Calcular secuencias activas según el modo (electrónico o tradicional)
-  const activeSequences = (ecfSequences || []).filter(
-    (s) => s.is_active && (isElectronic ? s.tipo_ecf.startsWith("E") : s.tipo_ecf.startsWith("B")),
-  );
+  // Calcular secuencias activas según el modo (electrónico o tradicional) - Memoizado
+  const activeSequences = useMemo(() => {
+    return (ecfSequences || []).filter(
+      (s) => s.is_active && (isElectronic ? s.tipo_ecf.startsWith("E") : s.tipo_ecf.startsWith("B")),
+    );
+  }, [ecfSequences, isElectronic]);
 
   // Obtener los tipos únicos disponibles en base a las secuencias configuradas
   const validTipos = useMemo(() => {
@@ -667,8 +665,14 @@ function NuevaOrdenPage() {
         ? ["E32", "E31"]
         : ["B02", "B01"];
   }, [activeSequences, isElectronic]);
-
   const catalogo = useMemo(() => catalogoData.filter((i) => i.activo), [catalogoData]);
+  const catalogoMap = useMemo(() => {
+    const map = new Map<string, CatalogoItem>();
+    for (const item of catalogo) {
+      map.set(item.nombre, item);
+    }
+    return map;
+  }, [catalogo]);
   const servicios = useMemo(() => {
     const byName = new Map<string, Servicio>();
     for (const service of serviciosData.filter((item) => item.activo)) {
@@ -1057,6 +1061,16 @@ function NuevaOrdenPage() {
     return map;
   }, [items]);
 
+  const indexedItems = useMemo(
+    () => items.map((item, index) => ({ item, index })),
+    [items],
+  );
+
+  const generalItems = useMemo(
+    () => indexedItems.filter(({ item }) => !item.descripcion.startsWith("↳")),
+    [indexedItems],
+  );
+
   const serviceCountsMap = useMemo(() => {
     const map: Record<string, number> = {};
     for (const s of serviciosSel) {
@@ -1064,6 +1078,11 @@ function NuevaOrdenPage() {
     }
     return map;
   }, [serviciosSel]);
+
+  const selectedServices = useMemo(
+    () => servicios.filter((service) => Boolean(serviceCountsMap[service.nombre])),
+    [servicios, serviceCountsMap],
+  );
 
   const catalogFiltered = useMemo(() => {
     let list = catalogo;
@@ -1080,6 +1099,17 @@ function NuevaOrdenPage() {
     }
     return list;
   }, [catalogo, activeCategory, posSearch, posFilterTab]);
+
+  const catalogByCategory = useMemo(() => {
+    const groups = new Map<string, CatalogoItem[]>();
+    for (const item of catalogFiltered) {
+      const category = item.categoria || "Otros";
+      const group = groups.get(category);
+      if (group) group.push(item);
+      else groups.set(category, [item]);
+    }
+    return Array.from(groups.entries());
+  }, [catalogFiltered]);
 
   const servicesFiltered = useMemo(() => {
     if (posSearch) {
@@ -1384,10 +1414,8 @@ function NuevaOrdenPage() {
     0,
   );
 
-  const costoServicios = servicios
-    .filter((s) => serviciosSel.includes(s.nombre))
-    .reduce((acc, s) => {
-      const qty = serviciosSel.filter((x) => x === s.nombre).length;
+  const costoServicios = selectedServices.reduce((acc, s) => {
+      const qty = serviceCountsMap[s.nombre] || 0;
       const price =
         customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio;
       return acc + price * qty;
@@ -2311,14 +2339,7 @@ function NuevaOrdenPage() {
 
             <Card className="flex-1 flex flex-col overflow-hidden border-2 border-primary/10 shadow-none rounded-3xl bg-card">
               {!(step === 1 && !cliente && !isPosMode) && (
-                <div
-                  aria-hidden={!isCatalogHeaderVisible}
-                  className={`flex shrink-0 flex-col overflow-hidden border-b px-6 transition-[max-height,opacity,margin,padding,border-color] duration-300 ease-out motion-reduce:transition-none ${
-                    isCatalogHeaderVisible
-                      ? "pointer-events-auto mb-2 max-h-[32rem] gap-3 border-border/40 py-4 opacity-100"
-                      : "pointer-events-none mb-0 max-h-0 gap-0 border-transparent py-0 opacity-0"
-                  }`}
-                >
+                <div className="flex shrink-0 flex-col gap-3 border-b border-border/40 px-6 py-4 mb-2">
                   <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
@@ -2405,30 +2426,7 @@ function NuevaOrdenPage() {
                 </div>
               )}
 
-              <div
-                className="flex-1 overflow-y-auto overscroll-contain px-6 py-4 custom-scrollbar space-y-8"
-                onScroll={(event) => {
-                  const scrollContainer = event.currentTarget;
-                  const scrollTop = scrollContainer.scrollTop;
-                  const previousScrollTop = catalogScrollTopRef.current;
-                  const scrollDelta = scrollTop - previousScrollTop;
-                  const maxScrollTop = Math.max(
-                    0,
-                    scrollContainer.scrollHeight - scrollContainer.clientHeight,
-                  );
-                  const isNearBottom = maxScrollTop - scrollTop <= 12;
-
-                  if (scrollTop <= 16) {
-                    setIsCatalogHeaderVisible(true);
-                  } else if (scrollDelta > 2 && scrollTop > 32) {
-                    setIsCatalogHeaderVisible(false);
-                  } else if (scrollDelta < -2 && !isNearBottom) {
-                    setIsCatalogHeaderVisible(true);
-                  }
-
-                  catalogScrollTopRef.current = scrollTop;
-                }}
-              >
+              <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain px-6 py-4 custom-scrollbar space-y-8 [scrollbar-gutter:stable]">
                 <>
                   <div className="flex items-center gap-3">
                     <div className="flex flex-1 items-center gap-2 min-w-0">
@@ -2541,13 +2539,8 @@ function NuevaOrdenPage() {
                   {/* SECCIONES DE CATEGORIAS DE PRENDAS */}
                   {enablePrendas &&
                     (posFilterTab === "TODOS" || posFilterTab === "PRENDAS") &&
-                    Array.from(new Set(catalogFiltered.map((c) => c.categoria || "Otros"))).map(
-                      (catName) => {
-                        const itemsInCat = catalogFiltered.filter(
-                          (c) => (c.categoria || "Otros") === catName,
-                        );
-                        if (itemsInCat.length === 0) return null;
-
+                    catalogByCategory.map(
+                      ([catName, itemsInCat]) => {
                         return (
                           <div key={catName} className="space-y-4">
                             <div className="flex items-center justify-between gap-3">
@@ -2562,9 +2555,7 @@ function NuevaOrdenPage() {
                               className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? "xl:grid-cols-5" : ""} gap-3`}
                             >
                               {itemsInCat.map((item) => {
-                                const countInCart = items
-                                  .filter((it) => it.descripcion === item.nombre)
-                                  .reduce((acc, it) => acc + it.cantidad, 0);
+                                const countInCart = itemCountsMap[item.nombre] || 0;
 
                                 return (
                                   <button
@@ -2818,19 +2809,17 @@ function NuevaOrdenPage() {
               ) : (
                 <>
                   {/* Servicios Seleccionados en Carrito POS */}
-                  {servicios
-                    .filter((s) => serviciosSel.includes(s.nombre))
-                    .map((srv) => {
-                      const count = serviciosSel.filter((x) => x === srv.nombre).length;
+                  {selectedServices.map((srv) => {
+                      const count = serviceCountsMap[srv.nombre] || 0;
                       const unitPrice =
                         customServicePrices[srv.nombre] !== undefined
                           ? customServicePrices[srv.nombre]
                           : srv.precio || 0;
-                      const prendasDelServicio = items.filter(
-                        (it) =>
-                          it.descripcion.startsWith("↳") &&
-                          (it.servicio_origen
-                            ? it.servicio_origen === srv.nombre
+                      const prendasDelServicio = indexedItems.filter(
+                        ({ item }) =>
+                          item.descripcion.startsWith("↳") &&
+                          (item.servicio_origen
+                            ? item.servicio_origen === srv.nombre
                             : serviciosSel[0] === srv.nombre),
                       );
 
@@ -2967,69 +2956,53 @@ function NuevaOrdenPage() {
                           </div>
 
                           {/* Prendas del Servicio */}
-                          {prendasDelServicio.map((it) => {
-                            const itemOriginalIndex = items.indexOf(it);
+                          {prendasDelServicio.map(({ item: it, index: itemOriginalIndex }) => {
                             return (
                               <div
                                 key={"pos-detail-" + itemOriginalIndex}
                                 className="flex flex-col gap-1.5 p-2 rounded-xl border transition-all bg-accent/5 ml-4 border-dashed border-primary/20 text-muted-foreground animate-in fade-in duration-150"
                               >
                                 <div className="flex items-center justify-between gap-1.5">
-                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                                     <Shirt className="h-3 w-3 text-primary shrink-0" />
                                     <span className="text-xs font-bold truncate">
                                       {it.descripcion}
                                       {it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
                                     </span>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setEditingItemIndex(itemOriginalIndex);
+                                        setItemEditColor(it.color || "");
+                                        setItemEditColorHex(it.color_hex || "");
+                                        setItemEditNota(it.notas || "");
+                                        setShowItemDetailModal(true);
+                                      }}
+                                      className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition-colors cursor-pointer shrink-0 ${
+                                        it.color || it.notas
+                                          ? "border border-[#1B4B73]/25 bg-[#1B4B73]/10 text-[#1B4B73] hover:bg-[#1B4B73]/15 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-300"
+                                          : "border border-dashed border-[#1B4B73]/45 bg-white text-[#1B4B73] hover:bg-[#1B4B73]/5 dark:bg-slate-900 dark:text-sky-300"
+                                      }`}
+                                    >
+                                      {it.color && (
+                                        <span
+                                          className="h-3 w-3 rounded-full border border-black/20 shrink-0"
+                                          style={{
+                                            background:
+                                              it.color_hex?.startsWith("#") ||
+                                              it.color_hex?.startsWith("linear")
+                                                ? it.color_hex
+                                                : "#94A3B8",
+                                          }}
+                                        />
+                                      )}
+                                      <Palette className="h-3.5 w-3.5 shrink-0" />
+                                      <span>Color / Nota</span>
+                                    </button>
                                   </div>
 
                                   {/* Botón Redondeado de Color / Nota */}
                                   <div className="flex items-center gap-1 shrink-0">
-                                    {it.color ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingItemIndex(itemOriginalIndex);
-                                          setItemEditColor(it.color || "");
-                                          setItemEditColorHex(it.color_hex || "");
-                                          setItemEditNota(it.notas || "");
-                                          setShowItemDetailModal(true);
-                                        }}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-[#1B4B73] transition-all shadow-2xs cursor-pointer group"
-                                      >
-                                        <span
-                                          className="w-2 h-2 rounded-full border border-black/20 shrink-0"
-                                          style={{
-                                            background: it.color_hex?.startsWith("#") || it.color_hex?.startsWith("linear")
-                                              ? it.color_hex
-                                              : "#94A3B8"
-                                          }}
-                                        />
-                                        <span className="font-bold">{it.color}</span>
-                                        {it.notas && (
-                                          <span className="text-[9px] text-muted-foreground font-medium italic truncate max-w-[45px]">
-                                            • {it.notas}
-                                          </span>
-                                        )}
-                                        <Palette className="h-2.5 w-2.5 text-muted-foreground/60 group-hover:text-primary shrink-0 ml-0.5" />
-                                      </button>
-                                    ) : (
-                                      <button
-                                        type="button"
-                                        onClick={() => {
-                                          setEditingItemIndex(itemOriginalIndex);
-                                          setItemEditColor("");
-                                          setItemEditColorHex("");
-                                          setItemEditNota(it.notas || "");
-                                          setShowItemDetailModal(true);
-                                        }}
-                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-dashed border-[#1B4B73]/40 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 transition-all cursor-pointer bg-[#1B4B73]/5"
-                                      >
-                                        <Palette className="h-2.5 w-2.5" />
-                                        <span>+ Color</span>
-                                      </button>
-                                    )}
-
                                     <Button
                                       variant="ghost"
                                       size="icon"
@@ -3075,12 +3048,9 @@ function NuevaOrdenPage() {
                     })}
 
                   {/* Prendas / Items Generales del Catálogo */}
-                  {items
-                    .filter((it) => !it.descripcion.startsWith("↳"))
-                    .map((it) => {
-                      const itemOriginalIndex = items.indexOf(it);
+                  {generalItems.map(({ item: it, index: itemOriginalIndex }) => {
                       const isDetail = it.descripcion.startsWith("↳");
-                      const catalogMatch = catalogo.find((c) => c.nombre === it.descripcion);
+                      const catalogMatch = catalogoMap.get(it.descripcion);
                       return (
                         <div
                           key={"pos-item-" + itemOriginalIndex}
@@ -3091,61 +3061,46 @@ function NuevaOrdenPage() {
                           }`}
                         >
                           <div className="flex items-center justify-between gap-1.5">
-                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                            <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                               {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
                               <span className="text-xs font-bold truncate">
                                 {it.descripcion}
                                 {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
                               </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingItemIndex(itemOriginalIndex);
+                                  setItemEditColor(it.color || "");
+                                  setItemEditColorHex(it.color_hex || "");
+                                  setItemEditNota(it.notas || "");
+                                  setShowItemDetailModal(true);
+                                }}
+                                className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-[11px] font-bold transition-colors cursor-pointer shrink-0 ${
+                                  it.color || it.notas
+                                    ? "border border-[#1B4B73]/25 bg-[#1B4B73]/10 text-[#1B4B73] hover:bg-[#1B4B73]/15 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-300"
+                                    : "border border-dashed border-[#1B4B73]/45 bg-white text-[#1B4B73] hover:bg-[#1B4B73]/5 dark:bg-slate-900 dark:text-sky-300"
+                                }`}
+                              >
+                                {it.color && (
+                                  <span
+                                    className="h-3 w-3 rounded-full border border-black/20 shrink-0"
+                                    style={{
+                                      background:
+                                        it.color_hex?.startsWith("#") ||
+                                        it.color_hex?.startsWith("linear")
+                                          ? it.color_hex
+                                          : "#94A3B8",
+                                    }}
+                                  />
+                                )}
+                                <Palette className="h-3.5 w-3.5 shrink-0" />
+                                <span>Color / Nota</span>
+                              </button>
                             </div>
 
                             {/* Botón Redondeado de Color / Nota */}
                             <div className="flex items-center gap-1 shrink-0">
-                              {it.color ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingItemIndex(itemOriginalIndex);
-                                    setItemEditColor(it.color || "");
-                                    setItemEditColorHex(it.color_hex || "");
-                                    setItemEditNota(it.notas || "");
-                                    setShowItemDetailModal(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-[#1B4B73] transition-all shadow-2xs cursor-pointer group"
-                                >
-                                  <span
-                                    className="w-2 h-2 rounded-full border border-black/20 shrink-0"
-                                    style={{
-                                      background: it.color_hex?.startsWith("#") || it.color_hex?.startsWith("linear")
-                                        ? it.color_hex
-                                        : "#94A3B8"
-                                    }}
-                                  />
-                                  <span className="font-bold">{it.color}</span>
-                                  {it.notas && (
-                                    <span className="text-[9px] text-muted-foreground font-medium italic truncate max-w-[45px]">
-                                      • {it.notas}
-                                    </span>
-                                  )}
-                                  <Palette className="h-2.5 w-2.5 text-muted-foreground/60 group-hover:text-primary shrink-0 ml-0.5" />
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingItemIndex(itemOriginalIndex);
-                                    setItemEditColor("");
-                                    setItemEditColorHex("");
-                                    setItemEditNota(it.notas || "");
-                                    setShowItemDetailModal(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-dashed border-[#1B4B73]/40 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 transition-all cursor-pointer bg-[#1B4B73]/5"
-                                >
-                                  <Palette className="h-2.5 w-2.5" />
-                                  <span>+ Color</span>
-                                </button>
-                              )}
-
                               <Button
                                 variant="ghost"
                                 size="icon"
@@ -3683,7 +3638,7 @@ function NuevaOrdenPage() {
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-3">
                       {servicios.map((s) => {
-                        const srvCount = serviciosSel.filter((x) => x === s.nombre).length;
+                        const srvCount = serviceCountsMap[s.nombre] || 0;
                         return (
                           <button
                             key={s.id}
@@ -3749,10 +3704,8 @@ function NuevaOrdenPage() {
 
                   <div className="space-y-2">
                     {/* Servicios Seleccionados para desglose */}
-                    {servicios
-                      .filter((s) => serviciosSel.includes(s.nombre))
-                      .map((srv) => {
-                        const count = serviciosSel.filter((x) => x === srv.nombre).length;
+                    {selectedServices.map((srv) => {
+                        const count = serviceCountsMap[srv.nombre] || 0;
                         const unitPrice =
                           customServicePrices[srv.nombre] !== undefined
                             ? customServicePrices[srv.nombre]
@@ -3859,7 +3812,7 @@ function NuevaOrdenPage() {
                     {/* Items normal */}
                     {items.map((it, i) => {
                       const isDetail = it.descripcion.startsWith("↳");
-                      const catalogMatch = catalogo.find((c) => c.nombre === it.descripcion);
+                      const catalogMatch = catalogoMap.get(it.descripcion);
                       return (
                         <div
                           key={i}
@@ -3870,10 +3823,42 @@ function NuevaOrdenPage() {
                           }`}
                         >
                           <div className="flex-1">
-                            <div className="font-medium flex items-center gap-2">
+                            <div className="font-medium flex items-center gap-2 flex-wrap">
                               {isDetail && <Shirt className="h-3 w-3 text-primary" />}
-                              {it.descripcion}
-                              {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                              <span>
+                                {it.descripcion}
+                                {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                              </span>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingItemIndex(i);
+                                  setItemEditColor(it.color || "");
+                                  setItemEditColorHex(it.color_hex || "");
+                                  setItemEditNota(it.notas || "");
+                                  setShowItemDetailModal(true);
+                                }}
+                                className={`inline-flex h-7 items-center gap-1.5 rounded-lg px-2.5 text-xs font-bold transition-colors cursor-pointer shrink-0 ${
+                                  it.color || it.notas
+                                    ? "border border-[#1B4B73]/25 bg-[#1B4B73]/10 text-[#1B4B73] hover:bg-[#1B4B73]/15 dark:border-sky-400/25 dark:bg-sky-400/10 dark:text-sky-300"
+                                    : "border border-dashed border-[#1B4B73]/45 bg-white text-[#1B4B73] hover:bg-[#1B4B73]/5 dark:bg-slate-900 dark:text-sky-300"
+                                }`}
+                              >
+                                {it.color && (
+                                  <span
+                                    className="h-3 w-3 rounded-full border border-black/20 shrink-0"
+                                    style={{
+                                      background:
+                                        it.color_hex?.startsWith("#") ||
+                                        it.color_hex?.startsWith("linear")
+                                          ? it.color_hex
+                                          : "#94A3B8",
+                                    }}
+                                  />
+                                )}
+                                <Palette className="h-3.5 w-3.5 shrink-0" />
+                                <span>{it.color || it.notas ? "Color / Nota" : "+ Color / Nota"}</span>
+                              </button>
                             </div>
                             <div className="text-xs text-muted-foreground">
                               {isDetail
@@ -3882,47 +3867,6 @@ function NuevaOrdenPage() {
                                   ? `${it.cantidad} lb × ${formatRD(it.precio_unitario)}`
                                   : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`}
                               {it.notas ? ` · ${it.notas}` : ""}
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              {it.color ? (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingItemIndex(i);
-                                    setItemEditColor(it.color || "");
-                                    setItemEditColorHex(it.color_hex || "");
-                                    setItemEditNota(it.notas || "");
-                                    setShowItemDetailModal(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-[#1B4B73] transition-all shadow-2xs cursor-pointer group"
-                                >
-                                  <span
-                                    className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
-                                    style={{
-                                      background: it.color_hex?.startsWith("#") || it.color_hex?.startsWith("linear")
-                                        ? it.color_hex
-                                        : "#94A3B8"
-                                    }}
-                                  />
-                                  <span className="font-bold">{it.color}</span>
-                                  <Palette className="h-2.5 w-2.5 text-muted-foreground/60 group-hover:text-primary shrink-0 ml-0.5" />
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  onClick={() => {
-                                    setEditingItemIndex(i);
-                                    setItemEditColor("");
-                                    setItemEditColorHex("");
-                                    setItemEditNota(it.notas || "");
-                                    setShowItemDetailModal(true);
-                                  }}
-                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border border-dashed border-[#1B4B73]/40 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/5 transition-all cursor-pointer"
-                                >
-                                  <Palette className="h-3 w-3" />
-                                  <span>+ Color / Nota</span>
-                                </button>
-                              )}
-                            </div>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -4030,10 +3974,8 @@ function NuevaOrdenPage() {
                       </Badge>
                     </div>
                     <div className="space-y-0 divide-y divide-dashed divide-slate-200 dark:divide-slate-800">
-                      {servicios
-                        .filter((s) => serviciosSel.includes(s.nombre))
-                        .map((srv) => {
-                          const count = serviciosSel.filter((x) => x === srv.nombre).length;
+                      {selectedServices.map((srv) => {
+                          const count = serviceCountsMap[srv.nombre] || 0;
                           const sPrice =
                             customServicePrices[srv.nombre] !== undefined
                               ? customServicePrices[srv.nombre]
