@@ -29,6 +29,31 @@ function findMedia(messageObj: any): { type: string; mediaInfo: any } | null {
     return null;
 }
 
+function unwrapMessageData(data: any): any {
+    if (Array.isArray(data)) return data[0] || null;
+
+    const messages = data?.messages;
+    if (messages) return Array.isArray(messages) ? messages[0] : messages;
+
+    if (data?.data?.key || data?.data?.message) return data.data;
+    return data || null;
+}
+
+function isTruthyFlag(value: unknown): boolean {
+    return value === true || value === 1 || String(value).toLowerCase() === 'true';
+}
+
+function isOutgoingMessage(body: any, messageData: any, key: any): boolean {
+    return [
+        key?.fromMe,
+        messageData?.fromMe,
+        messageData?.data?.key?.fromMe,
+        body?.fromMe,
+        body?.data?.fromMe,
+        body?.data?.key?.fromMe,
+    ].some(isTruthyFlag);
+}
+
 /**
  * Calls WaSender's decrypt-media endpoint to get a temporary public URL (1 hour).
  * Must send the original message structure as documented by WaSender.
@@ -141,22 +166,39 @@ serve(async (req) => {
                 if (isWasender) {
                     const rawMessages = body.data?.messages;
                     if (!rawMessages) return new Response('No message data', { status: 200 });
-                    messageData = Array.isArray(rawMessages) ? rawMessages[0] : rawMessages;
+                    messageData = unwrapMessageData(body.data);
                     if (!messageData) return new Response('No message data', { status: 200 });
                     key = messageData.key;
-                    if (key?.fromMe) return new Response('Ignore outgoing message', { status: 200 });
+                    if (isOutgoingMessage(body, messageData, key)) {
+                        return new Response('Ignore outgoing message', { status: 200 });
+                    }
 
                     from = key?.cleanedSenderPn || key?.remoteJid?.split('@')[0];
                     wamid = key?.id;
                     pushName = messageData.pushName || body.data?.pushName || from;
                     rawMessageObj = messageData.message || {};
                 } else if (isEvolution) {
-                    messageData = body.data;
-                    key = messageData.key;
-                    if (key?.fromMe) return new Response('Ignore outgoing message', { status: 200 });
+                    messageData = unwrapMessageData(body.data);
+                    if (!messageData) return new Response('No message data', { status: 200 });
+                    key = messageData.key || messageData.data?.key;
+                    if (isOutgoingMessage(body, messageData, key)) {
+                        return new Response('Ignore outgoing message', { status: 200 });
+                    }
 
                     pushName = messageData.pushName || body.pushName || '';
                     let rawSender = key?.remoteJid || '';
+
+                    // Klynn only stores direct customer chats. Statuses, newsletters,
+                    // broadcasts and groups must never create conversations or alerts.
+                    if (
+                        !rawSender ||
+                        rawSender === 'status@broadcast' ||
+                        rawSender.endsWith('@g.us') ||
+                        rawSender.includes('@newsletter') ||
+                        rawSender.endsWith('@broadcast')
+                    ) {
+                        return new Response('Ignore non-customer event', { status: 200 });
+                    }
                     
                     // Si remoteJid es un LID (@lid), buscar el JID real (@s.whatsapp.net)
                     if (rawSender.endsWith('@lid')) {
@@ -246,6 +288,11 @@ serve(async (req) => {
                             }
                         }
                     }
+                }
+
+                if (!/^\d{7,15}$/.test(from)) {
+                    console.log('[whatsapp-webhook] Event ignored: invalid or missing customer phone');
+                    return new Response('Invalid customer phone. Event ignored.', { status: 200 });
                 }
 
                 if (!tenantId) {
@@ -388,7 +435,12 @@ serve(async (req) => {
                     content = messageData.messageBody || 
                               rawMessageObj.conversation || 
                               rawMessageObj.extendedTextMessage?.text || 
-                              '(mensaje vacío)';
+                              '';
+                }
+
+                if (!content.trim()) {
+                    console.log('[whatsapp-webhook] Event ignored: no supported customer content');
+                    return new Response('Empty or unsupported message. Event ignored.', { status: 200 });
                 }
 
                 // 1. Resolve or create Conversation

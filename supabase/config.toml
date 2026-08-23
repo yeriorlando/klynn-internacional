@@ -31,3 +31,10 @@ entrypoint = "./functions/pronesoft-webhook/index.ts"
 
 [functions.pronesoft-proxy]
 verify_jwt = true
+
+[functions.employee-invitations]
+verify_jwt = true
+
+[functions.weekly-business-summary]
+# El endpoint valida JWT para pruebas manuales y x-cron-secret para el programador.
+verify_jwt = false

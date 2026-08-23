@@ -9,6 +9,9 @@ import {
   Loader2,
   User,
   Mail,
+  Send,
+  UserRoundPlus,
+  Clock3,
   ShieldCheck,
   ArrowRight,
   ArrowLeft,
@@ -73,12 +76,15 @@ import {
   sendEmployeeSignUpOtp,
   resendEmployeeSignUpOtp,
   verifyEmployeeOtpAndSave,
+  getEmployeeInvitations,
+  inviteEmployeeByEmail,
   getGlobalConfig,
   type Empleado,
   type RolEmpleado,
   type Orden,
   type Caja,
   type GlobalConfig,
+  type EmployeeInvitation,
 } from "@/lib/storage";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
@@ -139,7 +145,7 @@ function getRoleBadgeClass(rol: RolEmpleado) {
 }
 
 import { useEmpleados, useOrdenes, useGlobalConfig } from "@/hooks/use-queries";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 export const Route = createFileRoute("/t/$slug/personal")({ component: PersonalPage });
 
@@ -152,6 +158,11 @@ function PersonalPage() {
   const { data: emps = [], isLoading: loadingEmps } = useEmpleados(tenantId);
   const { data: ordenes = [] } = useOrdenes(tenantId);
   const { data: globalConfig } = useGlobalConfig();
+  const { data: invitations = [] } = useQuery({
+    queryKey: ["employee-invitations", tenantId],
+    queryFn: () => getEmployeeInvitations(tenantId),
+    enabled: Boolean(tenantId && tenantId !== "__loading__"),
+  });
 
   const [edit, setEdit] = useState<Empleado | null>(null);
   const [showNew, setShowNew] = useState(false);
@@ -169,6 +180,7 @@ function PersonalPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["empleados", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["employee-invitations", tenantId] });
   };
 
   if (!user || user.tenant.id === "__loading__" || (loadingEmps && emps.length === 0)) {
@@ -213,6 +225,9 @@ function PersonalPage() {
 
       {/* GRID DE 3 COLUMNAS DE TARJETAS */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
+        {invitations.map((invitation) => (
+          <InvitationCard key={invitation.id} invitation={invitation} />
+        ))}
         {emps.map((e) => {
           const stats = ordenes.filter((o) => o.empleado_id === e.id && o.estado !== "ANULADA");
           const total = stats.reduce((s, o) => s + o.total, 0);
@@ -244,6 +259,7 @@ function PersonalPage() {
                     <div className="text-xs text-muted-foreground font-medium truncate block mt-0.5" title={e.email}>
                       {e.email}
                     </div>
+                    <EmployeeStatusBadge empleado={e} />
                   </div>
                 </div>
 
@@ -335,7 +351,7 @@ function PersonalPage() {
         currentEmployeeId={user.empleado.id}
         requireEmployeeOtp={Boolean(globalConfig?.requireEmployeeOtp)}
         onDone={() => {
-          setRefresh((r) => r + 1);
+          refresh();
           setShowNew(false);
           setEdit(null);
         }}
@@ -349,6 +365,51 @@ function PersonalPage() {
         tenant={user.tenant}
       />
     </div>
+  );
+}
+
+function EmployeeStatusBadge({ empleado }: { empleado: Empleado }) {
+  const hasAuthAccess = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(empleado.id);
+  const label = !empleado.activo ? "Inactivo" : hasAuthAccess ? "Activo" : "Sin acceso";
+  const className = !empleado.activo
+    ? "bg-slate-100 text-slate-600 border-slate-200"
+    : hasAuthAccess
+      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+      : "bg-amber-50 text-amber-700 border-amber-200";
+  return (
+    <span className={`mt-1 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${className}`}>
+      {label}
+    </span>
+  );
+}
+
+function InvitationCard({ invitation }: { invitation: EmployeeInvitation }) {
+  const expired = new Date(invitation.expires_at).getTime() <= Date.now();
+  return (
+    <Card className="relative overflow-hidden rounded-2xl border border-dashed border-amber-300 bg-amber-50/40 p-5 shadow-2xs flex flex-col justify-between gap-4">
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="h-11 w-11 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center shrink-0">
+          <Mail className="h-5 w-5" />
+        </div>
+        <div className="min-w-0 flex-1">
+          <p className="font-display text-[15px] font-bold text-foreground">Invitación por correo</p>
+          <p className="text-xs text-muted-foreground font-medium truncate mt-0.5" title={invitation.email}>{invitation.email}</p>
+          <span className={`mt-1.5 inline-flex rounded-full border px-2 py-0.5 text-[9px] font-black uppercase tracking-wide ${
+            expired
+              ? "bg-rose-50 text-rose-700 border-rose-200"
+              : "bg-amber-100 text-amber-800 border-amber-200"
+          }`}>
+            {expired ? "Invitación vencida" : "Invitación pendiente"}
+          </span>
+        </div>
+      </div>
+      <div className="flex items-center gap-2 border-t border-amber-200/70 pt-3 text-[11px] font-semibold text-amber-800">
+        <Clock3 className="h-3.5 w-3.5" />
+        {expired
+          ? "El enlace ya no permite completar el acceso."
+          : `Vence el ${new Date(invitation.expires_at).toLocaleString("es-DO", { dateStyle: "medium", timeStyle: "short" })}`}
+      </div>
+    </Card>
   );
 }
 
@@ -404,6 +465,9 @@ function EmpleadoDialog({
   const [otpTimer, setOtpTimer] = useState(60);
   const [canResendOtp, setCanResendOtp] = useState(false);
   const [resendingOtp, setResendingOtp] = useState(false);
+  const [creationMode, setCreationMode] = useState<"manual" | "invite" | null>(empleado ? "manual" : null);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
     setIsOtpRequired(requireEmployeeOtp);
@@ -421,6 +485,8 @@ function EmpleadoDialog({
     setOtpCode("");
     setOtpTimer(60);
     setCanResendOtp(false);
+    setCreationMode(empleado ? "manual" : null);
+    setInviteEmail("");
     if (empleado) {
       setF({
         ...empty,
@@ -634,6 +700,114 @@ function EmpleadoDialog({
   }
 
   const isThreeSteps = isOtpRequired && !empleado;
+
+  async function submitInvitation() {
+    const email = inviteEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast.error("Ingresa un correo electrónico válido");
+      return;
+    }
+    if (currentUserEmail && email === currentUserEmail.toLowerCase().trim()) {
+      toast.error("No puedes enviarte una invitación a ti mismo");
+      return;
+    }
+    if (existingEmployees.some((item) => item.email?.toLowerCase().trim() === email)) {
+      toast.error("Este correo ya pertenece a un empleado de la lavandería");
+      return;
+    }
+    setInviting(true);
+    try {
+      await inviteEmployeeByEmail(tenantId, email);
+      toast.success(`Invitación enviada a ${email}`);
+      onDone();
+    } catch (error: any) {
+      toast.error(error?.message || "No se pudo enviar la invitación");
+    } finally {
+      setInviting(false);
+    }
+  }
+
+  if (!empleado && creationMode === null) {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="rounded-2xl max-w-lg border-none shadow-2xl bg-background p-5 sm:p-6">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="font-display text-xl font-black">Nuevo empleado</DialogTitle>
+            <p className="text-sm text-muted-foreground">Selecciona cómo deseas añadirlo.</p>
+          </DialogHeader>
+          <div className="grid gap-3 sm:grid-cols-2 pt-2">
+            <button
+              type="button"
+              onClick={() => setCreationMode("manual")}
+              className="group rounded-2xl border border-border bg-surface p-5 text-left transition-all hover:border-[#1B4B73]/50 hover:shadow-md active:scale-[0.99]"
+            >
+              <div className="mb-4 h-11 w-11 rounded-xl bg-[#1B4B73]/10 text-[#1B4B73] flex items-center justify-center">
+                <UserRoundPlus className="h-5 w-5" />
+              </div>
+              <p className="font-display font-black text-foreground">Añadir manualmente</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Usa el formulario actual de empleado.</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-[#1B4B73]">Continuar <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCreationMode("invite")}
+              className="group rounded-2xl border border-amber-200 bg-amber-50/50 p-5 text-left transition-all hover:border-amber-400 hover:shadow-md active:scale-[0.99]"
+            >
+              <div className="mb-4 h-11 w-11 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <Send className="h-5 w-5" />
+              </div>
+              <p className="font-display font-black text-foreground">Invitar por correo</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">Envía un enlace seguro de acceso.</p>
+              <span className="mt-4 inline-flex items-center gap-1 text-xs font-bold text-amber-700">Continuar <ArrowRight className="h-3.5 w-3.5 transition-transform group-hover:translate-x-0.5" /></span>
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
+  if (!empleado && creationMode === "invite") {
+    return (
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="rounded-2xl max-w-md border-none shadow-2xl bg-background p-5 sm:p-6">
+          <DialogHeader className="pr-8">
+            <DialogTitle className="font-display text-xl font-black">Invitar por correo</DialogTitle>
+            <p className="text-sm text-muted-foreground">Introduce el correo electrónico del empleado.</p>
+          </DialogHeader>
+          <div className="space-y-2 pt-2">
+            <Label htmlFor="employee-invite-email" className="text-xs font-bold">Correo electrónico</Label>
+            <div className="relative">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="employee-invite-email"
+                type="email"
+                autoFocus
+                value={inviteEmail}
+                onChange={(event) => setInviteEmail(event.target.value)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    event.preventDefault();
+                    submitInvitation();
+                  }
+                }}
+                placeholder="empleado@correo.com"
+                className="h-11 rounded-xl pl-10"
+              />
+            </div>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2 pt-3">
+            <Button variant="outline" onClick={() => setCreationMode(null)} disabled={inviting} className="rounded-xl">
+              <ArrowLeft className="mr-1.5 h-4 w-4" /> Atrás
+            </Button>
+            <Button onClick={submitInvitation} disabled={inviting} className="rounded-xl bg-[#1B4B73] text-white">
+              {inviting ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <Send className="mr-1.5 h-4 w-4" />}
+              Enviar invitación
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

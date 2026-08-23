@@ -98,6 +98,19 @@ export interface Empleado {
   avatar_url?: string;
 }
 
+export interface EmployeeInvitation {
+  id: string;
+  tenant_id: string;
+  email: string;
+  status: "pending" | "accepted" | "cancelled";
+  invited_by: string;
+  auth_user_id?: string | null;
+  expires_at: string;
+  accepted_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Tenant {
   id: string;
   nombre: string;
@@ -165,6 +178,7 @@ export interface TenantConfig {
   tiempo_entrega_urgente: number; // en horas
   dias_almacenamiento_sin_retirar?: number; // días límite para considerar ropa sin retirar (default: 5)
   whatsapp?: WhatsAppConfig;
+  weekly_summary?: WeeklySummaryConfig;
 
   // Alertas de Secuencias NCF/e-CF
   alerta_ncf_limite?: number;
@@ -191,6 +205,14 @@ export interface TenantConfig {
     estanteria?: boolean;
     pos_offline?: boolean;
   };
+}
+
+export interface WeeklySummaryConfig {
+  enabled: boolean;
+  frequency: "weekly" | "monthly";
+  channel: "email" | "whatsapp" | "both";
+  email: string;
+  whatsapp_phone: string;
 }
 
 export interface EstanteriaZona {
@@ -689,6 +711,13 @@ export const DEFAULT_CONFIG: TenantConfig = {
   tiempo_entrega_urgente: 6,
   alerta_ncf_limite: 50,
   alerta_ncf_telefono: "",
+  weekly_summary: {
+    enabled: false,
+    frequency: "weekly",
+    channel: "email",
+    email: "",
+    whatsapp_phone: "",
+  },
   pos_auto_imprimir: false,
   ticket_imprimir_taller_auto: false,
   ticket_taller_solo_con_ubicacion: false,
@@ -1998,6 +2027,74 @@ export async function verifyEmployeeOtpAndSave(
   if (dbError) throw new Error("Error al guardar en base de datos: " + dbError.message);
 
   return dataToSave;
+}
+
+export async function getEmployeeInvitations(tenantId: string): Promise<EmployeeInvitation[]> {
+  const { data, error } = await supabase
+    .from("employee_invitations")
+    .select("*")
+    .eq("tenant_id", tenantId)
+    .eq("status", "pending")
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    // Permite desplegar el frontend antes de aplicar la migración sin romper /personal.
+    if (error.code === "42P01" || error.message?.includes("employee_invitations")) return [];
+    throw error;
+  }
+  return (data || []) as EmployeeInvitation[];
+}
+
+export async function inviteEmployeeByEmail(
+  tenantId: string,
+  email: string,
+): Promise<EmployeeInvitation> {
+  const redirectTo = typeof window !== "undefined"
+    ? `${window.location.origin}/restablecer-contrasena?invitation=1`
+    : "https://klynn.com.do/restablecer-contrasena?invitation=1";
+  const { data, error } = await supabase.functions.invoke("employee-invitations", {
+    body: { tenantId, email: email.trim().toLowerCase(), redirectTo },
+  });
+  if (error) {
+    let message = error.message || "No se pudo enviar la invitación";
+    try {
+      const context = (error as any).context;
+      if (context && typeof context.json === "function") {
+        const body = await context.json();
+        if (body?.error) message = body.error;
+      }
+    } catch {}
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  if (!data?.invitation) throw new Error("La invitación no devolvió confirmación");
+  return data.invitation as EmployeeInvitation;
+}
+
+export async function sendWeeklySummaryTest(
+  tenantId: string,
+  channel: "email" | "whatsapp" | "both",
+  frequency: "weekly" | "monthly",
+): Promise<{ sent: string[]; failed: Array<{ channel: string; error: string }> }> {
+  const { data, error } = await supabase.functions.invoke("weekly-business-summary", {
+    body: { action: "test", tenantId, channel, frequency },
+  });
+  if (error) {
+    let message = error.message || "No se pudo enviar el resumen de prueba";
+    try {
+      const context = (error as any).context;
+      if (context && typeof context.json === "function") {
+        const body = await context.json();
+        if (body?.error) message = body.error;
+      }
+    } catch {}
+    throw new Error(message);
+  }
+  if (data?.error) throw new Error(data.error);
+  return {
+    sent: Array.isArray(data?.sent) ? data.sent : [],
+    failed: Array.isArray(data?.failed) ? data.failed : [],
+  };
 }
 
 // ============ Empleados (Supabase) ============

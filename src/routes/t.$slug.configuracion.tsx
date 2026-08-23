@@ -29,8 +29,8 @@ import {
   saveTenant, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
   getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
-  isModuleEnabled,
-  type Tenant, type TenantConfig, type WhatsAppConfig, type PlanId, type Plan, type Gasto,
+  isModuleEnabled, sendWeeklySummaryTest,
+  type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
 import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC, ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC } from "@/lib/fiscal";
@@ -90,6 +90,257 @@ function Field({ label, children, hint, span, icon: Icon, alignTop }: { label: s
       </div>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
     </div>
+  );
+}
+
+function WeeklySummaryTab({
+  tenant,
+  value,
+  activeProvider,
+  onSave,
+}: {
+  tenant: Tenant;
+  value: WeeklySummaryConfig;
+  activeProvider: "klynn_connect" | "wasender";
+  onSave: (value: WeeklySummaryConfig) => Promise<void>;
+}) {
+  const [draft, setDraft] = useState<WeeklySummaryConfig>({
+    enabled: value.enabled === true,
+    frequency: value.frequency || "weekly",
+    channel: value.channel || "email",
+    email: value.email || tenant.email || "",
+    whatsapp_phone: value.whatsapp_phone || tenant.config?.alerta_ncf_telefono || tenant.telefono || "",
+  });
+  const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState(false);
+
+  useEffect(() => {
+    setDraft({
+      enabled: value.enabled === true,
+      frequency: value.frequency || "weekly",
+      channel: value.channel || "email",
+      email: value.email || tenant.email || "",
+      whatsapp_phone: value.whatsapp_phone || tenant.config?.alerta_ncf_telefono || tenant.telefono || "",
+    });
+  }, [tenant.email, tenant.telefono, tenant.config?.alerta_ncf_telefono, value]);
+
+  const usesEmail = draft.channel === "email" || draft.channel === "both";
+  const usesWhatsApp = draft.channel === "whatsapp" || draft.channel === "both";
+
+  function validate() {
+    if (usesEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) {
+      toast.error("Introduce un correo v\u00e1lido para recibir el resumen.");
+      return false;
+    }
+    if (usesWhatsApp && draft.whatsapp_phone.replace(/\D/g, "").length < 10) {
+      toast.error("Introduce un n\u00famero de WhatsApp v\u00e1lido con c\u00f3digo de pa\u00eds.");
+      return false;
+    }
+    return true;
+  }
+
+  async function handleSave() {
+    if (!validate()) return;
+    setSaving(true);
+    try {
+      await onSave({
+        ...draft,
+        email: draft.email.trim().toLowerCase(),
+        whatsapp_phone: draft.whatsapp_phone.trim(),
+      });
+      toast.success(draft.enabled
+        ? `${draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} activado`
+        : "Preferencias del resumen guardadas");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleTest() {
+    if (!validate()) return;
+    setTesting(true);
+    try {
+      const cleanDraft = {
+        ...draft,
+        email: draft.email.trim().toLowerCase(),
+        whatsapp_phone: draft.whatsapp_phone.trim(),
+      };
+      await onSave(cleanDraft);
+      const result = await sendWeeklySummaryTest(tenant.id, cleanDraft.channel, cleanDraft.frequency);
+      if (result.sent.length > 0) {
+        toast.success(`Resumen de prueba enviado por ${result.sent.join(" y ")}.`);
+      }
+      if (result.failed.length > 0) {
+        toast.error(result.failed.map((item) => `${item.channel}: ${item.error}`).join(" | "));
+      }
+    } catch (error: any) {
+      toast.error(error?.message || "No se pudo enviar el resumen de prueba");
+    } finally {
+      setTesting(false);
+    }
+  }
+
+  return (
+    <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
+        <div className="flex items-center gap-3.5">
+          <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <TrendingUp className="h-5.5 w-5.5" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+              {draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal del negocio"}
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {draft.frequency === "monthly"
+                ? "Recibe el día 1.º de cada mes el resultado consolidado del mes anterior."
+                : "Recibe cada lunes el resultado de la semana anterior."}
+            </p>
+          </div>
+        </div>
+        <div className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-4 py-3">
+          <div>
+            <p className="text-xs font-bold text-foreground">Activar resumen</p>
+            <p className="text-[11px] text-muted-foreground">
+              {draft.frequency === "monthly" ? "El día 1.º de cada mes, a las 7:00 a. m." : "Cada lunes, a las 7:00 a. m."}
+            </p>
+          </div>
+          <Switch checked={draft.enabled} onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))} />
+        </div>
+      </div>
+
+      <div className="grid gap-5 md:grid-cols-2">
+        <Field label="Tipo de resumen" icon={Calendar} hint="Puedes activar el semanal o el ejecutivo mensual.">
+          <Select
+            value={draft.frequency}
+            onValueChange={(frequency: WeeklySummaryConfig["frequency"]) => setDraft((current) => ({ ...current, frequency }))}
+          >
+            <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="weekly">Resumen semanal</SelectItem>
+              <SelectItem value="monthly">Resumen ejecutivo mensual</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        <Field label="Canal de entrega" icon={Send} hint="Puedes recibirlo por uno o por ambos canales.">
+          <Select value={draft.channel} onValueChange={(channel: WeeklySummaryConfig["channel"]) => setDraft((current) => ({ ...current, channel }))}>
+            <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="email">Correo electr&oacute;nico</SelectItem>
+              <SelectItem value="whatsapp">WhatsApp</SelectItem>
+              <SelectItem value="both">Correo y WhatsApp</SelectItem>
+            </SelectContent>
+          </Select>
+        </Field>
+
+        {usesEmail && (
+          <Field label="Correo destinatario" icon={Mail} hint="Se completa inicialmente con el correo del negocio.">
+            <Input
+              type="email"
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}
+              value={draft.email}
+              onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
+              placeholder="propietario@lavanderia.com"
+            />
+          </Field>
+        )}
+
+        {usesWhatsApp && (
+          <Field
+            label="WhatsApp destinatario"
+            icon={MessageCircle}
+            hint={`Se enviar\u00e1 con el proveedor activo en Administraci\u00f3n: ${activeProvider === "klynn_connect" ? "Klynn Connect" : "WasenderAPI"}.`}
+          >
+            <Input
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}
+              value={draft.whatsapp_phone}
+              onChange={(event) => setDraft((current) => ({ ...current, whatsapp_phone: formatPhoneRD(event.target.value) }))}
+              placeholder="1 809 000 0000"
+            />
+          </Field>
+        )}
+      </div>
+
+      {/* Hallmark · component: report-preview · genre: modern-minimal · theme: Klynn
+          critique: P5 H5 E5 S5 R5 V4 · contrast: pass · responsive: pass */}
+      <section className="border-y border-slate-200/90 dark:border-slate-800 py-5">
+        <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+          <div className="min-w-0">
+            <h4 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
+              El resumen incluir&aacute;
+            </h4>
+            <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
+              Una vista breve de las &aacute;reas que requieren tu atenci&oacute;n.
+            </p>
+          </div>
+          <span className="inline-flex w-fit shrink-0 items-center gap-1.5 text-[11px] font-bold text-primary">
+            <Clock className="h-3.5 w-3.5" />
+            {draft.frequency === "monthly" ? "Mes anterior" : "Semana anterior"}
+          </span>
+        </div>
+
+        <div className="grid min-w-0 gap-x-6 gap-y-5 sm:grid-cols-2 xl:grid-cols-4">
+          {[
+            {
+              title: "Ventas y rendimiento",
+              description: "Ventas, \u00f3rdenes y ticket promedio",
+              icon: TrendingUp,
+            },
+            {
+              title: "Gastos y resultado",
+              description: "Egresos y balance estimado",
+              icon: Receipt,
+            },
+            {
+              title: "Cobros y operaci\u00f3n",
+              description: "Cuentas por cobrar y trabajo pendiente",
+              icon: Wallet,
+            },
+            {
+              title: "Salud fiscal",
+              description: `Incidencias e-CF y comparaci\u00f3n ${draft.frequency === "monthly" ? "mensual" : "semanal"}`,
+              icon: ShieldCheck,
+            },
+          ].map((item) => {
+            const Icon = item.icon;
+            return (
+              <article
+                key={item.title}
+                className="flex min-w-0 items-start gap-3"
+              >
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <Icon className="h-4.5 w-4.5" aria-hidden="true" />
+                </div>
+                <div className="min-w-0">
+                  <h5 className="text-xs font-extrabold leading-snug text-slate-900 dark:text-slate-100">
+                    {item.title}
+                  </h5>
+                  <p className="mt-1 text-[11px] leading-relaxed text-slate-500 dark:text-slate-400">
+                    {item.description}
+                  </p>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      </section>
+
+      <div className="pt-5 border-t border-border/70 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
+        <Button variant="outline" onClick={handleTest} disabled={testing || saving} className="rounded-xl font-bold gap-2">
+          {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          Enviar resumen de prueba
+        </Button>
+        <Button onClick={handleSave} disabled={saving || testing} className="rounded-xl bg-primary text-white font-bold gap-2">
+          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          Guardar preferencias
+        </Button>
+      </div>
+    </Card>
   );
 }
 
@@ -426,7 +677,7 @@ Característica escritura: —
       }
     }
     const t = params.get('tab');
-    if (t && ['perfil', 'apariencia', 'factura', 'caja', 'fiscal', 'whatsapp', 'plan'].includes(t)) {
+    if (t && ['perfil', 'apariencia', 'factura', 'caja', 'fiscal', 'whatsapp', 'notificaciones', 'plan'].includes(t)) {
       setActiveTab(t);
     }
   }, [auth?.tenant?.id, queryClient]);
@@ -489,9 +740,9 @@ Característica escritura: —
     <div>
       <PageHeader title="Configuración" description="Personaliza tu lavandería." />
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-        {/* Navigation Tabs Bar — Modern Clean Underline Style Centered & Prominent */}
-        <div className="border-b border-slate-200/90 dark:border-slate-800 -mx-1 px-1 overflow-x-auto no-scrollbar flex justify-center">
-          <TabsList className="flex items-center justify-center gap-2 sm:gap-5 md:gap-8 bg-transparent p-0 h-auto w-max border-none rounded-none mx-auto">
+        {/* Hallmark · component: settings tabs · genre: modern-minimal · theme: Klynn */}
+        <div className="-mx-1 overflow-x-auto border-b border-slate-200/90 px-1 [scrollbar-width:none] dark:border-slate-800 [&::-webkit-scrollbar]:hidden">
+          <TabsList className="mx-auto flex h-auto w-max items-center justify-start gap-1 rounded-none border-none bg-transparent p-0 lg:w-full lg:min-w-0">
             {[
               { id: 'perfil', label: 'Perfil', icon: User },
               { id: 'apariencia', label: 'Apariencia', icon: Palette },
@@ -499,6 +750,7 @@ Característica escritura: —
               { id: 'caja', label: 'Caja', icon: Banknote },
               { id: 'fiscal', label: 'Fiscal', icon: ShieldCheck, module: 'facturacion_fiscal' },
               { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
+              { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
               { id: 'plan', label: 'Plan', icon: CreditCard },
             ]
             .filter(t => !t.module || isModuleEnabled(tenant, t.module, plans.find(p => p.id === tenant?.plan_id)))
@@ -510,13 +762,13 @@ Característica escritura: —
                   key={t.id}
                   value={t.id}
                   disabled={isTrialExpired && t.id !== 'plan'}
-                  className={`group relative flex items-center gap-2.5 px-3 sm:px-4 py-3.5 text-sm sm:text-[15px] font-semibold transition-all duration-200 border-none rounded-none shadow-none bg-transparent data-[state=active]:bg-transparent data-[state=active]:shadow-none cursor-pointer shrink-0 disabled:opacity-40 disabled:cursor-not-allowed ${
+                  className={`group relative flex shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-none bg-transparent px-2.5 py-3 text-sm font-semibold shadow-none transition-colors duration-200 data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:cursor-not-allowed disabled:opacity-40 lg:min-w-0 lg:flex-1 lg:justify-center lg:px-1.5 xl:px-2.5 ${
                     isActive 
                       ? "text-[#1B4B73] dark:text-sky-400 font-bold" 
                       : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-900/40 rounded-t-xl"
                   }`}
                 >
-                  <Icon className={`h-5 w-5 transition-colors ${
+                  <Icon className={`h-[18px] w-[18px] shrink-0 transition-colors ${
                     isActive 
                       ? "text-[#1B4B73] dark:text-sky-400" 
                       : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
@@ -2064,6 +2316,15 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
           />
         </TabsContent>
 
+        <TabsContent value="notificaciones" className="space-y-6 animate-in fade-in duration-300">
+          <WeeklySummaryTab
+            tenant={tenant}
+            value={cfg.weekly_summary || DEFAULT_CONFIG.weekly_summary!}
+            activeProvider={globalConfig?.whatsapp_engine || "klynn_connect"}
+            onSave={(weeklySummary) => saveCfg({ weekly_summary: weeklySummary })}
+          />
+        </TabsContent>
+
         <TabsContent value="plan" className="space-y-6 animate-in fade-in duration-300">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
@@ -2651,7 +2912,9 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   const [sending, setSending] = useState(false);
 
   // Estados Klynn Connect
-  const [kcStatus, setKcStatus] = useState<"checking" | "open" | "close" | "connecting">("checking");
+  const [kcStatus, setKcStatus] = useState<"checking" | "open" | "close" | "connecting">(
+    wa.klynn_connect_status === "open" ? "open" : "checking"
+  );
   const [kcPhone, setKcPhone] = useState<string>(wa.klynn_connect_phone || "");
   const [kcProfilePic, setKcProfilePic] = useState<string>(wa.klynn_connect_profile_pic || "");
   const [qrModalOpen, setQrModalOpen] = useState(false);
@@ -2684,6 +2947,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     } catch (e) {
       console.error("Error comprobando estado de Klynn Connect:", e);
     }
+    if (kcStatus === "open") return "open";
     setKcStatus("close");
     return "close";
   };
@@ -2948,7 +3212,24 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
           {/* CUADRO DE CONEXIÓN KLYNN CONNECT */}
           {isKlynnConnect ? (
             <div className="space-y-4">
-              {kcStatus === "open" ? (
+              {kcStatus === "checking" ? (
+                <div className="p-5 sm:p-6 rounded-2xl border border-border/70 bg-muted/20 flex items-center gap-4">
+                  <div className="h-11 w-11 rounded-xl bg-muted text-muted-foreground flex items-center justify-center shrink-0">
+                    <Loader2 className="h-5 w-5 animate-spin" />
+                  </div>
+                  <div>
+                    <Badge variant="outline" className="bg-background text-muted-foreground border-border font-semibold text-[10px] uppercase tracking-wide">
+                      Comprobando
+                    </Badge>
+                    <h4 className="text-sm md:text-base font-bold text-foreground mt-1">
+                      Verificando la sesión de WhatsApp
+                    </h4>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      Consultando el estado real de Klynn Connect…
+                    </p>
+                  </div>
+                </div>
+              ) : kcStatus === "open" ? (
                 <div className="p-5 sm:p-6 rounded-2xl border border-emerald-500/30 bg-emerald-50/40 dark:bg-emerald-950/20 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-all">
                   <div className="flex items-center gap-4">
                     <div className="h-11 w-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
