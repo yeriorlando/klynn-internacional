@@ -148,7 +148,16 @@ export async function emitirECF(
     rnc_receptor:          cliente?.cedula ?? undefined,
     track_id:              response.trackId || response.id,
     status:                mapStatus(response.status, response.legalStatus),
-    dgii_response:         response,
+    dgii_response:         {
+      ...response,
+      // Conservamos el contexto exacto de emision. Si el administrador cambia
+      // luego el ambiente o la empresa asociada, este documento debe seguir
+      // consultandose contra el mismo tenant de Pronesoft que lo recibio.
+      klynnContext: {
+        companyId: ecfTenantId,
+        environment: targetProneEnv,
+      },
+    },
     xml_content:           response.xmlUrl ?? '',
     qr_content:            response.documentStampUrl || undefined,
     monto_total:           orden.total,
@@ -221,9 +230,10 @@ export async function sincronizarEstadoECF(tenantId: string, document: ECFDocume
   // Pronesoft consulta por trackId; el id inicial puede responder "no encontrado".
   const documentId = document.track_id || document.pronesoft_id;
   if (!config || !documentId) return document;
+  const emissionContext = (document.dgii_response as any)?.klynnContext;
   const client = getProneSoftClient(
-    config.pronesoft_tenant_id,
-    getConfiguredPronesoftEnvironment(config),
+    emissionContext?.companyId || config.pronesoft_tenant_id,
+    emissionContext?.environment || getConfiguredPronesoftEnvironment(config),
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
     tenantId,
@@ -272,13 +282,16 @@ export async function sincronizarEstadoECF(tenantId: string, document: ECFDocume
     track_id: authoritativeDocumentId,
     pronesoft_id: authoritativeDocumentId,
     legal_status: response.legalStatus,
-    dgii_response: response,
+    dgii_response: {
+      ...response,
+      ...(emissionContext ? { klynnContext: emissionContext } : {}),
+    },
     pdf_url: isRejected ? undefined : response.pdf || document.pdf_url,
     xml_url: response.xmlUrl || document.xml_url,
     qr_content: isRejected ? undefined : response.documentStampUrl || document.qr_content,
     document_stamp_url: isRejected ? undefined : response.documentStampUrl || document.document_stamp_url,
     security_code: isRejected ? undefined : response.securityCode || document.security_code,
-    signature_date: response.signatureDate || document.signature_date,
+    signature_date: isRejected ? undefined : response.signatureDate || document.signature_date,
   };
   await saveECFDocument(updated);
   if (document.order_id) {
@@ -288,7 +301,9 @@ export async function sincronizarEstadoECF(tenantId: string, document: ECFDocume
         ...order,
         ecf_id: authoritativeDocumentId,
         ecf_status: fiscalStatus,
-        ecf_qr: isRejected ? null : order.ecf_qr,
+        ecf_qr: isRejected ? null : response.documentStampUrl || order.ecf_qr,
+        ecf_security_code: isRejected ? null : response.securityCode || order.ecf_security_code,
+        ecf_signature_date: isRejected ? null : response.signatureDate || order.ecf_signature_date,
         ncf: updated.encf,
       } as Orden);
     }

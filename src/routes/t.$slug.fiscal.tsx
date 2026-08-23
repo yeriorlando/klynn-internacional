@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -37,8 +37,6 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Maximize2,
-  Minimize2
 } from "lucide-react";
 import { toast } from "sonner";
 import {
@@ -70,6 +68,7 @@ function CentroFiscalPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
   const tenantId = tenant?.id || "";
+  const navigate = useNavigate();
   const primaryColor = tenant?.color_primario || "#1B4B73";
 
   const { data: ecfConfig, isLoading: loadingConfig } = useECFConfig(tenantId);
@@ -79,9 +78,6 @@ function CentroFiscalPage() {
 
   const activePlan = plans.find((p) => p.id === tenant?.plan_id);
   const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
-
-  // Estado Pantalla Completa
-  const [isFullscreen, setIsFullscreen] = useState(false);
 
   // Tab activo
   const [activeTab, setActiveTab] = useState<"sent" | "received" | "approvals">("sent");
@@ -111,29 +107,6 @@ function CentroFiscalPage() {
 
   const ITEMS_PER_PAGE = 10;
 
-  // Manejo de Pantalla Completa
-  const toggleFullscreen = () => {
-    if (!isFullscreen) {
-      if (document.documentElement.requestFullscreen) {
-        document.documentElement.requestFullscreen().catch(() => {});
-      }
-      setIsFullscreen(true);
-    } else {
-      if (document.exitFullscreen) {
-        document.exitFullscreen().catch(() => {});
-      }
-      setIsFullscreen(false);
-    }
-  };
-
-  useEffect(() => {
-    const handleFSChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener("fullscreenchange", handleFSChange);
-    return () => document.removeEventListener("fullscreenchange", handleFSChange);
-  }, []);
-
   // Cargar e-CF Enviados (Fusionando datos locales de órdenes/ecf_documents con Pronesoft)
   async function loadSentDocuments() {
     if (!tenant || tenant.id === "__loading__") return;
@@ -141,25 +114,37 @@ function CentroFiscalPage() {
       try {
         // 1. Cargar datos locales de Supabase
         const localOrds = rawOrds;
-        const localEcf = rawEcfDocs;
+        let localEcf = [...rawEcfDocs];
 
         // Pronesoft es la autoridad para documentos pendientes. Actualizamos
         // antes de pintar el centro fiscal para no mostrar como aceptado algo
         // que sigue en cola o fue rechazado por DGII.
-        await Promise.allSettled(
+        const syncResults = await Promise.allSettled(
           localEcf
             .filter((doc: any) => doc.track_id && doc.status === 'pending')
             .slice(0, 25)
             .map((doc: any) => sincronizarEstadoECF(tenant.id, doc)),
         );
+        const synchronizedById = new Map<string, any>();
+        syncResults.forEach((result) => {
+          if (result.status === 'fulfilled') synchronizedById.set(result.value.id, result.value);
+        });
+        localEcf = localEcf.map((doc: any) => synchronizedById.get(doc.id) || doc);
 
       const fiscalOrds = (localOrds || []).filter((o: any) => o.ncf);
-
-      const ordsMap = new Map<string, any>();
-      fiscalOrds.forEach((o: any) => ordsMap.set(o.ncf, o));
-
-      const ecfDocsMap = new Map<string, any>();
-      (localEcf || []).forEach((e: any) => ecfDocsMap.set(e.encf, e));
+      const ordersById = new Map<string, any>();
+      const ordersByEcfId = new Map<string, any>();
+      (localOrds || []).forEach((order: any) => {
+        ordersById.set(order.id, order);
+        if (order.ecf_id) ordersByEcfId.set(order.ecf_id, order);
+      });
+      const ecfByRemoteId = new Map<string, any>();
+      const ecfByOrderId = new Map<string, any>();
+      localEcf.forEach((doc: any) => {
+        if (doc.track_id) ecfByRemoteId.set(doc.track_id, doc);
+        if (doc.pronesoft_id) ecfByRemoteId.set(doc.pronesoft_id, doc);
+        if (doc.order_id) ecfByOrderId.set(doc.order_id, doc);
+      });
 
       // 2. Intentar consultar Pronesoft
       let proneDocs: any[] = [];
@@ -172,35 +157,44 @@ function CentroFiscalPage() {
 
       // 3. Fusionar datos para rellenar montos, clientes y enlaces
       const mergedList: any[] = [];
-      const seenNCF = new Set<string>();
+      const seenOrderIds = new Set<string>();
+      const seenEcfIds = new Set<string>();
 
       if (proneDocs.length > 0) {
         for (const pd of proneDocs) {
           const encf = pd.encf || pd.eNcf;
           if (!encf) continue;
-          seenNCF.add(encf);
+          const remoteId = pd.id || pd.documentId;
+          const linkedEcf: any = remoteId ? ecfByRemoteId.get(remoteId) : undefined;
+          const localOrd: any = linkedEcf?.order_id
+            ? ordersById.get(linkedEcf.order_id)
+            : remoteId ? ordersByEcfId.get(remoteId) : undefined;
+          if (linkedEcf?.id) seenEcfIds.add(linkedEcf.id);
+          if (localOrd?.id) seenOrderIds.add(localOrd.id);
 
-          const localOrd: any = ordsMap.get(encf);
-          const localEcf: any = ecfDocsMap.get(encf);
-          const remoteStatus = String(pd.legalStatus || pd.status || '').toUpperCase();
+          const localLegalStatus = linkedEcf?.legal_status
+            || (linkedEcf?.status === 'rejected' ? 'REJECTED' : undefined)
+            || (linkedEcf?.status === 'accepted' ? 'ACCEPTED' : undefined)
+            || (linkedEcf?.status === 'accepted_with_reservations' ? 'ACCEPTED_WITH_OBSERVATIONS' : undefined);
+          const remoteStatus = String(localLegalStatus || pd.legalStatus || pd.status || '').toUpperCase();
           const normalizedStatus = remoteStatus === 'APPROVED' ? 'ACCEPTED'
             : remoteStatus === 'CONDITIONALLY_APPROVED' ? 'ACCEPTED_WITH_OBSERVATIONS'
             : remoteStatus || 'REGISTERED';
-          const stampUrl = localOrd?.ecf_qr || localEcf?.qr_content || pd.documentStampUrl;
+          const stampUrl = localOrd?.ecf_qr || linkedEcf?.qr_content || pd.documentStampUrl;
 
           mergedList.push({
-            id: pd.id || localEcf?.id || localOrd?.id,
+            id: remoteId || linkedEcf?.id || localOrd?.id,
             encf: encf,
             type: pd.documentType || pd.type || encf.substring(0, 3) || 'E32',
             buyerName: localOrd?.cliente_nombre || pd.buyerName || pd.buyer?.name || 'Cliente General',
-            buyerRnc: localOrd?.cliente_rnc || localEcf?.rnc_receptor || pd.buyerRnc || pd.buyer?.taxId || 'Consumidor Final',
-            totalAmount: localOrd?.total ?? localEcf?.monto_total ?? pd.totalAmount ?? pd.totals?.totalAmount ?? 0,
-            totalItbis: localOrd?.itbis ?? localEcf?.monto_itbis ?? pd.totalItbis ?? pd.totals?.totalITBIS ?? 0,
+            buyerRnc: localOrd?.cliente_rnc || linkedEcf?.rnc_receptor || pd.buyerRnc || pd.buyer?.taxId || 'Consumidor Final',
+            totalAmount: localOrd?.total ?? linkedEcf?.monto_total ?? pd.totalAmount ?? pd.totals?.totalAmount ?? 0,
+            totalItbis: localOrd?.itbis ?? linkedEcf?.monto_itbis ?? pd.totalItbis ?? pd.totals?.totalITBIS ?? 0,
             status: normalizedStatus,
-            createdAt: pd.createdAt || pd.receivedAt || localOrd?.creado_en || localEcf?.fecha_emision || new Date().toISOString(),
-            pdfUrl: localEcf?.pdf_url || pd.fileUrl || pd.pdfUrl || pd.pdf,
+            createdAt: pd.createdAt || pd.receivedAt || localOrd?.creado_en || linkedEcf?.fecha_emision || new Date().toISOString(),
+            pdfUrl: linkedEcf?.pdf_url || pd.fileUrl || pd.pdfUrl || pd.pdf,
             documentStampUrl: normalizedStatus === 'ACCEPTED' || normalizedStatus === 'ACCEPTED_WITH_OBSERVATIONS' ? stampUrl : undefined,
-            remoteDocumentId: pd.id,
+            remoteDocumentId: remoteId,
           });
         }
       }
@@ -208,9 +202,10 @@ function CentroFiscalPage() {
       // 4. Agregar órdenes locales con NCF no listadas por Pronesoft
       for (const ord of fiscalOrds) {
         const ordNcf = (ord as any).ncf;
-        if (ordNcf && !seenNCF.has(ordNcf)) {
-          seenNCF.add(ordNcf);
-          const localEcf = ecfDocsMap.get(ordNcf);
+        if (ordNcf && !seenOrderIds.has(ord.id)) {
+          seenOrderIds.add(ord.id);
+          const localEcf = ecfByOrderId.get(ord.id);
+          if (localEcf?.id) seenEcfIds.add(localEcf.id);
           mergedList.push({
             id: localEcf?.id || ord.id,
             encf: ordNcf,
@@ -231,8 +226,8 @@ function CentroFiscalPage() {
 
       // 5. Agregar documentos de ecf_documents no listados
       for (const doc of localEcf) {
-        if (doc.encf && !seenNCF.has(doc.encf)) {
-          seenNCF.add(doc.encf);
+        if (doc.encf && !seenEcfIds.has(doc.id)) {
+          seenEcfIds.add(doc.id);
           mergedList.push({
             id: doc.id,
             encf: doc.encf,
@@ -408,23 +403,12 @@ function CentroFiscalPage() {
   const paginatedApproval = filteredApproval.slice((pageApproval - 1) * ITEMS_PER_PAGE, pageApproval * ITEMS_PER_PAGE);
 
   return (
-    <div
-      className={
-        isFullscreen
-          ? "fixed inset-0 z-[99999] bg-background p-4 md:p-8 overflow-y-auto w-screen h-screen space-y-6"
-          : "space-y-6 pb-12"
-      }
-    >
+    <div className="space-y-6 pb-12">
       <PageHeader
         title="Centro Fiscal e-CF"
         description="Control maestro de comprobantes electrónicos emitidos, recibidos y aprobaciones comerciales ante la DGII."
       >
         <div className="flex flex-wrap items-center gap-2">
-          <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-xs px-3 py-1 font-bold">
-            <Shield className="h-3.5 w-3.5 mr-1" />
-            {ecfConfig?.ambiente === "produccion" ? "DGII Producción" : "DGII Pruebas (SBX)"}
-          </Badge>
-
           <Button
             onClick={() => {
               loadSentDocuments();
@@ -436,23 +420,15 @@ function CentroFiscalPage() {
             <span>Sincronizar Pronesoft</span>
           </Button>
 
-          {/* BOTÓN DE PANTALLA COMPLETA ESTANDARIZADO */}
           <Button
-            onClick={toggleFullscreen}
-            className="h-10 px-5 rounded-xl font-black bg-[#F0B900] hover:bg-[#dfac00] text-[#1B4B73] border border-[#F0B900] shadow-xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer text-xs sm:text-sm shrink-0"
+            variant="outline"
+            onClick={() => navigate({ to: "/t/$slug/fiscal-pendientes", params: { slug: tenant.slug } })}
+            className="h-10 px-5 rounded-xl font-bold border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 flex items-center gap-2 text-xs sm:text-sm"
           >
-            {isFullscreen ? (
-              <>
-                <Minimize2 className="h-4 w-4 text-[#1B4B73] shrink-0" />
-                <span>Salir Pantalla Completa</span>
-              </>
-            ) : (
-              <>
-                <Maximize2 className="h-4 w-4 text-[#1B4B73] shrink-0" />
-                <span>Pantalla Completa</span>
-              </>
-            )}
+            <Clock className="h-4 w-4" />
+            <span>Comprobantes pendientes</span>
           </Button>
+
         </div>
       </PageHeader>
 

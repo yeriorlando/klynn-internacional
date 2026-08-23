@@ -187,6 +187,8 @@ export function TenantShell() {
   }, [tenantId]);
 
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const isFiscalFullscreen = isFullscreen
+    && (pathname.endsWith("/fiscal") || pathname.endsWith("/fiscal-pendientes"));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const [isOnline, setIsOnline] = useState(true);
@@ -1164,7 +1166,9 @@ export function TenantShell() {
       {/* Sidebar desktop */}
       <aside
         id="tour-sidebar"
-        className="sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out"
+        className={`sidebar-desktop fixed inset-y-0 left-0 z-30 hidden w-72 border-r border-border bg-surface lg:flex lg:flex-col transition-all duration-500 ease-in-out ${
+          isFiscalFullscreen ? "-translate-x-full opacity-0 invisible" : "translate-x-0 opacity-100 visible"
+        }`}
       >
         <SidebarContent
           tenant={tenant}
@@ -1210,7 +1214,9 @@ export function TenantShell() {
       )}
 
       <div
-        className={`main-content-wrapper lg:pl-72 transition-all duration-500 ease-in-out ${pathname.endsWith("/conversations") ? "h-full flex flex-col overflow-hidden" : ""}`}
+        className={`main-content-wrapper transition-all duration-500 ease-in-out ${
+          isFiscalFullscreen ? "lg:pl-0" : "lg:pl-72"
+        } ${pathname.endsWith("/conversations") ? "h-full flex flex-col overflow-hidden" : ""}`}
       >
         {/* Header */}
         <header className="main-header sticky top-0 z-20 flex h-16 items-center gap-4 border-b border-border bg-surface/80 px-4 backdrop-blur-xl md:px-6 transition-all duration-500 ease-in-out shrink-0">
@@ -1257,7 +1263,10 @@ export function TenantShell() {
               </button>
             )}
 
-            {(pathname.endsWith("/nueva-orden") || pathname.endsWith("/procesos")) && (
+            {(pathname.endsWith("/nueva-orden")
+              || pathname.endsWith("/procesos")
+              || pathname.endsWith("/fiscal")
+              || pathname.endsWith("/fiscal-pendientes")) && (
               <button
                 type="button"
                 onClick={toggleFullscreen}

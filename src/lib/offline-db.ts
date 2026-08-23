@@ -220,6 +220,7 @@ class OfflineDBManager {
   async getPendingOutbox(tenantId?: string, maxAttempts = 5): Promise<SyncOutboxItem[]> {
     const all = await this.getAll<SyncOutboxItem>("sync_outbox");
     return all.filter((x) => {
+      if (tenantId && x.tenant_id !== tenantId) return false;
       if (x.status === "synced") return false;
       if (x.status === "pending") return true;
       if (x.status === "failed") {
@@ -236,6 +237,19 @@ class OfflineDBManager {
       return pendingOrders.length;
     }
     return pending.length;
+  }
+
+  async retryOutboxItem(id: string): Promise<void> {
+    const item = await this.get<SyncOutboxItem>("sync_outbox", id);
+    if (!item) throw new Error("La operación pendiente ya no existe en este dispositivo.");
+    item.status = "pending";
+    item.attempts = 0;
+    delete item.error_message;
+    item.timestamp = new Date().toISOString();
+    await this.put("sync_outbox", item);
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
+    }
   }
 
   async removeOutboxItem(id: string): Promise<void> {

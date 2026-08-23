@@ -34,7 +34,7 @@ const VALID_COLUMNS: Record<string, Set<string>> = {
     "nota_debito_monto", "ncf_vencimiento", "costo_envio", "servicios_precios", "ubicacion_ropa",
     "pago_referencia", "estado_proceso", "direccion_entrega", "sector_entrega", "referencia_entrega",
     "lat_entrega", "lng_entrega", "pod_foto", "pod_firma", "pod_receptor", "pod_fecha",
-    "incidencia_motivo", "incidencia_notas", "incidencia_fecha"
+    "incidencia_motivo", "incidencia_notas", "incidencia_fecha", "ecf_status"
   ]),
   clientes: new Set([
     "id", "tenant_id", "nombre", "apellido", "telefono", "email", "direccion", "cedula",
@@ -228,7 +228,7 @@ class SyncManager {
     let failedCount = 0;
 
     try {
-      const items = await offlineDB.getPendingOutbox();
+      const items = await offlineDB.getPendingOutbox(tenantId);
 
       // Ordenar por prioridad de dependencias: Clientes -> Cajas -> Órdenes -> Movimientos -> Gastos
       const sortedItems = [...items].sort((a, b) => {
@@ -407,10 +407,11 @@ class SyncManager {
       throw error;
     }
 
-    // 6. Si es una orden y tiene emisión e-CF pendiente o código provisional offline (SBX)
+    // 6. Si es una orden creada offline y tiene una emisión e-CF pendiente.
+    // No se reenvían documentos REGISTERED/ERROR/REJECTED por el simple hecho
+    // de no tener código de seguridad: eso podría duplicar un envío existente.
     const hasMockSecurityCode = data.ecf_security_code && String(data.ecf_security_code).startsWith("SBX");
-    const isEcfPending = payload.ecf_status === "PENDING_OFFLINE_TRANSMISSION" || 
-      (data.tipo_ecf && (!data.ecf_security_code || hasMockSecurityCode));
+    const isEcfPending = payload.ecf_status === "PENDING_OFFLINE_TRANSMISSION" || hasMockSecurityCode;
 
     if (table_name === "ordenes" && isEcfPending) {
       try {
@@ -430,20 +431,21 @@ class SyncManager {
           );
 
           if (result && result.encf) {
+            const legalStatus = String(result.legal_status || result.document?.legal_status || '').toUpperCase();
+            const accepted = legalStatus === "ACCEPTED" || legalStatus === "ACCEPTED_WITH_OBSERVATIONS";
+            const rejected = legalStatus === "REJECTED";
             const fiscalUpdates = {
               ncf: result.encf,
               tipo_ecf: data.tipo_ecf || "E32",
-              ecf_id: result.document?.id,
-              ecf_qr: result.stamp_url || (result.document as any)?.document_stamp_url || "",
-              ecf_security_code: result.security_code || "",
-              ecf_signature_date: (result.document as any)?.signature_date || new Date().toISOString(),
-              ecf_status: result.legal_status === "ACCEPTED" ? "ACCEPTED"
-                : result.legal_status === "ACCEPTED_WITH_OBSERVATIONS" ? "ACCEPTED_WITH_OBSERVATIONS"
-                : "REGISTERED",
+              ecf_id: result.document?.track_id || result.document?.pronesoft_id || result.document?.id,
+              ecf_qr: accepted ? result.stamp_url || (result.document as any)?.document_stamp_url || null : null,
+              ecf_security_code: accepted ? result.security_code || null : null,
+              ecf_signature_date: accepted ? (result.document as any)?.signature_date || null : null,
+              ecf_status: rejected ? "REJECTED" : accepted ? legalStatus : "REGISTERED",
             };
 
             await supabase.from("ordenes").update(fiscalUpdates).eq("id", data.id);
-            console.log(`[SyncManager] ✅ Comprobante e-CF timbrado exitosamente: ${result.encf} (Código de seguridad oficial: ${result.security_code})`);
+            console.log(`[SyncManager] e-CF diferido ${result.encf} registrado con estado ${fiscalUpdates.ecf_status}.`);
 
             // Actualizar en caché local
             const localOrd = read<Orden[]>(KEY.ordenes, []);
@@ -464,6 +466,9 @@ class SyncManager {
         }
       } catch (ecfErr) {
         console.warn("[SyncManager] Aviso en emisión diferida e-CF con Pronesoft:", ecfErr);
+        // Propagar el error mantiene la operación en la cola de salida para que
+        // el gestor vuelva a intentarla; nunca debe descartarse silenciosamente.
+        throw ecfErr;
       }
     }
 

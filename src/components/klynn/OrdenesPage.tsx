@@ -2569,20 +2569,20 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
   if (!emp || !cli) return null;
 
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
-  const isPendingECF = isECF && (
-    !orden.ecf_security_code ||
-    orden.ecf_security_code === "null" ||
-    orden.ecf_security_code.trim() === "" ||
-    (orden as any).ecf_status === "PENDING_OFFLINE_TRANSMISSION"
-  );
+  const ecfStatus = String((orden as any).ecf_status || '').toUpperCase();
+  const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
+  const isAcceptedECF = isECF && (ecfStatus === 'ACCEPTED' || ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS');
+  const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
   const isCréditoFiscal = orden.tipo_ecf === "E31" || orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
   const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
-  const qrData = !isPendingECF && (actualQR || (isECF && orden.ncf ? `https://dgii.gov.do/consulta_ecf?RNC_EMISOR=${tenant.rnc}&E_NCF=${orden.ncf}&MONTO_TOTAL=${orden.total}&FECHA_EMISION=${new Date(orden.creado_en).toLocaleDateString('en-GB').replace(/\//g, '')}` : ""));
+  const qrData = isAcceptedECF ? actualQR : "";
   const cfg = tenant.config;
 
   let docTitle = "Factura de Consumo";
   if (orden.nota_credito_ncf) {
     docTitle = isECF ? "Nota de Crédito Electrónica" : "Nota de Crédito";
+  } else if (isRejectedECF) {
+    docTitle = "Comprobante e-CF rechazado - No válido";
   } else if (isPendingECF) {
     docTitle = isCréditoFiscal ? "Pre-Factura Crédito Fiscal" : "Pre-Factura Consumidor Final";
   } else if (isCréditoFiscal) {
@@ -3148,22 +3148,37 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               tipoECFDefault
             );
 
+            const legalStatus = String(result.legal_status || result.document.legal_status || '').toUpperCase();
+            const accepted = legalStatus === "ACCEPTED" || legalStatus === "ACCEPTED_WITH_OBSERVATIONS";
+            const rejected = legalStatus === "REJECTED";
             finalNCF = result.encf;
             finalTipoECF = tipoECFDefault;
-            finalEcfStatus = "SIGNED";
-            finalEcfId = result.document.id;
-            finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
-            finalEcfSecurityCode = result.security_code || '';
-            finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
+            finalEcfStatus = rejected ? "REJECTED" : accepted ? legalStatus : "REGISTERED";
+            finalEcfId = result.document.track_id || result.document.pronesoft_id || result.document.id;
+            finalEcfQr = accepted ? result.stamp_url || result.document.document_stamp_url || '' : undefined;
+            finalEcfSecurityCode = accepted ? result.security_code || '' : undefined;
+            finalEcfSignatureDate = accepted ? result.document.signature_date : undefined;
 
-            toast.success(`✅ Comprobante DGII ${result.encf} emitido con éxito`);
+            if (accepted) {
+              toast.success(`✅ Comprobante DGII ${result.encf} aceptado`);
+            } else if (rejected) {
+              toast.error(`El e-CF ${result.encf} fue rechazado por DGII/Pronesoft.`);
+            } else {
+              toast.info(`e-CF ${result.encf} registrado en Pronesoft. Validación DGII pendiente.`);
+            }
           } catch (fErr: any) {
             console.error("Error Fiscal al cobrar:", fErr);
-            // Fallback resiliente
+            const message = String(fErr?.message || fErr || '');
+            const isConnectivityFailure = typeof navigator !== "undefined" && !navigator.onLine
+              || /failed to fetch|network|connection|timeout|timed out|load failed/i.test(message);
             finalNCF = undefined;
             finalTipoECF = tipoECFDefault;
-            finalEcfStatus = "PENDING_OFFLINE_TRANSMISSION";
-            toast.warning("Aviso de red: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.");
+            finalEcfStatus = isConnectivityFailure ? "PENDING_OFFLINE_TRANSMISSION" : "ERROR";
+            if (isConnectivityFailure) {
+              toast.warning("Aviso de red: Cobro registrado con Pre-Factura. Se timbrará con DGII al sincronizar.");
+            } else {
+              toast.error(`No se pudo emitir el e-CF: ${message}`);
+            }
           }
         }
       }

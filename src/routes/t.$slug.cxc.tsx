@@ -1108,6 +1108,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
         let finalEcfQr: string | undefined = o.ecf_qr;
         let finalEcfSecurityCode: string | undefined = o.ecf_security_code;
         let finalEcfSignatureDate: string | undefined = o.ecf_signature_date;
+        let finalEcfStatus: string | undefined = o.ecf_status;
 
         if (tenant.config?.ncf_facturacion_activa && !o.ncf && nuevoSaldo === 0) {
           const cliObj = clienteFull || { nombre: "Consumidor", apellido: "Final", telefono: "", tipo: "Consumidor Final" };
@@ -1134,23 +1135,16 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
             }
           } else {
             if (typeof window !== "undefined" && !navigator.onLine) {
-              // ⚠️ Modo Contingencia Offline (Ley 32-23)
-              let nextNCF: string | undefined = undefined;
-              try {
-                const { ncf, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
-                nextNCF = ncf;
-                finalNcfVencimiento = expiration_date;
-              } catch (seqErr) {
-                console.warn("Aviso al obtener secuencia local:", seqErr);
-              }
-
-              finalNCF = nextNCF;
+              // Offline no firma, no consume secuencia y no fabrica QR/codigo.
+              // La orden permanece como pre-factura hasta su transmision real.
+              finalNCF = undefined;
               finalTipoECF = tipoECFDefault;
-              finalEcfSecurityCode = 'SBX' + String(Math.floor(Math.random() * 900000) + 100000);
-              finalEcfSignatureDate = new Date().toISOString();
-              finalEcfQr = `https://ecf.dgii.gov.do/EstadisticaInternet/Consultas/ConsultaPublica?RncEmisor=133190907&RncReceptor=${cliObj?.cedula || '222333444'}&Encf=${finalNCF}&MontoTotal=${o.total}&MontoItbis=${o.itbis}&FechaEmision=${new Date().toISOString().substring(0, 10)}&CodigoSeguridad=TEST99`;
+              finalEcfQr = undefined;
+              finalEcfSecurityCode = undefined;
+              finalEcfSignatureDate = undefined;
+              finalEcfStatus = "PENDING_OFFLINE_TRANSMISSION";
 
-              toast.info(`⚠️ Modo Contingencia: Comprobante ${finalNCF} generado offline. Se enviará a DGII al conectar.`);
+              toast.info("Modo Offline: cobro registrado como Pre-Factura. Se timbrará al sincronizar.");
             } else {
               try {
                 let nextNCF: string | undefined = undefined;
@@ -1185,13 +1179,22 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
                 finalNCF = result.encf;
                 finalTipoECF = tipoECFDefault;
                 finalEcfId = result.document.track_id || result.document.pronesoft_id || result.document.id;
-                finalEcfQr = result.stamp_url || result.document.document_stamp_url || '';
-                finalEcfSecurityCode = result.security_code || '';
-                finalEcfSignatureDate = result.document.signature_date || new Date().toISOString();
+                const legalStatus = String(result.legal_status || result.document.legal_status || '').toUpperCase();
+                const accepted = legalStatus === "ACCEPTED" || legalStatus === "ACCEPTED_WITH_OBSERVATIONS";
+                finalEcfStatus = legalStatus === "REJECTED" ? "REJECTED" : accepted ? legalStatus : "REGISTERED";
+                finalEcfQr = accepted ? result.stamp_url || result.document.document_stamp_url || '' : undefined;
+                finalEcfSecurityCode = accepted ? result.security_code || '' : undefined;
+                finalEcfSignatureDate = accepted ? result.document.signature_date : undefined;
 
-                toast.success(`✅ Comprobante DGII ${result.encf} emitido para orden #${o.numero}`);
+                toast.info(accepted
+                  ? `Comprobante DGII ${result.encf} aceptado para orden #${o.numero}`
+                  : `e-CF ${result.encf} registrado; validación DGII pendiente.`);
               } catch (fErr: any) {
                 console.error("Error Fiscal en Cobrar Todo:", fErr);
+                const message = String(fErr?.message || fErr || '');
+                const isConnectivityFailure = typeof navigator !== "undefined" && !navigator.onLine
+                  || /failed to fetch|network|connection|timeout|timed out|load failed/i.test(message);
+                finalEcfStatus = isConnectivityFailure ? "PENDING_OFFLINE_TRANSMISSION" : "ERROR";
                 toast.error(`Error al generar comprobante fiscal para orden #${o.numero}: ` + fErr.message);
               }
             }
@@ -1212,7 +1215,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
           ecf_qr: finalEcfQr,
           ecf_security_code: finalEcfSecurityCode,
           ecf_signature_date: finalEcfSignatureDate,
-          ecf_status: finalEcfSecurityCode?.startsWith("SBX") ? "PENDING_OFFLINE_TRANSMISSION" : (o as any).ecf_status,
+          ecf_status: finalEcfStatus,
           pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : o.pago_referencia
         }));
 

@@ -37,6 +37,7 @@ import { Route as TSlugNuevaOrdenRouteImport } from './routes/t.$slug.nueva-orde
 import { Route as TSlugLogisticaRouteImport } from './routes/t.$slug.logistica'
 import { Route as TSlugLoginRouteImport } from './routes/t.$slug.login'
 import { Route as TSlugGastosRouteImport } from './routes/t.$slug.gastos'
+import { Route as TSlugFiscalPendientesRouteImport } from './routes/t.$slug.fiscal-pendientes'
 import { Route as TSlugFiscalHomologacionRouteImport } from './routes/t.$slug.fiscal-homologacion'
 import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
 import { Route as TSlugEstanteriaRouteImport } from './routes/t.$slug.estanteria'
@@ -190,6 +191,11 @@ const TSlugGastosRoute = TSlugGastosRouteImport.update({
   path: '/gastos',
   getParentRoute: () => TSlugRoute,
 } as any)
+const TSlugFiscalPendientesRoute = TSlugFiscalPendientesRouteImport.update({
+  id: '/fiscal-pendientes',
+  path: '/fiscal-pendientes',
+  getParentRoute: () => TSlugRoute,
+} as any)
 const TSlugFiscalHomologacionRoute = TSlugFiscalHomologacionRouteImport.update({
   id: '/fiscal-homologacion',
   path: '/fiscal-homologacion',
@@ -265,6 +271,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
   '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
+  '/t/$slug/fiscal-pendientes': typeof TSlugFiscalPendientesRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
@@ -303,6 +310,7 @@ export interface FileRoutesByTo {
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
   '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
+  '/t/$slug/fiscal-pendientes': typeof TSlugFiscalPendientesRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
@@ -343,6 +351,7 @@ export interface FileRoutesById {
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
   '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
+  '/t/$slug/fiscal-pendientes': typeof TSlugFiscalPendientesRoute
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
@@ -384,6 +393,7 @@ export interface FileRouteTypes {
     | '/t/$slug/estanteria'
     | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
+    | '/t/$slug/fiscal-pendientes'
     | '/t/$slug/gastos'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
@@ -422,6 +432,7 @@ export interface FileRouteTypes {
     | '/t/$slug/estanteria'
     | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
+    | '/t/$slug/fiscal-pendientes'
     | '/t/$slug/gastos'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
@@ -461,6 +472,7 @@ export interface FileRouteTypes {
     | '/t/$slug/estanteria'
     | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
+    | '/t/$slug/fiscal-pendientes'
     | '/t/$slug/gastos'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
@@ -692,6 +704,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugGastosRouteImport
       parentRoute: typeof TSlugRoute
     }
+    '/t/$slug/fiscal-pendientes': {
+      id: '/t/$slug/fiscal-pendientes'
+      path: '/fiscal-pendientes'
+      fullPath: '/t/$slug/fiscal-pendientes'
+      preLoaderRoute: typeof TSlugFiscalPendientesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
     '/t/$slug/fiscal-homologacion': {
       id: '/t/$slug/fiscal-homologacion'
       path: '/fiscal-homologacion'
@@ -768,6 +787,7 @@ interface TSlugRouteChildren {
   TSlugEstanteriaRoute: typeof TSlugEstanteriaRoute
   TSlugFiscalRoute: typeof TSlugFiscalRoute
   TSlugFiscalHomologacionRoute: typeof TSlugFiscalHomologacionRoute
+  TSlugFiscalPendientesRoute: typeof TSlugFiscalPendientesRoute
   TSlugGastosRoute: typeof TSlugGastosRoute
   TSlugLoginRoute: typeof TSlugLoginRoute
   TSlugLogisticaRoute: typeof TSlugLogisticaRoute
@@ -789,6 +809,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugEstanteriaRoute: TSlugEstanteriaRoute,
   TSlugFiscalRoute: TSlugFiscalRoute,
   TSlugFiscalHomologacionRoute: TSlugFiscalHomologacionRoute,
+  TSlugFiscalPendientesRoute: TSlugFiscalPendientesRoute,
   TSlugGastosRoute: TSlugGastosRoute,
   TSlugLoginRoute: TSlugLoginRoute,
   TSlugLogisticaRoute: TSlugLogisticaRoute,
