@@ -953,6 +953,7 @@ Característica escritura: —
 
               {/* Fila 3: Switches estilizados con IconBoxes */}
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-2">
+
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
                   <div className="flex items-center gap-3">
                     <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
@@ -1945,8 +1946,25 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     </div>
                   </div>
                   <Switch 
-                    checked={cfg.pos_auto_imprimir === true} 
-                    onCheckedChange={(v) => updateCfg({ pos_auto_imprimir: v })} 
+                    checked={cfg.pos_auto_imprimir === true}
+                    onCheckedChange={(v) => updateCfg({ pos_auto_imprimir: v })}
+                  />
+                </div>
+
+                {/* Switch: Requerir nota al cobrar una orden */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <FileText className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Requerir nota al cobrar una orden</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Muestra una revisión rápida antes de cobrar si la orden no tiene notas.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.pos_requerir_nota_confirmacion === true} 
+                    onCheckedChange={(v) => updateCfg({ pos_requerir_nota_confirmacion: v })} 
                   />
                 </div>
 

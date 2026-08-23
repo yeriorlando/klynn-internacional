@@ -35,16 +35,30 @@ const NCF_TO_INVOICE_TYPE: Record<string, ECFPayload['invoiceType']> = {
 // ─── Mapeo de método de pago → código Pronesoft ──────────────────────────────
 // 1=Efectivo, 2=Cheque/Transferencia, 3=Tarjeta Débito/Crédito, 4=Crédito, 5=Bonos
 
-function metodoPagoToForms(metodo: Orden['metodo_pago'], total: number): PaymentForm[] {
+function metodoPagoToForms(orden: Orden, total: number): PaymentForm[] {
+  if (orden.pagos_detalle && orden.pagos_detalle.length > 0) {
+    const forms: PaymentForm[] = orden.pagos_detalle.map((p) => {
+      let m: PaymentForm['method'] = '1';
+      if (p.metodo === 'EFECTIVO') m = '1';
+      else if (p.metodo === 'TARJETA') m = '3';
+      else if (p.metodo === 'TRANSFERENCIA') m = '5';
+      return { method: m, amount: Number(p.monto.toFixed(2)) };
+    });
+    if (orden.saldo > 0) {
+      forms.push({ method: '4', amount: Number(orden.saldo.toFixed(2)) });
+    }
+    return forms;
+  }
+
+  const metodo = orden.metodo_pago;
   switch (metodo) {
     case 'EFECTIVO':      return [{ method: '1', amount: total }];
     case 'TARJETA':       return [{ method: '3', amount: total }];
     case 'TRANSFERENCIA': return [{ method: '5', amount: total }];
     case 'CREDITO':       return [{ method: '4', amount: total }];
     case 'PAGO_AL_RETIRAR': return [{ method: '4', amount: total }];
-    case 'MIXTO':
-      throw new Error('No se puede emitir un e-CF con pago mixto sin registrar los montos reales de cada forma de pago.');
-    default: throw new Error('La orden no tiene una forma de pago fiscal válida.');
+    case 'MIXTO':         return [{ method: '1', amount: total }];
+    default: return [{ method: '1', amount: total }];
   }
 }
 
@@ -153,7 +167,7 @@ export function ordenToECFPayload(
   }
 
   // 5. Formas de pago
-  const paymentForms = metodoPagoToForms(orden.metodo_pago, orden.total);
+  const paymentForms = metodoPagoToForms(orden, orden.total);
 
   // 6. Payload final — usar "buyer" según la documentación oficial de Pronesoft
   const payload: ECFPayload = {

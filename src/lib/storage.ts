@@ -175,6 +175,7 @@ export interface TenantConfig {
   pos_modal_desglose?: boolean;
   pos_modo_defecto?: boolean;
   pos_auto_imprimir?: boolean;
+  pos_requerir_nota_confirmacion?: boolean;
   ticket_imprimir_taller_auto?: boolean;
   ticket_taller_solo_con_ubicacion?: boolean;
   ticket_imprimir_copia_caja?: boolean;
@@ -276,12 +277,21 @@ export type MetodoPago =
   | "MIXTO"
   | "PAGO_AL_RETIRAR";
 
+export interface PagoDesgloseItem {
+  metodo: "EFECTIVO" | "TARJETA" | "TRANSFERENCIA";
+  monto: number;
+  recibido?: number;
+  referencia?: string;
+}
+
 export interface OrdenItem {
   descripcion: string;
   cantidad: number;
   precio_unitario: number;
   es_libra?: boolean;
   is_exento?: boolean;
+  color?: string;
+  color_hex?: string;
   notas?: string;
   servicio_origen?: string;
 }
@@ -302,6 +312,11 @@ export interface Orden {
   pagado: number;
   saldo: number;
   metodo_pago: MetodoPago;
+  condicion_cobro?: "COBRAR_AHORA" | "ANTICIPO" | "AL_RETIRAR" | "CREDITO";
+  pagos_detalle?: PagoDesgloseItem[];
+  anticipo_monto?: number;
+  dias_credito?: number;
+  fecha_vencimiento_credito?: string;
   estado: EstadoOrden;
   fecha_entrega: string;
   es_urgente: boolean;

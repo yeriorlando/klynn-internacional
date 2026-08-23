@@ -67,7 +67,9 @@ import {
   useMovimientos, 
   useCajas, 
   useECFConfig, 
-  usePlans 
+  usePlans,
+  useServicios,
+  useCatalogo
 } from "@/hooks/use-queries";
 
 export const Route = createFileRoute("/t/$slug/reportes")({ component: ReportesPage });
@@ -85,6 +87,8 @@ function ReportesPage() {
   const { data: cajas = [] } = useCajas(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
   const { data: plans = [] } = usePlans();
+  const { data: serviciosData = [] } = useServicios(tenantId);
+  const { data: catalogoData = [] } = useCatalogo(tenantId);
 
   const [isPrinting, setIsPrinting] = useState(false);
   
@@ -227,18 +231,27 @@ function ReportesPage() {
     let totalPiezas = 0;
     let totalLibras = 0;
     ordenes.forEach(o => {
+      if (o.estado === "ANULADA") return;
       if (Array.isArray(o.items)) {
         o.items.forEach((item: any) => {
-          const desc = item.descripcion || "Otros";
-          const qty = item.cantidad || 1;
-          const sub = (item.precio_unitario || 0) * qty;
+          const rawDesc = item.descripcion || "Otros";
+          const desc = rawDesc.replace(/^↳\s*/, "").trim();
+          const qty = Number(item.cantidad) || 0;
+          const catMatch = catalogoData.find(c => 
+            c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
+          );
+          const priceUnit = Number(item.precio_unitario) > 0 
+            ? Number(item.precio_unitario) 
+            : (catMatch?.precio || 0);
+          const sub = priceUnit * qty;
+
           if (!garmentCounts[desc]) {
             garmentCounts[desc] = { count: 0, total: 0 };
           }
           garmentCounts[desc].count += qty;
           garmentCounts[desc].total += sub;
 
-          if (item.es_libra) {
+          if (item.es_libra || catMatch?.por_libra) {
             totalLibras += qty;
           } else {
             totalPiezas += qty;
@@ -255,9 +268,17 @@ function ReportesPage() {
     // --- 1b. Top de Servicios Más Solicitados (Operaciones) ---
     const serviceCounts: Record<string, { count: number; total: number }> = {};
     ordenes.forEach(o => {
+      if (o.estado === "ANULADA") return;
       if (Array.isArray(o.servicios)) {
         o.servicios.forEach((sName) => {
-          const price = o.servicios_precios?.[sName] || 0;
+          const srvMatch = serviciosData.find(s => 
+            s.nombre?.toLowerCase().trim() === sName.toLowerCase().trim()
+          );
+          const rawPrice = o.servicios_precios?.[sName];
+          const price = typeof rawPrice === "number" && rawPrice >= 0 
+            ? rawPrice 
+            : (srvMatch?.precio || 0);
+
           if (!serviceCounts[sName]) {
             serviceCounts[sName] = { count: 0, total: 0 };
           }

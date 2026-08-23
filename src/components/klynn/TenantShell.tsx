@@ -1696,11 +1696,17 @@ function SidebarContent({
 
   const switchBranch = async (t: any) => {
     if (t.slug === tenant.slug) return;
-    const ok = await switchSession(t.id, empleado.email);
-    if (ok) {
-      window.location.href = `/t/${t.slug}`;
-    } else {
-      toast.error("No tienes acceso a esta sucursal");
+    try {
+      toast.loading(`Cambiando a ${t.nombre}...`, { id: "branch-switch" });
+      const ok = await switchSession(t.id, empleado.email);
+      if (ok) {
+        toast.success(`Cambiando a ${t.nombre}...`, { id: "branch-switch" });
+        window.location.href = `/t/${t.slug}`;
+      } else {
+        toast.error("No tienes acceso a esta sucursal", { id: "branch-switch" });
+      }
+    } catch (err: any) {
+      toast.error("Error al cambiar de sucursal: " + (err?.message || "Intente de nuevo"), { id: "branch-switch" });
     }
   };
 

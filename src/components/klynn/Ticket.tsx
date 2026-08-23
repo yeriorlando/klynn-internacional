@@ -254,6 +254,11 @@ export function Ticket({
                         <span className="font-medium text-black">
                           • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
                         </span>
+                        {it.color && (
+                          <div className="text-[9px] font-bold text-black pl-2">
+                            🎨 Color: {it.color}
+                          </div>
+                        )}
                         {it.notas && (
                           <div className="text-[9px] font-bold text-black italic pl-2">
                             ⚠️ Nota: {it.notas}
@@ -273,11 +278,16 @@ export function Ticket({
                     <span className="font-medium text-black">
                       • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
                     </span>
-                    {it.notas && (
-                      <div className="text-[9px] font-bold text-black italic pl-2">
-                        ⚠️ Nota: {it.notas}
-                      </div>
-                    )}
+                    {it.color && (
+                          <div className="text-[9px] font-bold text-black pl-2">
+                            🎨 Color: {it.color}
+                          </div>
+                        )}
+                        {it.notas && (
+                          <div className="text-[9px] font-bold text-black italic pl-2">
+                            ⚠️ Nota: {it.notas}
+                          </div>
+                        )}
                   </div>
                 ))}
             </div>
@@ -475,6 +485,7 @@ export function Ticket({
                               <div key={'sd'+dIdx} className="flex justify-between items-start pl-3 mb-1 animate-in fade-in duration-200">
                                 <div className="w-[44%] pr-1">
                                   <div className="font-semibold text-black text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : (it.cantidad > 1 ? ` (x${it.cantidad})` : "")}</div>
+                                  {it.color && <div className="text-[9px] text-black font-semibold">Color: {it.color}</div>}
                                   {it.notas && <div className="text-[9px] italic leading-tight text-black font-medium">Nota: {it.notas}</div>}
                                 </div>
                                 <div className="w-[26%] text-right font-semibold pt-0.5 text-black">
@@ -508,6 +519,7 @@ export function Ticket({
                           <div className="w-[44%] pr-1">
                             <div className="font-semibold leading-tight text-[11px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
                             <div className="text-[10px] text-black font-semibold leading-tight">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
+                            {it.color && <div className="text-[9px] text-black font-semibold">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black font-sans">Nota: {it.notas}</div>}
                           </div>
                           <div className="w-[26%] text-right font-semibold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
@@ -537,7 +549,21 @@ export function Ticket({
           </div>
           <Sep />
           <div>
-            <Row k="Método de pago" v={orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago} />
+            <Row k="Método de pago" v={orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago === "MIXTO" ? "MIXTO" : orden.metodo_pago} />
+            {orden.condicion_cobro && orden.condicion_cobro !== "COBRAR_AHORA" && (
+              <Row k="Modalidad" v={orden.condicion_cobro === "ANTICIPO" ? "ANTICIPO" : orden.condicion_cobro === "AL_RETIRAR" ? "AL RETIRAR" : "CRÉDITO"} />
+            )}
+            {orden.pagos_detalle && orden.pagos_detalle.length > 0 && (
+              <div className="py-0.5 my-0.5 border-y border-dotted border-black/40 text-[9.5px]">
+                <div className="font-bold uppercase text-[9px] text-black/70 mb-0.5">Desglose de cobro:</div>
+                {orden.pagos_detalle.map((pd, pidx) => (
+                  <div key={pidx} className="flex justify-between font-medium">
+                    <span>• {pd.metodo}{pd.referencia ? ` (${pd.referencia})` : ""}:</span>
+                    <span className="font-semibold">{formatRD(pd.monto)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
             <Row k="Estado de factura" v={orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"} boldValue />
             {pagoRecibido !== undefined && (
               <>

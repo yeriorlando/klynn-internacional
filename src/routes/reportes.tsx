@@ -635,9 +635,10 @@ function ReportesPage() {
     if (!filteredData) return null;
     const { ordenes, gastos, movimientos, cajas, clientes } = filteredData;
 
-    const totalVentas = ordenes.reduce((s, o) => s + (o.total || 0), 0);
-    const totalITBIS = ordenes.reduce((s, o) => s + (o.itbis || 0), 0);
-    const totalDescuentos = ordenes.reduce((s, o) => s + (o.descuento || 0), 0);
+    const ordenesValidas = ordenes.filter(o => o.estado !== "ANULADA");
+    const totalVentas = ordenesValidas.reduce((s, o) => s + (o.total || 0), 0);
+    const totalITBIS = ordenesValidas.reduce((s, o) => s + (o.itbis || 0), 0);
+    const totalDescuentos = ordenesValidas.reduce((s, o) => s + (o.descuento || 0), 0);
     
     // Gastos (Total unificado de la tabla gastos)
     const gastosManuales = gastos.filter(g => !g.is_caja_chica).reduce((s, g) => s + (g.monto || 0), 0);
@@ -645,10 +646,10 @@ function ReportesPage() {
     const totalGastos = gastos.reduce((s, g) => s + (g.monto || 0), 0);
     const rentabilidad = totalVentas - totalGastos;
     const margenBeneficio = totalVentas > 0 ? (rentabilidad / totalVentas) * 100 : 0;
-    const ticketPromedio = ordenes.length > 0 ? totalVentas / ordenes.length : 0;
+    const ticketPromedio = ordenesValidas.length > 0 ? totalVentas / ordenesValidas.length : 0;
 
     // Métodos de Pago
-    const porMetodo = ordenes.reduce((m, o) => { 
+    const porMetodo = ordenesValidas.reduce((m, o) => { 
       const method = o.metodo_pago || "EFECTIVO";
       m[method] = (m[method] || 0) + (o.total || 0); 
       return m; 
@@ -673,7 +674,7 @@ function ReportesPage() {
     const ordenesEnTaller = (porEstado["RECIBIDA"] || 0) + (porEstado["EN_PROCESO"] || 0);
     const ordenesListasDespacho = (porEstado["LISTA"] || 0) + (porEstado["EN_CAMINO"] || 0);
     const ordenesCompletadas = porEstado["ENTREGADA"] || 0;
-    const tasaCompletitud = ordenes.length > 0 ? Math.round((ordenesCompletadas / ordenes.length) * 100) : 0;
+    const tasaCompletitud = ordenesValidas.length > 0 ? Math.round((ordenesCompletadas / ordenesValidas.length) * 100) : 0;
 
     // Cierres de caja enriquecidos con Empleado, Turno y Horarios
     const empsList = inspectData?.empleados || [];
@@ -782,7 +783,7 @@ function ReportesPage() {
     let totalAbonadoEnOrdenes = 0;
     let cantidadDeudas = 0;
 
-    ordenes.forEach(o => {
+    ordenesValidas.forEach(o => {
       const saldo = o.saldo || 0;
       const pagado = o.pagado || 0;
       if (saldo > 0) {
@@ -796,8 +797,10 @@ function ReportesPage() {
 
           // Total de órdenes históricas del cliente en la sucursal
           const clientOrders = allTenantOrders.filter(ao => 
-            (cId !== "desconocido" && ao.cliente_id === cId) || 
-            (ao.cliente_nombre && o.cliente_nombre && ao.cliente_nombre.toLowerCase() === o.cliente_nombre.toLowerCase())
+            ao.estado !== "ANULADA" && (
+              (cId !== "desconocido" && ao.cliente_id === cId) || 
+              (ao.cliente_nombre && o.cliente_nombre && ao.cliente_nombre.toLowerCase() === o.cliente_nombre.toLowerCase())
+            )
           );
           const totalOrdenesHistoricas = Math.max(clientOrders.length, 1);
 
@@ -851,7 +854,7 @@ function ReportesPage() {
       moraCritica: 0,    // Más de 30 días de vencida sobre su plazo (diasMora > 30)
     };
 
-    ordenes.filter(o => (o.saldo || 0) > 0).forEach(o => {
+    ordenesValidas.filter(o => (o.saldo || 0) > 0).forEach(o => {
       const days = Math.floor((Date.now() - new Date(o.creado_en).getTime()) / (1000 * 60 * 60 * 24));
       const s = o.saldo || 0;
       const plazoOrden = o.dias_credito || plazoCreditoBase;
@@ -887,20 +890,22 @@ function ReportesPage() {
     let totalLibras = 0;
     let totalMontoPrendas = 0;
 
-    ordenes.forEach(o => {
+    ordenesValidas.forEach(o => {
       if (Array.isArray(o.items)) {
         o.items.forEach((item: any) => {
           const rawDesc = item.descripcion || "Prenda General";
           // Limpiar prefijo de desglose si vino de un sub-servicio ("↳ ")
           const desc = rawDesc.replace(/^↳\s*/, "").trim();
           const qty = Number(item.cantidad) || 0;
-          const sub = (Number(item.precio_unitario) || 0) * qty;
+          const catMatch = inspectData?.catalogo?.find(c => 
+            c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
+          );
+          const priceUnit = Number(item.precio_unitario) > 0 
+            ? Number(item.precio_unitario) 
+            : (catMatch?.precio || 0);
+          const sub = priceUnit * qty;
           
           if (!garmentCounts[desc]) {
-            // Buscamos coincidencia en catálogo
-            const catMatch = inspectData?.catalogo?.find(c => 
-              c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
-            );
             const isLibra = !!(item.es_libra || catMatch?.por_libra);
             garmentCounts[desc] = { 
               count: 0, 
@@ -909,7 +914,7 @@ function ReportesPage() {
               imagen_url: catMatch?.imagen_url || null,
               categoria: catMatch?.categoria || (isLibra ? "Lavandería por Libra" : "Prendas"),
               icono: catMatch?.icono || null,
-              precio_base: catMatch?.precio || item.precio_unitario || 0
+              precio_base: catMatch?.precio || priceUnit || 0
             };
           }
           garmentCounts[desc].count += qty;
@@ -939,17 +944,21 @@ function ReportesPage() {
     }> = {};
     let totalMontoServicios = 0;
 
-    ordenes.forEach(o => {
+    ordenesValidas.forEach(o => {
       if (Array.isArray(o.servicios)) {
         o.servicios.forEach((sName: string) => {
-          const price = o.servicios_precios?.[sName] || 0;
+          const srvMatch = inspectData?.servicios?.find(s => 
+            s.nombre?.toLowerCase().trim() === sName.toLowerCase().trim()
+          );
+          const rawPrice = o.servicios_precios?.[sName];
+          const price = typeof rawPrice === "number" && rawPrice >= 0 
+            ? rawPrice 
+            : (srvMatch?.precio || 0);
+
           if (!serviceCounts[sName]) {
-            const srvMatch = inspectData?.servicios?.find(s => 
-              s.nombre?.toLowerCase().trim() === sName.toLowerCase().trim()
-            );
             serviceCounts[sName] = { 
               count: 0, 
-              total: 0,
+              total: 0, 
               imagen_url: srvMatch?.imagen_url || null,
               descripcion: srvMatch?.descripcion || "Servicio especializado de lavandería",
               icono: srvMatch?.icono || null,
@@ -3261,9 +3270,16 @@ function ReportesPage() {
                                 )}
 
                                 <div className="space-y-0.5 min-w-0 flex-1">
-                                  <span className="font-bold text-sm text-foreground truncate block group-hover:text-primary transition-colors" title={srv.name}>
-                                    {srv.name}
-                                  </span>
+                                  <div className="flex items-center justify-between gap-1">
+                                    <span className="font-bold text-sm text-foreground truncate block group-hover:text-primary transition-colors" title={srv.name}>
+                                      {srv.name}
+                                    </span>
+                                    {srv.precio_base > 0 && (
+                                      <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold shrink-0">
+                                        Base: {formatRD(srv.precio_base)}
+                                      </Badge>
+                                    )}
+                                  </div>
                                   <p className="text-[11px] text-muted-foreground line-clamp-1">
                                     {srv.descripcion}
                                   </p>

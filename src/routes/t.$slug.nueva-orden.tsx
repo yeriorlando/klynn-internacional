@@ -6,6 +6,8 @@ import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import {
+  Palette,
+  Split,
   ArrowLeft,
   ArrowRight,
   Plus,
@@ -53,6 +55,7 @@ import {
   WifiOff,
   Lock,
   RefreshCw,
+  ShieldCheck,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -111,6 +114,7 @@ import {
   type Cliente,
   type OrdenItem,
   type MetodoPago,
+  type PagoDesgloseItem,
   type Orden,
   type CatalogoItem,
   type Servicio,
@@ -161,6 +165,268 @@ const OPCIONES_CREDITO = [
   { dias: 90, label: "90 días" },
 ];
 
+
+// ==================== COLOR SELECTOR & ITEM NOTES ====================
+
+const PRESET_COLORS = [
+  { name: "Blanco", hex: "#FFFFFF", border: true },
+  { name: "Negro", hex: "#1E293B" },
+  { name: "Azul Marino", hex: "#1E3A8A" },
+  { name: "Azul Claro", hex: "#60A5FA" },
+  { name: "Rojo", hex: "#DC2626" },
+  { name: "Verde", hex: "#16A34A" },
+  { name: "Amarillo", hex: "#EAB308" },
+  { name: "Beige", hex: "#D4B996" },
+  { name: "Gris", hex: "#6B7280" },
+  { name: "Rosado", hex: "#EC4899" },
+  { name: "Morado", hex: "#7C3AED" },
+  { name: "Marrón", hex: "#78350F" },
+  { name: "Estampado", hex: "linear-gradient(135deg, #FF0080, #7928CA, #00DFD8)", isGradient: true },
+];
+
+function ColorSelectorPopover({
+  color,
+  onSelectColor,
+}: {
+  color?: string;
+  onSelectColor: (colorName: string, colorHex?: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [customText, setCustomText] = useState("");
+
+  const selectedPreset = PRESET_COLORS.find(
+    (c) => c.name.toLowerCase() === (color || "").toLowerCase()
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        {color ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 transition-all shadow-2xs group cursor-pointer max-w-[130px]"
+            title={`Color: ${color}. Clic para cambiar`}
+          >
+            <span
+              className="w-2.5 h-2.5 rounded-full shrink-0 border border-black/20"
+              style={{
+                background: selectedPreset?.isGradient
+                  ? selectedPreset.hex
+                  : selectedPreset?.hex || "#94A3B8",
+              }}
+            />
+            <span className="truncate">{color}</span>
+            <span
+              className="ml-0.5 text-slate-400 hover:text-destructive text-[11px] leading-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectColor("", "");
+              }}
+            >
+              ×
+            </span>
+          </button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 px-2 text-[10px] font-bold gap-1 rounded-lg bg-background hover:bg-accent border-dashed border-primary/30 text-primary hover:text-primary transition-all cursor-pointer shadow-2xs"
+          >
+            <Palette className="h-2.5 w-2.5" />
+            <span>Color</span>
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3 rounded-2xl shadow-xl z-50 bg-popover" align="start">
+        <div className="space-y-2.5">
+          <div className="flex items-center justify-between pb-1.5 border-b border-border/60">
+            <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <Palette className="h-3.5 w-3.5 text-primary" /> Selector de Color
+            </span>
+            {color && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSelectColor("", "");
+                  setOpen(false);
+                }}
+                className="text-[10px] font-bold text-destructive hover:underline cursor-pointer"
+              >
+                Quitar
+              </button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-6 gap-1.5">
+            {PRESET_COLORS.map((pc) => {
+              const isSel = (color || "").toLowerCase() === pc.name.toLowerCase();
+              return (
+                <button
+                  key={pc.name}
+                  type="button"
+                  title={pc.name}
+                  onClick={() => {
+                    onSelectColor(pc.name, pc.hex);
+                    setOpen(false);
+                  }}
+                  className={`relative w-7 h-7 rounded-full flex items-center justify-center transition-transform hover:scale-110 active:scale-95 cursor-pointer shadow-xs ${
+                    pc.border ? "border border-slate-300 dark:border-slate-600" : ""
+                  } ${isSel ? "ring-2 ring-primary ring-offset-1" : ""}`}
+                  style={{
+                    background: pc.isGradient ? pc.hex : pc.hex,
+                  }}
+                >
+                  {isSel && (
+                    <Check
+                      className={`h-3 w-3 stroke-[3] ${
+                        pc.name === "Blanco" || pc.name === "Amarillo" || pc.name === "Beige"
+                          ? "text-slate-900"
+                          : "text-white"
+                      }`}
+                    />
+                  )}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="pt-1.5 border-t border-border/60">
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (customText.trim()) {
+                  onSelectColor(customText.trim());
+                  setCustomText("");
+                  setOpen(false);
+                }
+              }}
+              className="flex gap-1.5"
+            >
+              <Input
+                placeholder="Otro color o patrón..."
+                value={customText}
+                onChange={(e) => setCustomText(e.target.value)}
+                className="h-7 text-xs rounded-lg px-2 bg-accent/20"
+              />
+              <Button
+                type="submit"
+                size="sm"
+                className="h-7 px-2 text-xs font-bold rounded-lg"
+                disabled={!customText.trim()}
+              >
+                OK
+              </Button>
+            </form>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+function ItemNotePopover({
+  nota,
+  onSaveNota,
+}: {
+  nota?: string;
+  onSaveNota: (text: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState(nota || "");
+
+  useEffect(() => {
+    setText(nota || "");
+  }, [nota, open]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        {nota ? (
+          <button
+            type="button"
+            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 border border-amber-300/80 dark:border-amber-700 transition-all shadow-2xs group cursor-pointer max-w-[140px]"
+            title={`Nota: ${nota}. Clic para editar`}
+          >
+            <FileText className="h-2.5 w-2.5 shrink-0 text-amber-600" />
+            <span className="truncate">{nota}</span>
+            <span
+              className="ml-0.5 text-amber-600 hover:text-destructive text-[11px] leading-none"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSaveNota("");
+              }}
+            >
+              ×
+            </span>
+          </button>
+        ) : (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-6 px-1.5 text-[10px] font-bold gap-1 rounded-lg bg-background hover:bg-accent border-dashed border-slate-300 dark:border-slate-700 text-muted-foreground hover:text-foreground transition-all cursor-pointer shadow-2xs"
+            title="Añadir nota o condición de esta prenda"
+          >
+            <FileText className="h-2.5 w-2.5" />
+          </Button>
+        )}
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-3 rounded-2xl shadow-xl z-50 bg-popover" align="start">
+        <div className="space-y-2">
+          <div className="flex items-center justify-between pb-1 border-b border-border/60">
+            <span className="text-[11px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 text-amber-500" /> Nota de la Prenda
+            </span>
+            {nota && (
+              <button
+                type="button"
+                onClick={() => {
+                  onSaveNota("");
+                  setOpen(false);
+                }}
+                className="text-[10px] font-bold text-destructive hover:underline cursor-pointer"
+              >
+                Borrar
+              </button>
+            )}
+          </div>
+          <Textarea
+            placeholder="Ej: Mancha en manga, falta botón, tela delicada..."
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            className="text-xs min-h-[60px] rounded-xl p-2 bg-accent/10 resize-none"
+            autoFocus
+          />
+          <div className="flex justify-end gap-1.5">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 text-xs px-2"
+              onClick={() => setOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="h-7 text-xs font-bold px-3 bg-primary text-white"
+              onClick={() => {
+                onSaveNota(text.trim());
+                setOpen(false);
+              }}
+            >
+              Guardar
+            </Button>
+          </div>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+
 function NuevaOrdenPage() {
   const user = useRequireAuth();
   const navigate = useNavigate();
@@ -203,6 +469,102 @@ function NuevaOrdenPage() {
   const catalogScrollTopRef = useRef(0);
 
   const [isCobroModalOpen, setIsCobroModalOpen] = useState(false);
+
+  // --- Estados de Cobro Profesional y Modalidades ---
+  type CondicionCobro = "COBRAR_AHORA" | "ANTICIPO" | "AL_RETIRAR" | "CREDITO";
+  const [condicionCobro, setCondicionCobro] = useState<CondicionCobro>("AL_RETIRAR");
+  const [instrumentoPago, setInstrumentoPago] = useState<"EFECTIVO" | "TARJETA" | "TRANSFERENCIA" | "MIXTO">("EFECTIVO");
+  const [anticipoMonto, setAnticipoMonto] = useState<number>(0);
+
+  // Desglose de Pago Mixto
+  const [pagoEfectivo, setPagoEfectivo] = useState<number>(0);
+  const [pagoEfectivoRecibido, setPagoEfectivoRecibido] = useState<number>(0);
+  const [pagoTarjeta, setPagoTarjeta] = useState<number>(0);
+  const [pagoTarjetaRef, setPagoTarjetaRef] = useState<string>("");
+  const [pagoTransferencia, setPagoTransferencia] = useState<number>(0);
+  const [pagoTransferenciaRef, setPagoTransferenciaRef] = useState<string>("");
+
+  // Modal de Revisión Rápida de Notas
+  const [showQuickNoteModal, setShowQuickNoteModal] = useState(false);
+  const [quickNoteText, setQuickNoteText] = useState("");
+
+  // Confirmación de Límite de Crédito
+  const [showCreditLimitConfirm, setShowCreditLimitConfirm] = useState(false);
+
+  // Selector y Detalles de Color / Notas por Prenda
+  const COLORES_PRENDA = [
+    { nombre: "Blanco", hex: "#FFFFFF", border: "#CBD5E1", text: "#0F172A" },
+    { nombre: "Negro", hex: "#0F172A", text: "#FFFFFF" },
+    { nombre: "Azul Marino", hex: "#1E3A8A", text: "#FFFFFF" },
+    { nombre: "Azul Claro", hex: "#38BDF8", text: "#0F172A" },
+    { nombre: "Rojo", hex: "#DC2626", text: "#FFFFFF" },
+    { nombre: "Rosado", hex: "#F472B6", text: "#0F172A" },
+    { nombre: "Verde", hex: "#16A34A", text: "#FFFFFF" },
+    { nombre: "Verde Oliva", hex: "#65A30D", text: "#FFFFFF" },
+    { nombre: "Amarillo", hex: "#FBBF24", text: "#0F172A" },
+    { nombre: "Beige / Crema", hex: "#F5F5DC", border: "#D4D4D8", text: "#0F172A" },
+    { nombre: "Gris", hex: "#64748B", text: "#FFFFFF" },
+    { nombre: "Marrón", hex: "#78350F", text: "#FFFFFF" },
+    { nombre: "Morado", hex: "#7C3AED", text: "#FFFFFF" },
+    { nombre: "Estampado", hex: "linear-gradient(135deg, #EF4444 25%, #3B82F6 25%, #3B82F6 50%, #10B981 50%, #10B981 75%, #F59E0B 75%)", text: "#0F172A" },
+  ];
+  const [editingItemIndex, setEditingItemIndex] = useState<number | null>(null);
+  const [showItemDetailModal, setShowItemDetailModal] = useState(false);
+  const [itemEditColor, setItemEditColor] = useState("");
+  const [itemEditColorHex, setItemEditColorHex] = useState("");
+  const [itemEditNota, setItemEditNota] = useState("");
+
+  function updateItemColor(index: number, colorName: string, colorHex?: string) {
+    setItems((prev) =>
+      prev.map((item, idx) =>
+        idx === index
+          ? {
+              ...item,
+              color: colorName || undefined,
+              color_hex: colorHex || undefined,
+            }
+          : item
+      )
+    );
+  }
+
+  function updateItemNota(index: number, noteText: string) {
+    setItems((prev) =>
+      prev.map((item, idx) =>
+        idx === index
+          ? {
+              ...item,
+              notas: noteText || undefined,
+            }
+          : item
+      )
+    );
+  }
+
+  function handleAbrirCobro() {
+    if (!cliente || (items.length === 0 && serviciosSel.length === 0)) return;
+    if (condicionCobro === "COBRAR_AHORA") {
+      setRecibido(total);
+    } else if (condicionCobro === "ANTICIPO") {
+      const half = +(total / 2).toFixed(2);
+      if (anticipoMonto <= 0 || anticipoMonto >= total) {
+        setAnticipoMonto(half);
+        setRecibido(half);
+      } else {
+        setRecibido(anticipoMonto);
+      }
+    } else if (condicionCobro === "AL_RETIRAR") {
+      setRecibido(0);
+      setAnticipoMonto(0);
+    }
+    const tieneNotas = !!notas.trim() || items.some((it) => !!it.notas?.trim());
+    if (cfg.pos_requerir_nota_confirmacion && !tieneNotas) {
+      setShowQuickNoteModal(true);
+    } else {
+      setIsCobroModalOpen(true);
+    }
+  }
+
   const [showOrdersDialog, setShowOrdersDialog] = useState(false);
   const [searchGlow, setSearchGlow] = useState(false);
 
@@ -686,6 +1048,23 @@ function NuevaOrdenPage() {
     return Array.from(map.values());
   }, [catalogo]);
 
+  const itemCountsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const it of items) {
+      const rawName = it.descripcion.replace("↳ ", "");
+      map[rawName] = (map[rawName] || 0) + it.cantidad;
+    }
+    return map;
+  }, [items]);
+
+  const serviceCountsMap = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const s of serviciosSel) {
+      map[s] = (map[s] || 0) + 1;
+    }
+    return map;
+  }, [serviciosSel]);
+
   const catalogFiltered = useMemo(() => {
     let list = catalogo;
     if (posFilterTab === "PRENDAS") {
@@ -1151,17 +1530,24 @@ function NuevaOrdenPage() {
     }
   };
 
-  async function onCrearOrden() {
+  
+  async function onCrearOrden(forceCreditAuth = false) {
     if (isCreatingOrden) return;
     setIsCreatingOrden(true);
-    if (
-      opcionPagoSelected === "CREDITO" &&
-      (!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))
-    ) {
-      toast.error("Las ventas a crédito deben asignarse a un cliente registrado.");
-      setIsCreatingOrden(false);
-      return;
+
+    // 1. Validar cliente para crédito
+    if (condicionCobro === "CREDITO") {
+      if (
+        !cliente ||
+        (cliente.nombre === "Consumidor" && cliente.apellido === "Final") ||
+        cliente.tipo === "Consumidor Final"
+      ) {
+        toast.error("Las ventas a crédito deben asignarse a un cliente registrado.");
+        setIsCreatingOrden(false);
+        return;
+      }
     }
+
     let targetCliente: Cliente | null = cliente;
     if (!targetCliente) {
       const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
@@ -1195,43 +1581,155 @@ function NuevaOrdenPage() {
         return;
       }
     }
+
     if (items.length === 0 && serviciosSel.length === 0) {
       toast.error("Agrega al menos una prenda o selecciona un servicio");
       setIsCreatingOrden(false);
       return;
     }
-    if ((metodo !== "CREDITO" || abonoCredito > 0) && !caja) {
+
+    // 2. Determinar montos según modalidad
+    let pagado = 0;
+    let saldo = 0;
+
+    if (condicionCobro === "COBRAR_AHORA") {
+      pagado = total;
+      saldo = 0;
+    } else if (condicionCobro === "ANTICIPO") {
+      if (anticipoMonto <= 0) {
+        toast.error("Ingresa un monto de anticipo mayor a RD$0.00");
+        setIsCreatingOrden(false);
+        return;
+      }
+      if (anticipoMonto >= total) {
+        toast.error("El anticipo debe ser menor al total. Si desea pagar completo, use 'Cobrar ahora'.");
+        setIsCreatingOrden(false);
+        return;
+      }
+      pagado = anticipoMonto;
+      saldo = +Math.max(0, total - anticipoMonto).toFixed(2);
+    } else if (condicionCobro === "AL_RETIRAR") {
+      pagado = 0;
+      saldo = total;
+    } else if (condicionCobro === "CREDITO") {
+      if (abonoCredito >= total) {
+        toast.error("El abono debe ser menor al total. Si desea pagar completo, use 'Cobrar ahora'.");
+        setIsCreatingOrden(false);
+        return;
+      }
+      pagado = abonoCredito;
+      saldo = +Math.max(0, total - abonoCredito).toFixed(2);
+
+      // Verificación de límite de crédito
+      const deudaActual = (ordenes || [])
+        .filter((o) => o.cliente_id === targetCliente?.id && o.saldo > 0 && o.estado !== "ANULADA")
+        .reduce((sum, o) => sum + o.saldo, 0);
+      const limite = targetCliente?.limite_credito || 0;
+      if (limite > 0 && deudaActual + saldo > limite && !forceCreditAuth) {
+        setShowCreditLimitConfirm(true);
+        setIsCreatingOrden(false);
+        return;
+      }
+    }
+
+    // 3. Validar caja si hay pago inmediato
+    if (pagado > 0 && !caja) {
       toast.error("Abre la caja antes de registrar un pago");
       setIsCreatingOrden(false);
       return;
     }
-    if (metodo === "EFECTIVO" && recibido < total) {
-      toast.error("El monto recibido es menor al total");
-      setIsCreatingOrden(false);
-      return;
-    }
-    if (metodo === "CREDITO" && abonoCredito >= total) {
-      toast.error(
-        "El abono debe ser menor al total. Si desea pagar completo, cambie el método de pago.",
-      );
-      setIsCreatingOrden(false);
-      return;
+
+    // 4. Validar instrumentos de pago
+    let pagosDetalle: PagoDesgloseItem[] = [];
+    let metodoFinal: MetodoPago = "EFECTIVO";
+
+    if (condicionCobro === "AL_RETIRAR") {
+      metodoFinal = "PAGO_AL_RETIRAR";
+    } else if (condicionCobro === "CREDITO") {
+      metodoFinal = "CREDITO";
+      if (abonoCredito > 0) {
+        pagosDetalle = [{ metodo: "EFECTIVO", monto: abonoCredito }];
+      }
+    } else {
+      // COBRAR_AHORA o ANTICIPO
+      if (instrumentoPago === "EFECTIVO") {
+        if (recibido < pagado) {
+          toast.error("El monto recibido es menor al monto a cobrar");
+          setIsCreatingOrden(false);
+          return;
+        }
+        metodoFinal = "EFECTIVO";
+        pagosDetalle = [{
+          metodo: "EFECTIVO",
+          monto: pagado,
+          recibido: recibido,
+        }];
+      } else if (instrumentoPago === "TARJETA") {
+        metodoFinal = "TARJETA";
+        pagosDetalle = [{
+          metodo: "TARJETA",
+          monto: pagado,
+          referencia: referencia.trim() || undefined,
+        }];
+      } else if (instrumentoPago === "TRANSFERENCIA") {
+        if (!referencia.trim()) {
+          toast.error("La referencia de transferencia es obligatoria.");
+          setIsCreatingOrden(false);
+          return;
+        }
+        metodoFinal = "TRANSFERENCIA";
+        pagosDetalle = [{
+          metodo: "TRANSFERENCIA",
+          monto: pagado,
+          referencia: referencia.trim(),
+        }];
+      } else if (instrumentoPago === "MIXTO") {
+        const sumaMixto = +(pagoEfectivo + pagoTarjeta + pagoTransferencia).toFixed(2);
+        if (Math.abs(sumaMixto - pagado) > 0.01) {
+          toast.error(`La suma de los métodos (RD${sumaMixto}) debe ser igual al monto a cobrar (RD${pagado}).`);
+          setIsCreatingOrden(false);
+          return;
+        }
+        if (pagoTransferencia > 0 && !pagoTransferenciaRef.trim()) {
+          toast.error("La referencia es obligatoria para el monto en transferencia.");
+          setIsCreatingOrden(false);
+          return;
+        }
+        if (pagoEfectivo > 0 && pagoEfectivoRecibido > 0 && pagoEfectivoRecibido < pagoEfectivo) {
+          toast.error("El efectivo recibido es menor al monto asignado a efectivo.");
+          setIsCreatingOrden(false);
+          return;
+        }
+
+        metodoFinal = "MIXTO";
+        if (pagoEfectivo > 0) {
+          pagosDetalle.push({
+            metodo: "EFECTIVO",
+            monto: pagoEfectivo,
+            recibido: pagoEfectivoRecibido > 0 ? pagoEfectivoRecibido : pagoEfectivo,
+          });
+        }
+        if (pagoTarjeta > 0) {
+          pagosDetalle.push({
+            metodo: "TARJETA",
+            monto: pagoTarjeta,
+            referencia: pagoTarjetaRef.trim() || undefined,
+          });
+        }
+        if (pagoTransferencia > 0) {
+          pagosDetalle.push({
+            metodo: "TRANSFERENCIA",
+            monto: pagoTransferencia,
+            referencia: pagoTransferenciaRef.trim(),
+          });
+        }
+      }
     }
 
     try {
-      const pagado =
-        opcionPagoSelected === "PAGO_AL_RETIRAR"
-          ? 0
-          : opcionPagoSelected === "CREDITO"
-            ? abonoCredito
-            : total;
-      const saldo = +Math.max(0, total - pagado).toFixed(2);
-
       const numero = await nextOrdenNumero(tenant.id);
 
-      // Calcular la fecha final de entrega combinando el día del input con la hora calculada
       const deliveryDate = new Date(fechaEntrega || new Date());
-
       const horasAdd = esUrgente
         ? cfg.tiempo_entrega_urgente || 3
         : cfg.tiempo_entrega_estandar || 24;
@@ -1239,11 +1737,10 @@ function NuevaOrdenPage() {
       now.setHours(now.getHours() + horasAdd);
       deliveryDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
 
-      // Consultar config fiscal fresca en el momento exacto de crear la orden
       const freshFiscalConfig = await getECFConfig(tenant.id);
       const isElectronic = Boolean(
-        freshFiscalConfig?.is_active || 
-        tenant.config?.modo_facturacion === "electronica" || 
+        freshFiscalConfig?.is_active ||
+        tenant.config?.modo_facturacion === "electronica" ||
         fiscalConfigData?.is_active
       );
       const activeTipo = isElectronic
@@ -1264,17 +1761,15 @@ function NuevaOrdenPage() {
       if (
         cfg.ncf_facturacion_activa &&
         !isElectronic &&
-        opcionPagoSelected !== "PAGO_AL_RETIRAR" &&
-        opcionPagoSelected !== "CREDITO"
+        condicionCobro !== "AL_RETIRAR" &&
+        condicionCobro !== "CREDITO"
       ) {
         try {
           const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
           finalNCF = nextNCF;
           ncfVencimiento = expiration_date;
         } catch (seqErr) {
-          console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
           finalNCF = `${cfg.ncf_secuencia || "B02"}${String(cfg.ncf_proximo || 1).padStart(8, "0")}`;
-          // Incrementar secuencia global heredada
           await saveTenant({
             ...tenant,
             config: {
@@ -1301,7 +1796,7 @@ function NuevaOrdenPage() {
             acc[sName] = sPrice;
             return acc;
           },
-          {} as Record<string, number>,
+          {} as Record<string, number>
         ),
         items,
         subtotal: +subtotal.toFixed(2),
@@ -1310,7 +1805,11 @@ function NuevaOrdenPage() {
         total,
         pagado,
         saldo,
-        metodo_pago: metodo,
+        metodo_pago: metodoFinal,
+        condicion_cobro: condicionCobro,
+        pagos_detalle: pagosDetalle.length > 0 ? pagosDetalle : undefined,
+        anticipo_monto: condicionCobro === "ANTICIPO" ? anticipoMonto : undefined,
+        dias_credito: condicionCobro === "CREDITO" ? limiteDiasSel : undefined,
         estado: "RECIBIDA",
         fecha_entrega: deliveryDate.toISOString(),
         es_urgente: esUrgente,
@@ -1327,21 +1826,19 @@ function NuevaOrdenPage() {
         lat_entrega: servicioDomicilio ? direccionData.lat : undefined,
         lng_entrega: servicioDomicilio ? direccionData.lng : undefined,
         pago_referencia:
-          (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia
+          (instrumentoPago === "TARJETA" || instrumentoPago === "TRANSFERENCIA") && referencia
             ? referencia
             : undefined,
       };
 
-      // --- LOGICA FISCAL ELECTRONICA (Pronesoft) ---
       let ordenActualizada = { ...orden };
       if (
         isElectronic &&
         activeTipo &&
-        opcionPagoSelected !== "PAGO_AL_RETIRAR" &&
-        opcionPagoSelected !== "CREDITO"
+        condicionCobro !== "AL_RETIRAR" &&
+        condicionCobro !== "CREDITO"
       ) {
         if (typeof window !== "undefined" && !navigator.onLine) {
-          // ⚠️ Modo Offline: Generar Pre-Factura y encolar para timbrado con Pronesoft al volver conexión
           ordenActualizada = {
             ...orden,
             ncf: undefined,
@@ -1350,15 +1847,11 @@ function NuevaOrdenPage() {
             ncf_vencimiento: ncfVencimiento,
           };
           await saveOrden(ordenActualizada);
-          toast.info(`⚠️ Modo Offline: Pre-Factura generada. Se timbrará con DGII al restablecer internet.`);
+          toast.info("⚠️ Modo Offline: Pre-Factura generada. Se timbrará con DGII al restablecer internet.");
         } else {
           try {
             await saveOrden(orden);
-
             let nextNCF: string | undefined = undefined;
-
-            // Solo consultar secuencias locales si estamos en PRODUCCION
-            // En Sandbox/Pruebas, Pronesoft genera y gestiona las secuencias de prueba automáticamente
             if (freshFiscalConfig?.ambiente === "produccion") {
               const nextResult = await getNextNumberPronesoft(tenant.id, activeTipo);
               const nextData = nextResult?.data || nextResult;
@@ -1372,7 +1865,7 @@ function NuevaOrdenPage() {
               freshFiscalConfig?.pronesoft_tenant_id || fiscalConfig?.pronesoft_tenant_id,
               cfg,
               tenant,
-              activeTipo,
+              activeTipo
             );
 
             const fiscalFields = {
@@ -1398,7 +1891,6 @@ function NuevaOrdenPage() {
           } catch (fErr: any) {
             console.error("Error Fiscal:", fErr);
             if (isConnectivityFailure(fErr)) {
-              // Solo una caída real de conectividad entra a la cola offline.
               ordenActualizada = {
                 ...orden,
                 ncf: undefined,
@@ -1407,9 +1899,8 @@ function NuevaOrdenPage() {
                 ncf_vencimiento: ncfVencimiento,
               };
               await saveOrden(ordenActualizada);
-              toast.warning("Sin conexión: se generó una pre-factura pendiente de transmisión a Pronesoft.");
+              toast.warning("Sin conexión: se generó una pre-factura pendiente de transmisión.");
             } else {
-              // Un rechazo fiscal/configuración no debe disfrazarse de modo offline.
               ordenActualizada = {
                 ...orden,
                 ncf: undefined,
@@ -1418,7 +1909,7 @@ function NuevaOrdenPage() {
                 ncf_vencimiento: ncfVencimiento,
               };
               await saveOrden(ordenActualizada);
-              toast.error(`No se pudo emitir el e-CF en Pronesoft: ${fErr?.message || "Error fiscal desconocido"}`, {
+              toast.error(`No se pudo emitir el e-CF: ${fErr?.message || "Error fiscal desconocido"}`, {
                 duration: 10000,
               });
             }
@@ -1428,23 +1919,47 @@ function NuevaOrdenPage() {
         await saveOrden(orden);
       }
 
-      // Registrar movimiento de caja ÚNICAMENTE si se recibió un pago real (pagado > 0)
+      // Registrar movimiento(s) de caja desglosados
       if (pagado > 0 && caja) {
-        await saveMovimiento({
-          id: uid("mov"),
-          tenant_id: tenant.id,
-          caja_id: caja.id,
-          empleado_id: empleado.id,
-          tipo: metodo === "CREDITO" ? "ABONO" : "VENTA",
-          concepto:
-            metodo === "CREDITO"
-              ? `Abono inicial orden #${ordenActualizada.numero}`
-              : `Venta orden #${ordenActualizada.numero}`,
-          monto: pagado,
-          metodo: metodo === "CREDITO" ? "EFECTIVO" : metodo,
-          orden_id: ordenActualizada.id,
-          creado_en: new Date().toISOString(),
-        });
+        if (pagosDetalle.length > 0) {
+          for (const pd of pagosDetalle) {
+            await saveMovimiento({
+              id: uid("mov"),
+              tenant_id: tenant.id,
+              caja_id: caja.id,
+              empleado_id: empleado.id,
+              tipo: condicionCobro === "CREDITO" ? "ABONO" : condicionCobro === "ANTICIPO" ? "ABONO" : "VENTA",
+              concepto:
+                condicionCobro === "CREDITO"
+                  ? `Abono inicial orden a crédito #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`
+                  : condicionCobro === "ANTICIPO"
+                  ? `Anticipo orden #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`
+                  : `Venta orden #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`,
+              monto: pd.monto,
+              metodo: pd.metodo,
+              orden_id: ordenActualizada.id,
+              creado_en: new Date().toISOString(),
+            });
+          }
+        } else {
+          await saveMovimiento({
+            id: uid("mov"),
+            tenant_id: tenant.id,
+            caja_id: caja.id,
+            empleado_id: empleado.id,
+            tipo: condicionCobro === "CREDITO" ? "ABONO" : condicionCobro === "ANTICIPO" ? "ABONO" : "VENTA",
+            concepto:
+              condicionCobro === "CREDITO"
+                ? `Abono inicial orden a crédito #${ordenActualizada.numero}`
+                : condicionCobro === "ANTICIPO"
+                ? `Anticipo orden #${ordenActualizada.numero}`
+                : `Venta orden #${ordenActualizada.numero}`,
+            monto: pagado,
+            metodo: "EFECTIVO",
+            orden_id: ordenActualizada.id,
+            creado_en: new Date().toISOString(),
+          });
+        }
       }
 
       setCreada({ ...ordenActualizada });
@@ -1476,20 +1991,15 @@ function NuevaOrdenPage() {
       if (targetCliente) {
         queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
         queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
-        import("@/lib/whatsapp").then(({ notificarWhatsApp }) =>
-          notificarWhatsApp(tenant, targetCliente, ordenActualizada, "creada", recibido).then(
-            (r) => {
-              if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
-            },
-          ),
-        );
       }
-      setIsCreatingOrden(false);
-    } catch (err: any) {
-      toast.error("Error al crear la orden: " + err.message);
+    } catch (e: any) {
+      console.error(e);
+      toast.error(e?.message || "Error al crear la orden");
+    } finally {
       setIsCreatingOrden(false);
     }
   }
+
 
   async function next() {
     if (limits?.ordersReached) {
@@ -1969,7 +2479,7 @@ function NuevaOrdenPage() {
                           className={`grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 ${isFullscreen ? "xl:grid-cols-5" : ""} gap-3`}
                         >
                           {servicesFiltered.map((s) => {
-                            const srvCount = serviciosSel.filter((x) => x === s.nombre).length;
+                            const srvCount = serviceCountsMap[s.nombre] || 0;
                             return (
                               <button
                                 key={s.id}
@@ -2462,47 +2972,95 @@ function NuevaOrdenPage() {
                             return (
                               <div
                                 key={"pos-detail-" + itemOriginalIndex}
-                                className="flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all bg-accent/5 ml-5 border-dashed border-primary/20 text-muted-foreground animate-in fade-in duration-200"
+                                className="flex flex-col gap-1.5 p-2 rounded-xl border transition-all bg-accent/5 ml-4 border-dashed border-primary/20 text-muted-foreground animate-in fade-in duration-150"
                               >
-                                <div className="flex justify-between items-start">
-                                  <div className="flex flex-col flex-1 min-w-0">
-                                    <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
-                                      <Shirt className="h-3 w-3 text-primary shrink-0" />
-                                      <span className="line-clamp-1">
-                                        {it.descripcion}
-                                        {it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
-                                      </span>
-                                    </div>
+                                <div className="flex items-center justify-between gap-1.5">
+                                  <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                    <Shirt className="h-3 w-3 text-primary shrink-0" />
+                                    <span className="text-xs font-bold truncate">
+                                      {it.descripcion}
+                                      {it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                                    </span>
                                   </div>
-                                  <Button
-                                    variant="ghost"
-                                    size="icon"
-                                    className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
-                                    onClick={() => removeItem(itemOriginalIndex)}
-                                  >
-                                    <Trash2 className="h-3.5 w-3.5" />
-                                  </Button>
+
+                                  {/* Botón Redondeado de Color / Nota */}
+                                  <div className="flex items-center gap-1 shrink-0">
+                                    {it.color ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingItemIndex(itemOriginalIndex);
+                                          setItemEditColor(it.color || "");
+                                          setItemEditColorHex(it.color_hex || "");
+                                          setItemEditNota(it.notas || "");
+                                          setShowItemDetailModal(true);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-[#1B4B73] transition-all shadow-2xs cursor-pointer group"
+                                      >
+                                        <span
+                                          className="w-2 h-2 rounded-full border border-black/20 shrink-0"
+                                          style={{
+                                            background: it.color_hex?.startsWith("#") || it.color_hex?.startsWith("linear")
+                                              ? it.color_hex
+                                              : "#94A3B8"
+                                          }}
+                                        />
+                                        <span className="font-bold">{it.color}</span>
+                                        {it.notas && (
+                                          <span className="text-[9px] text-muted-foreground font-medium italic truncate max-w-[45px]">
+                                            • {it.notas}
+                                          </span>
+                                        )}
+                                        <Palette className="h-2.5 w-2.5 text-muted-foreground/60 group-hover:text-primary shrink-0 ml-0.5" />
+                                      </button>
+                                    ) : (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditingItemIndex(itemOriginalIndex);
+                                          setItemEditColor("");
+                                          setItemEditColorHex("");
+                                          setItemEditNota(it.notas || "");
+                                          setShowItemDetailModal(true);
+                                        }}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-dashed border-[#1B4B73]/40 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 transition-all cursor-pointer bg-[#1B4B73]/5"
+                                      >
+                                        <Palette className="h-2.5 w-2.5" />
+                                        <span>+ Color</span>
+                                      </button>
+                                    )}
+
+                                    <Button
+                                      variant="ghost"
+                                      size="icon"
+                                      className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
+                                      onClick={() => removeItem(itemOriginalIndex)}
+                                    >
+                                      <Trash2 className="h-3 w-3" />
+                                    </Button>
+                                  </div>
                                 </div>
-                                <div className="flex justify-between items-center">
-                                  <div className="flex items-center gap-2">
+
+                                <div className="flex justify-between items-center pt-0.5">
+                                  <div className="flex items-center gap-1.5">
                                     <Button
                                       variant="outline"
                                       size="icon"
-                                      className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
+                                      className="h-5 w-5 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800"
                                       onClick={() => updateItemQuantity(itemOriginalIndex, -1)}
                                     >
-                                      <Minus className="h-2.5 w-2.5" />
+                                      <Minus className="h-2 w-2" />
                                     </Button>
-                                    <span className="text-xs font-bold w-5 text-center">
+                                    <span className="text-xs font-bold w-4 text-center">
                                       {it.cantidad}
                                     </span>
                                     <Button
                                       variant="outline"
                                       size="icon"
-                                      className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                                      className="h-5 w-5 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800"
                                       onClick={() => updateItemQuantity(itemOriginalIndex, 1)}
                                     >
-                                      <Plus className="h-2.5 w-2.5" />
+                                      <Plus className="h-2 w-2" />
                                     </Button>
                                   </div>
                                   <div className="text-xs font-black text-primary">
@@ -2519,43 +3077,87 @@ function NuevaOrdenPage() {
                   {/* Prendas / Items Generales del Catálogo */}
                   {items
                     .filter((it) => !it.descripcion.startsWith("↳"))
-                    .map((it, i) => {
+                    .map((it) => {
+                      const itemOriginalIndex = items.indexOf(it);
                       const isDetail = it.descripcion.startsWith("↳");
                       const catalogMatch = catalogo.find((c) => c.nombre === it.descripcion);
                       return (
                         <div
-                          key={i}
-                          className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all ${
+                          key={"pos-item-" + itemOriginalIndex}
+                          className={`flex flex-col gap-1.5 p-2 rounded-xl border transition-all ${
                             isDetail
-                              ? "bg-accent/5 ml-6 border-dashed border-primary/20 text-muted-foreground"
-                              : "bg-card shadow-sm hover:border-primary/25"
+                              ? "bg-accent/5 ml-4 border-dashed border-primary/20 text-muted-foreground"
+                              : "bg-card shadow-xs hover:border-primary/25"
                           }`}
                         >
-                          <div className="flex justify-between items-start">
-                            <div className="flex flex-col flex-1 min-w-0">
-                              <div className="flex items-center gap-1.5 text-xs font-bold leading-tight">
-                                {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
-                                <span className="line-clamp-1">
-                                  {it.descripcion}
-                                  {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
-                                </span>
-                              </div>
-                              {it.es_libra && (
-                                <div className="text-[10px] font-bold text-amber-600 dark:text-amber-400 mt-0.5">
-                                  {formatRD(it.precio_unitario)} por libra
-                                </div>
-                              )}
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                              {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
+                              <span className="text-xs font-bold truncate">
+                                {it.descripcion}
+                                {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                              </span>
                             </div>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
-                              onClick={() => removeItem(i)}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+
+                            {/* Botón Redondeado de Color / Nota */}
+                            <div className="flex items-center gap-1 shrink-0">
+                              {it.color ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItemIndex(itemOriginalIndex);
+                                    setItemEditColor(it.color || "");
+                                    setItemEditColorHex(it.color_hex || "");
+                                    setItemEditNota(it.notas || "");
+                                    setShowItemDetailModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-[#1B4B73] transition-all shadow-2xs cursor-pointer group"
+                                >
+                                  <span
+                                    className="w-2 h-2 rounded-full border border-black/20 shrink-0"
+                                    style={{
+                                      background: it.color_hex?.startsWith("#") || it.color_hex?.startsWith("linear")
+                                        ? it.color_hex
+                                        : "#94A3B8"
+                                    }}
+                                  />
+                                  <span className="font-bold">{it.color}</span>
+                                  {it.notas && (
+                                    <span className="text-[9px] text-muted-foreground font-medium italic truncate max-w-[45px]">
+                                      • {it.notas}
+                                    </span>
+                                  )}
+                                  <Palette className="h-2.5 w-2.5 text-muted-foreground/60 group-hover:text-primary shrink-0 ml-0.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItemIndex(itemOriginalIndex);
+                                    setItemEditColor("");
+                                    setItemEditColorHex("");
+                                    setItemEditNota(it.notas || "");
+                                    setShowItemDetailModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold border border-dashed border-[#1B4B73]/40 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/10 transition-all cursor-pointer bg-[#1B4B73]/5"
+                                >
+                                  <Palette className="h-2.5 w-2.5" />
+                                  <span>+ Color</span>
+                                </button>
+                              )}
+
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
+                                onClick={() => removeItem(itemOriginalIndex)}
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex justify-between items-center">
+
+                          <div className="flex justify-between items-center pt-0.5">
                             {it.es_libra ? (
                               <div className="flex items-center gap-1.5 text-xs font-semibold">
                                 <span className="text-slate-850 dark:text-slate-300 text-[10px] font-black">
@@ -2565,85 +3167,78 @@ function NuevaOrdenPage() {
                                   type="number"
                                   step="any"
                                   min="0.1"
-                                  className="w-20 h-7 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-sm p-1"
+                                  className="w-16 h-6 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-xs p-1"
                                   value={it.cantidad}
                                   onChange={(e) => {
                                     const val = parseFloat(e.target.value) || 0;
                                     setItems((prev) =>
                                       prev.map((item, idx) =>
-                                        idx === i ? { ...item, cantidad: val } : item,
+                                        idx === itemOriginalIndex ? { ...item, cantidad: val } : item,
                                       ),
                                     );
                                   }}
                                 />
                                 <span className="text-muted-foreground text-[10px] font-bold">
-                                  Libras
+                                  lb
                                 </span>
                               </div>
                             ) : (
-                              <div className="flex items-center gap-2">
+                              <div className="flex items-center gap-1.5">
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
-                                  onClick={() => updateItemQuantity(i, -1)}
+                                  className="h-5 w-5 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800"
+                                  onClick={() => updateItemQuantity(itemOriginalIndex, -1)}
                                 >
-                                  <Minus className="h-2.5 w-2.5" />
+                                  <Minus className="h-2 w-2" />
                                 </Button>
-                                <span className="text-xs font-bold w-5 text-center">
+                                <span className="text-xs font-bold w-4 text-center">
                                   {it.cantidad}
                                 </span>
                                 <Button
                                   variant="outline"
                                   size="icon"
-                                  className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
-                                  onClick={() => updateItemQuantity(i, 1)}
+                                  className="h-5 w-5 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800"
+                                  onClick={() => updateItemQuantity(itemOriginalIndex, 1)}
                                 >
-                                  <Plus className="h-2.5 w-2.5" />
+                                  <Plus className="h-2 w-2" />
                                 </Button>
                                 {!isDetail && catalogMatch?.permitir_desglose && (
                                   <Button
                                     type="button"
                                     variant="outline"
                                     size="sm"
-                                    className="h-6 px-2 text-[10px] font-extrabold gap-1 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 hover:text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 dark:hover:bg-emerald-900/60 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-2"
+                                    className="h-5 px-1.5 text-[9px] font-extrabold gap-0.5 bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800 rounded-md shadow-2xs transition-all cursor-pointer ml-1"
                                     title="Añadir prenda"
                                     onClick={() => {
-                                      setIndexDesglose(i);
+                                      setIndexDesglose(itemOriginalIndex);
                                       setDesgloseServiceName(it.descripcion);
                                       setShowDesgloseDialog(true);
                                     }}
                                   >
-                                    <Plus className="h-3 w-3 stroke-[2.5]" />
-                                    <span className="whitespace-nowrap">Añadir prenda</span>
+                                    <Plus className="h-2.5 w-2.5 stroke-[2.5]" />
+                                    <span>Prenda</span>
                                   </Button>
                                 )}
                               </div>
                             )}
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
                               {!isDetail && catalogMatch?.permitir_editar_precio ? (
-                                <div className="flex flex-col items-end gap-1">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[10px] font-bold text-muted-foreground">
-                                      RD$
-                                    </span>
-                                    <PriceInput
-                                      className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
-                                      value={it.precio_unitario || 0}
-                                      onChange={(val) => {
-                                        setItems((prev) =>
-                                          prev.map((item, idx) =>
-                                            idx === i ? { ...item, precio_unitario: val } : item,
-                                          ),
-                                        );
-                                      }}
-                                    />
-                                  </div>
-                                  {it.cantidad > 1 && (
-                                    <span className="text-[9px] text-muted-foreground font-semibold">
-                                      Tot: {formatRD(it.cantidad * it.precio_unitario)}
-                                    </span>
-                                  )}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] font-bold text-muted-foreground">
+                                    RD$
+                                  </span>
+                                  <PriceInput
+                                    className="w-16 h-6 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-xs"
+                                    value={it.precio_unitario || 0}
+                                    onChange={(val) => {
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex ? { ...item, precio_unitario: val } : item,
+                                        ),
+                                      );
+                                    }}
+                                  />
                                 </div>
                               ) : (
                                 <div className="text-xs font-black text-primary">
@@ -2660,7 +3255,6 @@ function NuevaOrdenPage() {
                 </>
               )}
             </div>
-
             {/* Sección de Fecha Estimada de Entrega */}
             <div className="px-4 py-2 bg-slate-50 dark:bg-slate-900/60 border-t border-border/40 space-y-1.5">
               <div className="flex items-center justify-between">
@@ -2772,9 +3366,7 @@ function NuevaOrdenPage() {
                 <Button
                   disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
                   className="w-full h-14 text-base bg-primary hover:bg-primary/95 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2 flex items-center justify-center gap-2.5 rounded-2xl relative px-10"
-                  onClick={() => {
-                    setIsCobroModalOpen(true);
-                  }}
+                  onClick={handleAbrirCobro}
                 >
                   <div className="flex items-center gap-2 justify-center">
                     <CreditCard className="h-5.5 w-5.5 text-white" />
@@ -2789,9 +3381,7 @@ function NuevaOrdenPage() {
                 <Button
                   disabled={!cliente || (items.length === 0 && serviciosSel.length === 0)}
                   className="w-full h-14 text-lg font-bold bg-primary hover:bg-primary/90 text-white shadow-glow border-none transition-all active:scale-[0.98] mt-2"
-                  onClick={() => {
-                    setIsCobroModalOpen(true);
-                  }}
+                  onClick={handleAbrirCobro}
                 >
                   COBRAR <ArrowRight className="ml-2 h-5 w-5" />
                 </Button>
@@ -3292,6 +3882,47 @@ function NuevaOrdenPage() {
                                   ? `${it.cantidad} lb × ${formatRD(it.precio_unitario)}`
                                   : `${it.cantidad} unid. × ${formatRD(it.precio_unitario)}`}
                               {it.notas ? ` · ${it.notas}` : ""}
+                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
+                              {it.color ? (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItemIndex(i);
+                                    setItemEditColor(it.color || "");
+                                    setItemEditColorHex(it.color_hex || "");
+                                    setItemEditNota(it.notas || "");
+                                    setShowItemDetailModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-bold border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-[#1B4B73] transition-all shadow-2xs cursor-pointer group"
+                                >
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                                    style={{
+                                      background: it.color_hex?.startsWith("#") || it.color_hex?.startsWith("linear")
+                                        ? it.color_hex
+                                        : "#94A3B8"
+                                    }}
+                                  />
+                                  <span className="font-bold">{it.color}</span>
+                                  <Palette className="h-2.5 w-2.5 text-muted-foreground/60 group-hover:text-primary shrink-0 ml-0.5" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setEditingItemIndex(i);
+                                    setItemEditColor("");
+                                    setItemEditColorHex("");
+                                    setItemEditNota(it.notas || "");
+                                    setShowItemDetailModal(true);
+                                  }}
+                                  className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border border-dashed border-[#1B4B73]/40 text-[#1B4B73] dark:text-sky-300 hover:bg-[#1B4B73]/5 transition-all cursor-pointer"
+                                >
+                                  <Palette className="h-3 w-3" />
+                                  <span>+ Color / Nota</span>
+                                </button>
+                              )}
+                            </div>
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
@@ -3637,91 +4268,97 @@ function NuevaOrdenPage() {
               )}
 
               {step === 5 && (
-                <>
-                  <div className="flex flex-col items-center text-center mb-10 mt-2">
-                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-muted-foreground/60 mb-2">
+                <div className="max-w-3xl mx-auto w-full space-y-5 animate-in fade-in duration-200">
+                  {/* Encabezado Total Modo Clásico */}
+                  <div className="flex flex-col items-center text-center mb-4 mt-1">
+                    <span className="text-[11px] font-black uppercase tracking-[0.2em] text-[#1B4B73]/70 dark:text-sky-400 mb-1">
                       Total a cobrar
                     </span>
-                    <div className="text-6xl font-display font-black text-primary tracking-tight">
+                    <div className="text-5xl sm:text-6xl font-display font-black text-[#1B4B73] dark:text-sky-300 tracking-tight">
                       {formatRD(total)}
                     </div>
-                    <div className="mt-6 w-16 h-1 bg-primary/10 rounded-full mb-6"></div>
-                    <p className="text-sm font-bold text-muted-foreground/80">
-                      Selecciona el método de pago
+                    <p className="text-xs font-bold text-slate-400 mt-2">
+                      Selecciona la condición de cobro y método de pago
                     </p>
                   </div>
 
-                  <div className="grid gap-4 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 max-w-4xl mx-auto w-full">
+                  {/* 1. LAS 4 MODALIDADES DE COBRO (AL RETIRAR EN 1ER LUGAR) */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                     {[
                       {
-                        id: "PAGO_AL_RETIRAR",
-                        label: "Pago al retirar",
-                        icon: Timer,
-                        color:
-                          "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700",
+                        id: "AL_RETIRAR",
+                        label: "PAGO AL RETIRAR",
+                        sub: "Contra entrega",
+                        icon: Clock,
                       },
                       {
-                        id: "EFECTIVO",
-                        label: "Efectivo",
-                        icon: Banknote,
-                        color:
-                          "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700",
+                        id: "COBRAR_AHORA",
+                        label: "COBRAR AHORA",
+                        sub: "Pago 100% hoy",
+                        icon: Check,
                       },
                       {
-                        id: "TARJETA",
-                        label: "Tarjeta",
-                        icon: CreditCard,
-                        color:
-                          "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700",
-                      },
-                      {
-                        id: "TRANSFERENCIA",
-                        label: "Transferencia",
-                        icon: Building2,
-                        color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700",
+                        id: "ANTICIPO",
+                        label: "ANTICIPO",
+                        sub: "Abono + Saldo",
+                        icon: CalendarIcon,
                       },
                       {
                         id: "CREDITO",
-                        label: "Crédito",
+                        label: "CRÉDITO",
+                        sub: "Cuenta por cobrar",
                         icon: FileText,
-                        color:
-                          "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700",
                       },
                     ].map((m) => {
-                      const isSelected = opcionPagoSelected === m.id;
+                      const isSelected = condicionCobro === m.id;
                       const Icon = m.icon;
                       return (
                         <button
                           key={m.id}
                           type="button"
-                          onClick={() => handleOpcionPagoChange(m.id)}
-                          className={`relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 p-5 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${
+                          onClick={() => {
+                            setCondicionCobro(m.id as CondicionCobro);
+                            if (m.id === "COBRAR_AHORA") {
+                              setRecibido(total);
+                            } else if (m.id === "ANTICIPO") {
+                              const half = +(total / 2).toFixed(2);
+                              if (anticipoMonto <= 0 || anticipoMonto >= total) {
+                                setAnticipoMonto(half);
+                                setRecibido(half);
+                              } else {
+                                setRecibido(anticipoMonto);
+                              }
+                            } else if (m.id === "AL_RETIRAR") {
+                              setRecibido(0);
+                              setAnticipoMonto(0);
+                            }
+                          }}
+                          className={`relative flex flex-col items-center justify-center gap-2.5 rounded-2xl border-2 p-4 transition-all duration-200 active:scale-95 text-center cursor-pointer ${
                             isSelected
-                              ? `bg-gradient-to-br ${m.color} ring-2 ring-primary/20 shadow-md scale-102`
-                              : "border-slate-200 dark:border-slate-800 bg-card hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-sm text-slate-500"
+                              ? "border-[#1B4B73] bg-[#1B4B73]/[0.05] dark:bg-[#1B4B73]/20 ring-2 ring-[#1B4B73]/20 shadow-md font-bold scale-[1.02]"
+                              : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#1B4B73]/30 text-slate-500 shadow-2xs"
                           }`}
                         >
                           <div
-                            className={`flex h-12 w-12 items-center justify-center rounded-full transition-transform duration-300 group-hover:scale-105 shadow-inner ${
-                              isSelected
-                                ? "bg-white dark:bg-slate-900"
-                                : "bg-slate-100 dark:bg-slate-800"
+                            className={`flex h-11 w-11 items-center justify-center rounded-full transition-transform ${
+                              isSelected ? "bg-[#1B4B73] text-white shadow-xs" : "bg-slate-100 dark:bg-slate-800 text-slate-600"
                             }`}
                           >
-                            <Icon className="h-6 w-6 shrink-0" />
+                            <Icon className="h-5.5 w-5.5 shrink-0" />
                           </div>
                           <div
-                            className={`font-black text-xs uppercase tracking-wider ${
-                              isSelected
-                                ? "font-black text-inherit"
-                                : "text-slate-600 dark:text-slate-400"
+                            className={`font-black text-xs uppercase tracking-wider leading-none ${
+                              isSelected ? "text-[#1B4B73] dark:text-sky-300" : "text-slate-800 dark:text-slate-200"
                             }`}
                           >
                             {m.label}
                           </div>
+                          <div className="text-[10px] text-muted-foreground font-medium leading-none">
+                            {m.sub}
+                          </div>
                           {isSelected && (
-                            <div className="absolute top-3 right-3 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
-                              <Check className="h-2.5 w-2.5 stroke-[3]" />
+                            <div className="absolute top-2.5 right-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#F0B900] text-slate-900 shadow-xs ring-2 ring-white">
+                              <Check className="h-3 w-3 stroke-[3]" />
                             </div>
                           )}
                         </button>
@@ -3729,237 +4366,359 @@ function NuevaOrdenPage() {
                     })}
                   </div>
 
-                  {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
-                    <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                      <div className="flex items-center gap-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-500/[0.03] p-4 text-teal-800 dark:text-teal-200">
-                        <Timer className="h-8 w-8 text-teal-600 shrink-0" />
-                        <div>
-                          <strong className="block text-sm">
-                            Cobro contra entrega (Pago al retirar)
-                          </strong>
-                          <span className="text-xs">
-                            La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo
-                            pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente
-                            venga a retirar su ropa.
-                          </span>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {cfg.ncf_facturacion_activa && (
-                    <div className="mt-4 rounded-2xl border-2 border-primary/20 bg-primary/5 p-4">
-                      <div className="text-xs font-bold uppercase tracking-widest text-primary mb-3">
-                        TIPO DE COMPROBANTE FISCAL
-                      </div>
-                      {validTipos.length <= 2 ? (
-                        <div className="flex gap-2">
-                          {validTipos.map((tipo) => (
-                            <Button
-                              key={tipo}
-                              variant="outline"
-                              className={`flex-1 h-12 rounded-xl font-bold transition-all border-2 ${tipoECF === tipo ? "bg-primary text-white border-primary shadow-glow hover:bg-primary/90 hover:text-white" : "bg-card text-muted-foreground border-border hover:bg-accent/50"}`}
-                              onClick={() => setTipoECF(tipo)}
+                  {/* 2. MÉTODOS DE PAGO */}
+                  {(condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && (
+                    <div className="space-y-4 pt-1">
+                      <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                        {[
+                          { id: "EFECTIVO", label: "EFECTIVO", icon: Banknote },
+                          { id: "TARJETA", label: "TARJETA", icon: CreditCard },
+                          { id: "TRANSFERENCIA", label: "TRANSF.", icon: Building2 },
+                          { id: "MIXTO", label: "MIXTO", icon: Split },
+                        ].map((inst) => {
+                          const isSel = instrumentoPago === inst.id;
+                          const Icon = inst.icon;
+                          return (
+                            <button
+                              key={inst.id}
+                              type="button"
+                              onClick={() => {
+                                setInstrumentoPago(inst.id as any);
+                                if (inst.id === "EFECTIVO") {
+                                  if (condicionCobro === "COBRAR_AHORA") {
+                                    setRecibido(total);
+                                  } else if (condicionCobro === "ANTICIPO") {
+                                    setRecibido(anticipoMonto > 0 ? anticipoMonto : +(total / 2).toFixed(2));
+                                  }
+                                } else if (inst.id === "MIXTO") {
+                                  const targetMonto = condicionCobro === "ANTICIPO" ? anticipoMonto : total;
+                                  const half = +(targetMonto / 2).toFixed(2);
+                                  setPagoEfectivo(half);
+                                  setPagoTarjeta(+(targetMonto - half).toFixed(2));
+                                  setPagoTransferencia(0);
+                                }
+                              }}
+                              className={`relative flex items-center justify-center gap-2 rounded-2xl border-2 py-3 px-3 transition-all duration-200 active:scale-95 cursor-pointer ${
+                                isSel
+                                  ? "border-[#1B4B73] bg-[#1B4B73] text-white font-black shadow-xs scale-[1.01]"
+                                  : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#1B4B73]/30 text-slate-700 dark:text-slate-300 font-bold shadow-2xs"
+                              }`}
                             >
-                              {NCF_NOMBRES[tipo.substring(0, 3)]?.replace("FISCAL", "")?.trim() ||
-                                "COMPROBANTE"}{" "}
-                              ({tipo})
-                            </Button>
-                          ))}
+                              <Icon className={`h-4.5 w-4.5 shrink-0 ${isSel ? "text-[#F0B900]" : ""}`} />
+                              <span className="text-xs tracking-wider">{inst.label}</span>
+                              {isSel && (
+                                <div className="h-4 w-4 rounded-full bg-[#F0B900] text-slate-900 flex items-center justify-center shrink-0 ml-0.5">
+                                  <Check className="h-2.5 w-2.5 stroke-[3]" />
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+
+                      {/* A1. ANTICIPO */}
+                      {condicionCobro === "ANTICIPO" && (
+                        <div className="p-4 bg-[#1B4B73]/[0.03] dark:bg-[#1B4B73]/20 border-2 border-[#1B4B73]/20 rounded-2xl space-y-2">
+                          <div className="flex items-center justify-between text-xs">
+                            <span className="font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-200">
+                              MONTO DEL ANTICIPO A ABONAR HOY
+                            </span>
+                            <span className="font-black text-[#855B00] dark:text-amber-300 bg-[#F0B900]/20 px-2.5 py-0.5 rounded-lg border border-[#F0B900]/40">
+                              Saldo restante al retirar: <b>{formatRD(Math.max(0, total - anticipoMonto))}</b>
+                            </span>
+                          </div>
+                          <div className="relative h-14">
+                            <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-[#1B4B73]/60">
+                              RD$
+                            </span>
+                            <PriceInput
+                              className="!h-full pl-14 !text-3xl font-black font-display bg-white dark:bg-slate-900 border-2 border-[#1B4B73]/30 focus-visible:ring-[#1B4B73]/30 rounded-xl text-[#1B4B73] dark:text-sky-300 shadow-2xs"
+                              value={anticipoMonto}
+                              onChange={(val) => {
+                                if (val > total) {
+                                  toast.warning("El anticipo no puede exceder el total");
+                                  return;
+                                }
+                                setAnticipoMonto(val);
+                                setRecibido(val);
+                              }}
+                              placeholder="0.00"
+                            />
+                          </div>
                         </div>
-                      ) : (
-                        <Select value={tipoECF} onValueChange={setTipoECF}>
-                          <SelectTrigger className="w-full h-14 bg-card border-2 border-border rounded-xl font-bold text-lg shadow-sm">
-                            <SelectValue placeholder="Seleccione un comprobante" />
-                          </SelectTrigger>
-                          <SelectContent className="rounded-xl">
-                            {validTipos.map((tipo) => (
-                              <SelectItem
-                                key={tipo}
-                                value={tipo}
-                                className="font-bold py-3 cursor-pointer"
-                              >
-                                {NCF_NOMBRES[tipo.substring(0, 3)] || "COMPROBANTE"} ({tipo})
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                      )}
+
+                      {/* A2. COBRAR AHORA Y EFECTIVO */}
+                      {condicionCobro === "COBRAR_AHORA" && instrumentoPago === "EFECTIVO" && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+                          <div>
+                            <Label className="text-[11px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 mb-1.5 block">
+                              MONTO RECIBIDO (EFECTIVO)
+                            </Label>
+                            <div className="rounded-2xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-3 flex items-center justify-between">
+                              <div className="flex items-center gap-2 flex-1">
+                                <span className="font-black text-lg text-slate-400 pl-1">RD$</span>
+                                <PriceInput
+                                  className="h-10 w-full !text-2xl font-black font-display bg-transparent border-none focus-visible:ring-0 text-[#1B4B73] dark:text-sky-200 p-0 shadow-none"
+                                  value={recibido}
+                                  onChange={(val) => {
+                                    if (val > 100000000) return;
+                                    setRecibido(val);
+                                  }}
+                                  placeholder="0.00"
+                                />
+                              </div>
+                              <div className="h-10 w-10 rounded-xl bg-sky-100 dark:bg-sky-900/60 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0">
+                                <Banknote className="h-5.5 w-5.5" />
+                              </div>
+                            </div>
+                          </div>
+
+                          <div>
+                            <Label className={`text-[11px] font-black uppercase tracking-wider mb-1.5 block ${recibido < total ? "text-rose-600" : "text-emerald-600"}`}>
+                              {recibido < total ? "FALTANTE" : "CAMBIO A ENTREGAR"}
+                            </Label>
+                            <div className={`rounded-2xl border-2 p-3 flex items-center justify-between ${
+                              recibido < total
+                                ? "border-rose-100 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/20 text-rose-600"
+                                : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600"
+                            }`}>
+                              <div className="flex items-center gap-1.5 pl-1">
+                                <span className="font-bold text-sm opacity-80">RD$</span>
+                                <span className="text-2xl font-display font-black leading-none">
+                                  {formatRD(
+                                    recibido > total ? recibido - total : total - recibido
+                                  ).replace("RD$", "").trim()}
+                                </span>
+                              </div>
+                              <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                                recibido < total ? "bg-rose-100 text-rose-600" : "bg-emerald-100 text-emerald-600"
+                              }`}>
+                                {recibido < total ? <AlertTriangle className="h-5.5 w-5.5" /> : <CheckCircle2 className="h-5.5 w-5.5" />}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* TARJETA */}
+                      {instrumentoPago === "TARJETA" && (
+                        <div className="space-y-1.5">
+                          <Label className="text-[11px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                            REFERENCIA DE TARJETA / APROBACIÓN (OPCIONAL)
+                          </Label>
+                          <Input
+                            placeholder="Número de aprobación, autorización, Auth # o APR."
+                            value={referencia}
+                            onChange={(e) => setReferencia(e.target.value)}
+                            className="h-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-[#1B4B73]/30 rounded-2xl font-medium text-sm px-4 shadow-2xs"
+                          />
+                        </div>
+                      )}
+
+                      {/* TRANSFERENCIA */}
+                      {instrumentoPago === "TRANSFERENCIA" && (
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between">
+                            <Label className="text-[11px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-200 block">
+                              NO. DE TRANSFERENCIA / COMPROBANTE * (OBLIGATORIA)
+                            </Label>
+                            {!referencia.trim() && <span className="text-[10px] text-destructive font-black">* Requerida</span>}
+                          </div>
+                          <Input
+                            placeholder="Número de aprobación, transferencia bancaria, cuenta..."
+                            value={referencia}
+                            onChange={(e) => setReferencia(e.target.value)}
+                            className={`h-12 bg-white dark:bg-slate-900 border-2 rounded-2xl font-medium text-sm px-4 shadow-2xs ${
+                              !referencia.trim() ? "border-destructive" : "border-slate-200 dark:border-slate-700"
+                            }`}
+                          />
+                        </div>
+                      )}
+
+                      {/* MIXTO */}
+                      {instrumentoPago === "MIXTO" && (
+                        <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border-2 border-[#1B4B73]/20 space-y-3 shadow-2xs">
+                          <div className="flex items-center justify-between pb-1 border-b border-border/60 text-xs">
+                            <span className="font-black uppercase tracking-wider text-[#1B4B73] flex items-center gap-1.5">
+                              <Split className="h-4 w-4" /> Desglose Multi-método
+                            </span>
+                            <span className="text-muted-foreground">
+                              Total: <b>{formatRD(condicionCobro === "ANTICIPO" ? anticipoMonto : total)}</b>
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div className="p-3 rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/20 space-y-2">
+                              <span className="text-sm font-black text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                                <Banknote className="h-4.5 w-4.5 shrink-0" /> Efectivo
+                              </span>
+                              <PriceInput
+                                className="h-11 text-right font-black !text-xl rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-2xs px-3"
+                                value={pagoEfectivo}
+                                onChange={(v) => setPagoEfectivo(v)}
+                                placeholder="0.00"
+                              />
+                            </div>
+
+                            <div className="p-3 rounded-2xl border-2 border-indigo-500/30 bg-indigo-50/20 dark:bg-indigo-950/20 space-y-2">
+                              <span className="text-sm font-black text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                                <CreditCard className="h-4.5 w-4.5 shrink-0" /> Tarjeta
+                              </span>
+                              <PriceInput
+                                className="h-11 text-right font-black !text-xl rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-2xs px-3"
+                                value={pagoTarjeta}
+                                onChange={(v) => setPagoTarjeta(v)}
+                                placeholder="0.00"
+                              />
+                            </div>
+
+                            <div className="p-3 rounded-2xl border-2 border-sky-500/30 bg-sky-50/20 dark:bg-sky-950/20 space-y-2">
+                              <span className="text-sm font-black text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
+                                <Building2 className="h-4.5 w-4.5 shrink-0" /> Transferencia
+                              </span>
+                              <PriceInput
+                                className="h-11 text-right font-black !text-xl rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 shadow-2xs px-3"
+                                value={pagoTransferencia}
+                                onChange={(v) => setPagoTransferencia(v)}
+                                placeholder="0.00"
+                              />
+                            </div>
+                          </div>
+
+                          {pagoTransferencia > 0 && (
+                            <Input
+                              placeholder="No. referencia de transferencia * (Obligatoria)"
+                              value={pagoTransferenciaRef}
+                              onChange={(e) => setPagoTransferenciaRef(e.target.value)}
+                              className={`h-10 text-xs rounded-xl bg-white dark:bg-slate-900 border-2 ${
+                                !pagoTransferenciaRef.trim() ? "border-destructive" : "border-slate-200 dark:border-slate-700"
+                              }`}
+                            />
+                          )}
+
+                          <div className="flex items-center justify-between pt-1.5 border-t border-border/60 text-xs">
+                            <div>
+                              <span className="text-muted-foreground">Asignado: </span>
+                              <span className="font-black text-foreground">{formatRD(pagoEfectivo + pagoTarjeta + pagoTransferencia)}</span>
+                            </div>
+                            <div>
+                              {Math.abs((condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ? (
+                                <span className="text-destructive font-black">
+                                  Falta: {formatRD(Math.max(0, (condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)))}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-black flex items-center gap-1">
+                                  <Check className="h-3.5 w-3.5" /> Cuadre exacto (100%)
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
                       )}
                     </div>
                   )}
 
-                  {metodo === "EFECTIVO" && (
-                    <div className="mt-4 rounded-2xl border-2 border-border/60 bg-accent/5 p-6">
-                      <div className="grid gap-6 md:grid-cols-2 items-center">
-                        <Field label="Monto recibido">
-                          <div className="relative h-24">
-                            <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/50">
-                              RD$
-                            </span>
-                            <PriceInput
-                              className="h-full pl-24 !text-5xl font-black font-display bg-background border-2 border-primary/20 focus-visible:ring-primary/30"
-                              value={recibido}
-                              onChange={setRecibido}
-                              placeholder="0.00"
-                            />
-                          </div>
-                        </Field>
-
-                        <div
-                          className={`flex flex-col items-center justify-center h-28 rounded-xl border-2 transition-all duration-300 ${
-                            faltante > 0
-                              ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                              : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
-                          }`}
-                        >
-                          <div className="text-xs font-black uppercase tracking-widest opacity-70">
-                            {faltante > 0 ? "Faltante" : "Vuelto a entregar"}
-                          </div>
-                          <div className="text-4xl font-display font-black">
-                            {formatRD(faltante > 0 ? faltante : vuelto)}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-
-                  {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
-                    <div className="mt-4 rounded-2xl border-2 border-border/60 bg-accent/5 p-6 animate-in fade-in slide-in-from-top-1 duration-200 max-w-4xl mx-auto w-full">
-                      <div className="flex flex-col gap-3">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Referencia de Transacción
-                        </Label>
-                        {!showRefInput ? (
-                          <Button
-                            type="button"
-                            variant="outline"
-                            onClick={() => setShowRefInput(true)}
-                            className="w-full h-12 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer"
-                          >
-                            <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
-                          </Button>
-                        ) : (
-                          <div className="flex gap-2">
-                            <Input
-                              type="text"
-                              value={referencia}
-                              onChange={(e) => setReferencia(e.target.value)}
-                              placeholder={
-                                metodo === "TARJETA"
-                                  ? "Número de aprobación, autorización, Auth # o APR."
-                                  : "Número de aprobación, transferencia, cuenta, etc."
-                              }
-                              className="h-12 bg-white border-2 border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium"
-                              autoFocus
-                            />
-                            <Button
-                              type="button"
-                              variant="destructive"
-                              onClick={() => {
-                                setReferencia("");
-                                setShowRefInput(false);
-                              }}
-                              className="h-12 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-2 cursor-pointer border-none"
-                            >
-                              <Trash2 className="h-4 w-4" /> Quitar
-                            </Button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  )}
-
-                  {opcionPagoSelected === "CREDITO" && (
-                    <div className="space-y-4 mt-6 w-full max-w-2xl mx-auto">
-                      <motion.div
-                        initial={{ opacity: 0, y: 10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        className="flex items-center gap-3 rounded-xl border border-warning/40 bg-warning/10 p-5 text-sm text-warning-foreground"
-                      >
-                        <AlertTriangle className="h-6 w-6 text-warning shrink-0" />
+                  {/* B. AL RETIRAR */}
+                  {condicionCobro === "AL_RETIRAR" && (
+                    <div className="space-y-4 pt-1">
+                      <div className="flex items-center gap-4 rounded-2xl border-2 border-[#1B4B73]/20 bg-[#1B4B73]/[0.03] p-5 text-[#1B4B73] dark:text-sky-200">
+                        <Timer className="h-9 w-9 text-[#1B4B73] shrink-0" />
                         <div>
-                          <strong className="block text-base">Venta a crédito</strong>
-                          Esta orden se registrará como pendiente de cobro en el balance de{" "}
-                          <strong>{cliente?.nombre}</strong>.
-                        </div>
-                      </motion.div>
-
-                      {/* --- CREDIT LIMIT CARD --- */}
-                      <div className="rounded-[1.75rem] border border-amber-200 dark:border-amber-800 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
-                        <div className="flex items-center gap-2 mb-4">
-                          <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
-                          <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800 dark:text-amber-300">
-                            PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
+                          <strong className="block text-base font-black">
+                            Cobro contra entrega (Pago al retirar)
+                          </strong>
+                          <span className="text-xs">
+                            La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo
+                            pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a
+                            retirar su ropa.
                           </span>
                         </div>
-                        <div className="grid grid-cols-6 gap-2.5">
-                          {OPCIONES_CREDITO.map((op) => (
-                            <button
-                              key={op.dias}
-                              type="button"
-                              onClick={() => actualizarLimiteDias(op.dias)}
-                              className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
-                                limiteDiasSel === op.dias
-                                  ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                                  : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                              }`}
-                            >
-                              <span
-                                className={`text-xl font-display font-black leading-none mb-1 ${
-                                  limiteDiasSel === op.dias
-                                    ? "text-amber-700 dark:text-amber-300"
-                                    : "text-foreground"
-                                }`}
-                              >
-                                {op.dias}
-                              </span>
-                              <span
-                                className={`text-[9px] font-black uppercase tracking-wider leading-none ${
-                                  limiteDiasSel === op.dias
-                                    ? "text-amber-600"
-                                    : "text-muted-foreground"
-                                }`}
-                              >
-                                DÍAS
-                              </span>
-                              {limiteDiasSel === op.dias && (
-                                <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
-                              )}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-
-                      <div className="rounded-3xl border-2 border-warning/20 bg-warning/5 p-5 animate-in fade-in slide-in-from-top-1 duration-200">
-                        <Label className="mb-2 block text-xs font-black uppercase tracking-widest text-amber-600">
-                          ¿Monto a abonar inicialmente? (Opcional)
-                        </Label>
-                        <div className="relative h-20">
-                          <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">
-                            RD$
-                          </span>
-                          <PriceInput
-                            className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 dark:text-amber-300 font-bold"
-                            value={abonoCredito}
-                            onChange={(val) => {
-                              if (val > total) {
-                                toast.warning("El abono no puede exceder el total de la orden");
-                                return;
-                              }
-                              setAbonoCredito(val);
-                            }}
-                            placeholder="0.00"
-                          />
-                        </div>
-                        <p className="mt-2 text-xs text-amber-600/70 font-medium">
-                          El monto abonado se registrará en la caja activa. El saldo restante (
-                          <strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de{" "}
-                          <strong>{cliente?.nombre}</strong>.
-                        </p>
                       </div>
                     </div>
                   )}
-                </>
+
+                  {/* C. CRÉDITO */}
+                  {condicionCobro === "CREDITO" && (
+                    <div className="space-y-4 pt-1">
+                      {(!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final") || cliente.tipo === "Consumidor Final") ? (
+                        <div className="flex items-center gap-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-destructive">
+                          <AlertTriangle className="h-8 w-8 text-destructive shrink-0" />
+                          <div>
+                            <strong className="block text-sm">Cliente Registrado Obligatorio</strong>
+                            <span className="text-xs">Las ventas a crédito deben asignarse a un cliente registrado (no Consumidor Final).</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-4 text-warning-foreground">
+                            <AlertTriangle className="h-7 w-7 text-warning shrink-0" />
+                            <div>
+                              <strong className="block text-sm">Venta a crédito</strong>
+                              <span className="text-xs">Se registrará en el balance de <span className="font-bold">{cliente?.nombre} {cliente?.apellido}</span>.</span>
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 p-4 shadow-2xs">
+                            <div className="flex items-center gap-2 mb-3">
+                              <Timer className="h-4 w-4 text-amber-500 shrink-0" />
+                              <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800 dark:text-amber-300">
+                                PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-6 gap-2">
+                              {OPCIONES_CREDITO.map((op) => (
+                                <button
+                                  key={op.dias}
+                                  type="button"
+                                  onClick={() => actualizarLimiteDias(op.dias)}
+                                  className={`relative flex flex-col items-center justify-center py-3 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer ${
+                                    limiteDiasSel === op.dias
+                                      ? "border-[#1B4B73] bg-[#1B4B73] text-white font-bold scale-[1.02] shadow-2xs"
+                                      : "border-border bg-white dark:bg-slate-900 text-muted-foreground hover:border-[#1B4B73]/40 shadow-2xs"
+                                  }`}
+                                >
+                                  <span className="text-lg font-display font-black leading-none mb-0.5">
+                                    {op.dias}
+                                  </span>
+                                  <span className="text-[8px] font-black uppercase tracking-wider leading-none">
+                                    DÍAS
+                                  </span>
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+
+                          <div className="rounded-2xl border-2 border-warning/20 bg-warning/5 p-4">
+                            <Label className="mb-1.5 block text-xs font-black uppercase tracking-widest text-amber-600">
+                              ¿Monto a abonar inicialmente? (Opcional)
+                            </Label>
+                            <div className="relative h-13">
+                              <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-base text-amber-600/40">
+                                RD$
+                              </span>
+                              <PriceInput
+                                className="!h-full pl-14 !text-2xl font-black font-display bg-white dark:bg-slate-900 border-2 border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 font-bold shadow-2xs"
+                                value={abonoCredito}
+                                onChange={(val) => {
+                                  if (val > total) {
+                                    toast.warning("El abono no puede exceder el total");
+                                    return;
+                                  }
+                                  setAbonoCredito(val);
+                                }}
+                                placeholder="0.00"
+                              />
+                            </div>
+                            <p className="mt-1.5 text-xs text-amber-600/70 font-medium">
+                              Saldo restante (<strong>{formatRD(Math.max(0, total - abonoCredito))}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                            </p>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                </div>
               )}
             </motion.div>
 
@@ -3971,7 +4730,7 @@ function NuevaOrdenPage() {
                   <Button
                     size="lg"
                     className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white shadow-none transition-all active:scale-95"
-                    onClick={onCrearOrden}
+                    onClick={() => onCrearOrden(false)}
                     disabled={(metodo === "EFECTIVO" && faltante > 0) || isCreatingOrden}
                   >
                     {isCreatingOrden ? (
@@ -4502,83 +5261,383 @@ function NuevaOrdenPage() {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
-        <DialogContent className="max-w-2xl p-4 sm:p-5 rounded-2xl overflow-y-auto max-h-[92vh] custom-scrollbar top-[50%]">
-          <DialogHeader className="pb-0">
-            <DialogTitle className="text-xl font-display font-bold text-foreground">
-              Panel de Cobro
+      
+      {/* ================= MODAL DE REVISIÓN RÁPIDA DE NOTA ================= */}
+      <Dialog open={showQuickNoteModal} onOpenChange={setShowQuickNoteModal}>
+        <DialogContent className="max-w-md p-5 sm:p-6 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-display font-bold flex items-center gap-2 text-foreground">
+              <FileText className="h-5 w-5 text-amber-500" /> ¿Deseas agregar una nota?
             </DialogTitle>
-            <DialogDescription className="sr-only">
-              Selecciona el método de pago y confirma la creación de la orden.
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              Esta orden aún no tiene ninguna observación ni nota especial por prenda. Puedes escribirla ahora o continuar.
             </DialogDescription>
-            <div className="flex flex-col items-center justify-center text-center -mt-6 sm:-mt-7 mb-0.5">
-              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 dark:text-slate-500">
-                TOTAL A COBRAR
-              </span>
-              <span className="text-2xl sm:text-3xl font-display font-black text-emerald-600 dark:text-emerald-400 tracking-tight leading-tight">
-                {formatRD(total)}
+          </DialogHeader>
+          <div className="py-2">
+            <Textarea
+              placeholder="Ej: Ropa con manchas en cuello, entregar en perchas, doblada, planchado con raya..."
+              value={quickNoteText}
+              onChange={(e) => setQuickNoteText(e.target.value)}
+              className="min-h-[90px] rounded-2xl text-xs p-3 bg-accent/10 resize-none border-primary/20 focus-visible:ring-primary/30"
+              autoFocus
+            />
+          </div>
+          <DialogFooter className="flex flex-row items-center justify-between gap-2 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              className="text-xs font-bold text-muted-foreground hover:text-foreground cursor-pointer"
+              onClick={() => {
+                setShowQuickNoteModal(false);
+                setIsCobroModalOpen(true);
+              }}
+            >
+              Omitir y continuar →
+            </Button>
+            <Button
+              type="button"
+              className="bg-primary text-white text-xs font-bold px-4 rounded-xl shadow-xs cursor-pointer"
+              onClick={() => {
+                if (quickNoteText.trim()) {
+                  setNotas((prev) => (prev ? `${prev}\n${quickNoteText.trim()}` : quickNoteText.trim()));
+                  setQuickNoteText("");
+                }
+                setShowQuickNoteModal(false);
+                setIsCobroModalOpen(true);
+              }}
+            >
+              Guardar y Cobrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ================= MODAL DE ADVERTENCIA DE LÍMITE DE CRÉDITO ================= */}
+      <Dialog open={showCreditLimitConfirm} onOpenChange={setShowCreditLimitConfirm}>
+        <DialogContent className="max-w-md p-5 sm:p-6 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+          <DialogHeader>
+            <DialogTitle className="text-lg font-display font-bold flex items-center gap-2 text-amber-600 dark:text-amber-400">
+              <AlertTriangle className="h-5 w-5 text-amber-500" /> Límite de Crédito Excedido
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground pt-1">
+              El cliente <strong>{cliente?.nombre} {cliente?.apellido}</strong> excede el límite de crédito disponible autorizado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-2 space-y-2 bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-xs">
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Límite de crédito fijado:</span>
+              <span className="font-bold">{formatRD(cliente?.limite_credito || 0)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Deuda acumulada actual:</span>
+              <span className="font-bold">
+                {formatRD(
+                  (ordenes || [])
+                    .filter((o) => o.cliente_id === cliente?.id && o.saldo > 0 && o.estado !== "ANULADA")
+                    .reduce((s, o) => s + o.saldo, 0)
+                )}
               </span>
             </div>
+            <div className="flex justify-between">
+              <span className="text-muted-foreground">Saldo a crédito de esta orden:</span>
+              <span className="font-bold">{formatRD(total - abonoCredito)}</span>
+            </div>
+            <div className="border-t border-amber-500/30 pt-1.5 flex justify-between font-black text-amber-900 dark:text-amber-200">
+              <span>Nueva deuda acumulada:</span>
+              <span>
+                {formatRD(
+                  (ordenes || [])
+                    .filter((o) => o.cliente_id === cliente?.id && o.saldo > 0 && o.estado !== "ANULADA")
+                    .reduce((s, o) => s + o.saldo, 0) + (total - abonoCredito)
+                )}
+              </span>
+            </div>
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            ¿Deseas autorizar esta venta a crédito como cajero/administrador?
+          </p>
+          <DialogFooter className="flex gap-2 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 rounded-xl text-xs font-bold"
+              onClick={() => setShowCreditLimitConfirm(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              className="flex-1 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white"
+              onClick={() => {
+                setShowCreditLimitConfirm(false);
+                onCrearOrden(true);
+              }}
+            >
+              Autorizar y Crear
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+                              
+      {/* ================= MODAL DE COLOR Y DETALLES DE PRENDA ================= */}
+      <Dialog open={showItemDetailModal} onOpenChange={setShowItemDetailModal}>
+        <DialogContent className="max-w-md p-5 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-lg font-bold text-slate-800 dark:text-slate-100">
+              <Palette className="h-5 w-5 text-[#1B4B73] dark:text-sky-400" />
+              Detalles de la Prenda
+            </DialogTitle>
+            <p className="text-xs text-muted-foreground">
+              {editingItemIndex !== null && items[editingItemIndex]
+                ? items[editingItemIndex].descripcion
+                : "Personaliza el color y las notas de esta prenda"}
+            </p>
           </DialogHeader>
 
-          <div className="py-0.5 space-y-3">
-            <div className="grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 mb-2">
+          <div className="space-y-4 my-2">
+            {/* Selector de Color */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-2">
+                Color de la prenda:
+              </label>
+              <div className="grid grid-cols-4 sm:grid-cols-5 gap-2 max-h-48 overflow-y-auto p-1 custom-scrollbar">
+                {COLORES_PRENDA.map((c) => {
+                  const isSelected = itemEditColor === c.nombre;
+                  return (
+                    <button
+                      key={c.nombre}
+                      type="button"
+                      onClick={() => {
+                        setItemEditColor(c.nombre);
+                        setItemEditColorHex(c.hex);
+                      }}
+                      className={`flex flex-col items-center gap-1.5 p-2 rounded-xl border text-center transition-all cursor-pointer ${
+                        isSelected
+                          ? "border-[#1B4B73] bg-[#1B4B73]/10 dark:border-sky-400 dark:bg-sky-950/40 ring-2 ring-[#1B4B73]/30"
+                          : "border-slate-200 dark:border-slate-700 hover:border-slate-400 bg-card"
+                      }`}
+                    >
+                      <span
+                        className="w-6 h-6 rounded-full border border-black/20 shadow-xs shrink-0"
+                        style={{
+                          background: c.hex.startsWith("#") || c.hex.startsWith("linear")
+                            ? c.hex
+                            : "#94A3B8"
+                        }}
+                      />
+                      <span className="text-[10px] font-bold leading-tight truncate w-full">
+                        {c.nombre}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Input de Notas de la prenda */}
+            <div>
+              <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1.5">
+                Notas / Observaciones (ej. Mancha, rasgadura, botón faltante):
+              </label>
+              <Input
+                placeholder="Ej. Mancha en cuello, botón flojo..."
+                value={itemEditNota}
+                onChange={(e) => setItemEditNota(e.target.value)}
+                className="text-xs h-9 rounded-xl"
+              />
+              <div className="flex flex-wrap gap-1 mt-1.5">
+                {["Mancha en cuello", "Falta botón", "Descosido", "Roto", "Delicada", "No planchar"].map((tag) => (
+                  <button
+                    key={tag}
+                    type="button"
+                    onClick={() => {
+                      setItemEditNota((prev) => (prev ? `${prev}, ${tag}` : tag));
+                    }}
+                    className="text-[10px] px-2 py-0.5 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-[#1B4B73]/10 hover:text-[#1B4B73] font-medium text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                  >
+                    + {tag}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="flex gap-2 sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-xl text-xs"
+              onClick={() => setShowItemDetailModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="rounded-xl text-xs bg-[#1B4B73] hover:bg-[#153a5b] text-white font-bold"
+              onClick={() => {
+                if (editingItemIndex !== null) {
+                  setItems((prev) =>
+                    prev.map((it, idx) =>
+                      idx === editingItemIndex
+                        ? {
+                            ...it,
+                            color: itemEditColor || undefined,
+                            color_hex: itemEditColorHex || undefined,
+                            notas: itemEditNota || undefined,
+                          }
+                        : it
+                    )
+                  );
+                }
+                setShowItemDetailModal(false);
+              }}
+            >
+              Guardar detalles
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+                              {/* ================= PANEL DE COBRO (BRANDED KLYNN) ================= */}
+      <Dialog open={isCobroModalOpen} onOpenChange={setIsCobroModalOpen}>
+        <DialogContent className="max-w-2xl p-4 sm:p-6 rounded-3xl overflow-y-auto max-h-[92vh] custom-scrollbar z-50 bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-2xl">
+          {/* Decorative Brand Dots Background */}
+          <div className="absolute top-3 right-14 opacity-25 pointer-events-none hidden sm:block">
+            <div className="grid grid-cols-5 gap-1.5">
+              {Array.from({ length: 15 }).map((_, i) => (
+                <div key={i} className="h-1 w-1 rounded-full bg-[#1B4B73]" />
+              ))}
+            </div>
+          </div>
+          <div className="absolute bottom-4 right-4 opacity-30 pointer-events-none hidden sm:block">
+            <div className="grid grid-cols-4 gap-1.5">
+              {Array.from({ length: 16 }).map((_, i) => (
+                <div key={i} className="h-1 w-1 rounded-full bg-[#F0B900]" />
+              ))}
+            </div>
+          </div>
+
+          <DialogHeader className="pb-0 relative">
+            <div className="flex items-start justify-between">
+              {/* Logo Klynn Oficial (/favicon.webp) + Título */}
+              <div className="flex items-center gap-3">
+                <div className="relative h-11 w-11 flex items-center justify-center shrink-0">
+                  <img
+                    src="/favicon.webp"
+                    alt="Klynn Logo"
+                    className="h-11 w-11 object-contain drop-shadow-xs"
+                    onError={(e) => {
+                      // Fallback if webp fails
+                      (e.target as HTMLElement).style.display = 'none';
+                    }}
+                  />
+                </div>
+                <div>
+                  <DialogTitle className="text-xl sm:text-2xl font-display font-extrabold text-[#1B4B73] dark:text-white leading-tight">
+                    Panel de Cobro
+                  </DialogTitle>
+                  <p className="text-xs text-slate-400 font-medium">
+                    Selecciona el método de cobro
+                  </p>
+                </div>
+              </div>
+
+              {/* Total Header Right */}
+              <div className="text-right pr-6 sm:pr-8">
+                <span className="text-[10px] font-black uppercase tracking-widest text-[#1B4B73]/70 dark:text-sky-400 block leading-none mb-1">
+                  TOTAL A COBRAR
+                </span>
+                <span className="text-3xl sm:text-4xl font-display font-black text-[#1B4B73] dark:text-sky-300 tracking-tight leading-none">
+                  {formatRD(total)}
+                </span>
+              </div>
+            </div>
+            <DialogDescription className="sr-only">
+              Selecciona el método de cobro y confirma la orden.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3.5 pt-2">
+            {/* 1. LAS 4 MODALIDADES DE COBRO (AL RETIRAR EN 1ER LUGAR) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
               {[
                 {
-                  id: "PAGO_AL_RETIRAR",
-                  label: "Pago al retirar",
-                  icon: Timer,
-                  color: "from-teal-500/10 to-teal-500/[0.02] border-teal-500/25 text-teal-700",
+                  id: "AL_RETIRAR",
+                  label: "AL RETIRAR",
+                  sub: "Contra entrega",
+                  icon: Clock,
                 },
                 {
-                  id: "EFECTIVO",
-                  label: "Efectivo",
-                  icon: Banknote,
-                  color:
-                    "from-emerald-500/10 to-emerald-500/[0.02] border-emerald-500/25 text-emerald-700",
+                  id: "COBRAR_AHORA",
+                  label: "COBRAR AHORA",
+                  sub: "Pago 100% hoy",
+                  icon: Check,
                 },
                 {
-                  id: "TARJETA",
-                  label: "Tarjeta",
-                  icon: CreditCard,
-                  color:
-                    "from-indigo-500/10 to-indigo-500/[0.02] border-indigo-500/25 text-indigo-700",
-                },
-                {
-                  id: "TRANSFERENCIA",
-                  label: "Transf.",
-                  icon: Building2,
-                  color: "from-sky-500/10 to-sky-500/[0.02] border-sky-500/25 text-sky-700",
+                  id: "ANTICIPO",
+                  label: "ANTICIPO",
+                  sub: "Abono + Saldo",
+                  icon: CalendarIcon,
                 },
                 {
                   id: "CREDITO",
-                  label: "Crédito",
+                  label: "CRÉDITO",
+                  sub: "Cuenta por cobrar",
                   icon: FileText,
-                  color: "from-amber-500/10 to-amber-500/[0.02] border-amber-500/25 text-amber-700",
                 },
               ].map((m) => {
-                const isSelected = opcionPagoSelected === m.id;
+                const isSelected = condicionCobro === m.id;
                 const Icon = m.icon;
                 return (
                   <button
                     key={m.id}
                     type="button"
-                    onClick={() => handleOpcionPagoChange(m.id)}
-                    className={`relative flex flex-col items-center justify-center gap-1.5 rounded-xl border-2 p-3 transition-all duration-300 hover:-translate-y-0.5 active:scale-95 group text-center cursor-pointer ${
+                    onClick={() => {
+                      setCondicionCobro(m.id as CondicionCobro);
+                      if (m.id === "COBRAR_AHORA") {
+                        setRecibido(total);
+                      } else if (m.id === "ANTICIPO") {
+                        const half = +(total / 2).toFixed(2);
+                        if (anticipoMonto <= 0 || anticipoMonto >= total) {
+                          setAnticipoMonto(half);
+                          setRecibido(half);
+                        } else {
+                          setRecibido(anticipoMonto);
+                        }
+                      } else if (m.id === "AL_RETIRAR") {
+                        setRecibido(0);
+                        setAnticipoMonto(0);
+                      }
+                    }}
+                    className={`relative flex flex-col items-center justify-center gap-2 rounded-2xl border-2 p-3 transition-all duration-200 active:scale-95 text-center cursor-pointer ${
                       isSelected
-                        ? `bg-gradient-to-br ${m.color} ring-1 ring-primary shadow-glow scale-102`
-                        : "border-border bg-card hover:border-primary/40 hover:shadow-xs text-slate-500"
+                        ? "border-[#1B4B73] bg-[#1B4B73]/[0.05] dark:bg-[#1B4B73]/20 ring-2 ring-[#1B4B73]/20 shadow-xs font-bold scale-[1.02]"
+                        : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#1B4B73]/30 text-slate-500 shadow-2xs"
                     }`}
                   >
-                    <Icon className="h-5 w-5 transition-transform duration-300 group-hover:scale-105 shrink-0" />
                     <div
-                      className={`font-bold text-xs uppercase tracking-tight ${isSelected ? "font-black text-inherit" : "text-foreground"}`}
+                      className={`flex h-10 w-10 items-center justify-center rounded-full transition-transform ${
+                        isSelected ? "bg-[#1B4B73] text-white shadow-xs" : "bg-slate-100 dark:bg-slate-800 text-slate-600"
+                      }`}
+                    >
+                      <Icon className="h-5 w-5 shrink-0" />
+                    </div>
+                    <div
+                      className={`font-black text-xs uppercase tracking-wider leading-none ${
+                        isSelected ? "text-[#1B4B73] dark:text-sky-300" : "text-slate-800 dark:text-slate-200"
+                      }`}
                     >
                       {m.label}
                     </div>
+                    <div className="text-[10px] text-muted-foreground font-medium leading-none">
+                      {m.sub}
+                    </div>
                     {isSelected && (
-                      <div className="absolute top-2 right-2 flex h-4 w-4 items-center justify-center rounded-full bg-primary text-white shadow-sm ring-2 ring-background animate-in zoom-in duration-200">
-                        <Check className="h-2 w-2 stroke-[3]" />
+                      <div className="absolute top-2 right-2 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#F0B900] text-slate-900 shadow-xs ring-1 ring-white">
+                        <Check className="h-2.5 w-2.5 stroke-[3]" />
                       </div>
                     )}
                   </button>
@@ -4586,12 +5645,284 @@ function NuevaOrdenPage() {
               })}
             </div>
 
-            {opcionPagoSelected === "PAGO_AL_RETIRAR" && (
-              <div className="space-y-4 mb-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex items-center gap-4 rounded-xl border border-teal-200 dark:border-teal-800 bg-teal-500/[0.03] p-4 text-teal-800 dark:text-teal-200">
-                  <Timer className="h-8 w-8 text-teal-600 shrink-0" />
+            {/* 2. MÉTODOS DE PAGO (PÍLDORAS HORIZONTALES) */}
+            {(condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+                  {[
+                    { id: "EFECTIVO", label: "EFECTIVO", icon: Banknote },
+                    { id: "TARJETA", label: "TARJETA", icon: CreditCard },
+                    { id: "TRANSFERENCIA", label: "TRANSF.", icon: Building2 },
+                    { id: "MIXTO", label: "MIXTO", icon: Split },
+                  ].map((inst) => {
+                    const isSel = instrumentoPago === inst.id;
+                    const Icon = inst.icon;
+                    return (
+                      <button
+                        key={inst.id}
+                        type="button"
+                        onClick={() => {
+                          setInstrumentoPago(inst.id as any);
+                          if (inst.id === "MIXTO") {
+                            const targetMonto = condicionCobro === "ANTICIPO" ? anticipoMonto : total;
+                            setPagoEfectivo(+Math.round(targetMonto / 2));
+                            setPagoTarjeta(+Math.max(0, targetMonto - Math.round(targetMonto / 2)));
+                            setPagoTransferencia(0);
+                          }
+                        }}
+                        className={`relative flex items-center justify-center gap-2 rounded-2xl border-2 py-2.5 px-3 transition-all duration-200 active:scale-95 cursor-pointer ${
+                          isSel
+                            ? "border-[#1B4B73] bg-[#1B4B73] text-white font-black shadow-xs scale-[1.01]"
+                            : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#1B4B73]/30 text-slate-700 dark:text-slate-300 font-bold shadow-2xs"
+                        }`}
+                      >
+                        <Icon className={`h-4.5 w-4.5 shrink-0 ${isSel ? "text-[#F0B900]" : ""}`} />
+                        <span className="text-xs tracking-wider">{inst.label}</span>
+                        {isSel && (
+                          <div className="h-4 w-4 rounded-full bg-[#F0B900] text-slate-900 flex items-center justify-center shrink-0 ml-0.5">
+                            <Check className="h-2.5 w-2.5 stroke-[3]" />
+                          </div>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* A1. ANTICIPO: UN SOLO CAMPO */}
+                {condicionCobro === "ANTICIPO" && (
+                  <div className="p-3.5 bg-[#1B4B73]/[0.03] dark:bg-[#1B4B73]/20 border-2 border-[#1B4B73]/20 rounded-2xl space-y-2 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-200">
+                        MONTO DEL ANTICIPO A ABONAR HOY
+                      </span>
+                      <span className="font-black text-[#855B00] dark:text-amber-300 bg-[#F0B900]/20 px-2 py-0.5 rounded-lg border border-[#F0B900]/40">
+                        Saldo al retirar: <b>{formatRD(Math.max(0, total - anticipoMonto))}</b>
+                      </span>
+                    </div>
+                    <div className="relative h-13">
+                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-[#1B4B73]/60">
+                        RD$
+                      </span>
+                      <PriceInput
+                        className="!h-full pl-14 !text-2xl font-black font-display bg-white dark:bg-slate-900 border-2 border-[#1B4B73]/30 focus-visible:ring-[#1B4B73]/30 rounded-xl text-[#1B4B73] dark:text-sky-300 shadow-2xs"
+                        value={anticipoMonto}
+                        onChange={(val) => {
+                          if (val > total) {
+                            toast.warning("El anticipo no puede exceder el total");
+                            return;
+                          }
+                          setAnticipoMonto(val);
+                          setRecibido(val);
+                        }}
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] text-[#1B4B73]/80 dark:text-sky-300/80 pt-0.5">
+                      <span>Total de la orden: <b>{formatRD(total)}</b></span>
+                      <span>Abono hoy con <b>{instrumentoPago}</b>: <b>{formatRD(anticipoMonto)}</b></span>
+                    </div>
+                  </div>
+                )}
+
+                {/* A2. COBRAR AHORA Y EFECTIVO: MONTO RECIBIDO Y CAMBIO */}
+                {condicionCobro === "COBRAR_AHORA" && instrumentoPago === "EFECTIVO" && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-center animate-in fade-in duration-200">
+                    <div>
+                      <Label className="text-[10px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 mb-1.5 block">
+                        MONTO RECIBIDO (EFECTIVO)
+                      </Label>
+                      <div className="rounded-2xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2.5 flex items-center justify-between">
+                        <div className="flex items-center gap-2 flex-1">
+                          <span className="font-black text-base text-slate-400 dark:text-slate-500 pl-1">
+                            RD$
+                          </span>
+                          <PriceInput
+                            className="h-10 w-full !text-2xl font-black font-display bg-transparent border-none focus-visible:ring-0 text-[#1B4B73] dark:text-sky-200 p-0 shadow-none"
+                            value={recibido}
+                            onChange={(val) => {
+                              if (val > 100000000) return;
+                              setRecibido(val);
+                            }}
+                            placeholder="0.00"
+                          />
+                        </div>
+                        <div className="h-9 w-9 rounded-xl bg-sky-100 dark:bg-sky-900/60 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0">
+                          <Banknote className="h-5 w-5" />
+                        </div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className={`text-[10px] font-black uppercase tracking-wider mb-1.5 block ${recibido < total ? "text-rose-600" : "text-emerald-600"}`}>
+                        {recibido < total ? "FALTANTE" : "CAMBIO A ENTREGAR"}
+                      </Label>
+                      <div className={`rounded-2xl border-2 p-2.5 flex items-center justify-between ${
+                        recibido < total
+                          ? "border-rose-100 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400"
+                          : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
+                      }`}>
+                        <div className="flex items-center gap-1.5 pl-1">
+                          <span className="font-bold text-sm opacity-80">RD$</span>
+                          <span className="text-2xl font-display font-black leading-none">
+                            {formatRD(
+                              recibido > total
+                                ? recibido - total
+                                : total - recibido
+                            ).replace("RD$", "").trim()}
+                          </span>
+                        </div>
+                        <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${
+                          recibido < total
+                            ? "bg-rose-100 dark:bg-rose-900/60 text-rose-600"
+                            : "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600"
+                        }`}>
+                          {recibido < total ? (
+                            <AlertTriangle className="h-5 w-5" />
+                          ) : (
+                            <CheckCircle2 className="h-5 w-5" />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* TARJETA */}
+                {instrumentoPago === "TARJETA" && (
+                  <div className="space-y-1.5 animate-in fade-in duration-200">
+                    <Label className="text-[10px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                      REFERENCIA DE TARJETA / APROBACIÓN (OPCIONAL)
+                    </Label>
+                    <Input
+                      placeholder="Número de aprobación, autorización, Auth # o APR."
+                      value={referencia}
+                      onChange={(e) => setReferencia(e.target.value)}
+                      className="h-12 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-[#1B4B73]/30 rounded-2xl font-medium text-sm px-4 shadow-2xs"
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {/* TRANSFERENCIA */}
+                {instrumentoPago === "TRANSFERENCIA" && (
+                  <div className="space-y-1.5 animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-200 block">
+                        NO. DE TRANSFERENCIA / COMPROBANTE * (OBLIGATORIA)
+                      </Label>
+                      {!referencia.trim() && (
+                        <span className="text-[10px] text-destructive font-black">* Requerida</span>
+                      )}
+                    </div>
+                    <Input
+                      placeholder="Número de aprobación, transferencia bancaria, cuenta..."
+                      value={referencia}
+                      onChange={(e) => setReferencia(e.target.value)}
+                      className={`h-12 bg-white dark:bg-slate-900 border-2 rounded-2xl font-medium text-sm px-4 shadow-2xs ${
+                        !referencia.trim()
+                          ? "border-destructive focus-visible:ring-destructive"
+                          : "border-slate-200 dark:border-slate-700 focus-visible:ring-[#1B4B73]/40"
+                      }`}
+                      autoFocus
+                    />
+                  </div>
+                )}
+
+                {/* MIXTO */}
+                {instrumentoPago === "MIXTO" && (
+                  <div className="p-3.5 bg-white dark:bg-slate-900 rounded-2xl border-2 border-[#1B4B73]/20 space-y-2.5 shadow-2xs animate-in fade-in duration-200">
+                    <div className="flex items-center justify-between pb-1 border-b border-border/60 text-xs">
+                      <span className="font-black uppercase tracking-wider text-[#1B4B73] flex items-center gap-1.5">
+                        <Split className="h-4 w-4" /> Desglose Multi-método
+                      </span>
+                      <span className="text-muted-foreground">
+                        Total: <b>{formatRD(condicionCobro === "ANTICIPO" ? anticipoMonto : total)}</b>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                      {/* Efectivo */}
+                      <div className="p-3 rounded-2xl border-2 border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/20 space-y-2">
+                        <span className="text-sm font-black text-emerald-700 dark:text-emerald-300 flex items-center gap-1.5">
+                          <Banknote className="h-4.5 w-4.5 shrink-0" /> Efectivo
+                        </span>
+                        <PriceInput
+                          className="h-11 text-right font-black !text-xl rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-emerald-500/30 shadow-2xs px-3 text-foreground"
+                          value={pagoEfectivo}
+                          onChange={(v) => setPagoEfectivo(v)}
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* Tarjeta */}
+                      <div className="p-3 rounded-2xl border-2 border-indigo-500/30 bg-indigo-50/20 dark:bg-indigo-950/20 space-y-2">
+                        <span className="text-sm font-black text-indigo-700 dark:text-indigo-300 flex items-center gap-1.5">
+                          <CreditCard className="h-4.5 w-4.5 shrink-0" /> Tarjeta
+                        </span>
+                        <PriceInput
+                          className="h-11 text-right font-black !text-xl rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-indigo-500/30 shadow-2xs px-3 text-foreground"
+                          value={pagoTarjeta}
+                          onChange={(v) => setPagoTarjeta(v)}
+                          placeholder="0.00"
+                        />
+                      </div>
+
+                      {/* Transferencia */}
+                      <div className="p-3 rounded-2xl border-2 border-sky-500/30 bg-sky-50/20 dark:bg-sky-950/20 space-y-2">
+                        <span className="text-sm font-black text-sky-700 dark:text-sky-300 flex items-center gap-1.5">
+                          <Building2 className="h-4.5 w-4.5 shrink-0" /> Transferencia
+                        </span>
+                        <PriceInput
+                          className="h-11 text-right font-black !text-xl rounded-xl bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-sky-500/30 shadow-2xs px-3 text-foreground"
+                          value={pagoTransferencia}
+                          onChange={(v) => setPagoTransferencia(v)}
+                          placeholder="0.00"
+                        />
+                      </div>
+                    </div>
+
+                    {pagoTransferencia > 0 && (
+                      <div className="pt-1">
+                        <Input
+                          placeholder="No. referencia de transferencia * (Obligatoria)"
+                          value={pagoTransferenciaRef}
+                          onChange={(e) => setPagoTransferenciaRef(e.target.value)}
+                          className={`h-10 text-xs rounded-xl bg-white dark:bg-slate-900 border-2 shadow-2xs ${
+                            !pagoTransferenciaRef.trim() ? "border-destructive focus-visible:ring-destructive" : "border-slate-200 dark:border-slate-700"
+                          }`}
+                        />
+                      </div>
+                    )}
+
+                    <div className="flex items-center justify-between pt-1.5 border-t border-border/60 text-xs">
+                      <div>
+                        <span className="text-muted-foreground">Asignado: </span>
+                        <span className="font-black text-foreground">{formatRD(pagoEfectivo + pagoTarjeta + pagoTransferencia)}</span>
+                      </div>
+                      <div>
+                        {Math.abs((condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ? (
+                          <span className="text-destructive font-black">
+                            Falta: {formatRD(Math.max(0, (condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)))}
+                          </span>
+                        ) : (
+                          <span className="text-emerald-600 font-black flex items-center gap-1">
+                            <Check className="h-3.5 w-3.5" /> Cuadre exacto (100%)
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* B. AL RETIRAR */}
+            {condicionCobro === "AL_RETIRAR" && (
+              <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex items-center gap-4 rounded-2xl border-2 border-[#1B4B73]/20 bg-[#1B4B73]/[0.03] p-4 text-[#1B4B73] dark:text-sky-200">
+                  <Timer className="h-8 w-8 text-[#1B4B73] shrink-0" />
                   <div>
-                    <strong className="block text-sm">
+                    <strong className="block text-sm font-black">
                       Cobro contra entrega (Pago al retirar)
                     </strong>
                     <span className="text-xs">
@@ -4604,229 +5935,141 @@ function NuevaOrdenPage() {
               </div>
             )}
 
-            {cfg.ncf_facturacion_activa && (
-              <div className="mb-4 p-4 rounded-2xl border-2 border-primary/10 bg-primary/5">
-                <Label className="text-xs font-black uppercase tracking-widest text-primary mb-2 block">
-                  Tipo de Comprobante Fiscal
-                </Label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    onClick={() => setTipoECF(isElectronic ? "E32" : "B02")}
-                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${tipoECF === "E32" || tipoECF === "B02" ? "bg-primary text-white" : "bg-background border border-border"}`}
-                  >
-                    CONSUMO ({isElectronic ? "E32" : "B02"})
-                  </button>
-                  <button
-                    onClick={() => setTipoECF(isElectronic ? "E31" : "B01")}
-                    className={`py-2 px-4 rounded-xl font-bold text-xs transition-all ${tipoECF === "E31" || tipoECF === "B01" ? "bg-primary text-white" : "bg-background border border-border"}`}
-                  >
-                    CRÉDITO FISCAL ({isElectronic ? "E31" : "B01"})
-                  </button>
-                </div>
-                {(tipoECF === "E31" || tipoECF === "B01") && !cliente?.cedula && (
-                  <p className="mt-2 text-[10px] text-destructive font-bold flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3" /> El cliente debe tener RNC/Cédula para
-                    Crédito Fiscal.
-                  </p>
+            {/* C. CRÉDITO */}
+            {condicionCobro === "CREDITO" && (
+              <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
+                {(!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final") || cliente.tipo === "Consumidor Final") ? (
+                  <div className="flex items-center gap-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-destructive">
+                    <AlertTriangle className="h-8 w-8 text-destructive shrink-0" />
+                    <div>
+                      <strong className="block text-sm">Cliente Registrado Obligatorio</strong>
+                      <span className="text-xs">Las ventas a crédito deben asignarse a un cliente registrado (no Consumidor Final).</span>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-3.5 text-warning-foreground">
+                      <AlertTriangle className="h-7 w-7 text-warning shrink-0" />
+                      <div>
+                        <strong className="block text-sm">Venta a crédito</strong>
+                        <span className="text-xs">Se registrará en el balance de <span className="font-bold">{cliente?.nombre} {cliente?.apellido}</span>.</span>
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 p-3.5 shadow-2xs">
+                      <div className="flex items-center gap-2 mb-2.5">
+                        <Timer className="h-4 w-4 text-amber-500 shrink-0" />
+                        <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800 dark:text-amber-300">
+                          PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-6 gap-2">
+                        {OPCIONES_CREDITO.map((op) => (
+                          <button
+                            key={op.dias}
+                            type="button"
+                            onClick={() => actualizarLimiteDias(op.dias)}
+                            className={`relative flex flex-col items-center justify-center py-2.5 rounded-xl border transition-all duration-200 active:scale-95 cursor-pointer ${
+                              limiteDiasSel === op.dias
+                                ? "border-[#1B4B73] bg-[#1B4B73] text-white font-bold scale-[1.02] shadow-2xs"
+                                : "border-border bg-white dark:bg-slate-900 text-muted-foreground hover:border-[#1B4B73]/40 shadow-2xs"
+                            }`}
+                          >
+                            <span className="text-lg font-display font-black leading-none mb-0.5">
+                              {op.dias}
+                            </span>
+                            <span className="text-[8px] font-black uppercase tracking-wider leading-none">
+                              DÍAS
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="rounded-2xl border-2 border-warning/20 bg-warning/5 p-3">
+                      <Label className="mb-1 block text-xs font-black uppercase tracking-widest text-amber-600">
+                        ¿Monto a abonar inicialmente? (Opcional)
+                      </Label>
+                      <div className="relative h-12">
+                        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-base text-amber-600/40">
+                          RD$
+                        </span>
+                        <PriceInput
+                          className="!h-full pl-12 !text-2xl font-black font-display bg-white dark:bg-slate-900 border-2 border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 font-bold shadow-2xs"
+                          value={abonoCredito}
+                          onChange={(val) => {
+                            if (val > total) {
+                              toast.warning("El abono no puede exceder el total");
+                              return;
+                            }
+                            setAbonoCredito(val);
+                          }}
+                          placeholder="0.00"
+                        />
+                      </div>
+                      <p className="mt-1 text-xs text-amber-600/70 font-medium">
+                        Saldo restante (<strong>{formatRD(Math.max(0, total - abonoCredito))}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                      </p>
+                    </div>
+                  </>
                 )}
               </div>
             )}
 
-            {metodo === "EFECTIVO" && (
-              <div className="rounded-2xl border border-border/60 bg-accent/5 p-3 mb-3">
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-center">
-                  <Field label="Monto recibido">
-                    <div className="relative h-16">
-                      <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/50">
-                        RD$
-                      </span>
-                      <PriceInput
-                        className="!h-full pl-16 !text-3xl font-black font-display bg-background border border-primary/20 focus-visible:ring-primary/30 rounded-xl"
-                        value={recibido}
-                        onChange={(val) => {
-                          if (val > 100000000) return;
-                          setRecibido(val);
-                        }}
-                        placeholder="0.00"
-                      />
-                    </div>
-                  </Field>
-
-                  <Field label={faltante > 0 ? "Faltante" : "Cambio a entregar"}>
-                    <div
-                      className={`flex items-center justify-center h-16 px-4 rounded-xl border transition-all duration-300 ${
-                        faltante > 0
-                          ? "bg-destructive/5 border-destructive/30 text-destructive animate-pulse"
-                          : "bg-emerald-500/5 border-emerald-500/30 text-emerald-600"
-                      }`}
-                    >
-                      <div
-                        className={`font-display font-black text-center break-all leading-tight ${(faltante > 0 ? faltante : vuelto) > 999999 ? "text-lg" : "text-2xl"}`}
-                      >
-                        {formatRD(faltante > 0 ? faltante : vuelto)}
-                      </div>
-                    </div>
-                  </Field>
+            {/* 3. FOOTER: SEGURIDAD + BOTÓN VERDE (#16A34A) */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
+              {/* Security badge */}
+              <div className="flex items-center gap-2.5">
+                <div className="h-9 w-9 rounded-xl bg-[#1B4B73]/[0.06] text-[#1B4B73] dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/15 shrink-0">
+                  <ShieldCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block leading-tight">
+                    Transacción segura
+                  </span>
+                  <span className="text-[10px] text-slate-400 block leading-none mt-0.5">
+                    Tus datos están protegidos
+                  </span>
                 </div>
               </div>
-            )}
 
-            {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
-              <div className="rounded-xl border border-border/60 bg-accent/5 p-4 mb-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex flex-col gap-2">
-                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                    Referencia de Transacción
-                  </Label>
-                  {!showRefInput ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowRefInput(true)}
-                      className="w-full h-10 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer text-xs"
-                    >
-                      <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
-                    </Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Input
-                        type="text"
-                        value={referencia}
-                        onChange={(e) => setReferencia(e.target.value)}
-                        placeholder={
-                          metodo === "TARJETA"
-                            ? "Número de aprobación, autorización, Auth # o APR."
-                            : "Número de aprobación, transferencia, cuenta, etc."
-                        }
-                        className="h-10 bg-white border border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium text-xs"
-                        autoFocus
-                      />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => {
-                          setReferencia("");
-                          setShowRefInput(false);
-                        }}
-                        className="h-10 px-4 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-2 cursor-pointer border-none text-xs"
-                      >
-                        <Trash2 className="h-4 w-4" /> Quitar
-                      </Button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {opcionPagoSelected === "CREDITO" && (
-              <div className="space-y-4 mb-4">
-                <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-4 text-warning-foreground">
-                  <AlertTriangle className="h-8 w-8 text-warning shrink-0" />
-                  <div>
-                    <strong className="block text-lg">Venta a crédito</strong>
-                    Se registrará en el balance de{" "}
-                    <span className="font-bold">{cliente?.nombre}</span>.
-                  </div>
-                </div>
-
-                <div className="rounded-[1.75rem] border border-amber-200 dark:border-amber-800 bg-amber-500/[0.03] p-5 shadow-sm animate-in fade-in slide-in-from-top-1 duration-200">
-                  <div className="flex items-center gap-2 mb-4">
-                    <Timer className="h-4.5 w-4.5 text-amber-500 shrink-0" />
-                    <span className="text-[11px] font-black uppercase tracking-[0.08em] text-amber-800 dark:text-amber-300">
-                      PLAZO DE CRÉDITO (DÍAS DE VENCIMIENTO)
-                    </span>
-                  </div>
-                  <div className="grid grid-cols-6 gap-2.5">
-                    {OPCIONES_CREDITO.map((op) => (
-                      <button
-                        key={op.dias}
-                        type="button"
-                        onClick={() => actualizarLimiteDias(op.dias)}
-                        className={`relative flex flex-col items-center justify-center py-3.5 rounded-2xl border transition-all duration-200 hover:-translate-y-0.5 active:scale-95 ${
-                          limiteDiasSel === op.dias
-                            ? "border-amber-500 bg-amber-500/[0.05] text-amber-700 dark:text-amber-300 font-bold scale-[1.03] shadow-sm ring-1 ring-amber-500/20"
-                            : "border-border bg-card text-muted-foreground hover:border-amber-400 hover:bg-amber-500/5 shadow-sm"
-                        }`}
-                      >
-                        <span
-                          className={`text-xl font-display font-black leading-none mb-1 ${
-                            limiteDiasSel === op.dias
-                              ? "text-amber-700 dark:text-amber-300"
-                              : "text-foreground"
-                          }`}
-                        >
-                          {op.dias}
-                        </span>
-                        <span
-                          className={`text-[9px] font-black uppercase tracking-wider leading-none ${
-                            limiteDiasSel === op.dias ? "text-amber-600" : "text-muted-foreground"
-                          }`}
-                        >
-                          DÍAS
-                        </span>
-                        {limiteDiasSel === op.dias && (
-                          <span className="absolute -top-1 right-6 w-2 h-2 bg-amber-500 rounded-full ring-2 ring-background shadow" />
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="rounded-3xl border-2 border-warning/20 bg-warning/5 p-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                  <Label className="mb-2 block text-xs font-black uppercase tracking-widest text-amber-600">
-                    ¿Monto a abonar inicialmente? (Opcional)
-                  </Label>
-                  <div className="relative h-20">
-                    <span className="absolute left-5 top-1/2 -translate-y-1/2 font-black text-xl text-amber-600/40">
-                      RD$
-                    </span>
-                    <PriceInput
-                      className="!h-full pl-20 !text-4xl font-black font-display bg-background border-2 border-warning/20 focus-visible:ring-warning/30 rounded-2xl text-amber-700 dark:text-amber-300 font-bold"
-                      value={abonoCredito}
-                      onChange={(val) => {
-                        if (val > total) {
-                          toast.warning("El abono no puede exceder el total de la orden");
-                          return;
-                        }
-                        setAbonoCredito(val);
-                      }}
-                      placeholder="0.00"
-                    />
-                  </div>
-                  <p className="mt-2 text-xs text-amber-600/70 font-medium">
-                    El monto abonado se registrará en la caja activa. El saldo restante (
-                    <strong>{formatRD(total - abonoCredito)}</strong>) irá al balance de{" "}
-                    <strong>{cliente?.nombre}</strong>.
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex justify-center pt-4">
+              {/* Botón Verde (#16A34A) */}
               <Button
                 size="lg"
-                className="w-full md:max-w-md h-14 text-base tracking-wide rounded-[1.25rem] font-bold bg-[#16A34A] hover:bg-[#15803D] text-white hover:-translate-y-0.5 transition-all shadow-none relative px-10"
-                onClick={onCrearOrden}
-                disabled={(metodo === "EFECTIVO" && faltante > 0) || isCreatingOrden}
+                className="w-full sm:w-auto h-13 px-8 text-sm sm:text-base font-extrabold tracking-wide rounded-2xl bg-[#16A34A] hover:bg-[#15803D] text-white shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+                onClick={() => onCrearOrden(false)}
+                disabled={
+                  isCreatingOrden ||
+                  (condicionCobro === "CREDITO" && (!cliente || cliente.tipo === "Consumidor Final" || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))) ||
+                  ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "EFECTIVO" && recibido < (condicionCobro === "ANTICIPO" ? anticipoMonto : total)) ||
+                  ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "TRANSFERENCIA" && !referencia.trim()) ||
+                  ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "MIXTO" && (
+                    Math.abs((condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ||
+                    (pagoTransferencia > 0 && !pagoTransferenciaRef.trim())
+                  ))
+                }
               >
                 {isCreatingOrden ? (
                   <>
-                    <Loader2 className="mr-2 h-5 w-5 animate-spin" /> PROCESANDO...
+                    <Loader2 className="h-5 w-5 animate-spin" /> PROCESANDO...
                   </>
                 ) : (
                   <>
-                    <CheckCircle2 className="mr-2 h-5 w-5" /> CONFIRMAR Y CREAR ORDEN
+                    <div className="h-5 w-5 rounded-full border-2 border-white flex items-center justify-center">
+                      <Check className="h-3 w-3 stroke-[3]" />
+                    </div>
+                    <span>CONFIRMAR Y CREAR ORDEN</span>
+                    <span className="ml-1.5 rounded-md bg-white/20 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">
+                      ESPACIO
+                    </span>
                   </>
-                )}
-                {!isCreatingOrden && (
-                  <kbd className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none rounded bg-white/20 px-2.5 py-1 text-[11px] font-black text-white shadow-sm border-none uppercase">
-                    Espacio
-                  </kbd>
                 )}
               </Button>
             </div>
           </div>
         </DialogContent>
       </Dialog>
+
     </div>
   );
 }

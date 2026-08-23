@@ -314,6 +314,9 @@ export function encodeEscPos(
         );
         misPrendas.forEach(it => {
           writeLine(`  • ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}${it.es_libra ? ` (${it.cantidad}lb)` : ""}`);
+          if (it.color) {
+            writeLine(`    Color: ${it.color}`);
+          }
           if (it.notas) {
             writeLine(`    Nota: ${it.notas}`);
           }
@@ -323,6 +326,9 @@ export function encodeEscPos(
 
     itemsSueltos.forEach((it) => {
       writeLine(`• ${it.cantidad}x ${it.descripcion}${it.es_libra ? ` (${it.cantidad}lb)` : ""}`);
+      if (it.color) {
+        writeLine(`  Color: ${it.color}`);
+      }
       if (it.notas) {
         writeLine(`  Nota: ${it.notas}`);
       }
@@ -410,7 +416,7 @@ export function encodeEscPos(
 
     // Renderizar prendas sueltas
     itemsSueltos.forEach((it) => {
-      const cantDesc = `${it.cantidad}x ${it.descripcion}`;
+      const cantDesc = `${it.cantidad}x ${it.descripcion}${it.color ? ` [${it.color}]` : ""}`;
       const sub = it.cantidad * it.precio_unitario;
       const subStr = `RD$${sub.toFixed(2)}`;
       if (cantDesc.length + subStr.length + 1 > columns) {
