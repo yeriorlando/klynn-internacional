@@ -18,7 +18,8 @@
     "start": "node .output/server/index.mjs",
     "lint": "eslint .",
     "format": "prettier --write .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test:offline": "node --experimental-strip-types --test src/lib/offline-hardening.test.ts"
   },
   "dependencies": {
     "@cloudflare/vite-plugin": "^1.25.5",

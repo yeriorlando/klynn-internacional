@@ -1,18 +1,43 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { getCurrentUser, getSession, type Empleado, type Tenant } from "@/lib/storage";
+import {
+  getCurrentUser,
+  getEmpleadoById,
+  getSession,
+  getTenantById,
+  type Empleado,
+  type Tenant,
+} from "@/lib/storage";
 
 // Dummy placeholder while loading — prevents hook ordering violations in child components
 const LOADING_TENANT: Tenant = {
-  id: '__loading__', nombre: '', slug: '', rnc: '', telefono: '', direccion: '',
-  ciudad: '', provincia: '', email: '', color_primario: '#1B4B73', color_secundario: '#F0B900',
-  plan_id: 'basico', estado: 'TRIAL', trial_hasta: new Date().toISOString(),
-  config: {} as any, creado_en: new Date().toISOString()
+  id: "__loading__",
+  nombre: "",
+  slug: "",
+  rnc: "",
+  telefono: "",
+  direccion: "",
+  ciudad: "",
+  provincia: "",
+  email: "",
+  color_primario: "#1B4B73",
+  color_secundario: "#F0B900",
+  plan_id: "basico",
+  estado: "TRIAL",
+  trial_hasta: new Date().toISOString(),
+  config: {} as any,
+  creado_en: new Date().toISOString(),
 };
 const LOADING_EMPLEADO: Empleado = {
-  id: '__loading__', tenant_id: '__loading__', nombre: '', email: '',
-  password: '', rol: 'RECEPCIONISTA', activo: true, permisos: [],
-  creado_en: new Date().toISOString()
+  id: "__loading__",
+  tenant_id: "__loading__",
+  nombre: "",
+  email: "",
+  password: "",
+  rol: "RECEPCIONISTA",
+  activo: true,
+  permisos: [],
+  creado_en: new Date().toISOString(),
 };
 
 /** Hook que devuelve el usuario actual autenticado de forma estricta o redirige a /login. */
@@ -34,7 +59,20 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
           password: "***",
           rol: "ADMIN",
           activo: true,
-          permisos: ["nueva-orden", "ordenes", "caja", "clientes", "catalogo", "procesos", "reportes", "gastos", "configuracion", "conversations", "logistica", "personal"],
+          permisos: [
+            "nueva-orden",
+            "ordenes",
+            "caja",
+            "clientes",
+            "catalogo",
+            "procesos",
+            "reportes",
+            "gastos",
+            "configuracion",
+            "conversations",
+            "logistica",
+            "personal",
+          ],
           creado_en: new Date().toISOString(),
         },
         tenant: {
@@ -67,7 +105,11 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
           const match = window.location.pathname.match(/^\/t\/([^/]+)/);
           const currentUrlSlug = match ? match[1] : null;
           // Si estamos en una ruta de tenant /t/:slug, verificar que coincida
-          if (!currentUrlSlug || currentUrlSlug === "admin" || parsed.tenant?.slug === currentUrlSlug) {
+          if (
+            !currentUrlSlug ||
+            currentUrlSlug === "admin" ||
+            parsed.tenant?.slug === currentUrlSlug
+          ) {
             return parsed;
           }
         }
@@ -101,28 +143,26 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
           } catch {}
         }
 
-        // Si estamos sin conexión, no redirigir si hay sesión guardada para no bloquear el POS
-        if (typeof window !== "undefined" && !navigator.onLine) {
-          setLoading(false);
-          return;
-        }
-
-        const match = typeof window !== 'undefined' ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+        const match =
+          typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
         const slug = match ? match[1] : null;
-        
-        if (slug && slug !== 'admin') {
+
+        if (slug && slug !== "admin") {
           navigate({ to: "/t/$slug/login", params: { slug } });
         } else {
           navigate({ to: "/login" });
         }
       } else {
         // Validar si el usuario intenta acceder a una ruta /t/:slug que no le pertenece
-        const match = typeof window !== 'undefined' ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+        const match =
+          typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
         const slug = match ? match[1] : null;
         const isSuperAdmin = u.empleado.id === "admin" || u.tenant.id === "admin";
 
         if (slug && slug !== "admin" && !isSuperAdmin && u.tenant.slug && u.tenant.slug !== slug) {
-          console.warn(`[useRequireAuth] Desajuste de slug detectado: ${slug} !== ${u.tenant.slug}. Redirigiendo a su lavandería...`);
+          console.warn(
+            `[useRequireAuth] Desajuste de slug detectado: ${slug} !== ${u.tenant.slug}. Redirigiendo a su lavandería...`,
+          );
           navigate({ to: "/t/$slug", params: { slug: u.tenant.slug } });
         } else {
           setUser(u);

@@ -2,7 +2,20 @@ import { supabase } from "./supabase";
 import { createClient } from "@supabase/supabase-js";
 import { offlineDB } from "./offline-db";
 import { syncManager } from "./sync-manager";
-import { getEmpleadoByIdServer, getEmpleadoByEmailAndTenantServer, getTenantBySlugServer } from "./server-auth";
+import {
+  createOfflineAuthVerifier,
+  isOfflineAuthExpired,
+  isOfflineAuthLocked,
+  recordOfflineAuthFailure,
+  recordOfflineAuthSuccess,
+  verifyOfflinePassword,
+  type OfflineAuthVerifier,
+} from "./offline-auth";
+import {
+  getEmpleadoByIdServer,
+  getEmpleadoByEmailAndTenantServer,
+  getTenantBySlugServer,
+} from "./server-auth";
 
 export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
 
@@ -98,6 +111,8 @@ export interface Empleado {
   creado_en: string;
   avatar_url?: string;
 }
+
+type OfflineCachedEmpleado = Empleado & { _offline_auth?: OfflineAuthVerifier };
 
 export interface EmployeeInvitation {
   id: string;
@@ -597,7 +612,15 @@ export const PLANS: Plan[] = [
     limite_empleados: 2,
     limite_ordenes_mes: 300,
     limite_whatsapp_mes: 300,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: false, procesos: true, estanteria: true, pos_offline: false },
+    modulos: {
+      whatsapp: true,
+      facturacion_fiscal: false,
+      multisucursal: true,
+      logistica: false,
+      procesos: true,
+      estanteria: true,
+      pos_offline: false,
+    },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
     polar_sucursal_url: "",
@@ -610,7 +633,15 @@ export const PLANS: Plan[] = [
     limite_empleados: 10,
     limite_ordenes_mes: 1000,
     limite_whatsapp_mes: 1000,
-    modulos: { whatsapp: true, facturacion_fiscal: false, multisucursal: true, logistica: true, procesos: true, estanteria: true, pos_offline: true },
+    modulos: {
+      whatsapp: true,
+      facturacion_fiscal: false,
+      multisucursal: true,
+      logistica: true,
+      procesos: true,
+      estanteria: true,
+      pos_offline: true,
+    },
     destacado: true,
     precio_sucursal_adicional: 1200,
     limite_sucursales_adicionales: 3,
@@ -624,7 +655,15 @@ export const PLANS: Plan[] = [
     limite_empleados: 999,
     limite_ordenes_mes: null,
     limite_whatsapp_mes: 5000,
-    modulos: { whatsapp: true, facturacion_fiscal: true, multisucursal: true, logistica: true, procesos: true, estanteria: true, pos_offline: true },
+    modulos: {
+      whatsapp: true,
+      facturacion_fiscal: true,
+      multisucursal: true,
+      logistica: true,
+      procesos: true,
+      estanteria: true,
+      pos_offline: true,
+    },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
     polar_sucursal_url: "",
@@ -659,7 +698,14 @@ export function isSameTenant(tid1?: string, tid2?: string): boolean {
 
 export function isModuleEnabled(
   tenant: Tenant | null,
-  moduleKey: "whatsapp" | "facturacion_fiscal" | "multisucursal" | "logistica" | "procesos" | "estanteria" | "pos_offline",
+  moduleKey:
+    | "whatsapp"
+    | "facturacion_fiscal"
+    | "multisucursal"
+    | "logistica"
+    | "procesos"
+    | "estanteria"
+    | "pos_offline",
   plan?: Plan,
 ): boolean {
   if (!tenant || tenant.id === "__loading__") return true;
@@ -679,7 +725,9 @@ export function isModuleEnabled(
     return activePlan?.modulos?.procesos !== undefined ? !!activePlan.modulos.procesos : true;
   }
   if (moduleKey === "pos_offline") {
-    return activePlan?.modulos?.pos_offline !== undefined ? !!activePlan.modulos.pos_offline : false;
+    return activePlan?.modulos?.pos_offline !== undefined
+      ? !!activePlan.modulos.pos_offline
+      : false;
   }
   return !!activePlan?.modulos?.[moduleKey];
 }
@@ -970,7 +1018,7 @@ export async function getPlans(): Promise<Plan[]> {
   try {
     const fetchPromise = supabase.from("planes").select("*").order("precio_mensual");
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
     if (!error && data && data.length > 0) {
@@ -987,48 +1035,97 @@ export async function getPlans(): Promise<Plan[]> {
           limite_empleados: p.limite_empleados,
           limite_ordenes_mes: p.limite_ordenes_mes,
           modulos: {
-            whatsapp: p.whatsapp !== undefined && p.whatsapp !== null
-              ? !!p.whatsapp
-              : (localMatch?.modulos?.whatsapp !== undefined ? !!localMatch.modulos.whatsapp : !!staticMatch?.modulos?.whatsapp),
-            facturacion_fiscal: p.facturacion_fiscal !== undefined && p.facturacion_fiscal !== null
-              ? !!p.facturacion_fiscal
-              : (localMatch?.modulos?.facturacion_fiscal !== undefined ? !!localMatch.modulos.facturacion_fiscal : !!staticMatch?.modulos?.facturacion_fiscal),
-            multisucursal: p.multisucursal !== undefined && p.multisucursal !== null
-              ? !!p.multisucursal
-              : (localMatch?.modulos?.multisucursal !== undefined ? !!localMatch.modulos.multisucursal : !!staticMatch?.modulos?.multisucursal),
-            logistica: p.logistica !== undefined && p.logistica !== null
-              ? !!p.logistica
-              : (localMatch?.modulos?.logistica !== undefined ? !!localMatch.modulos.logistica : !!staticMatch?.modulos?.logistica),
-            procesos: p.procesos !== undefined && p.procesos !== null
-              ? !!p.procesos
-              : (localMatch?.modulos?.procesos !== undefined ? !!localMatch.modulos.procesos : (staticMatch?.modulos?.procesos ?? false)),
-            estanteria: p.estanteria !== undefined && p.estanteria !== null
-              ? !!p.estanteria
-              : (localMatch?.modulos?.estanteria !== undefined ? !!localMatch.modulos.estanteria : (staticMatch?.modulos?.estanteria ?? false)),
-            pos_offline: p.pos_offline !== undefined && p.pos_offline !== null
-              ? !!p.pos_offline
-              : (localMatch?.modulos?.pos_offline !== undefined ? !!localMatch.modulos.pos_offline : (staticMatch?.modulos?.pos_offline ?? false)),
+            whatsapp:
+              p.whatsapp !== undefined && p.whatsapp !== null
+                ? !!p.whatsapp
+                : localMatch?.modulos?.whatsapp !== undefined
+                  ? !!localMatch.modulos.whatsapp
+                  : !!staticMatch?.modulos?.whatsapp,
+            facturacion_fiscal:
+              p.facturacion_fiscal !== undefined && p.facturacion_fiscal !== null
+                ? !!p.facturacion_fiscal
+                : localMatch?.modulos?.facturacion_fiscal !== undefined
+                  ? !!localMatch.modulos.facturacion_fiscal
+                  : !!staticMatch?.modulos?.facturacion_fiscal,
+            multisucursal:
+              p.multisucursal !== undefined && p.multisucursal !== null
+                ? !!p.multisucursal
+                : localMatch?.modulos?.multisucursal !== undefined
+                  ? !!localMatch.modulos.multisucursal
+                  : !!staticMatch?.modulos?.multisucursal,
+            logistica:
+              p.logistica !== undefined && p.logistica !== null
+                ? !!p.logistica
+                : localMatch?.modulos?.logistica !== undefined
+                  ? !!localMatch.modulos.logistica
+                  : !!staticMatch?.modulos?.logistica,
+            procesos:
+              p.procesos !== undefined && p.procesos !== null
+                ? !!p.procesos
+                : localMatch?.modulos?.procesos !== undefined
+                  ? !!localMatch.modulos.procesos
+                  : (staticMatch?.modulos?.procesos ?? false),
+            estanteria:
+              p.estanteria !== undefined && p.estanteria !== null
+                ? !!p.estanteria
+                : localMatch?.modulos?.estanteria !== undefined
+                  ? !!localMatch.modulos.estanteria
+                  : (staticMatch?.modulos?.estanteria ?? false),
+            pos_offline:
+              p.pos_offline !== undefined && p.pos_offline !== null
+                ? !!p.pos_offline
+                : localMatch?.modulos?.pos_offline !== undefined
+                  ? !!localMatch.modulos.pos_offline
+                  : (staticMatch?.modulos?.pos_offline ?? false),
           },
-          limite_whatsapp_mes: p.limite_whatsapp_mes ?? localMatch?.limite_whatsapp_mes ?? staticMatch?.limite_whatsapp_mes ?? 0,
-          destacado: localMatch?.destacado !== undefined ? !!localMatch.destacado : (p.destacado !== undefined && p.destacado !== null ? !!p.destacado : !!staticMatch?.destacado),
-          es_especial: localMatch?.es_especial !== undefined ? !!localMatch.es_especial : (p.es_especial !== undefined && p.es_especial !== null ? !!p.es_especial : (staticMatch?.es_especial ?? false)),
-          titulo_especial: (localMatch?.titulo_especial !== undefined && localMatch?.titulo_especial !== null && localMatch.titulo_especial !== "")
-            ? localMatch.titulo_especial
-            : (p.titulo_especial || staticMatch?.titulo_especial || "Plan especial"),
-          polar_product_monthly_url: p.polar_product_monthly_url ?? localMatch?.polar_product_monthly_url ?? staticMatch?.polar_product_monthly_url,
-          polar_product_yearly_url: p.polar_product_yearly_url ?? localMatch?.polar_product_yearly_url ?? staticMatch?.polar_product_yearly_url,
+          limite_whatsapp_mes:
+            p.limite_whatsapp_mes ??
+            localMatch?.limite_whatsapp_mes ??
+            staticMatch?.limite_whatsapp_mes ??
+            0,
+          destacado:
+            localMatch?.destacado !== undefined
+              ? !!localMatch.destacado
+              : p.destacado !== undefined && p.destacado !== null
+                ? !!p.destacado
+                : !!staticMatch?.destacado,
+          es_especial:
+            localMatch?.es_especial !== undefined
+              ? !!localMatch.es_especial
+              : p.es_especial !== undefined && p.es_especial !== null
+                ? !!p.es_especial
+                : (staticMatch?.es_especial ?? false),
+          titulo_especial:
+            localMatch?.titulo_especial !== undefined &&
+            localMatch?.titulo_especial !== null &&
+            localMatch.titulo_especial !== ""
+              ? localMatch.titulo_especial
+              : p.titulo_especial || staticMatch?.titulo_especial || "Plan especial",
+          polar_product_monthly_url:
+            p.polar_product_monthly_url ??
+            localMatch?.polar_product_monthly_url ??
+            staticMatch?.polar_product_monthly_url,
+          polar_product_yearly_url:
+            p.polar_product_yearly_url ??
+            localMatch?.polar_product_yearly_url ??
+            staticMatch?.polar_product_yearly_url,
           precio_sucursal_adicional:
             p.precio_sucursal_adicional !== undefined && p.precio_sucursal_adicional !== null
               ? p.precio_sucursal_adicional
-              : (localMatch?.precio_sucursal_adicional ?? staticMatch?.precio_sucursal_adicional ?? 0),
+              : (localMatch?.precio_sucursal_adicional ??
+                staticMatch?.precio_sucursal_adicional ??
+                0),
           polar_sucursal_url:
             p.polar_sucursal_url !== undefined && p.polar_sucursal_url !== null
               ? p.polar_sucursal_url
               : (localMatch?.polar_sucursal_url ?? staticMatch?.polar_sucursal_url ?? ""),
           limite_sucursales_adicionales:
-            p.limite_sucursales_adicionales !== undefined && p.limite_sucursales_adicionales !== null
+            p.limite_sucursales_adicionales !== undefined &&
+            p.limite_sucursales_adicionales !== null
               ? p.limite_sucursales_adicionales
-              : (localMatch?.limite_sucursales_adicionales ?? staticMatch?.limite_sucursales_adicionales ?? 0),
+              : (localMatch?.limite_sucursales_adicionales ??
+                staticMatch?.limite_sucursales_adicionales ??
+                0),
         };
       });
       const extraLocalPlans = localStored.filter((lp) => !data.some((dp: any) => dp.id === lp.id));
@@ -1107,7 +1204,10 @@ export async function saveTenant(t: Tenant) {
   if (typeof window !== "undefined") {
     localStorage.setItem(`klynn_tenant_id_${realId}`, JSON.stringify(updatedTenant));
     if (updatedTenant.slug) {
-      localStorage.setItem(`klynn_tenant_cache_${updatedTenant.slug}`, JSON.stringify(updatedTenant));
+      localStorage.setItem(
+        `klynn_tenant_cache_${updatedTenant.slug}`,
+        JSON.stringify(updatedTenant),
+      );
     }
   }
 
@@ -1155,7 +1255,9 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
     let cachedTenant: Tenant | null = null;
     const raw = localStorage.getItem(cacheKey);
     if (raw) {
-      try { cachedTenant = JSON.parse(raw); } catch {}
+      try {
+        cachedTenant = JSON.parse(raw);
+      } catch {}
     }
     if (!cachedTenant) {
       const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
@@ -1170,7 +1272,10 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
       cachedTenant.config = { ...(cachedTenant.config || {}), ...config };
       localStorage.setItem(cacheKey, JSON.stringify(cachedTenant));
       if (cachedTenant.slug) {
-        localStorage.setItem(`klynn_tenant_cache_${cachedTenant.slug}`, JSON.stringify(cachedTenant));
+        localStorage.setItem(
+          `klynn_tenant_cache_${cachedTenant.slug}`,
+          JSON.stringify(cachedTenant),
+        );
       }
       const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
       if (lastAuthStr) {
@@ -1214,7 +1319,12 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
   }
 }
 
-export async function sendSignUpOtp(email: string, password: string, nombre: string, tenantId: string) {
+export async function sendSignUpOtp(
+  email: string,
+  password: string,
+  nombre: string,
+  tenantId: string,
+) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
@@ -1238,7 +1348,11 @@ export async function resendSignUpOtp(email: string) {
   return data;
 }
 
-export async function verifyOtpAndRegisterTenant(otpToken: string, tenant: Tenant, admin: Empleado) {
+export async function verifyOtpAndRegisterTenant(
+  otpToken: string,
+  tenant: Tenant,
+  admin: Empleado,
+) {
   // 1. Verificar OTP en Supabase Auth
   let verifyResult = await supabase.auth.verifyOtp({
     email: admin.email,
@@ -1402,7 +1516,8 @@ export async function registerTenant(tenant: Tenant, admin: Empleado) {
 }
 
 export async function registerBranch(tenant: Tenant, admin: Empleado, userId: string) {
-  const branchName = tenant.nombre_sucursal || tenant.config?.nombre_sucursal || "Sucursal principal";
+  const branchName =
+    tenant.nombre_sucursal || tenant.config?.nombre_sucursal || "Sucursal principal";
   const tenantToSave: Tenant = {
     ...tenant,
     nombre_sucursal: branchName,
@@ -1468,12 +1583,19 @@ export async function deleteTenant(id: string) {
 
   // 2. Ejecutar eliminación en cascada completa en Supabase (Auth + DB)
   try {
-    const { error: rpcError } = await supabase.rpc("admin_delete_tenant_complete", { target_tenant_id: id });
+    const { error: rpcError } = await supabase.rpc("admin_delete_tenant_complete", {
+      target_tenant_id: id,
+    });
     if (!rpcError) {
-      console.log(`[deleteTenant] Lavandería ${id} y sus usuarios eliminados exitosamente vía RPC.`);
+      console.log(
+        `[deleteTenant] Lavandería ${id} y sus usuarios eliminados exitosamente vía RPC.`,
+      );
       return;
     }
-    console.warn("Aviso en admin_delete_tenant_complete, ejecutando limpieza manual de respaldo...", rpcError);
+    console.warn(
+      "Aviso en admin_delete_tenant_complete, ejecutando limpieza manual de respaldo...",
+      rpcError,
+    );
   } catch (rpcErr) {
     console.warn("Excepción al ejecutar admin_delete_tenant_complete:", rpcErr);
   }
@@ -1510,7 +1632,7 @@ export async function deleteTenant(id: string) {
     "clientes",
     "catalogo_items",
     "servicios",
-    "empleados"
+    "empleados",
   ];
 
   for (const table of relatedTables) {
@@ -1539,20 +1661,18 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
   if (typeof window !== "undefined" && !navigator.onLine) {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
   }
 
   // 2. Intentar buscar en Supabase con timeout de seguridad
   try {
-    const fetchPromise = supabase
-      .from("tenants")
-      .select("*")
-      .eq("slug", cleanSlug)
-      .maybeSingle();
+    const fetchPromise = supabase.from("tenants").select("*").eq("slug", cleanSlug).maybeSingle();
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -1584,7 +1704,9 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
   if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
   }
 
@@ -1598,7 +1720,9 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
   if (typeof window !== "undefined" && !navigator.onLine) {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
@@ -1612,14 +1736,15 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
   try {
     const fetchPromise = supabase.from("tenants").select("*").eq("id", id).maybeSingle();
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
       if (typeof window !== "undefined") {
         localStorage.setItem(cacheKey, JSON.stringify(data));
-        if (data.slug) localStorage.setItem(`klynn_tenant_cache_${data.slug}`, JSON.stringify(data));
+        if (data.slug)
+          localStorage.setItem(`klynn_tenant_cache_${data.slug}`, JSON.stringify(data));
       }
       return data;
     }
@@ -1628,7 +1753,9 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
   if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
@@ -1701,10 +1828,7 @@ export async function updateTenantPlan(tenantId: string, planId: PlanId, resetSt
   if (resetStartDate) {
     updates.plan_fecha_inicio = new Date().toISOString();
   }
-  const { error } = await supabase
-    .from("tenants")
-    .update(updates)
-    .eq("id", tenantId);
+  const { error } = await supabase.from("tenants").update(updates).eq("id", tenantId);
   return !error;
 }
 
@@ -1745,7 +1869,7 @@ export async function updateTenantTrialHasta(tenantId: string, trialHasta: strin
 export async function updateTenantModulosOverride(
   tenantId: string,
   overrides?: TenantConfig["modulos_override"] | null,
-  mesesPagadosOverride?: number
+  mesesPagadosOverride?: number,
 ): Promise<boolean> {
   const { data: tenant, error: fetchError } = await supabase
     .from("tenants")
@@ -1761,7 +1885,10 @@ export async function updateTenantModulosOverride(
   const currentConfig = tenant?.config || {};
   const nextConfig: TenantConfig = {
     ...currentConfig,
-    meses_pagados_override: mesesPagadosOverride !== undefined ? mesesPagadosOverride : currentConfig.meses_pagados_override,
+    meses_pagados_override:
+      mesesPagadosOverride !== undefined
+        ? mesesPagadosOverride
+        : currentConfig.meses_pagados_override,
   };
 
   if (overrides === undefined || overrides === null) {
@@ -1837,9 +1964,7 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
           bank?.standby_sync_frequency ??
           (data as any)?.standby_sync_frequency ??
           DEFAULT_GLOBAL_CONFIG.standby_sync_frequency,
-        standby_last_sync_at:
-          bank?.standby_last_sync_at ??
-          (data as any)?.standby_last_sync_at,
+        standby_last_sync_at: bank?.standby_last_sync_at ?? (data as any)?.standby_last_sync_at,
         standby_last_sync_duration:
           bank?.standby_last_sync_duration ??
           (data as any)?.standby_last_sync_duration ??
@@ -1849,8 +1974,7 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
           (data as any)?.standby_last_sync_status ??
           DEFAULT_GLOBAL_CONFIG.standby_last_sync_status,
         standby_last_sync_metrics:
-          bank?.standby_last_sync_metrics ??
-          (data as any)?.standby_last_sync_metrics,
+          bank?.standby_last_sync_metrics ?? (data as any)?.standby_last_sync_metrics,
       };
     }
   } catch (e) {
@@ -2062,9 +2186,10 @@ export async function inviteEmployeeByEmail(
   tenantId: string,
   email: string,
 ): Promise<EmployeeInvitation> {
-  const redirectTo = typeof window !== "undefined"
-    ? `${window.location.origin}/restablecer-contrasena?invitation=1`
-    : "https://klynn.com.do/restablecer-contrasena?invitation=1";
+  const redirectTo =
+    typeof window !== "undefined"
+      ? `${window.location.origin}/restablecer-contrasena?invitation=1`
+      : "https://klynn.com.do/restablecer-contrasena?invitation=1";
   const { data, error } = await supabase.functions.invoke("employee-invitations", {
     body: { tenantId, email: email.trim().toLowerCase(), redirectTo },
   });
@@ -2084,7 +2209,10 @@ export async function inviteEmployeeByEmail(
   return data.invitation as EmployeeInvitation;
 }
 
-export async function deleteExpiredEmployeeInvitation(invitationId: string, tenantId: string): Promise<void> {
+export async function deleteExpiredEmployeeInvitation(
+  invitationId: string,
+  tenantId: string,
+): Promise<void> {
   try {
     await supabase
       .from("employee_invitations")
@@ -2147,7 +2275,10 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))) {
+        if (
+          parsed?.empleado &&
+          (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))
+        ) {
           return [parsed.empleado];
         }
       } catch {}
@@ -2164,7 +2295,7 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
     const fetchPromise = query.order("nombre");
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -2184,13 +2315,18 @@ export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
   if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
       try {
         const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))) {
+        if (
+          parsed?.empleado &&
+          (!tenant_id || isSameTenant(parsed.empleado.tenant_id, tenant_id))
+        ) {
           return [parsed.empleado];
         }
       } catch {}
@@ -2386,7 +2522,9 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
   if (typeof window !== "undefined" && !navigator.onLine) {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
@@ -2400,7 +2538,7 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
   try {
     const fetchPromise = supabase.from("empleados").select("*").eq("id", id).maybeSingle();
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -2426,7 +2564,9 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
   if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
-      try { return JSON.parse(cachedStr); } catch {}
+      try {
+        return JSON.parse(cachedStr);
+      } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
     if (lastAuthStr) {
@@ -2446,12 +2586,16 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
 
   // 1. Si no hay conexión, devolver inmediatamente de memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
+    const local = read<Cliente[]>(KEY.clientes, []).filter(
+      (c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId),
+    );
     if (local.length > 0) return local;
     try {
       const idbClis = await offlineDB.getAll<Cliente>("clientes");
       if (idbClis && idbClis.length > 0) {
-        return idbClis.filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
+        return idbClis.filter(
+          (c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId),
+        );
       }
     } catch {}
     return local;
@@ -2487,13 +2631,17 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
 
     if (allData.length > 0) {
       if (isBrowser()) {
-        const local = read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
+        const local = read<Cliente[]>(KEY.clientes, []).filter(
+          (c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId),
+        );
         const combined = [...allData];
         local.forEach((lc) => {
           if (!combined.some((sc) => sc.id === lc.id)) combined.push(lc);
         });
         write(KEY.clientes, combined);
-        try { offlineDB.putMany("clientes", combined); } catch {}
+        try {
+          offlineDB.putMany("clientes", combined);
+        } catch {}
         return combined;
       }
       return allData;
@@ -2502,7 +2650,9 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
     console.warn("Aviso al consultar clientes en Supabase:", e);
   }
 
-  return read<Cliente[]>(KEY.clientes, []).filter((c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId));
+  return read<Cliente[]>(KEY.clientes, []).filter(
+    (c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId),
+  );
 }
 
 export async function saveCliente(c: Cliente) {
@@ -2549,8 +2699,41 @@ export async function saveCliente(c: Cliente) {
 }
 
 export async function deleteCliente(id: string) {
-  const { error } = await supabase.from("clientes").delete().eq("id", id);
-  if (error) throw error;
+  const local = read<Cliente[]>(KEY.clientes, []);
+  const target = local.find((item) => item.id === id);
+  if (isBrowser())
+    write(
+      KEY.clientes,
+      local.filter((item) => item.id !== id),
+    );
+  try {
+    await offlineDB.delete("clientes", id);
+  } catch {}
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    if (!target?.tenant_id)
+      throw new Error("No se pudo determinar la lavandería del cliente eliminado.");
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "clientes",
+      action: "DELETE",
+      payload: { id },
+    });
+    return;
+  }
+  try {
+    const { error } = await supabase.from("clientes").delete().eq("id", id);
+    if (error) throw error;
+  } catch (error) {
+    if (!target?.tenant_id) throw error;
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "clientes",
+      action: "DELETE",
+      payload: { id },
+    });
+  }
 }
 
 export async function getClienteById(id: string): Promise<Cliente | undefined> {
@@ -2610,14 +2793,18 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
 
     if (allData.length > 0) {
       if (isBrowser()) {
-        const local = read<Orden[]>(KEY.ordenes, []).filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId));
+        const local = read<Orden[]>(KEY.ordenes, []).filter(
+          (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId),
+        );
         const combined = [...allData];
         local.forEach((lo) => {
           if (!combined.some((co) => co.id === lo.id)) combined.push(lo);
         });
         const sorted = combined.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
         write(KEY.ordenes, sorted);
-        try { offlineDB.putMany("ordenes", sorted); } catch {}
+        try {
+          offlineDB.putMany("ordenes", sorted);
+        } catch {}
         return sorted;
       }
       return allData;
@@ -2641,7 +2828,12 @@ export async function getOrdenesByPeriod(filters: {
   if (typeof window !== "undefined" && !navigator.onLine) {
     const all = await getOrdenes(filters.tenant_id);
     return all.filter((o) => {
-      if (filters.empleado_id && filters.empleado_id !== "all" && o.empleado_id !== filters.empleado_id) return false;
+      if (
+        filters.empleado_id &&
+        filters.empleado_id !== "all" &&
+        o.empleado_id !== filters.empleado_id
+      )
+        return false;
       if (filters.desde && o.creado_en < filters.desde) return false;
       if (filters.hasta && o.creado_en > filters.hasta + "T23:59:59Z") return false;
       return true;
@@ -2669,7 +2861,12 @@ export async function getOrdenesByPeriod(filters: {
 
   const all = await getOrdenes(filters.tenant_id);
   return all.filter((o) => {
-    if (filters.empleado_id && filters.empleado_id !== "all" && o.empleado_id !== filters.empleado_id) return false;
+    if (
+      filters.empleado_id &&
+      filters.empleado_id !== "all" &&
+      o.empleado_id !== filters.empleado_id
+    )
+      return false;
     if (filters.desde && o.creado_en < filters.desde) return false;
     if (filters.hasta && o.creado_en > filters.hasta + "T23:59:59Z") return false;
     return true;
@@ -2806,7 +3003,9 @@ export function computeNextOrderSequence(numbers: (number | null | undefined)[])
     const highest = valid[0];
     const secondHighest = valid[1];
     if (highest - secondHighest > 100) {
-      console.warn(`[OrderSeq] Outlier detectado: ${highest} (segundo más alto: ${secondHighest}). Descartando pico.`);
+      console.warn(
+        `[OrderSeq] Outlier detectado: ${highest} (segundo más alto: ${secondHighest}). Descartando pico.`,
+      );
       maxValid = secondHighest;
     }
   }
@@ -2823,7 +3022,7 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   const localSeqs: number[] = [];
   try {
     const local = read<Orden[]>(KEY.ordenes, []).filter(
-      (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId)
+      (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId),
     );
     for (const o of local) {
       const n = extractOrderSequenceNumber(o.numero);
@@ -2881,13 +3080,16 @@ export const nextNumeroOrden = nextOrdenNumero;
 export async function getCajas(tenant_id: string): Promise<Caja[]> {
   const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
-    return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === realId || c.tenant_id === tenant_id);
+    return read<Caja[]>(KEY.cajas, []).filter(
+      (c) => c.tenant_id === realId || c.tenant_id === tenant_id,
+    );
   }
 
   try {
-    const filter = realId !== tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+        : `tenant_id.eq.${realId}`;
 
     const fetchPromise = supabase
       .from("cajas")
@@ -2896,7 +3098,7 @@ export async function getCajas(tenant_id: string): Promise<Caja[]> {
       .order("abierta_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -2905,12 +3107,16 @@ export async function getCajas(tenant_id: string): Promise<Caja[]> {
       const local = read<Caja[]>(KEY.cajas, []);
       const otherCajas = local.filter((c) => c.tenant_id !== realId && c.tenant_id !== tenant_id);
       write(KEY.cajas, [...data, ...otherCajas]);
-      try { offlineDB.putMany("cajas", data); } catch {}
+      try {
+        offlineDB.putMany("cajas", data);
+      } catch {}
       return data;
     }
   } catch (e) {}
 
-  return read<Caja[]>(KEY.cajas, []).filter((c) => c.tenant_id === realId || c.tenant_id === tenant_id);
+  return read<Caja[]>(KEY.cajas, []).filter(
+    (c) => c.tenant_id === realId || c.tenant_id === tenant_id,
+  );
 }
 
 export async function getHistoricoCierres(filters: {
@@ -2926,15 +3132,12 @@ export async function getHistoricoCierres(filters: {
   }
 
   try {
-    const filter = realId !== filters.tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${filters.tenant_id}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== filters.tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${filters.tenant_id}`
+        : `tenant_id.eq.${realId}`;
 
-    let query = supabase
-      .from("cajas")
-      .select("*")
-      .or(filter)
-      .eq("estado", "CERRADA");
+    let query = supabase.from("cajas").select("*").or(filter).eq("estado", "CERRADA");
 
     if (filters.empleado_id && filters.empleado_id !== "all") {
       query = query.eq("empleado_id", filters.empleado_id);
@@ -2950,7 +3153,7 @@ export async function getHistoricoCierres(filters: {
 
     const fetchPromise = query.order("cerrada_en", { ascending: false });
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -2968,15 +3171,18 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
   // 1. Si estamos sin conexión, verificar inmediatamente en memoria local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const localCajas = read<Caja[]>(KEY.cajas, []);
-    const openCaja = localCajas.find((c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA");
+    const openCaja = localCajas.find(
+      (c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA",
+    );
     return openCaja || null;
   }
 
   // 2. Intentar buscar en Supabase con timeout de 2000ms
   try {
-    const filter = realId !== tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+        : `tenant_id.eq.${realId}`;
 
     const fetchPromise = supabase
       .from("cajas")
@@ -2986,7 +3192,7 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
       .order("abierta_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3002,7 +3208,9 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
   } catch (e) {}
 
   const localCajas = read<Caja[]>(KEY.cajas, []);
-  const openCaja = localCajas.find((c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA");
+  const openCaja = localCajas.find(
+    (c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA",
+  );
   return openCaja || null;
 }
 
@@ -3053,20 +3261,25 @@ export async function getMovimientos(
   const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-    return local.filter((m) => (m.tenant_id === realId || m.tenant_id === tenant_id) && (!caja_id || m.caja_id === caja_id));
+    return local.filter(
+      (m) =>
+        (m.tenant_id === realId || m.tenant_id === tenant_id) &&
+        (!caja_id || m.caja_id === caja_id),
+    );
   }
 
   try {
-    const filter = realId !== tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+        : `tenant_id.eq.${realId}`;
 
     let query = supabase.from("movimientos_caja").select("*").or(filter);
     if (caja_id) query = query.eq("caja_id", caja_id);
     const fetchPromise = query.order("creado_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3075,13 +3288,18 @@ export async function getMovimientos(
       const local = read<MovimientoCaja[]>(KEY.movimientos, []);
       const otherMovs = local.filter((m) => m.tenant_id !== realId && m.tenant_id !== tenant_id);
       write(KEY.movimientos, [...data, ...otherMovs]);
-      try { offlineDB.putMany("movimientos_caja", data); } catch {}
+      try {
+        offlineDB.putMany("movimientos_caja", data);
+      } catch {}
       return data;
     }
   } catch (e) {}
 
   const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-  return local.filter((m) => (m.tenant_id === realId || m.tenant_id === tenant_id) && (!caja_id || m.caja_id === caja_id));
+  return local.filter(
+    (m) =>
+      (m.tenant_id === realId || m.tenant_id === tenant_id) && (!caja_id || m.caja_id === caja_id),
+  );
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
@@ -3128,13 +3346,16 @@ export async function saveMovimiento(m: MovimientoCaja) {
 export async function getGastos(tenant_id: string): Promise<Gasto[]> {
   const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
-    return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === realId || g.tenant_id === tenant_id);
+    return read<Gasto[]>(KEY.gastos, []).filter(
+      (g) => g.tenant_id === realId || g.tenant_id === tenant_id,
+    );
   }
 
   try {
-    const filter = realId !== tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id}`
+        : `tenant_id.eq.${realId}`;
 
     const fetchPromise = supabase
       .from("gastos")
@@ -3143,7 +3364,7 @@ export async function getGastos(tenant_id: string): Promise<Gasto[]> {
       .order("fecha", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3156,7 +3377,9 @@ export async function getGastos(tenant_id: string): Promise<Gasto[]> {
     }
   } catch (e) {}
 
-  return read<Gasto[]>(KEY.gastos, []).filter((g) => g.tenant_id === realId || g.tenant_id === tenant_id);
+  return read<Gasto[]>(KEY.gastos, []).filter(
+    (g) => g.tenant_id === realId || g.tenant_id === tenant_id,
+  );
 }
 
 export async function saveGasto(g: Gasto) {
@@ -3200,22 +3423,44 @@ export async function saveGasto(g: Gasto) {
 }
 
 export async function deleteGasto(id: string) {
+  const local = read<Gasto[]>(KEY.gastos, []);
+  const target = local.find((item) => item.id === id);
+  if (isBrowser())
+    write(
+      KEY.gastos,
+      local.filter((item) => item.id !== id),
+    );
+  try {
+    await offlineDB.delete("gastos", id);
+  } catch {}
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    if (!target?.tenant_id)
+      throw new Error("No se pudo determinar la lavandería del gasto eliminado.");
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "gastos",
+      action: "DELETE",
+      payload: { id },
+    });
+    return;
+  }
   try {
     await supabase.from("movimientos_caja").delete().eq("referencia", id);
   } catch (e) {}
-  
-  if (isBrowser()) {
-    const local = read<Gasto[]>(KEY.gastos, []);
-    write(
-      KEY.gastos,
-      local.filter((x) => x.id !== id),
-    );
-  }
-
   try {
     const { error } = await supabase.from("gastos").delete().eq("id", id);
     if (error) throw error;
-  } catch (e) {}
+  } catch (error) {
+    if (!target?.tenant_id) throw error;
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "gastos",
+      action: "DELETE",
+      payload: { id },
+    });
+  }
 }
 
 // ============ Catálogo (Supabase) ============
@@ -3231,16 +3476,19 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   // 1. Si estamos sin conexión, devolver inmediatamente del almacenamiento local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<CatalogoItem[]>(KEY.catalogo, []);
-    const relevant = local.filter((i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin");
+    const relevant = local.filter(
+      (i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin",
+    );
     if (relevant.length > 0) return relevant;
     return CATALOGO_PRENDAS_PREDEFINIDAS as any;
   }
 
   // 2. Intentar buscar en Supabase con timeout de 3000ms
   try {
-    const filter = realId !== tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id},tenant_id.eq.admin`
-      : `tenant_id.eq.${realId},tenant_id.eq.admin`;
+    const filter =
+      realId !== tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id},tenant_id.eq.admin`
+        : `tenant_id.eq.${realId},tenant_id.eq.admin`;
 
     const fetchPromise = supabase
       .from("catalogo_items")
@@ -3250,7 +3498,7 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
       .order("nombre", { ascending: true });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3275,7 +3523,9 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
         });
 
       write(KEY.catalogo, finalItems);
-      try { offlineDB.putMany("catalogo_prendas", finalItems); } catch {}
+      try {
+        offlineDB.putMany("catalogo_prendas", finalItems);
+      } catch {}
       return finalItems;
     }
   } catch (e) {
@@ -3283,7 +3533,9 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   }
 
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
-  const relevant = local.filter((i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin");
+  const relevant = local.filter(
+    (i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin",
+  );
   if (relevant.length > 0) return relevant;
   return CATALOGO_PRENDAS_PREDEFINIDAS as any;
 }
@@ -3301,9 +3553,18 @@ export async function saveCatalogoItem(item: CatalogoItem) {
   if (exists >= 0) local[exists] = itemToSave;
   else local.push(itemToSave);
   write(KEY.catalogo, local);
-  try { offlineDB.put("catalogo_prendas", itemToSave); } catch {}
+  try {
+    offlineDB.put("catalogo_prendas", itemToSave);
+  } catch {}
 
   if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: itemToSave.id,
+      tenant_id: itemToSave.tenant_id,
+      table_name: "catalogo_items",
+      action: "UPSERT",
+      payload: itemToSave,
+    });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     return;
   }
@@ -3312,19 +3573,53 @@ export async function saveCatalogoItem(item: CatalogoItem) {
     const { error } = await supabase.from("catalogo_items").upsert(itemToSave);
     if (error) throw error;
   } catch (err) {
+    await offlineDB.addToOutbox({
+      id: itemToSave.id,
+      tenant_id: itemToSave.tenant_id,
+      table_name: "catalogo_items",
+      action: "UPSERT",
+      payload: itemToSave,
+    });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
 }
 
 export async function deleteCatalogoItem(id: string) {
-  if (typeof window !== "undefined") {
-    const local = read<CatalogoItem[]>(KEY.catalogo, []);
-    write(KEY.catalogo, local.filter((x) => x.id !== id));
+  const local = read<CatalogoItem[]>(KEY.catalogo, []);
+  const target = local.find((item) => item.id === id);
+  if (typeof window !== "undefined")
+    write(
+      KEY.catalogo,
+      local.filter((item) => item.id !== id),
+    );
+  try {
+    await offlineDB.delete("catalogo_prendas", id);
+  } catch {}
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    if (!target?.tenant_id)
+      throw new Error("No se pudo determinar la lavandería del artículo eliminado.");
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "catalogo_items",
+      action: "DELETE",
+      payload: { id },
+    });
+    return;
   }
   try {
     const { error } = await supabase.from("catalogo_items").delete().eq("id", id);
     if (error) throw error;
-  } catch {}
+  } catch (error) {
+    if (!target?.tenant_id) throw error;
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "catalogo_items",
+      action: "DELETE",
+      payload: { id },
+    });
+  }
 }
 
 // ============ Servicios (Supabase) ============
@@ -3338,7 +3633,7 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
   const deduplicate = (services: Servicio[]): Servicio[] => {
     const byName = new Map<string, Servicio>();
     for (const service of services) {
-      const key = normalize(String(service.nombre || '').trim());
+      const key = normalize(String(service.nombre || "").trim());
       if (!key) continue;
       const current = byName.get(key);
       if (!current) {
@@ -3346,8 +3641,8 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
         continue;
       }
 
-      const serviceIsTenantOwned = service.tenant_id !== 'admin';
-      const currentIsTenantOwned = current.tenant_id !== 'admin';
+      const serviceIsTenantOwned = service.tenant_id !== "admin";
+      const currentIsTenantOwned = current.tenant_id !== "admin";
       const serviceHasPrice = Number(service.precio || 0) > 0;
       const currentHasPrice = Number(current.precio || 0) > 0;
 
@@ -3365,15 +3660,18 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
 
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<Servicio[]>(KEY.servicios, []);
-    const relevant = local.filter((s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin");
+    const relevant = local.filter(
+      (s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin",
+    );
     if (relevant.length > 0) return deduplicate(relevant);
     return deduplicate(SERVICIOS_PREDEFINIDOS as any);
   }
 
   try {
-    const filter = realId !== tenant_id 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id},tenant_id.eq.admin`
-      : `tenant_id.eq.${realId},tenant_id.eq.admin`;
+    const filter =
+      realId !== tenant_id
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenant_id},tenant_id.eq.admin`
+        : `tenant_id.eq.${realId},tenant_id.eq.admin`;
 
     const fetchPromise = supabase
       .from("servicios")
@@ -3382,7 +3680,7 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
       .order("nombre", { ascending: true });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 3000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3391,7 +3689,9 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
       const finalItems = deduplicate(data as Servicio[]);
 
       write(KEY.servicios, finalItems);
-      try { offlineDB.putMany("catalogo_servicios", finalItems); } catch {}
+      try {
+        offlineDB.putMany("catalogo_servicios", finalItems);
+      } catch {}
       return finalItems;
     }
   } catch (e) {
@@ -3399,7 +3699,9 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
   }
 
   const local = read<Servicio[]>(KEY.servicios, []);
-  const relevant = local.filter((s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin");
+  const relevant = local.filter(
+    (s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin",
+  );
   if (relevant.length > 0) return deduplicate(relevant);
   return deduplicate(SERVICIOS_PREDEFINIDOS as any);
 }
@@ -3411,15 +3713,74 @@ export async function saveServicio(s: Servicio) {
     throw new Error("tenant_id inválido");
   }
   const sToSave = { ...s, tenant_id: resolveTenantId(s.tenant_id) };
-  const { error } = await supabase.from("servicios").upsert(sToSave);
-
-  if (error) throw error;
+  const local = read<Servicio[]>(KEY.servicios, []);
+  const index = local.findIndex((item) => item.id === sToSave.id);
+  if (index >= 0) local[index] = sToSave;
+  else local.push(sToSave);
+  write(KEY.servicios, local);
+  try {
+    await offlineDB.put("catalogo_servicios", sToSave);
+  } catch {}
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    await offlineDB.addToOutbox({
+      id: sToSave.id,
+      tenant_id: sToSave.tenant_id,
+      table_name: "servicios",
+      action: "UPSERT",
+      payload: sToSave,
+    });
+    return;
+  }
+  try {
+    const { error } = await supabase.from("servicios").upsert(sToSave);
+    if (error) throw error;
+  } catch (error) {
+    await offlineDB.addToOutbox({
+      id: sToSave.id,
+      tenant_id: sToSave.tenant_id,
+      table_name: "servicios",
+      action: "UPSERT",
+      payload: sToSave,
+    });
+  }
 }
 
 export async function deleteServicio(id: string) {
-  const { error } = await supabase.from("servicios").delete().eq("id", id);
-
-  if (error) throw error;
+  const local = read<Servicio[]>(KEY.servicios, []);
+  const target = local.find((item) => item.id === id);
+  if (isBrowser())
+    write(
+      KEY.servicios,
+      local.filter((item) => item.id !== id),
+    );
+  try {
+    await offlineDB.delete("catalogo_servicios", id);
+  } catch {}
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    if (!target?.tenant_id)
+      throw new Error("No se pudo determinar la lavandería del servicio eliminado.");
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "servicios",
+      action: "DELETE",
+      payload: { id },
+    });
+    return;
+  }
+  try {
+    const { error } = await supabase.from("servicios").delete().eq("id", id);
+    if (error) throw error;
+  } catch (error) {
+    if (!target?.tenant_id) throw error;
+    await offlineDB.addToOutbox({
+      id,
+      tenant_id: resolveTenantId(target.tenant_id),
+      table_name: "servicios",
+      action: "DELETE",
+      payload: { id },
+    });
+  }
 }
 
 // ============ Plans CRUD ============
@@ -3500,13 +3861,87 @@ export interface Session {
   empleado_id: string;
   tenant_id: string;
   iniciado_en: string;
+  auth_verified_at?: string;
+  offline_expires_at?: string;
 }
 export function getSession(): Session | null {
-  return read<Session | null>(KEY.session, null);
+  const session = read<Session | null>(KEY.session, null);
+  if (!session) return null;
+  const fallbackExpiry = Date.parse(session.iniciado_en || "") + 12 * 60 * 60 * 1000;
+  const expiresAt = session.offline_expires_at
+    ? Date.parse(session.offline_expires_at)
+    : fallbackExpiry;
+  if (!Number.isFinite(expiresAt) || expiresAt <= Date.now()) {
+    if (isBrowser()) localStorage.removeItem(KEY.session);
+    return null;
+  }
+  return session;
 }
 export function setSession(s: Session | null) {
-  if (s) write(KEY.session, s);
-  else if (isBrowser()) localStorage.removeItem(KEY.session);
+  if (s) {
+    const verifiedAt = s.auth_verified_at || new Date().toISOString();
+    write(KEY.session, {
+      ...s,
+      auth_verified_at: verifiedAt,
+      offline_expires_at:
+        s.offline_expires_at ||
+        new Date(Date.parse(verifiedAt) + 12 * 60 * 60 * 1000).toISOString(),
+    });
+  } else if (isBrowser()) localStorage.removeItem(KEY.session);
+}
+
+async function cacheEmployeeForOffline(emp: Empleado, password: string): Promise<void> {
+  const offlineAuth = await createOfflineAuthVerifier(password);
+  const cached: OfflineCachedEmpleado = {
+    ...emp,
+    password: "***",
+    pin: undefined,
+    _offline_auth: offlineAuth,
+  };
+  await offlineDB.put("auth_cache", cached);
+}
+
+async function authenticateCachedEmployee(
+  tenantId: string,
+  cleanEmail: string,
+  password: string,
+): Promise<{ ok: true; empleado: Empleado } | { ok: false; error: string }> {
+  const cachedEmps = await offlineDB.getAll<OfflineCachedEmpleado>("auth_cache", tenantId);
+  const matched = cachedEmps.find(
+    (employee) =>
+      employee.email.toLowerCase() === cleanEmail &&
+      employee.activo &&
+      employee.tenant_id === tenantId,
+  );
+  if (!matched?._offline_auth) {
+    return {
+      ok: false,
+      error:
+        "Este usuario todavía no está habilitado para acceso offline. Inicia sesión una vez con internet en este dispositivo.",
+    };
+  }
+  if (isOfflineAuthExpired(matched._offline_auth)) {
+    return {
+      ok: false,
+      error: "La autorización offline expiró. Conéctate a internet para renovarla.",
+    };
+  }
+  if (isOfflineAuthLocked(matched._offline_auth)) {
+    return {
+      ok: false,
+      error: "Acceso offline bloqueado temporalmente por varios intentos fallidos.",
+    };
+  }
+  const valid = await verifyOfflinePassword(password, matched._offline_auth);
+  if (!valid) {
+    matched._offline_auth = recordOfflineAuthFailure(matched._offline_auth);
+    await offlineDB.put("auth_cache", matched);
+    return { ok: false, error: "Contraseña incorrecta." };
+  }
+  matched._offline_auth = recordOfflineAuthSuccess(matched._offline_auth);
+  await offlineDB.put("auth_cache", matched);
+  const { _offline_auth: _auth, ...employee } = matched;
+  return { ok: true, empleado: employee };
 }
 
 export async function login(
@@ -3523,34 +3958,19 @@ export async function login(
   // 2. Si estamos sin conexión (Offline Auth Mode)
   if (typeof window !== "undefined" && !navigator.onLine) {
     try {
-      const cachedEmps = await offlineDB.getAll<Empleado>("auth_cache", tenant.id);
-      let matchedEmp = cachedEmps.find(
-        (e) => e.email.toLowerCase() === cleanEmail && e.activo && e.tenant_id === tenant.id
-      );
-
-      if (!matchedEmp) {
-        matchedEmp = {
-          id: `emp-offline-${cleanEmail.replace(/[^a-zA-Z0-9]/g, "_")}`,
-          tenant_id: tenant.id,
-          nombre: cleanEmail.split("@")[0] || "Operador Mostrador",
-          email: cleanEmail,
-          password: "***",
-          rol: "ADMIN",
-          activo: true,
-          permisos: PERMISOS_SISTEMA.map((p) => p.id),
-          creado_en: new Date().toISOString(),
-        } as Empleado;
-        try {
-          await offlineDB.put("auth_cache", matchedEmp);
-          localStorage.setItem(`klynn_emp_id_${matchedEmp.id}`, JSON.stringify(matchedEmp));
-        } catch {}
-      }
-
-      setSession({ empleado_id: matchedEmp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+      const offlineResult = await authenticateCachedEmployee(tenant.id, cleanEmail, password);
+      if (!offlineResult.ok) return offlineResult;
+      const matchedEmp = offlineResult.empleado;
+      setSession({
+        empleado_id: matchedEmp.id,
+        tenant_id: tenant.id,
+        iniciado_en: new Date().toISOString(),
+      });
       setActiveTenant(slug);
       return { ok: true, empleado: matchedEmp, tenant };
     } catch (offlineErr) {
       console.warn("Error en validación offline:", offlineErr);
+      return { ok: false, error: "No se pudo validar de forma segura el acceso offline." };
     }
   }
 
@@ -3563,16 +3983,22 @@ export async function login(
 
     if (authError) {
       // Si el error es de red / Failed to fetch, intentar fallback offline
-      if (authError.message?.toLowerCase().includes("fetch") || authError.message?.toLowerCase().includes("network")) {
-        const cachedEmps = await offlineDB.getAll<Empleado>("auth_cache", tenant.id);
-        const matchedEmp = cachedEmps.find(
-          (e) => e.email.toLowerCase() === cleanEmail && e.activo && e.tenant_id === tenant.id
-        );
-        if (matchedEmp) {
-          setSession({ empleado_id: matchedEmp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+      if (
+        authError.message?.toLowerCase().includes("fetch") ||
+        authError.message?.toLowerCase().includes("network")
+      ) {
+        const offlineResult = await authenticateCachedEmployee(tenant.id, cleanEmail, password);
+        if (offlineResult.ok) {
+          const matchedEmp = offlineResult.empleado;
+          setSession({
+            empleado_id: matchedEmp.id,
+            tenant_id: tenant.id,
+            iniciado_en: new Date().toISOString(),
+          });
           setActiveTenant(slug);
           return { ok: true, empleado: matchedEmp, tenant };
         }
+        return offlineResult;
       }
 
       // Consultar si el empleado existe para este tenant
@@ -3585,11 +4011,17 @@ export async function login(
           .maybeSingle();
 
         if (!empCheck) {
-          return { ok: false, error: "No existe ninguna cuenta registrada con este correo en esta lavandería." };
+          return {
+            ok: false,
+            error: "No existe ninguna cuenta registrada con este correo en esta lavandería.",
+          };
         }
       } catch {}
 
-      return { ok: false, error: "Contraseña incorrecta. Verifica tu contraseña o usa '¿Olvidaste tu contraseña?'." };
+      return {
+        ok: false,
+        error: "Contraseña incorrecta. Verifica tu contraseña o usa '¿Olvidaste tu contraseña?'.",
+      };
     }
 
     if (!authData.user) return { ok: false, error: "Error de autenticación" };
@@ -3630,24 +4062,31 @@ export async function login(
 
     // Guardar en caché offline para permitir acceso futuro si se va la luz/red
     try {
-      await offlineDB.put("auth_cache", emp);
+      await cacheEmployeeForOffline(emp, password);
     } catch {}
 
-    setSession({ empleado_id: emp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+    setSession({
+      empleado_id: emp.id,
+      tenant_id: tenant.id,
+      iniciado_en: new Date().toISOString(),
+    });
     setActiveTenant(slug);
     return { ok: true, empleado: emp, tenant };
   } catch (err: any) {
     // Fallback de contingencia si falló la conexión
     try {
-      const cachedEmps = await offlineDB.getAll<Empleado>("auth_cache", tenant.id);
-      const matchedEmp = cachedEmps.find(
-        (e) => e.email.toLowerCase() === cleanEmail && e.activo && e.tenant_id === tenant.id
-      );
-      if (matchedEmp) {
-        setSession({ empleado_id: matchedEmp.id, tenant_id: tenant.id, iniciado_en: new Date().toISOString() });
+      const offlineResult = await authenticateCachedEmployee(tenant.id, cleanEmail, password);
+      if (offlineResult.ok) {
+        const matchedEmp = offlineResult.empleado;
+        setSession({
+          empleado_id: matchedEmp.id,
+          tenant_id: tenant.id,
+          iniciado_en: new Date().toISOString(),
+        });
         setActiveTenant(slug);
         return { ok: true, empleado: matchedEmp, tenant };
       }
+      return offlineResult;
     } catch {}
 
     return { ok: false, error: "Error de conexión: " + (err.message || "Intente de nuevo") };
@@ -3702,8 +4141,12 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   const cacheUserResult = (empleado: Empleado, tenant: Tenant) => {
     if (typeof window !== "undefined") {
       try {
-        localStorage.setItem("klynn_last_auth_user", JSON.stringify({ empleado, tenant }));
-        localStorage.setItem(`klynn_emp_id_${empleado.id}`, JSON.stringify(empleado));
+        const safeEmployee = { ...empleado, password: "***", pin: undefined };
+        localStorage.setItem(
+          "klynn_last_auth_user",
+          JSON.stringify({ empleado: safeEmployee, tenant }),
+        );
+        localStorage.setItem(`klynn_emp_id_${empleado.id}`, JSON.stringify(safeEmployee));
         localStorage.setItem(`klynn_tenant_id_${tenant.id}`, JSON.stringify(tenant));
         if (tenant.slug) {
           localStorage.setItem(`klynn_tenant_cache_${tenant.slug}`, JSON.stringify(tenant));
@@ -3713,13 +4156,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     }
   };
 
-  const sessionStr = isBrowser() ? (localStorage.getItem("lvx:session") || localStorage.getItem(KEY.session)) : null;
-  let session: Session | null = null;
-  if (sessionStr) {
-    try {
-      session = JSON.parse(sessionStr);
-    } catch {}
-  }
+  const session = getSession();
 
   // 1. Si estamos sin conexión, recuperar la sesión estrictamente desde sesión activa verificada
   if (typeof window !== "undefined" && !navigator.onLine) {
@@ -3731,15 +4168,6 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
         return { empleado: emp, tenant: ten };
       }
     }
-    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
-    if (lastAuthStr) {
-      try {
-        const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant && parsed.empleado.activo && isSameTenant(parsed.empleado.tenant_id, parsed.tenant.id)) {
-          return parsed;
-        }
-      } catch {}
-    }
     return null;
   }
 
@@ -3748,7 +4176,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   try {
     const fetchUser = supabase.auth.getUser();
     const timeoutUser = new Promise<{ data: any }>((resolve) =>
-      setTimeout(() => resolve({ data: { user: null } }), 4000)
+      setTimeout(() => resolve({ data: { user: null } }), 4000),
     );
     const res = await Promise.race([fetchUser, timeoutUser]);
     user = res.data?.user;
@@ -3784,17 +4212,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
       }
     }
 
-    const lastAuthStr = typeof window !== "undefined" ? localStorage.getItem("klynn_last_auth_user") : null;
-    if (lastAuthStr) {
-      try {
-        const parsed = JSON.parse(lastAuthStr);
-        if (parsed?.empleado && parsed?.tenant && parsed.empleado.activo && isSameTenant(parsed.empleado.tenant_id, parsed.tenant.id)) {
-          return parsed;
-        }
-      } catch {}
-    }
-
-    // Solo si NO existe absolutamente ninguna sesión previa, retornar null
+    // Sin usuario Supabase ni sesión local vigente no se confía en perfiles sueltos de localStorage.
     return null;
   }
 
@@ -3876,8 +4294,13 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   }
 
   // B. Buscar coincidencia con el slug en la URL actual
-  const urlMatch = typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
-  const currentSlug = urlMatch ? urlMatch[1] : (isBrowser() ? localStorage.getItem(KEY.active) : null);
+  const urlMatch =
+    typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/) : null;
+  const currentSlug = urlMatch
+    ? urlMatch[1]
+    : isBrowser()
+      ? localStorage.getItem(KEY.active)
+      : null;
   if (currentSlug && currentSlug !== "admin") {
     const ten = await getTenantBySlug(currentSlug);
     if (ten) {
@@ -3912,33 +4335,18 @@ export function getBillingCycleStart(
 ): Date {
   const start = new Date(planStartDateStr);
   if (isNaN(start.getTime())) return new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  if (now < start) return new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
+  if (now < start)
+    return new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
 
   const year = now.getFullYear();
   const month = now.getMonth();
   const day = start.getDate();
 
-  let cycleStart = new Date(
-    year,
-    month,
-    day,
-    0,
-    0,
-    0,
-    0,
-  );
+  let cycleStart = new Date(year, month, day, 0, 0, 0, 0);
 
   // Manejar el desbordamiento de fin de mes (ej. si el mes tiene menos días que el día de aniversario)
   if (cycleStart.getDate() !== day) {
-    cycleStart = new Date(
-      year,
-      month + 1,
-      0,
-      0,
-      0,
-      0,
-      0,
-    );
+    cycleStart = new Date(year, month + 1, 0, 0, 0, 0, 0);
   }
 
   // Si la fecha calculada está en el futuro, el ciclo actual comenzó en el mes anterior
@@ -3949,25 +4357,9 @@ export function getBillingCycleStart(
       prevMonth = 11;
       prevYear = year - 1;
     }
-    cycleStart = new Date(
-      prevYear,
-      prevMonth,
-      day,
-      0,
-      0,
-      0,
-      0,
-    );
+    cycleStart = new Date(prevYear, prevMonth, day, 0, 0, 0, 0);
     if (cycleStart.getDate() !== day) {
-      cycleStart = new Date(
-        prevYear,
-        prevMonth + 1,
-        0,
-        0,
-        0,
-        0,
-        0,
-      );
+      cycleStart = new Date(prevYear, prevMonth + 1, 0, 0, 0, 0, 0);
     }
   }
 
@@ -4038,12 +4430,22 @@ export async function checkPlanLimits(tenant: Tenant | string) {
   const baseLimit = plan.limite_ordenes_mes;
   const effectiveLimit = baseLimit !== null ? baseLimit + GRACE_ORDERS_BONUS : null;
 
-  const isGracePeriod = baseLimit !== null && orderCount >= baseLimit && orderCount < (effectiveLimit ?? 0);
+  const isGracePeriod =
+    baseLimit !== null && orderCount >= baseLimit && orderCount < (effectiveLimit ?? 0);
   const ordersReached = effectiveLimit !== null && orderCount >= effectiveLimit;
   const employeesReached = employeeCount >= plan.limite_empleados;
 
-  const graceUsed = isGracePeriod ? Math.max(0, orderCount - baseLimit) : (baseLimit !== null && orderCount >= (effectiveLimit ?? 0) ? GRACE_ORDERS_BONUS : 0);
-  const graceRemaining = isGracePeriod && effectiveLimit !== null ? Math.max(0, effectiveLimit - orderCount) : (orderCount < (baseLimit ?? Infinity) ? GRACE_ORDERS_BONUS : 0);
+  const graceUsed = isGracePeriod
+    ? Math.max(0, orderCount - baseLimit)
+    : baseLimit !== null && orderCount >= (effectiveLimit ?? 0)
+      ? GRACE_ORDERS_BONUS
+      : 0;
+  const graceRemaining =
+    isGracePeriod && effectiveLimit !== null
+      ? Math.max(0, effectiveLimit - orderCount)
+      : orderCount < (baseLimit ?? Infinity)
+        ? GRACE_ORDERS_BONUS
+        : 0;
 
   return {
     plan,
@@ -4359,26 +4761,26 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
   const realId = resolveTenantId(tenantId);
   const cacheKey = `klynn_ecf_cfg_${realId}`;
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_cfg_${tenantId}`);
+    const cached =
+      localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_cfg_${tenantId}`);
     if (cached) {
-      try { return JSON.parse(cached); } catch {}
+      try {
+        return JSON.parse(cached);
+      } catch {}
     }
     return null;
   }
 
   try {
-    const filter = realId !== tenantId 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== tenantId
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
+        : `tenant_id.eq.${realId}`;
 
-    const fetchPromise = supabase
-      .from("ecf_config")
-      .select("*")
-      .or(filter)
-      .maybeSingle();
+    const fetchPromise = supabase.from("ecf_config").select("*").or(filter).maybeSingle();
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -4392,9 +4794,12 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
   } catch {}
 
   if (typeof window !== "undefined") {
-    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_cfg_${tenantId}`);
+    const cached =
+      localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_cfg_${tenantId}`);
     if (cached) {
-      try { return JSON.parse(cached); } catch {}
+      try {
+        return JSON.parse(cached);
+      } catch {}
     }
   }
   return null;
@@ -4426,26 +4831,26 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
   const realId = resolveTenantId(tenantId);
   const cacheKey = `klynn_ecf_seqs_${realId}`;
   if (typeof window !== "undefined" && !navigator.onLine) {
-    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
+    const cached =
+      localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (cached) {
-      try { return JSON.parse(cached); } catch {}
+      try {
+        return JSON.parse(cached);
+      } catch {}
     }
     return [];
   }
 
   try {
-    const filter = realId !== tenantId 
-      ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
-      : `tenant_id.eq.${realId}`;
+    const filter =
+      realId !== tenantId
+        ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
+        : `tenant_id.eq.${realId}`;
 
-    const fetchPromise = supabase
-      .from("ecf_sequences")
-      .select("*")
-      .or(filter)
-      .order("tipo_ecf");
+    const fetchPromise = supabase.from("ecf_sequences").select("*").or(filter).order("tipo_ecf");
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -4461,9 +4866,12 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
   }
 
   if (typeof window !== "undefined") {
-    const cached = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
+    const cached =
+      localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (cached) {
-      try { return JSON.parse(cached); } catch {}
+      try {
+        return JSON.parse(cached);
+      } catch {}
     }
   }
   return [];
@@ -4476,10 +4884,13 @@ export async function saveECFSequence(seq: ECFSequence) {
   if (typeof window !== "undefined") {
     let localSeqs: ECFSequence[] = [];
     try {
-      const raw = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${seq.tenant_id}`);
+      const raw =
+        localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${seq.tenant_id}`);
       if (raw) localSeqs = JSON.parse(raw);
     } catch {}
-    const idx = localSeqs.findIndex((s) => s.id === seqToSave.id || s.tipo_ecf === seqToSave.tipo_ecf);
+    const idx = localSeqs.findIndex(
+      (s) => s.id === seqToSave.id || s.tipo_ecf === seqToSave.tipo_ecf,
+    );
     if (idx >= 0) localSeqs[idx] = seqToSave;
     else localSeqs.push(seqToSave);
     localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
@@ -4527,7 +4938,7 @@ export async function getECFDocuments(tenantId: string): Promise<ECFDocument[]> 
       .order("fecha_emision", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500)
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -4536,7 +4947,8 @@ export async function getECFDocuments(tenantId: string): Promise<ECFDocument[]> 
       ...doc,
       pdf_url: doc.pdf_url || doc.dgii_response?.pdf || doc.dgii_response?.pdf_url,
       xml_url: doc.xml_url || doc.dgii_response?.xmlUrl || doc.dgii_response?.xml_url,
-      document_stamp_url: doc.document_stamp_url || doc.dgii_response?.documentStampUrl || doc.qr_content,
+      document_stamp_url:
+        doc.document_stamp_url || doc.dgii_response?.documentStampUrl || doc.qr_content,
       security_code: doc.security_code || doc.dgii_response?.securityCode,
       contingency_mode: doc.contingency_mode ?? doc.dgii_response?.contingencyMode ?? false,
       legal_status: doc.legal_status || doc.dgii_response?.legalStatus,
@@ -4556,7 +4968,7 @@ export async function saveECFDocument(doc: ECFDocument) {
     tipo_ecf: doc.tipo_ecf,
     rnc_receptor: doc.rnc_receptor || null,
     track_id: doc.track_id || null,
-    status: doc.status || 'pending',
+    status: doc.status || "pending",
     dgii_response: doc.dgii_response || {
       pdf_url: (doc as any).pdf_url,
       xml_url: (doc as any).xml_url,
@@ -4568,7 +4980,8 @@ export async function saveECFDocument(doc: ECFDocument) {
       legal_status: (doc as any).legal_status,
       pronesoft_id: (doc as any).pronesoft_id,
     },
-    xml_content: doc.xml_content || (doc as any).xml_url || (doc.dgii_response as any)?.xmlUrl || "",
+    xml_content:
+      doc.xml_content || (doc as any).xml_url || (doc.dgii_response as any)?.xmlUrl || "",
     qr_content: doc.qr_content || (doc as any).document_stamp_url || null,
     monto_total: doc.monto_total ?? 0,
     monto_itbis: doc.monto_itbis ?? 0,
@@ -4591,9 +5004,7 @@ export async function nextECFNumero(
   tipo: string,
 ): Promise<{ ncf: string; expiration_date?: string }> {
   const realId = resolveTenantId(tenantId);
-  const normalizedTipo = tipo.startsWith("E") || tipo.startsWith("B")
-    ? tipo
-    : `E${tipo}`;
+  const normalizedTipo = tipo.startsWith("E") || tipo.startsWith("B") ? tipo : `E${tipo}`;
 
   const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
   const cacheKey = `klynn_ecf_seqs_${realId}`;
@@ -4615,15 +5026,21 @@ export async function nextECFNumero(
   // 2. Obtener secuencias locales en caché
   let localSeqs: any[] = [];
   if (typeof window !== "undefined") {
-    const raw = localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
+    const raw =
+      localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (raw) {
-      try { localSeqs = JSON.parse(raw); } catch {}
+      try {
+        localSeqs = JSON.parse(raw);
+      } catch {}
     }
   }
 
   // Encontrar la secuencia para este tipo
   const seqIndex = localSeqs.findIndex(
-    (s) => (s.tipo_ecf === normalizedTipo || s.tipo === normalizedTipo) && (s.is_active !== false && s.activa !== false)
+    (s) =>
+      (s.tipo_ecf === normalizedTipo || s.tipo === normalizedTipo) &&
+      s.is_active !== false &&
+      s.activa !== false,
   );
 
   const seq = seqIndex >= 0 ? localSeqs[seqIndex] : null;
@@ -4683,11 +5100,17 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
     // 1. Obtener la config fiscal para saber si tiene pronesoft_tenant_id y está activo
     const { data: config } = await supabase
       .from("ecf_config")
-      .select("is_active, pronesoft_tenant_id, ambiente, pronesoft_environment, usar_credenciales_propias, pronesoft_client_id, pronesoft_client_secret")
+      .select(
+        "is_active, pronesoft_tenant_id, ambiente, pronesoft_environment, usar_credenciales_propias, pronesoft_client_id, pronesoft_client_secret",
+      )
       .eq("tenant_id", tenantId)
       .maybeSingle();
 
-    const isUUID = config?.pronesoft_tenant_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(config.pronesoft_tenant_id);
+    const isUUID =
+      config?.pronesoft_tenant_id &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        config.pronesoft_tenant_id,
+      );
 
     if (config?.is_active && isUUID) {
       const pronesoft = getProneSoftClient(
@@ -4699,7 +5122,7 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
             : "sandbox",
         config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
         config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-        tenantId
+        tenantId,
       );
       const res = await pronesoft.listReceivedDocuments(1, 100);
 
@@ -4708,7 +5131,9 @@ export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDo
         const ops = res.data.map((doc: any) => ({
           tenant_id: tenantId,
           id: doc.id || doc.trackId || doc.eNcf || doc.encf,
-          tipo_ecf: doc.documentType || (doc.eNcf ? doc.eNcf.substring(0, 3) : (doc.encf ? doc.encf.substring(0, 3) : "E31")),
+          tipo_ecf:
+            doc.documentType ||
+            (doc.eNcf ? doc.eNcf.substring(0, 3) : doc.encf ? doc.encf.substring(0, 3) : "E31"),
           rnc_emisor: doc.issuerRnc || doc.sellerRnc || "N/A",
           nombre_emisor: doc.issuerName || doc.sellerName || "Proveedor",
           encf: doc.eNcf || doc.encf || "",
@@ -4775,9 +5200,12 @@ export async function updateEstadoComercialECF(
               : "sandbox",
           config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
           config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-          tenantId
+          tenantId,
         );
-        await pronesoft.submitCommercialApproval(id, estado === "APROBADO" ? "ACCEPTED" : "REJECTED");
+        await pronesoft.submitCommercialApproval(
+          id,
+          estado === "APROBADO" ? "ACCEPTED" : "REJECTED",
+        );
       }
     } catch (err) {
       console.warn("Aviso al enviar aprobación comercial a Pronesoft:", err);
@@ -4843,7 +5271,7 @@ export async function getNotificaciones(tenantId: string): Promise<Notificacion[
       .limit(50);
 
     const timeoutPromise = new Promise<{ data: any }>((resolve) =>
-      setTimeout(() => resolve({ data: [] }), 1500)
+      setTimeout(() => resolve({ data: [] }), 1500),
     );
 
     const { data } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -4907,15 +5335,17 @@ export async function crearNotificacion(notif: {
     const channel = supabase.channel(`tenant_events_${notif.tenant_id}`);
     channel.subscribe((status) => {
       if (status === "SUBSCRIBED") {
-        channel.send({
-          type: "broadcast",
-          event: "nueva_notificacion",
-          payload: newNotif,
-        }).then(() => {
-          setTimeout(() => {
-            supabase.removeChannel(channel);
-          }, 1000);
-        });
+        channel
+          .send({
+            type: "broadcast",
+            event: "nueva_notificacion",
+            payload: newNotif,
+          })
+          .then(() => {
+            setTimeout(() => {
+              supabase.removeChannel(channel);
+            }, 1000);
+          });
       }
     });
   } catch (e) {
@@ -5024,7 +5454,10 @@ export async function validarCodigoInvitacion(codigoRaw: string): Promise<{
     return { ok: false, error: "Ingresa un código de activación." };
   }
 
-  const clean = codigoRaw.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const clean = codigoRaw
+    .trim()
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "");
   const all = await getInvitaciones();
   const found = all.find((x) => {
     const storedClean = x.codigo.toUpperCase().replace(/[^0-9A-Z]/g, "");
@@ -5054,9 +5487,12 @@ export async function validarCodigoInvitacion(codigoRaw: string): Promise<{
 export async function marcarCodigoUsado(
   codigoRaw: string,
   tenantSlug: string,
-  email: string
+  email: string,
 ): Promise<boolean> {
-  const clean = codigoRaw.trim().toUpperCase().replace(/[^0-9A-Z]/g, "");
+  const clean = codigoRaw
+    .trim()
+    .toUpperCase()
+    .replace(/[^0-9A-Z]/g, "");
   const all = await getInvitaciones();
   const found = all.find((x) => {
     const storedClean = x.codigo.toUpperCase().replace(/[^0-9A-Z]/g, "");
@@ -5078,12 +5514,15 @@ export async function marcarCodigoUsado(
   };
 
   try {
-    await supabase.from("invitaciones").update({
-      estado: "USADO",
-      usado_en: updated.usado_en,
-      usado_por_slug: tenantSlug,
-      usado_por_email: email,
-    }).eq("id", found.id);
+    await supabase
+      .from("invitaciones")
+      .update({
+        estado: "USADO",
+        usado_en: updated.usado_en,
+        usado_por_slug: tenantSlug,
+        usado_por_email: email,
+      })
+      .eq("id", found.id);
   } catch (e) {
     console.warn("marcarCodigoUsado Supabase error:", e);
   }
@@ -5113,7 +5552,9 @@ export interface MetaServicio {
   activo: boolean;
 }
 
-export async function getMetasServicios(tenantId: string): Promise<Record<string, { meta_diaria: number; activo: boolean }>> {
+export async function getMetasServicios(
+  tenantId: string,
+): Promise<Record<string, { meta_diaria: number; activo: boolean }>> {
   if (!tenantId || tenantId === "__loading__") return {};
   try {
     const tenant = await getTenantById(tenantId);
@@ -5127,7 +5568,7 @@ export async function saveMetaServicio(
   tenantId: string,
   servicioNombre: string,
   metaDiaria: number,
-  activo: boolean = true
+  activo: boolean = true,
 ): Promise<void> {
   if (!tenantId || tenantId === "__loading__") return;
   try {
@@ -5137,7 +5578,7 @@ export async function saveMetaServicio(
       current[servicioNombre] = { meta_diaria: metaDiaria, activo };
       await saveTenant({
         ...tenant,
-        config: { ...tenant.config, metas_servicios: current }
+        config: { ...tenant.config, metas_servicios: current },
       });
     }
   } catch (e) {

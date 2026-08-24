@@ -1,29 +1,43 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { Cloud, CloudOff, RefreshCw, CheckCircle2, AlertTriangle, ShieldCheck } from "lucide-react";
 import { syncManager, type SyncState } from "@/lib/sync-manager";
 import { offlineDB } from "@/lib/offline-db";
 import { toast } from "sonner";
 
-export function OfflineStatusBadge({ tenantId, hasOfflineModule = true }: { tenantId?: string; hasOfflineModule?: boolean }) {
+export function OfflineStatusBadge({
+  tenantId,
+  hasOfflineModule = true,
+}: {
+  tenantId?: string;
+  hasOfflineModule?: boolean;
+}) {
   const [status, setStatus] = useState<SyncState>("online");
   const [pendingCount, setPendingCount] = useState<number>(0);
   const [isHovered, setIsHovered] = useState(false);
 
-  const updateBadge = async () => {
+  const updateBadge = useCallback(async () => {
     if (typeof window === "undefined") return;
-    setStatus(navigator.onLine ? "online" : "offline");
+    setStatus((current) =>
+      !navigator.onLine ? "offline" : current === "offline" ? "online" : current,
+    );
     try {
+      if (!tenantId) {
+        setPendingCount(0);
+        return;
+      }
       const count = await offlineDB.getOutboxCount(tenantId);
       setPendingCount(count);
+      if (navigator.onLine && count === 0) setStatus("online");
     } catch (e) {
       console.warn("Error getting outbox count", e);
     }
-  };
+  }, [tenantId]);
 
   useEffect(() => {
     updateBadge();
 
-    const handleSyncStatus = (e: any) => {
+    const handleSyncStatus = (event: Event) => {
+      const e = event as CustomEvent<{ status?: SyncState }>;
       if (e.detail?.status) {
         setStatus(e.detail.status);
       }
@@ -57,7 +71,7 @@ export function OfflineStatusBadge({ tenantId, hasOfflineModule = true }: { tena
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
     };
-  }, [tenantId]);
+  }, [updateBadge]);
 
   const handleManualSync = async () => {
     if (!navigator.onLine) {
@@ -65,11 +79,21 @@ export function OfflineStatusBadge({ tenantId, hasOfflineModule = true }: { tena
       return;
     }
     toast.info("Iniciando sincronización con la nube...");
-    const res = await syncManager.processQueue();
+    if (!tenantId) {
+      toast.error("No hay una lavandería activa para sincronizar.");
+      return;
+    }
+    const res = await syncManager.processQueue(tenantId);
     if (res.synced > 0) {
       toast.success(`¡Sincronización completada! (${res.synced} operaciones enviadas a la nube)`);
     } else if (res.failed > 0) {
-      toast.error(`${res.failed} operaciones tuvieron errores al subir. Revisa la consola.`);
+      toast.error(
+        `${res.failed} operaciones requieren atención. Abre “Comprobantes pendientes” o vuelve a intentar después de revisar tu sesión.`,
+      );
+    } else if (pendingCount > 0) {
+      toast.warning(
+        `${pendingCount} operaciones siguen guardadas. Algunas pueden estar esperando el próximo reintento o requerir revisión.`,
+      );
     } else {
       toast.success("Todo está al día y sincronizado con la nube.");
     }
@@ -98,7 +122,11 @@ export function OfflineStatusBadge({ tenantId, hasOfflineModule = true }: { tena
     if (!hasOfflineModule) {
       return (
         <button
-          onClick={() => toast.error("El Modo Offline (Facturación sin conexión) está inactivo para este plan. Conéctate a internet para continuar operando.")}
+          onClick={() =>
+            toast.error(
+              "El Modo Offline (Facturación sin conexión) está inactivo para este plan. Conéctate a internet para continuar operando.",
+            )
+          }
           className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-500/10 dark:bg-slate-500/20 border border-rose-500/40 text-rose-600 dark:text-rose-400 text-[11px] font-bold shadow-2xs transition-all hover:bg-rose-500/10 cursor-pointer"
           title="Sin conexión a internet. El Modo Offline está inactivo en esta lavandería."
         >

@@ -7,7 +7,7 @@
  * Pronesoft maneja: firma XML, cola de envío, modo de contingencia.
  */
 
-export { getProneSoftClient } from './fiscal/pronesoft-client';
+export { getProneSoftClient } from "./fiscal/pronesoft-client";
 export type {
   ECFPayload,
   ECFSubmitResponse,
@@ -17,17 +17,27 @@ export type {
   ECFTotals,
   PaymentForm,
   AssociatedCompany,
-} from './fiscal/pronesoft-client';
+} from "./fiscal/pronesoft-client";
 
-export { ordenToECFPayload } from './fiscal/orden-to-ecf';
-export { getECFConfig, getECFDocuments } from './storage';
+export { ordenToECFPayload } from "./fiscal/orden-to-ecf";
+export { getECFConfig, getECFDocuments } from "./storage";
 
-import { getProneSoftClient, type ECFSubmitResponse, type ProneSoftEnvironment } from './fiscal/pronesoft-client';
-import { ordenToECFPayload } from './fiscal/orden-to-ecf';
-import { getECFConfig, getECFDocuments, saveECFDocument, updateECFConfig, saveOrden } from './storage';
-import { supabase } from '@/lib/supabase';
-import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig } from './storage';
-import { toast } from 'sonner';
+import {
+  getProneSoftClient,
+  type ECFSubmitResponse,
+  type ProneSoftEnvironment,
+} from "./fiscal/pronesoft-client";
+import { ordenToECFPayload } from "./fiscal/orden-to-ecf";
+import {
+  getECFConfig,
+  getECFDocuments,
+  saveECFDocument,
+  updateECFConfig,
+  saveOrden,
+} from "./storage";
+import { supabase } from "@/lib/supabase";
+import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig } from "./storage";
+import { toast } from "sonner";
 
 // TEMPORAL: habilitado exclusivamente para diagnosticar el rechazo del XSD
 // Sandbox de Pronesoft con un RNC numÃ©rico autorizado por el usuario.
@@ -35,21 +45,22 @@ import { toast } from 'sonner';
 export const ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC = true;
 
 function getConfiguredPronesoftEnvironment(config?: ECFConfig | null): ProneSoftEnvironment {
-  if (config?.pronesoft_environment === 'CerteCF') return 'homologacion';
-  if (config?.pronesoft_environment === 'eCF' || config?.ambiente === 'produccion') return 'production';
-  return 'sandbox';
+  if (config?.pronesoft_environment === "CerteCF") return "homologacion";
+  if (config?.pronesoft_environment === "eCF" || config?.ambiente === "produccion")
+    return "production";
+  return "sandbox";
 }
 
 // ─── Función principal: Emitir un eCF para una orden ─────────────────────────
 
 export interface EmitirECFResult {
-  document:         ECFDocument;
-  encf:             string;
-  pdf_url:          string;
-  stamp_url:        string;
-  security_code:    string;
+  document: ECFDocument;
+  encf: string;
+  pdf_url: string;
+  stamp_url: string;
+  security_code: string;
   contingency_mode: boolean;
-  legal_status?:    string;
+  legal_status?: string;
 }
 
 /**
@@ -63,15 +74,14 @@ export interface EmitirECFResult {
  * @param tipoECF     - Tipo forzado (E31, E32...) — si no, usa config.ncf_secuencia
  */
 export async function emitirECF(
-  orden:       Orden,
-  cliente:     Cliente | null,
+  orden: Orden,
+  cliente: Cliente | null,
   ecfTenantId: string | undefined,
-  config:      TenantConfig,
-  tenant:      Tenant,
-  tipoECF?:    string,
-  reference?:  { ncf: string; date: string; code: string }
+  config: TenantConfig,
+  tenant: Tenant,
+  tipoECF?: string,
+  reference?: { ncf: string; date: string; code: string },
 ): Promise<EmitirECFResult> {
-
   // 1. Construir payload
   const payload = ordenToECFPayload(orden, cliente, config, tipoECF, reference);
 
@@ -90,25 +100,34 @@ export async function emitirECF(
   }
 
   const targetProneEnv = getConfiguredPronesoftEnvironment(ecfConf);
-  const client = getProneSoftClient(ecfTenantId, targetProneEnv, customClientId, customClientSecret, tenant.id);
+  const client = getProneSoftClient(
+    ecfTenantId,
+    targetProneEnv,
+    customClientId,
+    customClientSecret,
+    tenant.id,
+  );
 
   // 3. Enviar a Pronesoft → DGII
   let response: ECFSubmitResponse;
   try {
-    response = await client.submitDocument(payload);
+    const idempotencyKey = `ecf:${tenant.id}:${orden.id}:${tipoECF || payload.invoiceType}`;
+    response = await client.submitDocument(payload, idempotencyKey);
   } catch (err: any) {
-    const isSandboxEnv = ecfConf?.ambiente === 'pruebas' || 
-      (tenant.rnc && tenant.rnc.toUpperCase().startsWith("SBX")) || 
+    const isSandboxEnv =
+      ecfConf?.ambiente === "pruebas" ||
+      (tenant.rnc && tenant.rnc.toUpperCase().startsWith("SBX")) ||
       (ecfConf?.rnc_emisor && ecfConf.rnc_emisor.toUpperCase().startsWith("SBX"));
 
-    const isSandboxError = isSandboxEnv || (err.message && (
-      err.message.includes("Certificado inválido") ||
-      err.message.includes("Only 8, 16, 24, or 32 bits supported") ||
-      err.message.includes("Error autenticando RNC") ||
-      err.message.includes("400") ||
-      err.message.includes("Failed to fetch") ||
-      err.message.includes("Proxy")
-    ));
+    const isSandboxError =
+      isSandboxEnv ||
+      (err.message &&
+        (err.message.includes("Certificado inválido") ||
+          err.message.includes("Only 8, 16, 24, or 32 bits supported") ||
+          err.message.includes("Error autenticando RNC") ||
+          err.message.includes("400") ||
+          err.message.includes("Failed to fetch") ||
+          err.message.includes("Proxy")));
 
     if (isSandboxError) {
       throw new Error(`No se pudo emitir el e-CF de prueba en Pronesoft: ${err.message}`);
@@ -117,13 +136,21 @@ export async function emitirECF(
       try {
         const nuevoProneTenantId = await registerTenantInPronesoft(tenant.id);
         if (nuevoProneTenantId) {
-          const nuevoClient = getProneSoftClient(nuevoProneTenantId, targetProneEnv, customClientId, customClientSecret, tenant.id);
-          response = await nuevoClient.submitDocument(payload);
+          const nuevoClient = getProneSoftClient(
+            nuevoProneTenantId,
+            targetProneEnv,
+            customClientId,
+            customClientSecret,
+            tenant.id,
+          );
+          response = await nuevoClient.submitDocument(payload, idempotencyKey);
         } else {
           throw err;
         }
       } catch (retryErr: any) {
-        throw new Error(`Error al emitir eCF (Reintento de auto-registro falló): ${retryErr.message}`);
+        throw new Error(
+          `Error al emitir eCF (Reintento de auto-registro falló): ${retryErr.message}`,
+        );
       }
     } else {
       throw new Error(`Error al emitir eCF: ${err.message}`);
@@ -132,23 +159,29 @@ export async function emitirECF(
 
   const assignedEncf = response.encf || response.documentNumber || payload.invoiceNumber;
   if (!assignedEncf) {
-    throw new Error('Pronesoft registró el documento pero no devolvió un e-NCF. Conserva el ID para reconciliación antes de reintentar.');
+    throw new Error(
+      "Pronesoft registró el documento pero no devolvió un e-NCF. Conserva el ID para reconciliación antes de reintentar.",
+    );
   }
 
   // 4. Guardar en Supabase (ecf_documents)
   const ecfDoc: ECFDocument = {
-    id:                    crypto.randomUUID(),
-    tenant_id:             tenant.id,
-    order_id:              orden.id,
-    encf:                  assignedEncf,
-    tipo_ecf:              payload.invoiceType === '31' ? 'E31'
-                         : payload.invoiceType === '32' ? 'E32'
-                         : payload.invoiceType === '34' ? 'E34'
-                         : `E${payload.invoiceType}`,
-    rnc_receptor:          cliente?.cedula ?? undefined,
-    track_id:              response.trackId || response.id,
-    status:                mapStatus(response.status, response.legalStatus),
-    dgii_response:         {
+    id: crypto.randomUUID(),
+    tenant_id: tenant.id,
+    order_id: orden.id,
+    encf: assignedEncf,
+    tipo_ecf:
+      payload.invoiceType === "31"
+        ? "E31"
+        : payload.invoiceType === "32"
+          ? "E32"
+          : payload.invoiceType === "34"
+            ? "E34"
+            : `E${payload.invoiceType}`,
+    rnc_receptor: cliente?.cedula ?? undefined,
+    track_id: response.trackId || response.id,
+    status: mapStatus(response.status, response.legalStatus),
+    dgii_response: {
       ...response,
       // Conservamos el contexto exacto de emision. Si el administrador cambia
       // luego el ambiente o la empresa asociada, este documento debe seguir
@@ -158,28 +191,28 @@ export async function emitirECF(
         environment: targetProneEnv,
       },
     },
-    xml_content:           response.xmlUrl ?? '',
-    qr_content:            response.documentStampUrl || undefined,
-    monto_total:           orden.total,
-    monto_itbis:           orden.itbis,
-    fecha_emision:         response.stampDate || new Date().toISOString(),
+    xml_content: response.xmlUrl ?? "",
+    qr_content: response.documentStampUrl || undefined,
+    monto_total: orden.total,
+    monto_itbis: orden.itbis,
+    fecha_emision: response.stampDate || new Date().toISOString(),
     // Campos extendidos de Pronesoft
-    pronesoft_id:          response.id,
-    legal_status:          response.legalStatus || undefined,
-    pdf_url:               response.pdf || undefined,
-    xml_url:               response.xmlUrl || undefined,
-    document_stamp_url:    response.documentStampUrl || undefined,
-    security_code:         response.securityCode || undefined,
-    contingency_mode:      response.contingencyMode,
-    stamp_date:            response.stampDate,
-    signature_date:        response.signatureDate || undefined,
+    pronesoft_id: response.id,
+    legal_status: response.legalStatus || undefined,
+    pdf_url: response.pdf || undefined,
+    xml_url: response.xmlUrl || undefined,
+    document_stamp_url: response.documentStampUrl || undefined,
+    security_code: response.securityCode || undefined,
+    contingency_mode: response.contingencyMode,
+    stamp_date: response.stampDate,
+    signature_date: response.signatureDate || undefined,
   } as ECFDocument;
 
   try {
     await saveECFDocument(ecfDoc);
   } catch (saveErr) {
     // No bloqueamos si falla el guardado — el documento ya fue emitido
-    console.error('Advertencia: no se pudo guardar ECFDocument en Supabase:', saveErr);
+    console.error("Advertencia: no se pudo guardar ECFDocument en Supabase:", saveErr);
   }
 
   // 5. Actualizar la secuencia local (valor_actual) con el eNCF emitido para mantener la sincronización y la cuenta regresiva en UI
@@ -189,8 +222,8 @@ export async function emitirECF(
       // Remover el prefijo E32 / E31 antes de convertir a número para obtener el verdadero consecutivo (ej: "E320000000029" -> "0000000029" -> 29)
       const rawNumStr = assignedEncf.startsWith(tipoDoc)
         ? assignedEncf.substring(tipoDoc.length)
-        : assignedEncf.replace(/^[A-Z]+\d{2}/, '').replace(/\D/g, '');
-        
+        : assignedEncf.replace(/^[A-Z]+\d{2}/, "").replace(/\D/g, "");
+
       const numSol = parseInt(rawNumStr, 10);
       if (!isNaN(numSol) && numSol > 0) {
         const { data: seq } = await supabase
@@ -211,20 +244,23 @@ export async function emitirECF(
   }
 
   return {
-    document:         ecfDoc,
-    encf:             assignedEncf,
-    pdf_url:          response.pdf || undefined,
-    stamp_url:        response.documentStampUrl || undefined,
-    security_code:    response.securityCode || undefined,
+    document: ecfDoc,
+    encf: assignedEncf,
+    pdf_url: response.pdf || undefined,
+    stamp_url: response.documentStampUrl || undefined,
+    security_code: response.securityCode || undefined,
     contingency_mode: response.contingencyMode,
-    legal_status:     response.legalStatus || undefined,
+    legal_status: response.legalStatus || undefined,
   };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /** Consulta Pronesoft y propaga el estado fiscal real a la orden y al documento local. */
-export async function sincronizarEstadoECF(tenantId: string, document: ECFDocument): Promise<ECFDocument> {
+export async function sincronizarEstadoECF(
+  tenantId: string,
+  document: ECFDocument,
+): Promise<ECFDocument> {
   const config = await getECFConfig(tenantId);
   // El SDK devuelve un id de registro y un trackId. El endpoint /status de
   // Pronesoft consulta por trackId; el id inicial puede responder "no encontrado".
@@ -270,11 +306,17 @@ export async function sincronizarEstadoECF(tenantId: string, document: ECFDocume
     response = await client.getSentDocument(remoteId);
   }
 
-  const fiscalStatus = response.legalStatus === 'ACCEPTED' ? 'ACCEPTED'
-    : response.legalStatus === 'ACCEPTED_WITH_OBSERVATIONS' ? 'ACCEPTED_WITH_OBSERVATIONS'
-    : response.legalStatus === 'REJECTED' ? 'REJECTED'
-    : response.status === 'ERROR' ? 'ERROR' : response.status;
-  const isRejected = fiscalStatus === 'REJECTED' || fiscalStatus === 'ERROR';
+  const fiscalStatus =
+    response.legalStatus === "ACCEPTED"
+      ? "ACCEPTED"
+      : response.legalStatus === "ACCEPTED_WITH_OBSERVATIONS"
+        ? "ACCEPTED_WITH_OBSERVATIONS"
+        : response.legalStatus === "REJECTED"
+          ? "REJECTED"
+          : response.status === "ERROR"
+            ? "ERROR"
+            : response.status;
+  const isRejected = fiscalStatus === "REJECTED" || fiscalStatus === "ERROR";
   const updated: ECFDocument = {
     ...document,
     encf: response.encf || document.encf,
@@ -289,13 +331,19 @@ export async function sincronizarEstadoECF(tenantId: string, document: ECFDocume
     pdf_url: isRejected ? undefined : response.pdf || document.pdf_url,
     xml_url: response.xmlUrl || document.xml_url,
     qr_content: isRejected ? undefined : response.documentStampUrl || document.qr_content,
-    document_stamp_url: isRejected ? undefined : response.documentStampUrl || document.document_stamp_url,
+    document_stamp_url: isRejected
+      ? undefined
+      : response.documentStampUrl || document.document_stamp_url,
     security_code: isRejected ? undefined : response.securityCode || document.security_code,
     signature_date: isRejected ? undefined : response.signatureDate || document.signature_date,
   };
   await saveECFDocument(updated);
   if (document.order_id) {
-    const { data: order } = await supabase.from('ordenes').select('*').eq('id', document.order_id).maybeSingle();
+    const { data: order } = await supabase
+      .from("ordenes")
+      .select("*")
+      .eq("id", document.order_id)
+      .maybeSingle();
     if (order) {
       await saveOrden({
         ...order,
@@ -323,7 +371,10 @@ export interface DGIIContribuyente {
 /**
  * Consulta la información oficial de un RNC/Cédula en el servicio DGII de Pronesoft.
  */
-export async function consultarRNC(rncInput: string, ambiente?: 'pruebas' | 'produccion'): Promise<DGIIContribuyente | null> {
+export async function consultarRNC(
+  rncInput: string,
+  ambiente?: "pruebas" | "produccion",
+): Promise<DGIIContribuyente | null> {
   const raw = (rncInput || "").trim().toUpperCase();
   if (raw.startsWith("SBX") || ambiente === "pruebas" || raw === "987654321") {
     if (raw.includes("987654321") || raw === "987654321" || raw === "SBX987654321") {
@@ -359,8 +410,8 @@ export async function consultarRNC(rncInput: string, ambiente?: 'pruebas' | 'pro
 
   try {
     // 2. Fallback vía Edge function pronesoft-proxy
-    const { data, error } = await supabase.functions.invoke('pronesoft-proxy', {
-      body: { action: 'get-rnc', payload: { rnc: cleanRnc } }
+    const { data, error } = await supabase.functions.invoke("pronesoft-proxy", {
+      body: { action: "get-rnc", payload: { rnc: cleanRnc } },
     });
     if (!error && data && data.name) {
       return data as DGIIContribuyente;
@@ -374,7 +425,7 @@ export async function consultarRNC(rncInput: string, ambiente?: 'pruebas' | 'pro
 
 /**
  * Evalúa si la configuración fiscal está lista para emitir o comunicarse con Pronesoft.
- * 
+ *
  * - Modalidad 1 (Cuenta Maestra Klynn): Requiere is_active y pronesoft_tenant_id.
  * - Modalidad 2 (Credenciales Propias): Requiere is_active y que existan client_id y client_secret.
  */
@@ -387,25 +438,25 @@ export function isECFReady(config: ECFConfig | null | undefined): boolean {
 }
 
 function mapStatus(
-  status:      ECFSubmitResponse['status'],
-  legalStatus?: ECFSubmitResponse['legalStatus']
-): ECFDocument['status'] {
-  if (legalStatus === 'ACCEPTED')                  return 'accepted';
-  if (legalStatus === 'ACCEPTED_WITH_OBSERVATIONS') return 'accepted_with_reservations';
-  if (legalStatus === 'REJECTED')                  return 'rejected';
-  if (status === 'ERROR')                          return 'rejected';
-  return 'pending'; // REGISTERED, TO_SEND, WAITING_RESPONSE
+  status: ECFSubmitResponse["status"],
+  legalStatus?: ECFSubmitResponse["legalStatus"],
+): ECFDocument["status"] {
+  if (legalStatus === "ACCEPTED") return "accepted";
+  if (legalStatus === "ACCEPTED_WITH_OBSERVATIONS") return "accepted_with_reservations";
+  if (legalStatus === "REJECTED") return "rejected";
+  if (status === "ERROR") return "rejected";
+  return "pending"; // REGISTERED, TO_SEND, WAITING_RESPONSE
 }
 
 /**
  * Registra automáticamente un negocio de Klynn en Pronesoft como empresa asociada.
- * 
+ *
  * 1. Crea la 'Associated Company' en Pronesoft bajo la cuenta de Klynn.
  * 2. Guarda el x-tenant-id resultante en la configuración local.
  */
 export async function registerTenantInPronesoft(
   tenantId: string,
-  explicitConfig?: Partial<ECFConfig>
+  explicitConfig?: Partial<ECFConfig>,
 ): Promise<string> {
   // 1. Obtener datos del negocio y config actual
   let config = await getECFConfig(tenantId);
@@ -413,7 +464,11 @@ export async function registerTenantInPronesoft(
     config = explicitConfig as ECFConfig;
   }
   if (!config) {
-    const { data: tData } = await supabase.from('tenants').select('nombre, rnc').eq('id', tenantId).single();
+    const { data: tData } = await supabase
+      .from("tenants")
+      .select("nombre, rnc")
+      .eq("id", tenantId)
+      .single();
     config = {
       id: crypto.randomUUID(),
       tenant_id: tenantId,
@@ -432,15 +487,19 @@ export async function registerTenantInPronesoft(
     return config.pronesoft_tenant_id || "";
   }
 
-  const { data: tenantData } = await supabase.from('tenants').select('nombre, rnc, telefono, direccion, ciudad').eq('id', tenantId).single();
+  const { data: tenantData } = await supabase
+    .from("tenants")
+    .select("nombre, rnc, telefono, direccion, ciudad")
+    .eq("id", tenantId)
+    .single();
 
   const proneSoftEnv = getConfiguredPronesoftEnvironment(config);
   const client = getProneSoftClient(
-    undefined, 
+    undefined,
     proneSoftEnv,
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
 
   const companyName = config.razon_social || tenantData?.nombre || "Lavanderia Klynn";
@@ -448,18 +507,19 @@ export async function registerTenantInPronesoft(
 
   // El contrato sandbox documentado usa SBX. Durante el diagnÃ³stico autorizado
   // tambiÃ©n preservamos un RNC real de 9/11 dÃ­gitos escrito manualmente.
-  if (proneSoftEnv === 'sandbox') {
-    const numericRnc = rncToRegister.replace(/\D/g, '');
-    const isAllowedNumericDiagnostic = ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC
-      && (numericRnc.length === 9 || numericRnc.length === 11);
-    if (!rncToRegister.startsWith('SBX') && !isAllowedNumericDiagnostic) {
-      const digitsOnly = rncToRegister.replace(/\D/g, '') || '987654321';
+  if (proneSoftEnv === "sandbox") {
+    const numericRnc = rncToRegister.replace(/\D/g, "");
+    const isAllowedNumericDiagnostic =
+      ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC &&
+      (numericRnc.length === 9 || numericRnc.length === 11);
+    if (!rncToRegister.startsWith("SBX") && !isAllowedNumericDiagnostic) {
+      const digitsOnly = rncToRegister.replace(/\D/g, "") || "987654321";
       rncToRegister = `SBX${digitsOnly}`;
     } else if (isAllowedNumericDiagnostic) {
       rncToRegister = numericRnc;
     }
-  } else if (proneSoftEnv === 'production') {
-    rncToRegister = rncToRegister.replace(/^SBX/i, '').replace(/\D/g, '');
+  } else if (proneSoftEnv === "production") {
+    rncToRegister = rncToRegister.replace(/^SBX/i, "").replace(/\D/g, "");
   }
 
   // 2. Buscar primero por RNC para que el alta sea idempotente.
@@ -468,8 +528,13 @@ export async function registerTenantInPronesoft(
     for (let page = 1; page <= 100 && !pronesoftTenantId; page++) {
       const listed = await client.listAssociatedCompanies({ page, limit: 100 });
       const companies = Array.isArray(listed) ? listed : listed?.data || [];
-      const match = companies.find((company: any) => String(company?.rnc || '').trim().toUpperCase() === rncToRegister);
-      if (match) pronesoftTenantId = match.id || match.businessId || '';
+      const match = companies.find(
+        (company: any) =>
+          String(company?.rnc || "")
+            .trim()
+            .toUpperCase() === rncToRegister,
+      );
+      if (match) pronesoftTenantId = match.id || match.businessId || "";
       if (companies.length < 100) break;
     }
 
@@ -477,13 +542,14 @@ export async function registerTenantInPronesoft(
       const res = await client.createAssociatedCompany({
         rnc: rncToRegister,
         name: companyName,
-        email: `ecf-${tenantId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()}@klynn.com.do`,
+        email: `ecf-${tenantId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}@klynn.com.do`,
         phone: tenantData?.telefono || undefined,
         address: tenantData?.direccion || undefined,
         city: tenantData?.ciudad || undefined,
       });
 
-      const tenantResultId = res?.id || (res as any)?.businessId || (typeof res === 'string' ? res : '');
+      const tenantResultId =
+        res?.id || (res as any)?.businessId || (typeof res === "string" ? res : "");
       if (!tenantResultId) throw new Error("Pronesoft no devolvió un ID de empresa");
       pronesoftTenantId = tenantResultId;
     }
@@ -493,7 +559,7 @@ export async function registerTenantInPronesoft(
       pronesoft_tenant_id: pronesoftTenantId,
       is_active: true,
       rnc_emisor: rncToRegister,
-      razon_social: companyName
+      razon_social: companyName,
     });
 
     return pronesoftTenantId;
@@ -507,10 +573,10 @@ export async function registerTenantInPronesoft(
  * Sincroniza el certificado P12 local con Pronesoft.
  */
 export async function uploadCertificateToPronesoft(
-  tenantId: string, 
-  base64: string, 
+  tenantId: string,
+  base64: string,
   password: string,
-  passedConfig?: ECFConfig
+  passedConfig?: ECFConfig,
 ): Promise<boolean> {
   const config = passedConfig || (await getECFConfig(tenantId));
   if (!config) {
@@ -520,18 +586,18 @@ export async function uploadCertificateToPronesoft(
 
   const proneSoftEnv2 = getConfiguredPronesoftEnvironment(config);
   const client = getProneSoftClient(
-    config.pronesoft_tenant_id || undefined, 
+    config.pronesoft_tenant_id || undefined,
     proneSoftEnv2,
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
 
   try {
     const res = await client.uploadCertificate({
       certificate: base64,
       password: password,
-      rnc: config.rnc_emisor
+      rnc: config.rnc_emisor,
     });
     return res.ok;
   } catch (err: any) {
@@ -543,7 +609,7 @@ export async function uploadCertificateToPronesoft(
 
 export async function createSequencePronesoft(
   tenantId: string,
-  data: { type: string; from: number; to: number; quantity?: number; expiration?: string }
+  data: { type: string; from: number; to: number; quantity?: number; expiration?: string },
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
@@ -551,26 +617,38 @@ export async function createSequencePronesoft(
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
   return client.createSequence(data);
 }
 
 export async function listAssociatedCompaniesPronesoft(
   params?: { page?: number; limit?: number },
-  env?: 'sandbox' | 'production' | 'all'
+  env?: "sandbox" | "production" | "all",
 ): Promise<any[]> {
-  if (env === 'all') {
+  if (env === "all") {
     const [sbxRes, prodRes] = await Promise.allSettled([
-      getProneSoftClient(undefined, 'sandbox').listAssociatedCompanies(params),
-      getProneSoftClient(undefined, 'production').listAssociatedCompanies(params),
+      getProneSoftClient(undefined, "sandbox").listAssociatedCompanies(params),
+      getProneSoftClient(undefined, "production").listAssociatedCompanies(params),
     ]);
 
-    const sbxItems = sbxRes.status === 'fulfilled' ? (sbxRes.value?.data || (Array.isArray(sbxRes.value) ? sbxRes.value : [])) : [];
-    const prodItems = prodRes.status === 'fulfilled' ? (prodRes.value?.data || (Array.isArray(prodRes.value) ? prodRes.value : [])) : [];
+    const sbxItems =
+      sbxRes.status === "fulfilled"
+        ? sbxRes.value?.data || (Array.isArray(sbxRes.value) ? sbxRes.value : [])
+        : [];
+    const prodItems =
+      prodRes.status === "fulfilled"
+        ? prodRes.value?.data || (Array.isArray(prodRes.value) ? prodRes.value : [])
+        : [];
 
-    const taggedSbx = (Array.isArray(sbxItems) ? sbxItems : []).map((c: any) => ({ ...c, _ambiente: 'sandbox' }));
-    const taggedProd = (Array.isArray(prodItems) ? prodItems : []).map((c: any) => ({ ...c, _ambiente: 'production' }));
+    const taggedSbx = (Array.isArray(sbxItems) ? sbxItems : []).map((c: any) => ({
+      ...c,
+      _ambiente: "sandbox",
+    }));
+    const taggedProd = (Array.isArray(prodItems) ? prodItems : []).map((c: any) => ({
+      ...c,
+      _ambiente: "production",
+    }));
 
     // Unificar evitando duplicados por ID
     const seen = new Set<string>();
@@ -585,47 +663,46 @@ export async function listAssociatedCompaniesPronesoft(
     return combined;
   }
 
-  const targetEnv = env || 'production';
+  const targetEnv = env || "production";
   try {
     const client = getProneSoftClient(undefined, targetEnv);
     const res = await client.listAssociatedCompanies(params);
     const items = res?.data || (Array.isArray(res) ? res : []);
     return (Array.isArray(items) ? items : []).map((c: any) => ({ ...c, _ambiente: targetEnv }));
   } catch (err: any) {
-    console.warn(`[Pronesoft API] Aviso al listar empresas asociadas en ${targetEnv}:`, err?.message || err);
+    console.warn(
+      `[Pronesoft API] Aviso al listar empresas asociadas en ${targetEnv}:`,
+      err?.message || err,
+    );
     throw err;
   }
 }
 
-export async function listSequencesPronesoft(
-  tenantId: string,
-  params?: any
-): Promise<any> {
+export async function listSequencesPronesoft(tenantId: string, params?: any): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
     config?.pronesoft_tenant_id || undefined,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
   return client.listSequences(params);
 }
 
-export async function getNextNumberPronesoft(
-  tenantId: string,
-  type: string
-): Promise<any> {
+export async function getNextNumberPronesoft(tenantId: string, type: string): Promise<any> {
   const config = await getECFConfig(tenantId);
   if (!config || !isECFReady(config)) {
-    throw new Error('La facturación electrónica no está configurada para reservar e-NCF en Pronesoft.');
+    throw new Error(
+      "La facturación electrónica no está configurada para reservar e-NCF en Pronesoft.",
+    );
   }
   const client = getProneSoftClient(
     config.pronesoft_tenant_id || undefined,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
   return client.getNextNumber(type);
 }
@@ -636,7 +713,7 @@ export async function anularSecuenciasPronesoft(
   invoiceType: string,
   startNumber: string,
   endNumber: string,
-  reason: string
+  reason: string,
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   if (!config || !isECFReady(config)) {
@@ -648,15 +725,15 @@ export async function anularSecuenciasPronesoft(
     getConfiguredPronesoftEnvironment(config),
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
-  
+
   return client.voidSequences({
     sequenceId,
     invoiceType,
     startNumber,
     endNumber,
-    reason
+    reason,
   });
 }
 
@@ -664,7 +741,7 @@ export async function listSentDocumentsPronesoft(
   tenantId: string,
   page: number = 1,
   pageSize: number = 50,
-  type?: string
+  type?: string,
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
@@ -672,7 +749,7 @@ export async function listSentDocumentsPronesoft(
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
   return client.listSentDocuments(page, pageSize, type);
 }
@@ -699,10 +776,14 @@ export async function getSentDocumentDiagnosticsPronesoft(
 export async function listReceivedDocumentsPronesoft(
   tenantId: string,
   page: number = 1,
-  pageSize: number = 50
+  pageSize: number = 50,
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
-  const isUUID = config?.pronesoft_tenant_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(config.pronesoft_tenant_id);
+  const isUUID =
+    config?.pronesoft_tenant_id &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+      config.pronesoft_tenant_id,
+    );
   if (!config?.is_active || !isUUID) {
     return { data: [], total: 0 };
   }
@@ -712,7 +793,7 @@ export async function listReceivedDocumentsPronesoft(
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
   return client.listReceivedDocuments(page, pageSize);
 }
@@ -720,8 +801,8 @@ export async function listReceivedDocumentsPronesoft(
 export async function submitCommercialApprovalPronesoft(
   tenantId: string,
   documentId: string,
-  status: 'ACCEPTED' | 'REJECTED',
-  details?: string
+  status: "ACCEPTED" | "REJECTED",
+  details?: string,
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
@@ -729,7 +810,7 @@ export async function submitCommercialApprovalPronesoft(
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
-    tenantId
+    tenantId,
   );
   return client.submitCommercialApproval(documentId, status, details);
 }
