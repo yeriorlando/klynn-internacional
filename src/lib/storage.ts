@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { createClient } from "@supabase/supabase-js";
 import { offlineDB } from "./offline-db";
 import { syncManager } from "./sync-manager";
+import { computeNextOrderSequence, extractOrderSequenceNumber } from "./order-sequence";
 import {
   createOfflineAuthVerifier,
   isOfflineAuthExpired,
@@ -2976,42 +2977,7 @@ export async function getOrdenById(id: string): Promise<Orden | undefined> {
   }
 }
 
-export function extractOrderSequenceNumber(numero?: string | null): number | null {
-  if (!numero || typeof numero !== "string") return null;
-  const match = numero.match(/-(\d+)$/);
-  if (match) {
-    const n = parseInt(match[1], 10);
-    return isNaN(n) ? null : n;
-  }
-  return null;
-}
-
-export function computeNextOrderSequence(numbers: (number | null | undefined)[]): number {
-  const valid = numbers
-    .filter((n): n is number => typeof n === "number" && !isNaN(n) && n > 0)
-    .sort((a, b) => b - a);
-
-  if (valid.length === 0) return 1;
-
-  if (valid.length === 1) {
-    return valid[0] > 5000 ? 1 : valid[0] + 1;
-  }
-
-  // Filtrar posibles outliers aislados (un salto anómalo mayor a 100 sin registros intermedios)
-  let maxValid = valid[0];
-  if (valid.length >= 2) {
-    const highest = valid[0];
-    const secondHighest = valid[1];
-    if (highest - secondHighest > 100) {
-      console.warn(
-        `[OrderSeq] Outlier detectado: ${highest} (segundo más alto: ${secondHighest}). Descartando pico.`,
-      );
-      maxValid = secondHighest;
-    }
-  }
-
-  return maxValid + 1;
-}
+export { computeNextOrderSequence, extractOrderSequenceNumber } from "./order-sequence";
 
 export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   const realId = resolveTenantId(tenant_id);
@@ -3025,7 +2991,7 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
       (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId),
     );
     for (const o of local) {
-      const n = extractOrderSequenceNumber(o.numero);
+      const n = extractOrderSequenceNumber(o.numero, ym);
       if (n) localSeqs.push(n);
     }
   } catch {}
@@ -3035,7 +3001,7 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
       const outbox = await offlineDB.getPendingOutbox(realId);
       for (const item of outbox) {
         if (item.table_name === "ordenes" && item.payload?.numero) {
-          const n = extractOrderSequenceNumber(item.payload.numero);
+          const n = extractOrderSequenceNumber(item.payload.numero, ym);
           if (n) localSeqs.push(n);
         }
       }
@@ -3052,15 +3018,16 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   try {
     const { data, error } = await supabase
       .from("ordenes")
-      .select("numero, creado_en")
+      .select("numero")
       .eq("tenant_id", realId)
+      .ilike("numero", `KL-${ym}-%`)
       .order("creado_en", { ascending: false })
-      .limit(50);
+      .limit(1000);
 
     const remoteSeqs: number[] = [];
     if (!error && data && data.length > 0) {
       for (const row of data) {
-        const n = extractOrderSequenceNumber(row.numero);
+        const n = extractOrderSequenceNumber(row.numero, ym);
         if (n) remoteSeqs.push(n);
       }
     }

@@ -7,6 +7,7 @@ import {
   verifyOfflinePassword,
 } from "./offline-auth.ts";
 import { compactOutboxOperation, type SyncOutboxItem } from "./offline-db.ts";
+import { computeNextOrderSequence, extractOrderSequenceNumber } from "./order-sequence.ts";
 
 function queued(
   action: SyncOutboxItem["action"],
@@ -67,4 +68,17 @@ test("five failed offline logins create a temporary lock", async () => {
   for (let attempt = 0; attempt < 5; attempt++) verifier = recordOfflineAuthFailure(verifier);
   assert.ok(verifier.locked_until);
   assert.equal(await verifyOfflinePassword("secret", verifier), false);
+});
+
+test("duplicate copies of one anomalous order do not drag the sequence forward", () => {
+  assert.equal(computeNextOrderSequence([232, 233, 234, 8139, 8139, 8139]), 235);
+});
+
+test("a small anomalous cluster does not replace the established tenant sequence", () => {
+  assert.equal(computeNextOrderSequence([230, 231, 232, 233, 234, 8139, 8140, 8141]), 235);
+});
+
+test("order sequences are read only from the requested month", () => {
+  assert.equal(extractOrderSequenceNumber("KL-202608-0234", "202608"), 234);
+  assert.equal(extractOrderSequenceNumber("KL-202607-9999", "202608"), null);
 });

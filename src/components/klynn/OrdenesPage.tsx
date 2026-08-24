@@ -3201,7 +3201,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         ecf_security_code: finalEcfSecurityCode,
         ecf_signature_date: finalEcfSignatureDate,
         ecf_status: finalEcfStatus || (finalEcfSecurityCode?.startsWith("SBX") ? "PENDING_OFFLINE_TRANSMISSION" : (orden as any).ecf_status),
-        pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : orden.pago_referencia
+        pago_referencia: (metodo === "TARJETA" || metodo === "TRANSFERENCIA") && referencia ? referencia : orden.pago_referencia,
       });
 
       await saveOrden(ordenActualizada);
@@ -3242,12 +3242,12 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
       toast.success(
         nuevoSaldo === 0
-          ? `Orden #${orden.numero} saldada correctamente RD$${montoAPagar} ✅`
-          : `Abono de RD$${montoAPagar} registrado a la orden #${orden.numero} ✅`
+          ? `Orden #${orden.numero} saldada correctamente RD${montoAPagar} ✅`
+          : `Abono de RD${montoAPagar} registrado a la orden #${orden.numero} ✅`
       );
       
-      queryClient.invalidateQueries({ queryKey: ['ordenes', tenant.id] });
-      queryClient.invalidateQueries({ queryKey: ['movimientos', tenant.id] });
+      queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
+      queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
 
       onClose();
       if (showPrintPortal) {
@@ -3265,17 +3265,12 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
   const formatAmountInput = (val: string) => {
     if (!val) return "";
-    // Eliminar comas previas y limpiar entrada
     const clean = val.replace(/,/g, "").replace(/[^0-9.]/g, "");
     const parts = clean.split(".");
     const integerPart = parts[0];
     const decimalPart = parts.length > 1 ? parts.slice(1).join("") : null;
-    
-    // Aplicar expresión regular para agregar comas de miles
     const formattedInteger = integerPart.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
-    
     if (decimalPart !== null) {
-      // Limitar a un máximo de 2 dígitos decimales
       return formattedInteger + "." + decimalPart.substring(0, 2);
     }
     return formattedInteger;
@@ -3316,294 +3311,381 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
     );
   }
 
+  const numeroLimpio = String(orden.numero || "").replace(/^[#$]+/, "");
+  const clienteNombreLimpio = `${String(cli.nombre || "").replace(/^\$/, "")} ${String(cli.apellido || "").replace(/^\$/, "")}`.trim();
+
   return (
     <Dialog open={true} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-2xl rounded-2xl p-0 border border-slate-200/80 dark:border-slate-800 shadow-2xl overflow-hidden bg-background [&>button]:bg-primary [&>button]:text-primary-foreground [&>button]:hover:bg-primary/90 [&>button]:border-none [&>button]:shadow-md [&>button]:h-9 [&>button]:w-9 [&>button]:top-4 [&>button]:right-4 [&>button]:rounded-full [&>button]:z-20">
-        <div className="grid grid-cols-1 md:grid-cols-12 min-h-[420px]">
-          {/* COLUMNA IZQUIERDA: RESUMEN DE LA ORDEN + ACCIONES SECUNDARIAS */}
-          <div className="md:col-span-5 bg-slate-50 dark:bg-slate-900/60 p-5 flex flex-col justify-between border-r border-slate-200/80 dark:border-slate-800 relative">
-            <div className="space-y-3">
-              {/* Header sin badge detrás del icono invoice */}
-              <div className="flex items-center gap-2.5 mb-4.5">
-                <Receipt className="h-6 w-6 text-primary shrink-0 stroke-[2.2]" />
-                <div>
-                  <span className="text-[10px] font-extrabold text-slate-600 dark:text-slate-300 block uppercase tracking-wider">Detalle de Cobro</span>
-                  <span className="font-mono text-base font-black text-primary block mt-0.5">Orden #{orden.numero}</span>
-                </div>
+      <DialogContent className="max-w-xl sm:max-w-2xl rounded-3xl py-3.5 px-5 sm:px-6 border border-slate-200/80 dark:border-slate-800 shadow-2xl overflow-hidden bg-white dark:bg-slate-950 font-sans [&>button]:!flex [&>button]:!items-center [&>button]:!justify-center [&>button]:!bg-rose-500 [&>button]:hover:!bg-rose-600 [&>button]:!text-white [&>button]:!h-7 [&>button]:!w-7 [&>button]:!rounded-full [&>button]:!shadow-md [&>button]:!right-3.5 [&>button]:!top-3.5 [&>button]:!border-none [&>button]:!z-50 [&>button]:!opacity-100 [&>button]:cursor-pointer [&>button]:transition-all [&>button]:active:scale-95">
+        {/* DIALOG HEADER CON LOGO, TITULO Y TOTAL A COBRAR */}
+        <DialogHeader className="pb-2 border-b border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center justify-between gap-3">
+            {/* Logo + Título */}
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 shadow-xs shrink-0">
+                <img
+                  src="/favicon.webp"
+                  alt="Klynn Logo"
+                  className="h-5.5 w-5.5 object-contain drop-shadow-xs"
+                  onError={(e) => {
+                    (e.target as HTMLElement).style.display = "none";
+                  }}
+                />
               </div>
-
-              {/* Cliente Card */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 space-y-2 shadow-xs">
-                <div className="flex items-center justify-between text-[10px] text-slate-600 dark:text-slate-300 font-medium">
-                  <span className="font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300">Cliente</span>
-                  <span className="px-2 py-0.5 rounded-full bg-primary/10 text-primary text-[8px] font-extrabold uppercase tracking-wider border border-primary/20">
-                    {cli.tipo === "Empresa" ? "Empresa" : "Personal"}
+              <div className="text-left">
+                <DialogTitle className="text-lg sm:text-xl font-display font-extrabold text-[#1B4B73] dark:text-white leading-tight">
+                  Panel de Cobro
+                </DialogTitle>
+                <div className="flex flex-col mt-0.5 leading-tight">
+                  <span className="text-[11px] font-semibold text-slate-400 dark:text-slate-500">
+                    Orden {numeroLimpio}
                   </span>
-                </div>
-                <div className="flex items-center gap-2.5">
-                  <div className="h-7 w-7 rounded-lg bg-slate-100 dark:bg-slate-800 border border-slate-200/60 dark:border-slate-700 flex items-center justify-center text-slate-600 dark:text-slate-300 font-bold text-xs shrink-0">
-                    {cli.tipo === "Empresa" ? <Building2 className="h-3.5 w-3.5" /> : <User className="h-3.5 w-3.5" />}
-                  </div>
-                  <div className="truncate">
-                    <p className="font-bold text-xs text-slate-900 dark:text-slate-100 truncate">{cli.nombre} {cli.apellido || ""}</p>
-                    {cli.telefono && <p className="text-[10px] text-slate-600 dark:text-slate-300 font-mono font-extrabold mt-0.5">{formatPhoneRD(cli.telefono)}</p>}
-                  </div>
-                </div>
-              </div>
-
-              {/* Montos Resumen */}
-              <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-xl p-3 grid grid-cols-2 gap-2 shadow-xs">
-                <div>
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Total Orden</span>
-                  <span className="text-sm font-black text-slate-900 dark:text-slate-100 block mt-0.5">{formatRD(orden.total)}</span>
-                </div>
-                <div className="border-l border-slate-200/80 dark:border-slate-800 pl-2.5">
-                  <span className="text-[9px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">Abonado</span>
-                  <span className="text-sm font-black text-primary block mt-0.5">{formatRD(orden.pagado)}</span>
-                </div>
-              </div>
-
-              {/* Saldo Destacado (Total a Saldar) */}
-              <div className="bg-emerald-50/90 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-xl p-3 flex items-center justify-between shadow-xs">
-                <div className="space-y-0.5">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-emerald-800 dark:text-emerald-300 block">Total a Saldar</span>
-                  <span className="text-2xl font-black text-emerald-700 dark:text-emerald-300 block tracking-tight">{formatRD(totalCobrar)}</span>
-                </div>
-                <div className="h-9 w-9 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-md shadow-emerald-600/20">
-                  <Wallet className="h-4.5 w-4.5" />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200 truncate">
+                    {clienteNombreLimpio}
+                  </span>
                 </div>
               </div>
             </div>
 
-            {/* BOTONES CANCELAR Y CONDONAR DEUDA (MOVIDOS AL PANEL IZQUIERDO SEGÚN LA 2DA IMAGEN) */}
-            <div className="flex gap-2 mt-4 pt-2 border-t border-slate-200/60 dark:border-slate-800">
-              <Button
-                variant="outline"
-                type="button"
-                onClick={onClose}
-                className="flex-1 h-9 rounded-xl text-[11px] font-extrabold bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-100 cursor-pointer shadow-xs"
-              >
-                Cancelar
-              </Button>
+            {/* Total Header Right */}
+            <div className="text-right pr-8 sm:pr-10">
+              <span className="text-[9px] font-black uppercase tracking-widest text-[#1B4B73]/70 dark:text-sky-400 block leading-none mb-0.5">
+                TOTAL A COBRAR
+              </span>
+              <span className="text-2xl sm:text-3xl font-display font-black text-[#1B4B73] dark:text-sky-300 tracking-tight leading-none">
+                {formatRD(totalCobrar)}
+              </span>
+            </div>
+          </div>
+          <DialogDescription className="sr-only">
+            Selecciona el método de cobro y confirma el pago de la orden.
+          </DialogDescription>
+        </DialogHeader>
 
-              {isAuthorized && (
-                <Button
-                  variant="outline"
-                  type="button"
-                  onClick={() => setShowCondonar(true)}
-                  className="flex-1 h-9 rounded-xl text-[10px] font-extrabold border-amber-300/80 text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <AlertTriangle className="h-3.5 w-3.5 text-amber-500" />
-                  Condonar Deuda
-                </Button>
-              )}
+        {/* BODY */}
+        <div className="space-y-2.5 pt-2">
+          {/* BARRA RESUMEN DE SALDOS */}
+          <div className="grid grid-cols-3 gap-2 p-2 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
+            <div className="flex flex-col">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Total Orden</span>
+              <span className="font-extrabold text-slate-700 dark:text-slate-200 text-xs sm:text-sm mt-0.5">{formatRD(orden.total)}</span>
+            </div>
+            <div className="flex flex-col border-x border-slate-200 dark:border-slate-800 px-2">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Abonado</span>
+              <span className="font-extrabold text-[#1B4B73] dark:text-sky-400 text-xs sm:text-sm mt-0.5">{formatRD(orden.pagado)}</span>
+            </div>
+            <div className="flex flex-col pl-1">
+              <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Saldo Pendiente</span>
+              <span className="font-extrabold text-emerald-600 dark:text-emerald-400 text-xs sm:text-sm mt-0.5">{formatRD(totalCobrar)}</span>
             </div>
           </div>
 
-          {/* COLUMNA DERECHA: REGISTRO DE COBRO */}
-          <div className="md:col-span-7 p-5 flex flex-col justify-between space-y-4 bg-slate-50/30 dark:bg-slate-950">
-            <div className="space-y-4">
-              {/* Header Title */}
-              <div>
-                <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-1.5">
-                  Registrar Pago
-                </h3>
-                <p className="text-[11px] text-slate-600 dark:text-slate-300 font-bold mt-0.5">
-                  Selecciona la forma de pago e ingresa el monto.
-                </p>
-              </div>
+          {/* 1. MÉTODOS DE PAGO (PÍLDORAS HORIZONTALES) */}
+          <div className="space-y-1">
+            <label className="text-[9px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 block">
+              MÉTODO DE COBRO
+            </label>
+            <div className="grid grid-cols-3 gap-2.5">
+              {[
+                { id: "EFECTIVO", label: "EFECTIVO", icon: Banknote },
+                { id: "TARJETA", label: "TARJETA", icon: CreditCard },
+                { id: "TRANSFERENCIA", label: "TRANSFERENCIA", icon: Building2 },
+              ].map((inst) => {
+                const isSel = metodo === inst.id;
+                const Icon = inst.icon;
+                return (
+                  <button
+                    key={inst.id}
+                    type="button"
+                    onClick={() => handleMetodoChange(inst.id as MetodoPago)}
+                    className={`relative flex items-center justify-center gap-2 rounded-xl border-2 py-2.5 px-3 transition-all duration-200 active:scale-95 cursor-pointer ${
+                      isSel
+                        ? "border-[#1B4B73] bg-[#1B4B73] text-white font-black shadow-xs scale-[1.01]"
+                        : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-[#1B4B73]/30 text-slate-700 dark:text-slate-300 font-bold shadow-2xs"
+                    }`}
+                  >
+                    <Icon className={`h-4.5 w-4.5 shrink-0 ${isSel ? "text-[#F0B900]" : ""}`} />
+                    <span className="text-xs tracking-wider">{inst.label}</span>
+                    {isSel && (
+                      <div className="h-3.5 w-3.5 rounded-full bg-[#F0B900] text-slate-900 flex items-center justify-center shrink-0 ml-0.5">
+                        <Check className="h-2 w-2 stroke-[3]" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
 
-              {/* Selector de Método de Pago */}
-              <div className="space-y-1.5">
-                <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
-                  Método de Pago
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {[
-                    { id: "EFECTIVO", label: "Efectivo", icon: Banknote },
-                    { id: "TARJETA", label: "Tarjeta", icon: CreditCard },
-                    { id: "TRANSFERENCIA", label: "Transferencia", icon: Building2 }
-                  ].map((m) => {
-                    const Icon = m.icon;
-                    const isSelected = metodo === m.id;
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => handleMetodoChange(m.id as MetodoPago)}
-                        className={`flex flex-col items-center justify-center py-2 px-2.5 rounded-xl border transition-all duration-150 cursor-pointer ${
-                          isSelected
-                            ? "border-emerald-600 bg-emerald-600 text-white shadow-md shadow-emerald-600/20 scale-[1.02]"
-                            : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:border-emerald-500/40"
-                        }`}
-                      >
-                        <Icon className={`h-4.5 w-4.5 mb-1 ${isSelected ? "text-white" : "text-slate-600 dark:text-slate-300"}`} />
-                        <span className="text-[11px] font-extrabold">{m.label}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Entrada de Monto (AUMENTADO TAMAÑO DE FUENTE E INPUT SEGÚN LA 3RA IMAGEN) */}
-              <div className="space-y-1.5">
-                <div className="flex items-center justify-between">
-                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
-                    {metodo === "EFECTIVO" ? "Monto Entregado" : "Monto a Cobrar"}
-                  </label>
-                  {metodo === "EFECTIVO" && (
+          {/* 2. CAMPOS DE MONTO */}
+          {metodo === "EFECTIVO" && (
+            <div className="space-y-2 animate-in fade-in duration-200">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 items-center">
+                {/* Monto Recibido */}
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-[9px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 block">
+                      MONTO RECIBIDO (EFECTIVO)
+                    </label>
                     <button
                       type="button"
                       onClick={() => setRecibido(totalCobrar)}
-                      className="text-[10px] font-extrabold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                      className="text-[9px] font-extrabold text-[#1B4B73] dark:text-sky-400 hover:underline cursor-pointer"
                     >
-                      Monto Exacto ({formatRD(totalCobrar)})
+                      Monto Exacto
                     </button>
-                  )}
-                </div>
-
-                <div className="relative h-12 rounded-xl border border-slate-200 dark:border-slate-800 focus-within:border-emerald-600 focus-within:ring-2 focus-within:ring-emerald-500/20 bg-white dark:bg-slate-900 flex items-center px-3.5 transition-all shadow-xs">
-                  <span className="font-black text-slate-400 text-lg mr-2 select-none shrink-0">RD$</span>
-                  <input
-                    type="text"
-                    className="w-full h-full border-0 outline-none focus:outline-none focus:ring-0 text-3xl md:text-3xl font-black text-slate-900 dark:text-slate-100 p-0 bg-transparent tracking-tight"
-                    value={recibido ? formatAmountInput(String(recibido)) : ""}
-                    onChange={(e) => setRecibido(parseAmount(e.target.value))}
-                    placeholder="0.00"
-                    autoFocus
-                  />
-                </div>
-
-                {/* Botones Rápidos de Monto (Presets POS) */}
-                {metodo === "EFECTIVO" && (
-                  <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto">
-                    {[100, 500, 1000, 2000].map((add) => (
-                      <button
-                        key={add}
-                        type="button"
-                        onClick={() => setRecibido(prev => prev + add)}
-                        className="px-2.5 py-1 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border border-emerald-200/80 text-[10px] font-extrabold transition-all cursor-pointer shrink-0 shadow-2xs"
-                      >
-                        +{add} RD$
-                      </button>
-                    ))}
                   </div>
-                )}
-              </div>
-
-              {/* Referencia de Transacción para Tarjeta/Transferencia */}
-              {(metodo === "TARJETA" || metodo === "TRANSFERENCIA") && (
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-extrabold uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
-                    Referencia de Transacción
-                  </label>
-                  {!showRefInput ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => setShowRefInput(true)}
-                      className="w-full h-10 rounded-xl font-bold gap-2 text-primary border-primary/20 hover:bg-primary/5 hover:text-primary cursor-pointer text-xs"
-                    >
-                      <FileText className="h-4 w-4" /> Añadir referencia (Opcional)
-                    </Button>
-                  ) : (
-                    <div className="flex gap-2">
-                      <Input
+                  <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
+                    <div className="flex items-center gap-1.5 flex-1">
+                      <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
+                        RD$
+                      </span>
+                      <input
                         type="text"
-                        value={referencia}
-                        onChange={(e) => setReferencia(e.target.value)}
-                        placeholder={metodo === "TARJETA" ? "Número de aprobación, autorización, Auth # o APR." : "Número de aprobación, transferencia, cuenta, etc."}
-                        className="h-10 bg-white border-2 border-primary/20 focus-visible:ring-primary/30 rounded-xl font-medium text-xs"
+                        className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-[#1B4B73] dark:text-sky-200 p-0 shadow-none"
+                        value={recibido ? formatAmountInput(String(recibido)) : ""}
+                        onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                        placeholder="0.00"
                         autoFocus
                       />
-                      <Button
-                        type="button"
-                        variant="destructive"
-                        onClick={() => {
-                          setReferencia("");
-                          setShowRefInput(false);
-                        }}
-                        className="h-10 px-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold gap-1.5 cursor-pointer text-xs border-none"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" /> Quitar
-                      </Button>
                     </div>
+                    <div className="h-7 w-7 rounded-lg bg-sky-100 dark:bg-sky-900/60 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0">
+                      <Banknote className="h-4 w-4" />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Cambio / Saldo */}
+                <div>
+                  <label className={`text-[9px] font-black uppercase tracking-wider mb-1 block ${faltante > 0 ? "text-amber-600" : "text-emerald-600"}`}>
+                    {faltante > 0 ? "FALTA POR COBRAR" : "CAMBIO A ENTREGAR"}
+                  </label>
+                  <div className={`rounded-xl border-2 p-2 flex items-center justify-between ${
+                    faltante > 0
+                      ? "border-amber-100 dark:border-amber-900/40 bg-amber-50/40 dark:bg-amber-950/20 text-amber-600 dark:text-amber-400"
+                      : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
+                  }`}>
+                    <div className="flex items-center gap-1.5 pl-1">
+                      <span className="font-bold text-xs opacity-80">RD$</span>
+                      <span className="text-xl sm:text-2xl font-display font-black leading-none">
+                        {formatRD(faltante > 0 ? faltante : vuelto).replace("RD$", "").trim()}
+                      </span>
+                    </div>
+                    <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
+                      faltante > 0
+                        ? "bg-amber-100 dark:bg-amber-900/60 text-amber-600"
+                        : "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600"
+                    }`}>
+                      {faltante > 0 ? (
+                        <AlertTriangle className="h-4 w-4" />
+                      ) : (
+                        <CheckCircle2 className="h-4 w-4" />
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Botones Rápidos de Monto */}
+              <div className="flex items-center gap-1.5 pt-0.5 overflow-x-auto [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+                {[100, 500, 1000, 2000].map((add) => (
+                  <button
+                    key={add}
+                    type="button"
+                    onClick={() => setRecibido((prev) => prev + add)}
+                    className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-[#1B4B73]/10 dark:hover:bg-[#1B4B73]/30 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 text-[11px] font-black transition-all cursor-pointer shrink-0 shadow-2xs"
+                  >
+                    +{add} RD$
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setRecibido(totalCobrar)}
+                  className="px-2.5 py-1 rounded-lg bg-[#F0B900]/20 hover:bg-[#F0B900]/30 text-amber-900 dark:text-amber-300 border border-[#F0B900]/40 text-[11px] font-black transition-all cursor-pointer shrink-0"
+                >
+                  Monto Exacto ({formatRD(totalCobrar)})
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* TARJETA */}
+          {metodo === "TARJETA" && (
+            <div className="space-y-2 animate-in fade-in duration-200">
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 mb-1 block">
+                  MONTO A COBRAR
+                </label>
+                <div className="rounded-xl border-2 border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20 p-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">RD$</span>
+                    <input
+                      type="text"
+                      className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-indigo-900 dark:text-indigo-200 p-0 shadow-none"
+                      value={recibido ? formatAmountInput(String(recibido)) : ""}
+                      onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="h-7 w-7 rounded-lg bg-indigo-100 dark:bg-indigo-900/60 text-indigo-600 dark:text-indigo-300 flex items-center justify-center shrink-0">
+                    <CreditCard className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[9px] font-black uppercase tracking-wider text-slate-600 dark:text-slate-300 block">
+                  REFERENCIA DE TARJETA / APROBACIÓN (OPCIONAL)
+                </label>
+                <Input
+                  placeholder="Número de aprobación, autorización, Auth # o APR."
+                  value={referencia}
+                  onChange={(e) => setReferencia(e.target.value)}
+                  className="h-9 bg-white dark:bg-slate-900 border-2 border-slate-200 dark:border-slate-700 focus-visible:ring-[#1B4B73]/30 rounded-xl font-medium text-xs px-3 shadow-2xs"
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
+
+          {/* TRANSFERENCIA */}
+          {metodo === "TRANSFERENCIA" && (
+            <div className="space-y-2 animate-in fade-in duration-200">
+              <div>
+                <label className="text-[9px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 mb-1 block">
+                  MONTO A COBRAR
+                </label>
+                <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
+                  <div className="flex items-center gap-1.5 flex-1">
+                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">RD$</span>
+                    <input
+                      type="text"
+                      className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sky-900 dark:text-sky-200 p-0 shadow-none"
+                      value={recibido ? formatAmountInput(String(recibido)) : ""}
+                      onChange={(e) => setRecibido(parseAmount(e.target.value))}
+                      placeholder="0.00"
+                    />
+                  </div>
+                  <div className="h-7 w-7 rounded-lg bg-sky-100 dark:bg-sky-900/60 text-sky-600 dark:text-sky-300 flex items-center justify-center shrink-0">
+                    <Building2 className="h-4 w-4" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <div className="flex items-center justify-between">
+                  <label className="text-[9px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-200 block">
+                    NO. DE TRANSFERENCIA / COMPROBANTE * (OBLIGATORIA)
+                  </label>
+                  {!referencia.trim() && (
+                    <span className="text-[9px] text-destructive font-black">* Requerida</span>
                   )}
                 </div>
-              )}
+                <Input
+                  placeholder="Número de aprobación, transferencia bancaria, cuenta..."
+                  value={referencia}
+                  onChange={(e) => setReferencia(e.target.value)}
+                  className={`h-9 bg-white dark:bg-slate-900 border-2 rounded-xl font-medium text-xs px-3 shadow-2xs ${
+                    !referencia.trim()
+                      ? "border-destructive focus-visible:ring-destructive"
+                      : "border-slate-200 dark:border-slate-700 focus-visible:ring-[#1B4B73]/40"
+                  }`}
+                  autoFocus
+                />
+              </div>
+            </div>
+          )}
 
-              {/* Indicador de Vuelto / Faltante */}
-              {metodo === "EFECTIVO" ? (
-                <div className={`p-2.5 px-3.5 rounded-xl border transition-all flex items-center justify-between ${
-                  faltante > 0
-                    ? "bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40 text-amber-800 dark:text-amber-300"
-                    : "bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200/80 text-emerald-800 dark:text-emerald-300"
-                }`}>
-                  <div className="flex items-center gap-2">
-                    <div className={`p-1.5 rounded-lg ${faltante > 0 ? "bg-amber-100 text-amber-700" : "bg-emerald-100 text-emerald-700"}`}>
-                      <Coins className="h-4 w-4" />
-                    </div>
-                    <div>
-                      <span className="text-[11px] font-extrabold uppercase tracking-wider block">
-                        {faltante > 0 ? "Falta por Cobrar" : "Cambio a Entregar"}
-                      </span>
-                      <span className="text-[9px] font-bold opacity-90 block">
-                        {faltante > 0 ? "Saldo restante" : "Cambio para el cliente"}
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-xl font-black tracking-tight">
-                    {formatRD(faltante > 0 ? faltante : vuelto)}
+          {/* OPCIONES SECUNDARIAS (ENTREGA & CONDONAR DEUDA) */}
+          <div className="flex items-center justify-between p-2 rounded-xl bg-slate-50 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800">
+            {orden.estado !== "ENTREGADA" ? (
+              <div className="flex items-center justify-between w-full">
+                <div className="flex flex-col text-left">
+                  <span className="text-[11px] font-extrabold text-slate-800 dark:text-slate-200">
+                    Marcar ropa como entregada
+                  </span>
+                  <span className="text-[9px] font-medium text-slate-400">
+                    Cambiar estado a Entregada al confirmar cobro
                   </span>
                 </div>
-              ) : (
-                faltante > 0 && (
-                  <div className="p-2.5 px-3.5 rounded-xl border border-rose-200 dark:border-rose-900/40 bg-rose-50 dark:bg-rose-950/30 text-rose-800 dark:text-rose-300 flex items-center justify-between">
-                    <span className="text-[11px] font-extrabold uppercase tracking-wider">Saldo Restante</span>
-                    <span className="text-lg font-black">{formatRD(faltante)}</span>
-                  </div>
-                )
-              )}
+                <Switch
+                  checked={entregarAlCobrar}
+                  onCheckedChange={setEntregarAlCobrar}
+                  className="scale-90"
+                />
+              </div>
+            ) : (
+              <div className="text-[11px] text-slate-500 font-medium">
+                Esta orden ya se encuentra en estado <b>ENTREGADA</b>.
+              </div>
+            )}
+
+            {isAuthorized && (
+              <Button
+                variant="ghost"
+                type="button"
+                size="sm"
+                onClick={() => setShowCondonar(true)}
+                className="text-[11px] font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/40 gap-1 ml-2 shrink-0 cursor-pointer rounded-lg h-7 px-2"
+              >
+                <AlertTriangle className="h-3 w-3 text-amber-500" />
+                Condonar Deuda
+              </Button>
+            )}
+          </div>
+
+          {!cajaAbierta && (
+            <p className="text-[11px] font-bold text-rose-600 text-center flex items-center justify-center gap-1.5 p-1 rounded-lg bg-rose-50 border border-rose-200">
+              <AlertTriangle className="h-3.5 w-3.5" /> La caja está cerrada. Abre la caja antes de registrar un pago.
+            </p>
+          )}
+
+          {/* 3. FOOTER: SEGURIDAD + BOTÓN VERDE (#16A34A) IDÉNTICO A NUEVA ORDEN */}
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+            {/* Security badge */}
+            <div className="flex items-center gap-2">
+              <div className="h-7 w-7 rounded-lg bg-[#1B4B73]/[0.06] text-[#1B4B73] dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/15 shrink-0">
+                <ShieldCheck className="h-4 w-4" />
+              </div>
+              <div>
+                <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200 block leading-tight">
+                  Transacción segura
+                </span>
+                <span className="text-[9px] text-slate-400 block leading-none mt-0.5">
+                  Tus datos están protegidos
+                </span>
+              </div>
             </div>
 
-            {/* Acciones Finales (Botón Verde COBRAR ORDEN Grande y Limpio) */}
-            <div className="space-y-2 pt-1">
-              {orden.estado !== "ENTREGADA" && (
-                <div className="flex items-center justify-between py-1 px-1 rounded-xl bg-slate-100 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="flex flex-col text-left pl-2">
-                    <span className="text-[11px] font-extrabold text-slate-700 dark:text-slate-300">Marcar ropa como entregada</span>
-                    <span className="text-[9px] font-medium text-slate-500">Cambiar estado a Entregada al confirmar cobro</span>
+            {/* Botón Verde (#16A34A) */}
+            <Button
+              size="lg"
+              className="w-full sm:w-auto h-10 px-5 text-xs sm:text-sm font-extrabold tracking-wide rounded-xl bg-[#16A34A] hover:bg-[#15803D] text-white shadow-md active:scale-[0.98] transition-all flex items-center justify-center gap-2 cursor-pointer"
+              onClick={handleConfirmarCobro}
+              disabled={
+                loading ||
+                !cajaAbierta ||
+                recibido <= 0 ||
+                (metodo === "TRANSFERENCIA" && !referencia.trim()) ||
+                (metodo !== "EFECTIVO" && recibido > totalCobrar)
+              }
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" /> PROCESANDO...
+                </>
+              ) : (
+                <>
+                  <div className="h-4 w-4 rounded-full border-2 border-white flex items-center justify-center">
+                    <Check className="h-2.5 w-2.5 stroke-[3]" />
                   </div>
-                  <Switch
-                    checked={entregarAlCobrar}
-                    onCheckedChange={setEntregarAlCobrar}
-                    className="scale-90 origin-right mr-1"
-                  />
-                </div>
+                  <span>COBRAR ORDEN</span>
+                  <span className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wider text-white">
+                    ESPACIO
+                  </span>
+                </>
               )}
-              <Button
-                size="lg"
-                className="w-full h-12 font-black text-sm rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-md shadow-emerald-600/20 active:scale-[0.99] transition-all cursor-pointer flex items-center justify-center gap-2 uppercase tracking-wider"
-                onClick={handleConfirmarCobro}
-                disabled={loading || !cajaAbierta || recibido <= 0 || (metodo !== "EFECTIVO" && recibido > totalCobrar)}
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Check className="h-5 w-5 stroke-[3]" />
-                )}
-                <span>COBRAR ORDEN</span>
-                <span className="ml-1.5 px-2 py-0.5 text-[10px] font-extrabold uppercase bg-emerald-700/50 text-white rounded-md border border-white/20 tracking-wider shadow-2xs">
-                  ESPACIO
-                </span>
-              </Button>
-              
-              {!cajaAbierta && (
-                <p className="text-[9px] font-black text-rose-600 text-center flex items-center justify-center gap-1 animate-pulse">
-                  <AlertTriangle className="h-3 w-3" /> La caja está cerrada. Abre la caja antes de registrar un pago.
-                </p>
-              )}
-            </div>
+            </Button>
           </div>
         </div>
       </DialogContent>
@@ -3611,7 +3693,6 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   );
 }
 
-// ============ TARJETA DE ORDEN PENDIENTE INTERACTIVA ============
 export interface PendienteCardProps {
   o: Orden;
   clientes: Cliente[];
