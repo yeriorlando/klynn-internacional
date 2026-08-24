@@ -203,6 +203,7 @@ export interface TenantConfig {
   max_sucursales?: number;
   pos_habilitar_servicios?: boolean;
   pos_habilitar_prendas?: boolean;
+  pos_modalidad_operativa?: "PRENDAS_CON_SERVICIOS" | "SERVICIOS_PRIMERO" | "FLEXIBLE";
   pos_modal_desglose?: boolean;
   pos_modo_defecto?: boolean;
   pos_auto_imprimir?: boolean;
@@ -543,7 +544,9 @@ export interface CatalogoItem {
   tenant_id: string;
   categoria: string;
   nombre: string;
+  descripcion?: string;
   precio: number;
+  precios_servicios?: Record<string, number>;
   por_libra?: boolean;
   activo: boolean;
   is_exento?: boolean;
@@ -768,6 +771,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
     email: "",
     whatsapp_phone: "",
   },
+  pos_modalidad_operativa: "FLEXIBLE",
   pos_auto_imprimir: false,
   ticket_imprimir_taller_auto: false,
   ticket_taller_solo_con_ubicacion: false,
@@ -3492,11 +3496,22 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
     if (!error && data && data.length > 0) {
       const finalItems: CatalogoItem[] = [];
       const namesSet = new Set<string>();
+      const local = read<CatalogoItem[]>(KEY.catalogo, []);
+      const localMap = new Map(local.map((x) => [x.id, x]));
 
       data
         .filter((i: any) => i.tenant_id !== "admin")
         .forEach((i: any) => {
-          finalItems.push(i);
+          const loc = localMap.get(i.id);
+          const merged: CatalogoItem = {
+            ...i,
+            descripcion: i.descripcion || loc?.descripcion || undefined,
+            precios_servicios:
+              i.precios_servicios && Object.keys(i.precios_servicios).length > 0
+                ? i.precios_servicios
+                : (loc?.precios_servicios || {}),
+          };
+          finalItems.push(merged);
           namesSet.add(normalize(i.nombre));
         });
 
@@ -3504,7 +3519,16 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
         .filter((i: any) => i.tenant_id === "admin")
         .forEach((i: any) => {
           if (!namesSet.has(normalize(i.nombre))) {
-            finalItems.push(i);
+            const loc = localMap.get(i.id);
+            const merged: CatalogoItem = {
+              ...i,
+              descripcion: i.descripcion || loc?.descripcion || undefined,
+              precios_servicios:
+                i.precios_servicios && Object.keys(i.precios_servicios).length > 0
+                  ? i.precios_servicios
+                  : (loc?.precios_servicios || {}),
+            };
+            finalItems.push(merged);
           }
         });
 
@@ -3557,8 +3581,19 @@ export async function saveCatalogoItem(item: CatalogoItem) {
 
   try {
     const { error } = await supabase.from("catalogo_items").upsert(itemToSave);
-    if (error) throw error;
+    if (error) {
+      console.warn("Error guardando catalogo_items en Supabase:", error);
+      // Si la columna aún no está en Supabase, guardar versión básica para no bloquear
+      const fallback = { ...itemToSave };
+      delete (fallback as any).precios_servicios;
+      delete (fallback as any).descripcion;
+      const { error: fallbackError } = await supabase.from("catalogo_items").upsert(fallback);
+      if (fallbackError) {
+        throw fallbackError;
+      }
+    }
   } catch (err) {
+    console.warn("Fallo de red o guardado remoto catalogo_items:", err);
     await offlineDB.addToOutbox({
       id: itemToSave.id,
       tenant_id: itemToSave.tenant_id,

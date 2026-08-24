@@ -729,7 +729,13 @@ Característica escritura: —
     });
   }
   async function saveWA(w: Partial<WhatsAppConfig>) {
-    await saveCfg({ whatsapp: { ...wa, ...w } });
+    await saveCfg({
+      whatsapp: {
+        ...wa,
+        ...w,
+        provider: globalConfig?.whatsapp_engine || "klynn_connect",
+      },
+    });
   }
 
   const params = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '');
@@ -2114,6 +2120,102 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     onChange={(e) => updateCfg({ monto_max_caja_chica: parseAmount(e.target.value) })} 
                   />
                 </Field>
+              </div>
+
+              {/* Modalidad Operativa del Catálogo / POS */}
+              <div className="pt-2">
+                <div className="p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/70 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">
+                        Modalidad de Facturación del Catálogo (POS)
+                      </span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Define el flujo de trabajo principal del cajero al registrar prendas y tratamientos.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3 pt-1">
+                    {/* Opción 1: Prendas con Tratamientos */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ pos_modalidad_operativa: "PRENDAS_CON_SERVICIOS" })}
+                      className={`flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                        (cfg.pos_modalidad_operativa || "FLEXIBLE") === "PRENDAS_CON_SERVICIOS"
+                          ? "border-primary bg-primary/5 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1.5">
+                        <Shirt className={`h-4 w-4 ${
+                          (cfg.pos_modalidad_operativa || "FLEXIBLE") === "PRENDAS_CON_SERVICIOS"
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                        }`} />
+                        {(cfg.pos_modalidad_operativa || "FLEXIBLE") === "PRENDAS_CON_SERVICIOS" && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Prendas con Tratamiento</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                        Tarifas fijadas por prenda según el tratamiento elegido (Lavado en seco, planchado, etc.).
+                      </span>
+                    </button>
+
+                    {/* Opción 2: Servicios Primero */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ pos_modalidad_operativa: "SERVICIOS_PRIMERO" })}
+                      className={`flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                        (cfg.pos_modalidad_operativa || "FLEXIBLE") === "SERVICIOS_PRIMERO"
+                          ? "border-primary bg-primary/5 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1.5">
+                        <Sparkles className={`h-4 w-4 ${
+                          (cfg.pos_modalidad_operativa || "FLEXIBLE") === "SERVICIOS_PRIMERO"
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                        }`} />
+                        {(cfg.pos_modalidad_operativa || "FLEXIBLE") === "SERVICIOS_PRIMERO" && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Servicios Primero</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                        Primero seleccionas el servicio base (ej. por libra/estándar) y luego desglosas las prendas.
+                      </span>
+                    </button>
+
+                    {/* Opción 3: Flexible / Híbrido */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ pos_modalidad_operativa: "FLEXIBLE" })}
+                      className={`flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                        (cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE"
+                          ? "border-primary bg-primary/5 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1.5">
+                        <Layers className={`h-4 w-4 ${
+                          (cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE"
+                            ? "text-primary"
+                            : "text-muted-foreground"
+                        }`} />
+                        {(cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE" && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Híbrido / Flexible</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                        Permite usar ambas pestañas libremente según la prenda o servicio requerido.
+                      </span>
+                    </button>
+                  </div>
+                </div>
               </div>
 
               {/* Fila 2: Switches de Configuración POS */}
@@ -4607,35 +4709,18 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       return;
                     }
                     const wa = cfg.whatsapp;
-                    if (!wa?.api_key) {
+                    if (!wa?.enabled) {
                       toast.error("WhatsApp no está configurado en tu pestaña de WhatsApp");
                       return;
                     }
                     
                     const promise = (async () => {
-                      const cleanPhone = alertPhone.replace(/\D/g, "");
-                      const formattedPhone = cleanPhone.startsWith('+') ? cleanPhone : `+${cleanPhone}`;
-                      const base = (wa.base_url || "https://wasenderapi.com").replace(/\/$/, "");
-                      const url = `${base}/api/send-message`;
-                      
-                      const res = await fetch(url, {
-                        method: "POST",
-                        headers: { 
-                          "Content-Type": "application/json", 
-                          "Authorization": `Bearer ${wa.api_key}`,
-                          "Accept": "application/json"
-                        },
-                        body: JSON.stringify({ 
-                          to: formattedPhone, 
-                          text: `*🚨 ALERTA FISCAL: SECUENCIA PRÓXIMA A AGOTARSE*\n\nEstimado cliente, te informamos que la secuencia fiscal de tu negocio está a punto de agotarse:\n\n• *Tipo de NCF:* B02 - CONSUMIDOR FINAL\n• *Rango Restante:* 8 comprobantes disponibles (Límite configurado: 50)\n• *Último Emitido:* B0200000042\n• *Fecha de Vencimiento:* 31/12/2026\n\n*Recomendación:* Solicita un nuevo rango de comprobantes en la Oficina Virtual de la DGII de inmediato para evitar interrupciones en tu facturación.\n\n_Mensaje automático de prueba generado desde Klynn._`,
-                          instance_id: wa.instance
-                        }), 
-                      });
-                      
-                      if (!res.ok) {
-                        const data = await res.json().catch(() => ({}));
-                        throw new Error(data.message || `HTTP ${res.status}`);
-                      }
+                      const result = await sendTestWhatsAppMessage(
+                        tenant,
+                        alertPhone,
+                        `*🚨 ALERTA FISCAL: SECUENCIA PRÓXIMA A AGOTARSE*\n\nEstimado cliente, te informamos que la secuencia fiscal de tu negocio está a punto de agotarse:\n\n• *Tipo de NCF:* B02 - CONSUMIDOR FINAL\n• *Rango Restante:* 8 comprobantes disponibles (Límite configurado: 50)\n• *Último Emitido:* B0200000042\n• *Fecha de Vencimiento:* 31/12/2026\n\n*Recomendación:* Solicita un nuevo rango de comprobantes en la Oficina Virtual de la DGII de inmediato para evitar interrupciones en tu facturación.\n\n_Mensaje automático de prueba generado desde Klynn._`,
+                      );
+                      if (!result.ok) throw new Error(result.reason || "No se pudo enviar la alerta");
                     })();
 
                     toast.promise(promise, {

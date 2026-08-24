@@ -12,7 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, formatDateTimeRD } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
-import { notificarWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 import { toast } from "sonner";
 import { useCajaAbierta, useOrdenes, useClientes, useMovimientos } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -401,7 +401,7 @@ function CuentasPorCobrarPage() {
 
   async function enviarRecordatorio(cli: ClienteDeuda) {
     const waConfig = user.tenant.config?.whatsapp;
-    if (!waConfig?.enabled || !waConfig.api_key) {
+    if (!waConfig?.enabled) {
       toast.error("WhatsApp no está configurado. Actívalo en Configuración."); return;
     }
     if (!cli.cliente_telefono) {
@@ -413,15 +413,8 @@ function CuentasPorCobrarPage() {
         `* Orden ${o.numero} (${new Date(o.creado_en).toLocaleDateString("es-DO")}): ${o.items?.map(i => `${i.descripcion} x${i.cantidad}`).join(", ") || "Servicio"} — Saldo: ${formatRD(o.saldo)} (${o.dias_antiguedad} ${o.dias_antiguedad === 1 ? "día" : "días"})`
       ).join("\n\n");
       const msg = `Estimado/a *${cli.cliente_nombre}${cli.cliente_apellido ? " " + cli.cliente_apellido : ""}*,\n\nLe contactamos de parte de *${user.tenant.nombre}* para recordarle que tiene un saldo pendiente de pago.\n\n*Detalle de órdenes pendientes:*\n\n${ordenesStr}\n\n*Total adeudado: ${formatRD(cli.total_deuda)}*\nDías de la deuda más antigua: ${cli.dias_max} ${cli.dias_max === 1 ? "día" : "días"}\n\nLe solicitamos cordialmente proceder con el pago a la brevedad posible. Para cualquier consulta, comuníquese con nosotros.\n\n_${user.tenant.nombre}${user.tenant.telefono ? " — " + user.tenant.telefono : ""}_`;
-      const phone = cli.cliente_telefono.replace(/\D/g, "");
-      const fullPhone = `+${phone.length === 10 ? "1" + phone : phone}`;
-      const base = (waConfig.base_url || "https://wasenderapi.com").replace(/\/$/, "");
-      const res = await fetch(`${base}/api/send-message`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${waConfig.api_key}` },
-        body: JSON.stringify({ to: fullPhone, text: msg, instance_id: waConfig.instance }),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = await sendWhatsAppMessage(user.tenant, cli.cliente_telefono, { text: msg });
+      if (!result.ok) throw new Error(result.reason || "No se pudo enviar el recordatorio");
       toast.success(`Recordatorio enviado a ${cli.cliente_nombre} ✅`);
     } catch (e: any) {
       toast.error("Error al enviar: " + e.message);

@@ -3,10 +3,166 @@ import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAp
 
 type Evento = "creada" | "lista" | "en_camino" | "entregada" | "sin_retirar";
 
+export type WhatsAppProvider = "klynn_connect" | "wasender";
+
+export type WhatsAppSendRequest = {
+  text?: string;
+  mediaUrl?: string;
+  mediaType?: "image" | "audio" | "video" | "document" | "pdf";
+  fileName?: string;
+  caption?: string;
+  replyTo?: number;
+};
+
+export type WhatsAppSendResult = {
+  ok: boolean;
+  provider: WhatsAppProvider;
+  reason?: string;
+  messageId?: string;
+  mediaUrl?: string;
+  data?: any;
+};
+
 function normalizePhoneRD(tel: string): string {
   const d = tel.replace(/\D/g, "");
   if (d.length === 10) return "1" + d; // RD: 1 + 10 dígitos
   return d;
+}
+
+/**
+ * Único punto de salida para WhatsApp en el cliente.
+ * El proveedor activo de /admin es la fuente de verdad y la pestaña WhatsApp
+ * refleja esa misma selección. Nunca se decide el proveedor en el componente.
+ */
+export async function sendWhatsAppMessage(
+  tenant: Tenant,
+  destPhone: string,
+  request: WhatsAppSendRequest,
+): Promise<WhatsAppSendResult> {
+  const globalCfg = await getGlobalConfig();
+  const provider: WhatsAppProvider = globalCfg.whatsapp_engine || "klynn_connect";
+  const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
+  const phone = normalizePhoneRD(destPhone);
+
+  if (!wa?.enabled) return { ok: false, provider, reason: "WhatsApp deshabilitado" };
+  if (phone.length < 11) return { ok: false, provider, reason: "Número de WhatsApp inválido" };
+  if (!request.text?.trim() && !request.mediaUrl) {
+    return { ok: false, provider, reason: "El mensaje no contiene texto ni archivo" };
+  }
+
+  try {
+    if (provider === "klynn_connect") {
+      const action = request.mediaUrl ? "send_media" : "send_message";
+      const instanceName = wa.instance || getKlynnConnectInstanceName(tenant);
+      const res = await fetch(
+        `https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=${action}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instance_name: instanceName,
+            number: phone,
+            text: request.text,
+            mediaUrl: request.mediaUrl,
+            mediaType: request.mediaType,
+            fileName: request.fileName,
+            caption: request.caption || request.text || "",
+            server_url: globalCfg.klynn_connect_url || "https://wa.klynn.com.do",
+            api_key: globalCfg.klynn_connect_apikey,
+          }),
+        },
+      );
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        return {
+          ok: false,
+          provider,
+          reason: data.error || data.message || `HTTP ${res.status}`,
+          data,
+        };
+      }
+      return {
+        ok: true,
+        provider,
+        messageId: data.data?.key?.id || data.key?.id || data.id,
+        data,
+      };
+    }
+
+    if (!wa.api_key) {
+      return { ok: false, provider, reason: "API Token de WASender faltante" };
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    let mediaUrl = request.mediaUrl;
+    if (mediaUrl?.includes(";base64,")) {
+      const uploadRes = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=upload`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          api_key: wa.api_key,
+          base_url: wa.base_url || "https://wasenderapi.com",
+          base64: mediaUrl,
+        }),
+      });
+      const uploadData = await uploadRes.json().catch(() => ({}));
+      mediaUrl = uploadData.publicUrl || uploadData.data?.url || uploadData.url;
+      if (!uploadRes.ok || !mediaUrl) {
+        return {
+          ok: false,
+          provider,
+          reason: uploadData.message || uploadData.error || "Error al subir archivo a WASender",
+          data: uploadData,
+        };
+      }
+    }
+
+    const payload: Record<string, unknown> = {
+      api_key: wa.api_key,
+      base_url: wa.base_url || "https://wasenderapi.com",
+      to: `+${phone}`,
+      instance_id: wa.instance,
+    };
+    if (!mediaUrl) payload.text = request.text;
+    else if (request.mediaType === "image") payload.imageUrl = mediaUrl;
+    else if (request.mediaType === "audio") {
+      payload.audioUrl = mediaUrl;
+      payload.ptt = true;
+    } else if (request.mediaType === "video") payload.videoUrl = mediaUrl;
+    else {
+      payload.documentUrl = mediaUrl;
+      payload.filename = request.fileName || "documento";
+    }
+    if (request.replyTo) payload.replyTo = request.replyTo;
+
+    const res = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=send`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok || data.status === "error" || data.success === false) {
+      return {
+        ok: false,
+        provider,
+        reason: data.message || data.error || `HTTP ${res.status}`,
+        data,
+      };
+    }
+    return {
+      ok: true,
+      provider,
+      messageId: data.data?.id || data.id,
+      mediaUrl,
+      data,
+    };
+  } catch (error) {
+    return {
+      ok: false,
+      provider,
+      reason: error instanceof Error ? error.message : "Error desconocido enviando WhatsApp",
+    };
+  }
 }
 
 function render(tpl: string, vars: Record<string, string>) {
@@ -61,11 +217,6 @@ export async function notificarWhatsApp(
   const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
   if (!wa?.enabled) return { ok: false, reason: "WhatsApp deshabilitado" };
   
-  const globalCfg = await getGlobalConfig();
-  const engine = globalCfg.whatsapp_engine || "klynn_connect";
-  if (engine === "wasender" && !wa.api_key) {
-    return { ok: false, reason: "API Token de WASender faltante" };
-  }
   if (!cliente.telefono) return { ok: false, reason: "Cliente sin teléfono" };
 
   const flag =
@@ -80,7 +231,7 @@ export async function notificarWhatsApp(
     evento === "creada" ? wa.plantilla_creada :
     evento === "lista" ? wa.plantilla_lista :
     evento === "en_camino" ? "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de {lavanderia} y va de camino a tu dirección:\n\n{cliente_dir}\n\n¡Nos vemos pronto!" :
-    evento === "sin_retirar" ? (wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar!) :
+    evento === "sin_retirar" ? (wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp?.plantilla_sin_retirar || "") :
     wa.plantilla_entregada;
 
   const detalleStr = (evento === "creada")
@@ -147,63 +298,11 @@ export async function notificarWhatsApp(
     ticket_nota: tenant.config?.ticket_nota || "",
   });
 
-  const instanceName = wa.instance || `klynn_${(tenant.slug || tenant.id).replace(/[^a-zA-Z0-9_]/g, "_")}`;
-
   const phone = normalizePhoneRD(cliente.telefono);
-  const fullPhone = phone.startsWith("+") ? phone : `+${phone}`;
 
   try {
-    let resOk = false;
-    let errorReason = "";
-
-    if (engine === "klynn_connect") {
-      // 🚀 MOTOR KLYNN CONNECT (EVOLUTION API NATIVO)
-      const proxyUrl = "https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=send_message";
-      const res = await fetch(proxyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instance_name: instanceName,
-          number: phone, // Evolution prefiere formato numérico ej: 18091234567
-          text: mensaje,
-          server_url: globalCfg.klynn_connect_url || "https://wa.klynn.com.do",
-          api_key: globalCfg.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
-        }),
-      });
-
-      const data = await res.json().catch(() => ({}));
-      resOk = res.ok && data.ok !== false;
-      if (!resOk) {
-        errorReason = data.error || data.message || `HTTP ${res.status}`;
-      }
-    } else {
-      // ☁️ MOTOR WASENDER API
-      if (!wa.api_key) return { ok: false, reason: "API Token de WASender faltante" };
-      const base = (wa.base_url || "https://wasenderapi.com").replace(/\/$/, "");
-      const url = `${base}/api/send-message`;
-
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          "Authorization": `Bearer ${wa.api_key}`,
-          "Accept": "application/json"
-        },
-        body: JSON.stringify({ 
-          to: fullPhone, 
-          text: mensaje,
-          instance_id: wa.instance
-        }), 
-      });
-
-      const data = await res.json().catch(() => ({}));
-      resOk = res.ok;
-      if (!resOk) {
-        errorReason = data.message || `HTTP ${res.status}`;
-      }
-    }
-
-    if (!resOk) return { ok: false, reason: errorReason };
+    const result = await sendWhatsAppMessage(tenant, phone, { text: mensaje });
+    if (!result.ok) return { ok: false, reason: result.reason };
     
     // 2. Incrementar contador en caso de éxito
     await incrementWhatsAppCount(tenant.id);
@@ -227,53 +326,8 @@ export function getKlynnConnectInstanceName(tenant: Tenant): string {
 }
 
 export async function sendTestWhatsAppMessage(tenant: Tenant, destPhone: string, text: string): Promise<{ ok: boolean; reason?: string }> {
-  const globalCfg = await getGlobalConfig();
-  const engine = globalCfg.whatsapp_engine || "klynn_connect";
-  const instanceName = getKlynnConnectInstanceName(tenant);
-  const cleanPhone = normalizePhoneRD(destPhone);
-
-  try {
-    if (engine === "klynn_connect") {
-      const proxyUrl = "https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=send_message";
-      const res = await fetch(proxyUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instance_name: instanceName,
-          number: cleanPhone,
-          text,
-          server_url: globalCfg.klynn_connect_url || "https://wa.klynn.com.do",
-          api_key: globalCfg.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok || data.ok === false) {
-        return { ok: false, reason: data.error || data.message || `HTTP ${res.status}` };
-      }
-      return { ok: true };
-    } else {
-      const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
-      const fullPhone = cleanPhone.startsWith("+") ? cleanPhone : `+${cleanPhone}`;
-      const base = (wa.base_url || "https://wasenderapi.com").replace(/\/$/, "");
-      const res = await fetch(`${base}/api/send-message`, {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          "Authorization": `Bearer ${wa.api_key}`,
-        },
-        body: JSON.stringify({ 
-          to: fullPhone, 
-          text,
-          instance_id: wa.instance
-        }), 
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) return { ok: false, reason: data.message || `HTTP ${res.status}` };
-      return { ok: true };
-    }
-  } catch (e: any) {
-    return { ok: false, reason: e.message };
-  }
+  const result = await sendWhatsAppMessage(tenant, destPhone, { text });
+  return result.ok ? { ok: true } : { ok: false, reason: result.reason };
 }
 
 export function calcularDiasEnAlmacen(creadoEn: string): number {

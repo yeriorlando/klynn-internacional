@@ -233,7 +233,7 @@ export function Ticket({
           <div className="py-1.5 border-b border-dotted border-black/40">
             <div className="flex items-center gap-1.5 font-bold uppercase text-black mb-1">
               <Shirt className="h-3.5 w-3.5 text-black" />
-              <span>SERVICIO:</span>
+              <span>TRATAMIENTOS Y PRENDAS:</span>
             </div>
             <div className="pl-5 space-y-1">
               {orden.servicios?.map((sName, i) => {
@@ -278,16 +278,21 @@ export function Ticket({
                     <span className="font-medium text-black">
                       • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
                     </span>
+                    {it.servicio_origen && (
+                      <div className="text-[9px] font-bold text-black pl-2">
+                        ★ Tratamiento: {it.servicio_origen}
+                      </div>
+                    )}
                     {it.color && (
-                          <div className="text-[9px] font-bold text-black pl-2">
-                            🎨 Color: {it.color}
-                          </div>
-                        )}
-                        {it.notas && (
-                          <div className="text-[9px] font-bold text-black italic pl-2">
-                            ⚠️ Nota: {it.notas}
-                          </div>
-                        )}
+                      <div className="text-[9px] font-bold text-black pl-2">
+                        🎨 Color: {it.color}
+                      </div>
+                    )}
+                    {it.notas && (
+                      <div className="text-[9px] font-bold text-black italic pl-2">
+                        ⚠️ Nota: {it.notas}
+                      </div>
+                    )}
                   </div>
                 ))}
             </div>
@@ -458,14 +463,20 @@ export function Ticket({
 
                       return (
                         <div key={'s'+i} className="mb-2">
-                          <div className="flex justify-between items-start mb-1">
-                            <div className="w-[44%] pr-1">
-                              <div className="font-bold leading-tight uppercase text-[11px]">Servicio: {sName}</div>
-                              <div className="text-[10px] text-black font-semibold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
+                          {p > 0 ? (
+                            <div className="flex justify-between items-start mb-1">
+                              <div className="w-[44%] pr-1">
+                                <div className="font-bold leading-tight uppercase text-[11px]">{sName}</div>
+                                <div className="text-[10px] text-black font-semibold leading-tight">1 × {formatRD(p).replace("RD$", "")}</div>
+                              </div>
+                              <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
+                              <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
                             </div>
-                            <div className="w-[26%] text-right font-bold pt-0.5">{itemItbis > 0 ? formatRD(itemItbis).replace("RD$", "") : "0.00"}</div>
-                            <div className="w-[30%] text-right font-bold pt-0.5">{formatRD(valor).replace("RD$", "")}</div>
-                          </div>
+                          ) : (
+                            <div className="font-extrabold text-[11px] text-black uppercase tracking-wider pt-1.5 pb-0.5 mb-1.5 border-b border-black/50">
+                              {sName}
+                            </div>
+                          )}
 
                           {/* Desgloses anidados debajo del servicio */}
                           {misPrendasDesglosadas.map((it, dIdx) => {
@@ -481,10 +492,15 @@ export function Ticket({
                               }
                             }
 
+                            const cleanDesc = it.descripcion.replace(/^↳\s*/, "");
+                            const cantPrefix = it.cantidad > 1 ? `${it.cantidad}x ` : "";
+
                             return (
-                              <div key={'sd'+dIdx} className="flex justify-between items-start pl-3 mb-1 animate-in fade-in duration-200">
+                              <div key={'sd'+dIdx} className={`flex justify-between items-start ${p > 0 ? "pl-3" : "pl-1"} mb-1 animate-in fade-in duration-200`}>
                                 <div className="w-[44%] pr-1">
-                                  <div className="font-semibold text-black text-[10px] leading-tight">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : (it.cantidad > 1 ? ` (x${it.cantidad})` : "")}</div>
+                                  <div className="font-semibold text-black text-[10px] leading-tight">
+                                    {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb)` : ""}
+                                  </div>
                                   {it.color && <div className="text-[9px] text-black font-semibold">Color: {it.color}</div>}
                                   {it.notas && <div className="text-[9px] italic leading-tight text-black font-medium">Nota: {it.notas}</div>}
                                 </div>
@@ -518,6 +534,11 @@ export function Ticket({
                         <div key={'suelto'+i} className="flex justify-between items-start mb-1.5">
                           <div className="w-[44%] pr-1">
                             <div className="font-semibold leading-tight text-[11px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                            {it.servicio_origen && (
+                              <div className="text-[9.5px] font-bold text-black leading-tight">
+                                ↳ {it.servicio_origen}
+                              </div>
+                            )}
                             <div className="text-[10px] text-black font-semibold leading-tight">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
                             {it.color && <div className="text-[9px] text-black font-semibold">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black font-sans">Nota: {it.notas}</div>}
@@ -544,7 +565,7 @@ export function Ticket({
             {orden.costo_envio && orden.costo_envio > 0 && (
               <Row k="🚚 Envío a domicilio" v={formatRD(orden.costo_envio).replace("DOP", "RD$")} />
             )}
-            <div className="my-1 border-t border-dashed border-black" />
+            <div className="my-1.5 border-t-2 border-black" />
             <Row k="TOTAL" v={formatRD(orden.total).replace("DOP", "RD$")} bold />
           </div>
           <Sep />
@@ -553,8 +574,8 @@ export function Ticket({
             {orden.condicion_cobro && orden.condicion_cobro !== "COBRAR_AHORA" && (
               <Row k="Modalidad" v={orden.condicion_cobro === "ANTICIPO" ? "ANTICIPO" : orden.condicion_cobro === "AL_RETIRAR" ? "AL RETIRAR" : "CRÉDITO"} />
             )}
-            {orden.pagos_detalle && orden.pagos_detalle.length > 0 && (
-              <div className="py-0.5 my-0.5 border-y border-dotted border-black/40 text-[9.5px]">
+            {orden.pagos_detalle && orden.pagos_detalle.length > 1 && (
+              <div className="py-1 my-1 border-y border-dotted border-black/60 text-[9.5px]">
                 <div className="font-bold uppercase text-[9px] text-black/70 mb-0.5">Desglose de cobro:</div>
                 {orden.pagos_detalle.map((pd, pidx) => (
                   <div key={pidx} className="flex justify-between font-medium">
@@ -671,7 +692,7 @@ export function Ticket({
   );
 }
 
-function Sep() { return <div className="my-1.5 border-t border-dashed border-black" />; }
+function Sep() { return <div className="my-2 border-t border-black/70" />; }
 function Row({ k, v, bold, boldValue }: { k: string; v: string; bold?: boolean; boldValue?: boolean }) {
   return (
     <div className={`flex justify-between text-[11px] ${bold ? "font-bold text-[12px]" : "font-semibold"}`}>

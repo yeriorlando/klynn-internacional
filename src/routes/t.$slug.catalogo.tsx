@@ -13,12 +13,17 @@ import {
   ArrowLeft,
   ArrowRight,
   CheckCircle2,
+  Check,
   X,
   Tag,
   Wrench,
   FileSpreadsheet,
   Download,
   Upload,
+  Scale,
+  Receipt,
+  Layers,
+  SlidersHorizontal,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -250,85 +255,149 @@ function CatalogoPage() {
           </div>
 
           {categorias.length === 0 && (
-            <Card className="p-12 text-center text-muted-foreground">
-              No hay prendas. Agrega la primera.
+            <Card className="p-12 text-center text-muted-foreground bg-card border-dashed rounded-2xl">
+              No hay prendas registradas. Agrega la primera prenda a tu catálogo.
             </Card>
           )}
 
           {categorias.map((cat) => (
-            <div key={cat} className="mb-6">
-              <h3 className="mb-3 font-display text-lg">{cat}</h3>
-              <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+            <div key={cat} className="mb-8">
+              <div className="flex items-center gap-2 mb-3.5">
+                <span className="h-2.5 w-2.5 rounded-full bg-primary" />
+                <h3 className="font-display font-black text-lg tracking-tight">{cat}</h3>
+                <span className="text-xs font-bold text-muted-foreground">
+                  ({filteredItems.filter((i) => i.categoria === cat).length})
+                </span>
+              </div>
+              <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
                 {filteredItems
                   .filter((i) => i.categoria === cat)
-                  .map((it) => (
-                    <Card
-                      key={it.id}
-                      className="group relative overflow-hidden border-none shadow-card h-64 transition-all hover:shadow-elegant"
-                    >
-                      {/* Imagen de fondo */}
-                      <div className="absolute inset-0">
-                        {it.imagen_url ? (
-                          <img
-                            src={it.imagen_url}
-                            alt={it.nombre}
-                            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                          />
-                        ) : (
-                          <div className="h-full w-full bg-gradient-to-br from-primary/10 to-secondary/10 grid place-items-center">
-                            <span className="text-5xl">{it.icono || "👕"}</span>
-                          </div>
-                        )}
-                        {/* Gradiente para legibilidad */}
-                        <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                      </div>
+                  .map((it) => {
+                    const rawSrvPrices = it.precios_servicios && typeof it.precios_servicios === "object"
+                      ? it.precios_servicios
+                      : {};
+                    const srvMap = new Map<string, number>();
+                    Object.entries(rawSrvPrices).forEach(([k, p]) => {
+                      const num = Number(p);
+                      if (num > 0) {
+                        const srvObj = servicios.find((s) => s.id === k || s.nombre.toLowerCase() === k.toLowerCase());
+                        const name = srvObj ? srvObj.nombre : k;
+                        // Si la clave es un UUID crudo y no encuentra servicio, omitirlo
+                        if (!srvObj && k.length > 20 && k.includes("-")) {
+                          return;
+                        }
+                        srvMap.set(name, num);
+                      }
+                    });
+                    const srvPrices = Array.from(srvMap.entries());
+                    const hasSrvPrices = srvPrices.length > 0;
 
-                      {/* Contenido (Glassmorphism) */}
-                      <div className="absolute bottom-0 left-0 right-0 p-4">
-                        <div className="backdrop-blur-md bg-white/10 rounded-2xl p-3 border border-white/20 shadow-lg">
-                          <div className="flex items-start justify-between gap-2">
-                            <div className="flex flex-col gap-1">
-                              <div className="font-display font-bold text-white text-lg leading-tight drop-shadow-md">
-                                {it.nombre}
-                              </div>
-                              {it.es_muestra && (
-                                <Badge className="w-fit bg-primary/80 backdrop-blur-md text-[9px] h-4 px-1.5 border-none text-white uppercase font-black tracking-wider">
-                                  Muestra
-                                </Badge>
+                    return (
+                      <Card
+                        key={it.id}
+                        className="bg-card border border-slate-200/90 dark:border-slate-800/90 hover:border-primary/50 rounded-3xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative group"
+                      >
+                        <div>
+                          {/* Top Header: Prominent Garment Image & Full Title */}
+                          <div className="flex items-start gap-3.5">
+                            <div className="h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden text-3xl sm:text-4xl shadow-xs group-hover:scale-105 transition-transform duration-300">
+                              {it.imagen_url ? (
+                                <img
+                                  src={it.imagen_url}
+                                  alt={it.nombre}
+                                  className="h-full w-full object-cover"
+                                />
+                              ) : (
+                                <span>{it.icono || "👕"}</span>
                               )}
                             </div>
-                            {!it.activo && (
-                              <Badge
-                                variant="outline"
-                                className="text-[10px] bg-white/20 text-white border-white/40"
-                              >
-                                Inactivo
-                              </Badge>
-                            )}
+                            <div className="min-w-0 flex-1">
+                              <h4 className="font-display font-black text-base sm:text-lg text-foreground tracking-tight leading-snug line-clamp-2" title={it.nombre}>
+                                {it.nombre}
+                              </h4>
+                              {it.descripcion ? (
+                                <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed" title={it.descripcion}>
+                                  {it.descripcion}
+                                </p>
+                              ) : null}
+                              {/* Status Badges */}
+                              <div className="flex items-center gap-1.5 mt-2 flex-wrap">
+                                {it.es_muestra && (
+                                  <Badge className="bg-primary text-[9px] h-4 px-1.5 border-none text-white uppercase font-black tracking-wider">
+                                    Muestra
+                                  </Badge>
+                                )}
+                                {!it.activo && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] h-4 px-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold"
+                                  >
+                                    Inactivo
+                                  </Badge>
+                                )}
+                                {it.por_libra && (
+                                  <Badge
+                                    variant="outline"
+                                    className="text-[9px] h-4 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-bold"
+                                  >
+                                    Por Libra
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                          <div className="mt-1 font-display text-2xl font-black text-white drop-shadow-lg">
-                            {formatRD(it.precio)}
-                            {it.por_libra ? "/lb" : ""}
+
+                          {/* Precios por Servicio (Matriz Destacada SGL) */}
+                          <div className="my-4.5 space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                            {hasSrvPrices ? (
+                              srvPrices.map(([srvName, srvPrice]) => (
+                                <div key={srvName} className="space-y-0.5">
+                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
+                                    {srvName}
+                                  </span>
+                                  <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
+                                    {formatRD(srvPrice)}
+                                  </span>
+                                </div>
+                              ))
+                            ) : (
+                              <div className="space-y-0.5">
+                                <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
+                                  Precio General
+                                </span>
+                                <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
+                                  {formatRD(it.precio)}
+                                  {it.por_libra ? (
+                                    <span className="text-sm font-semibold text-muted-foreground ml-1">/lb</span>
+                                  ) : null}
+                                </span>
+                              </div>
+                            )}
                           </div>
                         </div>
 
-                        {/* Botones de acción (visibles al hover o fijos) */}
-                        <div className="mt-2 flex gap-1 animate-in slide-in-from-bottom-2 duration-300">
+                        {/* Footer Action Buttons (Matching Image 2 SGL) */}
+                        <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2">
                           <Button
                             size="sm"
                             variant="outline"
-                            className="flex-1"
+                            className="flex-1 rounded-2xl h-10 text-xs font-bold gap-1.5 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs cursor-pointer text-slate-800 dark:text-slate-200"
                             onClick={() => {
                               setEditItem(it);
                               setOpenItem(true);
                             }}
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <Pencil className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
+                            <span>Editar</span>
                           </Button>
                           <AlertDialog>
                             <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="outline">
-                                <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-10 w-12 p-0 rounded-2xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 shadow-2xs cursor-pointer shrink-0"
+                              >
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             </AlertDialogTrigger>
                             <AlertDialogContent className="rounded-2xl border-none shadow-card">
@@ -339,24 +408,14 @@ function CatalogoPage() {
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
-                                <AlertDialogCancel className="rounded-xl">
-                                  Cancelar
-                                </AlertDialogCancel>
+                                <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
                                 <AlertDialogAction
                                   onClick={async () => {
-                                    if (it.tenant_id === "admin") {
-                                      toast.error(
-                                        "No puedes eliminar prendas de muestra. Desactívala si no la usas. 🚫",
-                                      );
-                                      return;
-                                    }
                                     await deleteCatalogoItem(it.id);
-                                    queryClient.invalidateQueries({
-                                      queryKey: ["catalogo", tenantId],
-                                    });
-                                    toast.success("Eliminada 🗑️");
+                                    queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
+                                    toast.success("Prenda eliminada");
                                   }}
-                                  className="bg-destructive text-white rounded-xl"
+                                  className="bg-destructive hover:bg-destructive/90 text-white rounded-xl font-bold"
                                 >
                                   Eliminar
                                 </AlertDialogAction>
@@ -364,9 +423,9 @@ function CatalogoPage() {
                             </AlertDialogContent>
                           </AlertDialog>
                         </div>
-                      </div>
-                    </Card>
-                  ))}
+                      </Card>
+                    );
+                  })}
               </div>
             </div>
           ))}
@@ -422,118 +481,138 @@ function CatalogoPage() {
             </div>
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-3 xl:grid-cols-4">
             {filteredServicios.map((s) => (
               <Card
                 key={s.id}
-                className="group relative overflow-hidden border-none shadow-card h-64 transition-all hover:shadow-elegant"
+                className="bg-card border border-slate-200/90 dark:border-slate-800/90 hover:border-primary/50 rounded-3xl p-5 shadow-2xs hover:shadow-md transition-all flex flex-col justify-between relative group"
               >
-                {/* Imagen de fondo completa */}
-                <div className="absolute inset-0">
-                  {s.imagen_url ? (
-                    <img
-                      src={s.imagen_url}
-                      alt={s.nombre}
-                      className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-110"
-                    />
-                  ) : (
-                    <div className="h-full w-full bg-gradient-to-br from-primary/10 to-secondary/10 grid place-items-center">
-                      <span className="text-5xl">{s.icono || "🧺"}</span>
+                <div>
+                  {/* Top Header: Prominent Service Image & Full Title */}
+                  <div className="flex items-start gap-3.5">
+                    <div className="h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden text-3xl sm:text-4xl shadow-xs group-hover:scale-105 transition-transform duration-300">
+                      {s.imagen_url ? (
+                        <img
+                          src={s.imagen_url}
+                          alt={s.nombre}
+                          className="h-full w-full object-cover"
+                        />
+                      ) : (
+                        <span>{s.icono || "🧺"}</span>
+                      )}
                     </div>
-                  )}
-                  {/* Gradiente oscuro para contraste */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
-                </div>
-
-                {/* Contenido (Glassmorphism) */}
-                <div className="absolute bottom-0 left-0 right-0 p-4">
-                  <div className="backdrop-blur-md bg-white/10 rounded-2xl p-3 border border-white/20 shadow-lg mb-2">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="flex flex-col gap-1">
-                        <div className="font-display font-bold text-white text-lg leading-tight drop-shadow-md">
-                          {s.nombre}
-                        </div>
+                    <div className="min-w-0 flex-1">
+                      <h4 className="font-display font-black text-base sm:text-lg text-foreground tracking-tight leading-snug line-clamp-2" title={s.nombre}>
+                        {s.nombre}
+                      </h4>
+                      {s.descripcion ? (
+                        <p className="text-xs text-muted-foreground mt-1 line-clamp-2 leading-relaxed" title={s.descripcion}>
+                          {s.descripcion}
+                        </p>
+                      ) : null}
+                      {/* Status Badges */}
+                      <div className="flex items-center gap-1.5 mt-2 flex-wrap">
                         {s.es_muestra && (
-                          <Badge className="w-fit bg-primary/80 backdrop-blur-md text-[9px] h-4 px-1.5 border-none text-white uppercase font-black tracking-wider">
+                          <Badge className="bg-primary text-[9px] h-4 px-1.5 border-none text-white uppercase font-black tracking-wider">
                             Muestra
                           </Badge>
                         )}
+                        {!s.activo && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30 font-bold"
+                          >
+                            Inactivo
+                          </Badge>
+                        )}
+                        {s.por_libra && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/30 font-bold"
+                          >
+                            Por Libra
+                          </Badge>
+                        )}
                       </div>
-                      {!s.activo && (
-                        <Badge
-                          variant="outline"
-                          className="text-[10px] bg-white/20 text-white border-white/40"
-                        >
-                          Inactivo
-                        </Badge>
-                      )}
-                    </div>
-                    <div className="mt-1 font-display text-2xl font-black text-white drop-shadow-lg">
-                      {s.precio > 0 ? (
-                        <>
-                          {formatRD(s.precio)}
-                          {s.por_libra ? <span className="text-base font-bold opacity-90">/lb</span> : ""}
-                        </>
-                      ) : (
-                        "Sin costo"
-                      )}
                     </div>
                   </div>
 
-                  {/* Botones de acción (Igual que prendas) */}
-                  <div className="flex gap-1 animate-in slide-in-from-bottom-2 duration-300">
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="flex-1"
-                      onClick={() => {
-                        setEditServ(s);
-                        setOpenServ(true);
-                      }}
-                    >
-                      <Pencil className="h-3.5 w-3.5" />
-                    </Button>
-                    <AlertDialog>
-                      <AlertDialogTrigger asChild>
-                        <Button size="sm" variant="outline">
-                          <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                        </Button>
-                      </AlertDialogTrigger>
-                      <AlertDialogContent className="rounded-2xl border-none shadow-card">
-                        <AlertDialogHeader>
-                          <AlertDialogTitle>¿Eliminar {s.nombre}?</AlertDialogTitle>
-                          <AlertDialogDescription>
-                            Esta acción eliminará permanentemente este servicio del catálogo.
-                          </AlertDialogDescription>
-                        </AlertDialogHeader>
-                        <AlertDialogFooter>
-                          <AlertDialogCancel className="rounded-xl">Cancelar</AlertDialogCancel>
-                          <AlertDialogAction
-                            onClick={async () => {
-                              if (s.tenant_id === "admin") {
-                                toast.error(
-                                  "No puedes eliminar servicios de muestra. Desactívalo si no lo usas. 🚫",
-                                );
-                                return;
-                              }
-                              await deleteServicio(s.id);
-                              queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
-                              toast.success("Servicio eliminado 🗑️");
-                            }}
-                            className="bg-destructive text-white rounded-xl"
-                          >
-                            Eliminar
-                          </AlertDialogAction>
-                        </AlertDialogFooter>
-                      </AlertDialogContent>
-                    </AlertDialog>
+                  {/* Tarifa Base */}
+                  <div className="my-4.5 space-y-1 pt-2 border-t border-slate-100 dark:border-slate-800/80">
+                    <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
+                      Tarifa Base del Servicio
+                    </span>
+                    <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
+                      {s.precio > 0 ? (
+                        <>
+                          {formatRD(s.precio)}
+                          {s.por_libra ? (
+                            <span className="text-sm font-semibold text-muted-foreground ml-1">/lb</span>
+                          ) : null}
+                        </>
+                      ) : (
+                        <span className="text-sm font-bold text-muted-foreground">Variable / Sin costo</span>
+                      )}
+                    </span>
                   </div>
+                </div>
+
+                {/* Footer Action Buttons */}
+                <div className="pt-3 border-t border-slate-100 dark:border-slate-800/80 flex items-center gap-2">
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="flex-1 rounded-2xl h-10 text-xs font-bold gap-1.5 border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 shadow-2xs cursor-pointer text-slate-800 dark:text-slate-200"
+                    onClick={() => {
+                      setEditServ(s);
+                      setOpenServ(true);
+                    }}
+                  >
+                    <Pencil className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" />
+                    <span>Editar</span>
+                  </Button>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="h-10 w-12 p-0 rounded-2xl border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/30 hover:text-rose-600 shadow-2xs cursor-pointer shrink-0"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-2xl border-none shadow-card">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar {s.nombre}?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta acción eliminará permanentemente este servicio del catálogo.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            if (s.tenant_id === "admin") {
+                              toast.error("No puedes eliminar servicios de muestra. Desactívalo si no lo usas.");
+                              return;
+                            }
+                            await deleteServicio(s.id);
+                            queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
+                            toast.success("Servicio eliminado");
+                          }}
+                          className="bg-destructive hover:bg-destructive/90 text-white rounded-xl font-bold"
+                        >
+                          Eliminar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
                 </div>
               </Card>
             ))}
             {servicios.length === 0 && (
-              <Card className="col-span-full p-20 text-center text-muted-foreground bg-card/50 border-dashed rounded-[2rem]">
-                No hay servicios registrados aún.
+              <Card className="col-span-full p-12 text-center text-muted-foreground bg-card border-dashed rounded-2xl">
+                No hay servicios registrados aún. Agrega el primer servicio a tu lavandería.
               </Card>
             )}
           </div>
@@ -545,6 +624,8 @@ function CatalogoPage() {
         onOpenChange={setOpenItem}
         tenantId={tenantId}
         initial={editItem}
+        serviciosList={servicios}
+        existingCategories={categorias}
         onSaved={() => {
           queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
           setOpenItem(false);
@@ -578,41 +659,60 @@ function ItemDialog({
   tenantId,
   initial,
   onSaved,
+  serviciosList = [],
+  existingCategories = [],
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   tenantId: string;
   initial: CatalogoItem | null;
   onSaved: () => void;
+  serviciosList?: Servicio[];
+  existingCategories?: string[];
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [activeTab, setActiveTab] = useState<"info" | "visual">("info");
   const [f, setF] = useState<Partial<CatalogoItem>>({});
   const [imgError, setImgError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState<"emoji" | "image">("emoji");
   const [iconSearch, setIconSearch] = useState("");
+  const [showDesc, setShowDesc] = useState(false);
+  const [serviceSearch, setServiceSearch] = useState("");
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setStep(1);
+      setActiveTab("info");
       setF(
         initial
-          ? { ...initial }
+          ? {
+              ...initial,
+              precios_servicios:
+                initial.precios_servicios && typeof initial.precios_servicios === "object"
+                  ? { ...initial.precios_servicios }
+                  : {},
+            }
           : {
               categoria: "",
               nombre: "",
+              descripcion: "",
               precio: 0,
+              precios_servicios: {},
               activo: true,
               icono: "👕",
               is_exento: false,
+              por_libra: false,
               es_muestra: false,
               permitir_desglose: false,
               permitir_editar_precio: false,
             },
       );
+      setShowDesc(Boolean(initial?.descripcion));
       setMode(initial?.imagen_url ? "image" : "emoji");
       setImgError(false);
       setIconSearch("");
+      setServiceSearch("");
+      setIsSubmitting(false);
     }
   }, [open, initial]);
 
@@ -621,6 +721,19 @@ function ItemDialog({
     const s = iconSearch.toLowerCase();
     return LAUNDRY_ICONS.filter((i) => i.label.toLowerCase().includes(s));
   }, [iconSearch]);
+
+  const quickCategorySuggestions = useMemo(() => {
+    const defaults = ["Camisas", "Pantalones", "Vestidos", "Trajes", "Abrigos", "Ropa de Cama", "Lavandería"];
+    const combined = Array.from(new Set([...existingCategories, ...defaults])).filter(Boolean);
+    return combined.slice(0, 7);
+  }, [existingCategories]);
+
+  const activeServicesCount = useMemo(() => {
+    if (!f.precios_servicios || typeof f.precios_servicios !== "object") return 0;
+    return Object.keys(f.precios_servicios).filter(
+      (k) => (f.precios_servicios?.[k] ?? 0) > 0 && !(k.length > 20 && k.includes("-")),
+    ).length;
+  }, [f.precios_servicios]);
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -644,7 +757,8 @@ function ItemDialog({
       } = supabase.storage.from("catalogo").getPublicUrl(path);
 
       setF((prev) => ({ ...prev, imagen_url: publicUrl }));
-      toast.success("Imagen subida y comprimida");
+      setImgError(false);
+      toast.success("Imagen subida y optimizada ✨");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Verifica el almacenamiento";
       toast.error("Error al subir: " + msg);
@@ -653,380 +767,653 @@ function ItemDialog({
     }
   }
 
-  const handleNextStep = () => {
-    if (!f.nombre?.trim() || !f.categoria?.trim()) {
-      toast.error("Nombre y Categoría requeridos");
-      return;
-    }
-    setStep(2);
-  };
-
   async function submit() {
-    if (!f.nombre?.trim() || !f.categoria?.trim()) {
-      toast.error("Nombre y categoría requeridos");
-      setStep(1);
+    if (!f.nombre?.trim()) {
+      toast.error("El nombre de la prenda es requerido");
+      setActiveTab("info");
       return;
     }
-    const item: CatalogoItem = {
-      id: initial?.id ?? uid("cat"),
-      tenant_id: tenantId,
-      categoria: f.categoria!.trim(),
-      nombre: f.nombre!.trim(),
-      precio: Number(f.precio) || 0,
-      por_libra: !!f.por_libra,
-      activo: f.activo ?? true,
-      is_exento: !!f.is_exento,
-      es_muestra: !!f.es_muestra,
-      permitir_desglose: !!f.permitir_desglose,
-      permitir_editar_precio: !!f.permitir_editar_precio,
-      icono: mode === "emoji" ? f.icono : undefined,
-      imagen_url: mode === "image" ? f.imagen_url : undefined,
-    };
-    await saveCatalogoItem(item);
-    toast.success(initial ? "Prenda actualizada" : "Prenda creada");
-    onSaved();
+    if (!f.categoria?.trim()) {
+      toast.error("La categoría es requerida");
+      setActiveTab("info");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      // Limpiar precios de servicios vacíos o 0 y normalizar nombres
+      const cleanPreciosServicios: Record<string, number> = {};
+      if (f.precios_servicios) {
+        Object.entries(f.precios_servicios).forEach(([key, val]) => {
+          const num = Number(val);
+          if (num > 0) {
+            const srvObj = serviciosList.find(
+              (s) => s.id === key || s.nombre.toLowerCase() === key.toLowerCase(),
+            );
+            const name = srvObj ? srvObj.nombre : key;
+            if (!srvObj && key.length > 20 && key.includes("-")) {
+              return;
+            }
+            cleanPreciosServicios[name] = num;
+          }
+        });
+      }
+
+      const basePrecio =
+        Number(f.precio) > 0
+          ? Number(f.precio)
+          : Object.values(cleanPreciosServicios)[0] || 0;
+
+      const item: CatalogoItem = {
+        id: initial?.id ?? uid("cat"),
+        tenant_id: tenantId,
+        categoria: f.categoria!.trim(),
+        nombre: f.nombre!.trim(),
+        descripcion: f.descripcion?.trim() || undefined,
+        precio: basePrecio,
+        precios_servicios: cleanPreciosServicios,
+        por_libra: !!f.por_libra,
+        activo: f.activo ?? true,
+        is_exento: !!f.is_exento,
+        es_muestra: !!f.es_muestra,
+        permitir_desglose: !!f.permitir_desglose,
+        permitir_editar_precio: !!f.permitir_editar_precio,
+        icono: mode === "emoji" ? f.icono || "👕" : undefined,
+        imagen_url: mode === "image" ? f.imagen_url : undefined,
+      };
+
+      await saveCatalogoItem(item);
+      toast.success(
+        initial ? "Prenda actualizada con éxito ✨" : "Prenda creada con éxito ✨",
+      );
+      onSaved();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al guardar la prenda";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
-        {/* STEPPER HEADER */}
-        <div className="bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 pt-4 pb-2.5 relative border-b border-border/40">
-          <div className="flex items-center justify-between mb-2 pr-10">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
-                {step === 1 ? <Shirt className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl max-h-[90vh] rounded-3xl p-0 overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-2xl bg-background text-foreground flex flex-col">
+        {/* HEADER MODERNO */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/80 px-5 sm:px-6 pt-5 pb-4 border-b border-slate-200/80 dark:border-slate-800 shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-xs shrink-0 overflow-hidden">
+                {f.imagen_url && !imgError ? (
+                  <img
+                    src={f.imagen_url}
+                    alt="Prenda"
+                    className="h-full w-full object-cover"
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <Shirt className="h-5 w-5 text-primary" />
+                )}
               </div>
-              <div>
-                <DialogTitle className="text-base font-display text-foreground">
-                  {initial ? "Editar prenda" : "Nueva prenda"}
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-display font-black text-foreground truncate leading-tight">
+                  {initial ? `Editar: ${f.nombre || "Prenda"}` : "Nueva Prenda"}
                 </DialogTitle>
-                <p className="text-xs text-muted-foreground">
-                  {step === 1
-                    ? "Paso 1: Información general y precio"
-                    : "Paso 2: Identificador visual e imagen"}
+                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                  Personaliza los datos, tarifas por servicio y aspecto visual
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Stepper Buttons (Centered) */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
+          {/* PESTAÑAS SEGMENTADAS ELEGANTES */}
+          <div className="grid grid-cols-2 gap-1.5 mt-4 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/70 border border-slate-300/40 dark:border-slate-700/50">
             <button
               type="button"
-              onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                step === 1
-                  ? "bg-primary text-white shadow-md font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              onClick={() => setActiveTab("info")}
+              className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "info"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
               }`}
             >
-              <span
-                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
-                  step === 1
-                    ? "bg-white/25 text-white"
-                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                }`}
-              >
-                1
-              </span>
-              <span>Información General</span>
+              <Shirt className="h-4 w-4 text-primary" />
+              <span>Datos y Tarifas</span>
+              {activeServicesCount > 0 && (
+                <Badge className="h-4 px-1.5 text-[9px] bg-primary/15 text-primary border-none font-bold">
+                  {activeServicesCount}
+                </Badge>
+              )}
             </button>
 
             <button
               type="button"
-              onClick={handleNextStep}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                step === 2
-                  ? "bg-primary text-white shadow-md font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              onClick={() => setActiveTab("visual")}
+              className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "visual"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
               }`}
             >
-              <span
-                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
-                  step === 2
-                    ? "bg-white/25 text-white"
-                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                }`}
-              >
-                2
-              </span>
-              <span>Identificador Visual</span>
+              <ImageIcon className="h-4 w-4 text-primary" />
+              <span>Icono, Foto y Preview</span>
             </button>
           </div>
         </div>
 
-        {/* DIALOG BODY */}
-        <div className="px-4 sm:px-5 pt-3 pb-4 sm:pb-5">
-          {step === 1 ? (
-            /* STEP 1: INFORMACIÓN Y PRECIO */
-            <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Categoría *
-                  </Label>
-                  <Input
-                    value={f.categoria || ""}
-                    onChange={(e) => setF({ ...f, categoria: e.target.value })}
-                    placeholder="Ej: Camisas"
-                    className="h-9.5 rounded-xl text-xs"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Nombre *
-                  </Label>
-                  <Input
-                    value={f.nombre || ""}
-                    onChange={(e) => setF({ ...f, nombre: e.target.value })}
-                    placeholder="Ej: Camisa Manga Larga"
-                    className="h-9.5 rounded-xl text-xs"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-3 sm:grid-cols-2 items-center">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Precio (RD$)
-                  </Label>
-                  <Input
-                    type="number"
-                    value={f.precio ?? 0}
-                    onChange={(e) => setF({ ...f, precio: Number(e.target.value) })}
-                    className="h-9.5 rounded-xl text-xs font-bold text-base"
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-4">
-                  <Switch
-                    checked={!!f.por_libra}
-                    onCheckedChange={(v) => setF({ ...f, por_libra: v })}
-                  />
-                  <Label className="text-xs font-medium cursor-pointer">Cobrar por libra</Label>
-                </div>
-              </div>
-
-              {/* Switches Grid */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-primary/5 border border-primary/15">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold text-primary block leading-none">
-                      Exento ITBIS
+        {/* CUERPO DEL MODAL CON SCROLL FLUIDO */}
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar">
+          {activeTab === "info" ? (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* BLOQUE 1: INFORMACIÓN PRINCIPAL */}
+              <div className="space-y-3.5 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="grid gap-3.5 sm:grid-cols-2">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="item-name" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-primary" />
+                      Nombre de la prenda <span className="text-destructive">*</span>
                     </Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Ind: 3</p>
+                    <Input
+                      id="item-name"
+                      value={f.nombre || ""}
+                      onChange={(e) => setF({ ...f, nombre: e.target.value })}
+                      placeholder="Ej. Camisa manga larga, Traje 2 piezas..."
+                      className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm font-semibold text-foreground focus-visible:ring-primary shadow-2xs"
+                      required
+                    />
                   </div>
-                  <Switch
-                    checked={!!f.is_exento}
-                    onCheckedChange={(v) => setF({ ...f, is_exento: v })}
-                  />
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="item-category" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Shirt className="h-3.5 w-3.5 text-primary" />
+                      Categoría <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="item-category"
+                      value={f.categoria || ""}
+                      onChange={(e) => setF({ ...f, categoria: e.target.value })}
+                      placeholder="Ej. Camisas, Vestidos, Hogar..."
+                      className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm font-semibold text-foreground focus-visible:ring-primary shadow-2xs"
+                      required
+                    />
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold block leading-none">Estado Activo</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">En catálogo</p>
-                  </div>
-                  <Switch
-                    checked={f.activo ?? true}
-                    onCheckedChange={(v) => setF({ ...f, activo: v })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold block leading-none">Desglose</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">En órdenes</p>
-                  </div>
-                  <Switch
-                    checked={!!f.permitir_desglose}
-                    onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })}
-                  />
-                </div>
-
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold block leading-none">Editar precio</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Al facturar</p>
-                  </div>
-                  <Switch
-                    checked={!!f.permitir_editar_precio}
-                    onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })}
-                  />
+                {/* DESCRIPCIÓN OPCIONAL */}
+                <div className="pt-1">
+                  {showDesc ? (
+                    <div className="space-y-1.5 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="item-description" className="text-xs font-bold text-foreground">
+                          Descripción o detalles de la prenda
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDesc(false);
+                            setF({ ...f, descripcion: "" });
+                          }}
+                          className="text-[10px] font-bold text-destructive hover:underline cursor-pointer"
+                        >
+                          Quitar descripción
+                        </button>
+                      </div>
+                      <Textarea
+                        id="item-description"
+                        value={f.descripcion || ""}
+                        onChange={(e) => setF({ ...f, descripcion: e.target.value })}
+                        placeholder="Ej. Instrucciones especiales de planchado, tipo de tela, cuidados..."
+                        rows={2}
+                        className="min-h-16 resize-none rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs text-foreground focus-visible:ring-primary shadow-2xs"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowDesc(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Añadir descripción o nota opcional
+                    </button>
+                  )}
                 </div>
               </div>
 
-              {/* Step 1 Footer */}
-              <div className="pt-2.5 flex justify-between items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  className="rounded-xl h-10 px-5 text-xs font-medium cursor-pointer"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleNextStep}
-                  className="rounded-xl h-10 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
-                >
-                  Siguiente: Identificador <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
+              {/* BLOQUE 2: MATRIZ DE SERVICIOS Y TARIFAS */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
+                        Tarifas por Tratamiento
+                      </h4>
+                      <Badge className="h-4 px-1.5 text-[9px] bg-primary/10 text-primary border-primary/20 font-bold">
+                        {activeServicesCount} activos
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Activa los tratamientos aplicables a esta prenda y define su precio en caja
+                    </p>
+                  </div>
+
+                  {serviciosList.length > 4 && (
+                    <div className="relative w-full sm:w-44 shrink-0">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        value={serviceSearch}
+                        onChange={(e) => setServiceSearch(e.target.value)}
+                        placeholder="Filtrar servicio..."
+                        className="h-8 pl-8 pr-2.5 rounded-lg bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs text-foreground shadow-2xs"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="grid gap-2.5 max-h-56 overflow-y-auto pr-1 sm:grid-cols-2 custom-scrollbar pt-1">
+                  {serviciosList
+                    .filter(
+                      (service) =>
+                        service.activo &&
+                        service.nombre.toLowerCase().includes(serviceSearch.toLowerCase()),
+                    )
+                    .map((service) => {
+                      const prices = f.precios_servicios || {};
+                      const isAssigned =
+                        Object.prototype.hasOwnProperty.call(prices, service.nombre) ||
+                        Object.prototype.hasOwnProperty.call(prices, service.id);
+                      const currentVal = prices[service.nombre] ?? prices[service.id] ?? "";
+
+                      return (
+                        <div
+                          key={service.id}
+                          className={`p-3 rounded-2xl border transition-all ${
+                            isAssigned
+                              ? "border-primary bg-primary/[0.04] shadow-xs ring-1 ring-primary/20"
+                              : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 hover:border-primary/40 shadow-2xs"
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/15 overflow-hidden shadow-2xs">
+                                {service.imagen_url ? (
+                                  <img
+                                    src={service.imagen_url}
+                                    alt={service.nombre}
+                                    className="h-full w-full object-cover"
+                                  />
+                                ) : (
+                                  <Sparkles className="h-4 w-4 text-primary" />
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <span className="block text-xs font-black text-foreground truncate leading-tight">
+                                  {service.nombre}
+                                </span>
+                                {service.precio > 0 && (
+                                  <span className="block text-[10px] font-semibold text-muted-foreground mt-0.5">
+                                    Base: {formatRD(service.precio)}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            <Switch
+                              checked={isAssigned}
+                              onCheckedChange={(checked) => {
+                                setF((prev) => {
+                                  const updated = { ...(prev.precios_servicios || {}) };
+                                  delete updated[service.id];
+                                  if (!checked) {
+                                    delete updated[service.nombre];
+                                  } else {
+                                    updated[service.nombre] =
+                                      Number(service.precio) > 0
+                                        ? Number(service.precio)
+                                        : Number(prev.precio) || 0;
+                                  }
+                                  return { ...prev, precios_servicios: updated };
+                                });
+                              }}
+                              className="data-[state=checked]:bg-primary"
+                            />
+                          </div>
+
+                          {isAssigned && (
+                            <div className="mt-2.5 pt-2 border-t border-primary/15 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                              <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">
+                                Precio prenda:
+                              </span>
+                              <div className="flex items-center gap-1 w-32 shrink-0">
+                                <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
+                                <Input
+                                  type="number"
+                                  min="0"
+                                  step="any"
+                                  placeholder="0.00"
+                                  value={currentVal}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setF((prev) => {
+                                      const updated = { ...(prev.precios_servicios || {}) };
+                                      delete updated[service.id];
+                                      updated[service.nombre] = val === "" ? ("" as any) : Number(val) || 0;
+                                      return { ...prev, precios_servicios: updated };
+                                    });
+                                  }}
+                                  className="h-8 text-xs font-black rounded-lg text-right bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs"
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+
+                  {serviciosList.filter((s) => s.activo).length === 0 && (
+                    <div className="col-span-full py-6 text-center text-xs text-muted-foreground border border-dashed rounded-2xl">
+                      No hay servicios activos creados en el sistema.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* BLOQUE 3: PRECIO GENERAL Y OPCIONES RÁPIDAS */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="grid gap-3.5 sm:grid-cols-2 items-center">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="item-base-price" className="text-xs font-bold text-foreground">
+                      Precio General / Base (Opcional)
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                        RD$
+                      </span>
+                      <Input
+                        id="item-base-price"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={f.precio ?? 0}
+                        onChange={(e) => setF({ ...f, precio: Number(e.target.value) || 0 })}
+                        className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs"
+                      />
+                    </div>
+                  </div>
+
+                  {/* CARDS DE INTERRUPTORES LIMPIOS CON ICONOS LUCIDE SVG */}
+                  <div className="grid grid-cols-1 gap-2 pt-1">
+                    <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          <Scale className="h-3.5 w-3.5" />
+                        </div>
+                        <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                      </div>
+                      <Switch
+                        checked={!!f.por_libra}
+                        onCheckedChange={(v) => setF({ ...f, por_libra: v })}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </label>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Prenda Activa en POS</span>
+                    </div>
+                    <Switch
+                      checked={f.activo ?? true}
+                      onCheckedChange={(v) => setF({ ...f, activo: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                        <Receipt className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Exento de ITBIS (0%)</span>
+                    </div>
+                    <Switch
+                      checked={!!f.is_exento}
+                      onCheckedChange={(v) => setF({ ...f, is_exento: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           ) : (
-            /* STEP 2: IDENTIFICADOR VISUAL */
-            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
-              {/* Selector de Modo */}
-              <div className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-foreground block">
-                    Usar Foto / Imagen
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    Alternar entre Emoji o foto subida
-                  </span>
-                </div>
-                <Switch
-                  id="mode-toggle-item-split"
-                  checked={mode === "image"}
-                  onCheckedChange={(v) => setMode(v ? "image" : "emoji")}
-                  className="data-[state=checked]:bg-primary"
-                />
-              </div>
+            /* TAB 2: IDENTIFICADOR VISUAL Y VISTA PREVIA COMPACTA */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* SELECTOR EMOJI VS IMAGEN */}
+              <div className="p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
+                      Identificador Visual
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Elige si representarás esta prenda con un icono ilustrado o una foto real
+                    </p>
+                  </div>
 
-              {/* Contenido según modo */}
-              {mode === "emoji" ? (
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Buscar icono..."
-                      value={iconSearch}
-                      onChange={(e) => setIconSearch(e.target.value)}
-                      className="w-full h-8 pl-8 pr-3 rounded-lg bg-background border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border">
-                    {filteredIcons.map((i) => (
-                      <button
-                        key={i.char}
-                        type="button"
-                        onClick={() =>
-                          setF({ ...f, icono: f.icono === i.char ? undefined : i.char })
-                        }
-                        className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all border ${
-                          f.icono === i.char
-                            ? "bg-primary text-white border-primary shadow-md font-bold"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs"
-                        }`}
-                      >
-                        <span className="text-lg">{i.char}</span>
-                        <span
-                          className={`text-[8px] font-bold truncate w-full text-center leading-none ${f.icono === i.char ? "text-white" : "text-muted-foreground"}`}
-                        >
-                          {i.label}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="flex rounded-xl bg-slate-200/70 dark:bg-slate-800 p-1 border border-slate-300/40 dark:border-slate-700 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setMode("emoji")}
+                      className={`flex items-center gap-2 px-4 py-2 text-xs font-bold whitespace-nowrap rounded-lg transition-all cursor-pointer ${
+                        mode === "emoji"
+                          ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Shirt className="h-3.5 w-3.5 text-primary" />
+                      <span>Icono / Emoji</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("image")}
+                      className={`flex items-center gap-2 px-4 py-2 text-xs font-bold whitespace-nowrap rounded-lg transition-all cursor-pointer ${
+                        mode === "image"
+                          ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                      <span>Foto Real</span>
+                    </button>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      value={f.imagen_url || ""}
-                      onChange={(e) => setF({ ...f, imagen_url: e.target.value })}
-                      placeholder="Pegar URL de la imagen..."
-                      className="flex-1 h-9.5 rounded-xl text-xs"
-                    />
+
+                {mode === "emoji" ? (
+                  <div className="space-y-2.5 pt-1">
                     <div className="relative">
-                      <input
-                        type="file"
-                        id="item-upload"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleFileUpload}
-                        disabled={uploading}
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Buscar icono por nombre (ej. camisa, vestido, traje)..."
+                        value={iconSearch}
+                        onChange={(e) => setIconSearch(e.target.value)}
+                        className="h-9 pl-9 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs shadow-2xs"
                       />
-                      <Button
-                        type="button"
-                        className="h-9.5 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95 cursor-pointer"
-                        disabled={uploading}
-                        onClick={() => document.getElementById("item-upload")?.click()}
-                      >
-                        {uploading ? (
-                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                        ) : (
-                          <>
-                            <ImageIcon className="h-4 w-4" /> Subir imagen
-                          </>
-                        )}
-                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 custom-scrollbar">
+                      {filteredIcons.map((i) => (
+                        <button
+                          key={i.char}
+                          type="button"
+                          onClick={() => setF({ ...f, icono: i.char })}
+                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all border cursor-pointer ${
+                            (f.icono || "👕") === i.char
+                              ? "bg-primary/10 text-primary border-primary shadow-xs ring-2 ring-primary/30"
+                              : "bg-slate-50/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-primary/40 hover:bg-white dark:hover:bg-slate-700 shadow-2xs"
+                          }`}
+                        >
+                          <span className="text-2xl">{i.char}</span>
+                          <span className="text-[9px] font-bold truncate w-full text-center text-muted-foreground">
+                            {i.label}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Vista Previa Destacada */}
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border flex items-center justify-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-border shadow-sm flex items-center justify-center overflow-hidden shrink-0">
-                  {mode === "image" && f.imagen_url && !imgError ? (
-                    <img
-                      src={f.imagen_url}
-                      alt="Vista previa"
-                      className="h-full w-full object-cover"
-                      onError={() => setImgError(true)}
-                    />
-                  ) : (
-                    <span className="text-3xl">{f.icono || "👕"}</span>
-                  )}
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-foreground block">
-                    {f.nombre || "Nombre de Prenda"}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {f.categoria || "Categoría"} · {formatRD(f.precio || 0)} {f.por_libra ? "/lb" : ""}
-                  </span>
-                </div>
+                ) : (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        value={f.imagen_url || ""}
+                        onChange={(e) => {
+                          setF({ ...f, imagen_url: e.target.value });
+                          setImgError(false);
+                        }}
+                        placeholder="Pegar URL directa de la imagen..."
+                        className="flex-1 h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs shadow-2xs"
+                      />
+                      <div>
+                        <input
+                          type="file"
+                          id="item-upload-redesign"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          disabled={uploading}
+                        />
+                        <Button
+                          type="button"
+                          className="w-full sm:w-auto h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-2 shadow-sm cursor-pointer"
+                          disabled={uploading}
+                          onClick={() => document.getElementById("item-upload-redesign")?.click()}
+                        >
+                          {uploading ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" /> Subir archivo
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Step 2 Footer */}
-              <div className="pt-2.5 flex justify-between items-center border-t border-border/50">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setStep(1)}
-                  className="rounded-xl h-10 px-5 text-xs font-medium gap-1 cursor-pointer"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior
-                </Button>
+              {/* VISTA PREVIA HORIZONTAL COMPACTA (ESTILO MINIMALISTA) */}
+              <div className="p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
+                  Vista Previa en el Catálogo
+                </span>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onOpenChange(false)}
-                    className="rounded-xl h-10 px-5 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
-                  >
-                    Cancelar
-                  </Button>
-
-                  <Button
-                    type="button"
-                    onClick={submit}
-                    className="rounded-xl h-10 px-6 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
-                  >
-                    Guardar Prenda <CheckCircle2 className="h-3.5 w-3.5" />
-                  </Button>
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center gap-3.5 max-w-sm">
+                  <div className="h-13 w-13 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                    {f.imagen_url && !imgError ? (
+                      <img
+                        src={f.imagen_url}
+                        alt={f.nombre || "Prenda"}
+                        className="h-full w-full object-cover"
+                        onError={() => setImgError(true)}
+                      />
+                    ) : (
+                      <Shirt className="h-6 w-6 text-primary" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-black text-sm text-foreground truncate leading-tight">
+                      {f.nombre || "Nombre de la Prenda"}
+                    </h4>
+                    <p className="text-xs text-muted-foreground truncate mt-1 font-semibold">
+                      {f.categoria || "Categoría"} · {formatRD(f.precio || 0)}{f.por_libra ? "/lb" : ""}
+                    </p>
+                    {activeServicesCount > 0 && (
+                      <span className="inline-block text-[10px] font-bold text-primary mt-0.5">
+                        {activeServicesCount} {activeServicesCount === 1 ? "tratamiento activo" : "tratamientos activos"}
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           )}
         </div>
+
+        {/* FOOTER PRINCIPAL CON BOTONES PASO A PASO */}
+        {activeTab === "info" ? (
+          <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="rounded-xl h-10 px-5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => {
+                if (!f.nombre?.trim()) {
+                  toast.error("El nombre de la prenda es requerido");
+                  return;
+                }
+                if (!f.categoria?.trim()) {
+                  toast.error("La categoría es requerida");
+                  return;
+                }
+                setActiveTab("visual");
+              }}
+              className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+            >
+              <span>Siguiente: Identificador Visual</span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setActiveTab("info")}
+              className="rounded-xl h-10 px-5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer gap-1.5"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Anterior</span>
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="rounded-xl h-10 px-5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                type="button"
+                onClick={submit}
+                disabled={isSubmitting || !f.nombre?.trim() || !f.categoria?.trim()}
+                className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    <span>{initial ? "Guardar cambios" : "Guardar prenda"}</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );
@@ -1045,16 +1432,18 @@ function ServDialog({
   initial: Servicio | null;
   onSaved: () => void;
 }) {
-  const [step, setStep] = useState<1 | 2>(1);
+  const [activeTab, setActiveTab] = useState<"info" | "visual">("info");
   const [f, setF] = useState<Partial<Servicio>>({});
   const [imgError, setImgError] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [mode, setMode] = useState<"emoji" | "image">("emoji");
   const [iconSearch, setIconSearch] = useState("");
+  const [showDesc, setShowDesc] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setStep(1);
+      setActiveTab("info");
       setF(
         initial
           ? { ...initial }
@@ -1071,9 +1460,11 @@ function ServDialog({
               permitir_editar_precio: false,
             },
       );
+      setShowDesc(Boolean(initial?.descripcion));
       setMode(initial?.imagen_url ? "image" : "emoji");
       setImgError(false);
       setIconSearch("");
+      setIsSubmitting(false);
     }
   }, [open, initial]);
 
@@ -1105,7 +1496,8 @@ function ServDialog({
       } = supabase.storage.from("catalogo").getPublicUrl(path);
 
       setF((prev) => ({ ...prev, imagen_url: publicUrl }));
-      toast.success("Imagen de servicio subida y comprimida");
+      setImgError(false);
+      toast.success("Imagen de servicio subida y optimizada ✨");
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Verifica el almacenamiento";
       toast.error("Error al subir: " + msg);
@@ -1114,375 +1506,490 @@ function ServDialog({
     }
   }
 
-  const handleNextStep = () => {
-    if (!f.nombre?.trim()) {
-      toast.error("Nombre del Servicio requerido");
-      return;
-    }
-    setStep(2);
-  };
-
   async function submit() {
     if (!f.nombre?.trim()) {
-      toast.error("Nombre requerido");
-      setStep(1);
+      toast.error("El nombre del servicio es requerido");
+      setActiveTab("info");
       return;
     }
-    const isCloning = initial?.tenant_id === "admin";
-    const s: Servicio = {
-      id: isCloning ? uid("srv") : (initial?.id ?? uid("srv")),
-      tenant_id: tenantId,
-      nombre: f.nombre!.trim(),
-      descripcion: f.descripcion?.trim() || undefined,
-      icono: mode === "emoji" ? f.icono : undefined,
-      imagen_url: mode === "image" ? f.imagen_url : undefined,
-      activo: f.activo ?? true,
-      precio: Number(f.precio) || 0,
-      por_libra: !!f.por_libra,
-      is_exento: !!f.is_exento,
-      permitir_desglose: !!f.permitir_desglose,
-      permitir_editar_precio: !!f.permitir_editar_precio,
-    };
-    await saveServicio(s);
-    toast.success(
-      isCloning
-        ? "Servicio personalizado para tu catálogo"
-        : initial
-          ? "Servicio actualizado"
-          : "Servicio creado",
-    );
-    onSaved();
+
+    try {
+      setIsSubmitting(true);
+      const isCloning = initial?.tenant_id === "admin";
+      const s: Servicio = {
+        id: isCloning ? uid("srv") : (initial?.id ?? uid("srv")),
+        tenant_id: tenantId,
+        nombre: f.nombre!.trim(),
+        descripcion: f.descripcion?.trim() || undefined,
+        icono: mode === "emoji" ? f.icono : undefined,
+        imagen_url: mode === "image" ? f.imagen_url : undefined,
+        activo: f.activo ?? true,
+        precio: Number(f.precio) || 0,
+        por_libra: !!f.por_libra,
+        is_exento: !!f.is_exento,
+        permitir_desglose: !!f.permitir_desglose,
+        permitir_editar_precio: !!f.permitir_editar_precio,
+      };
+      await saveServicio(s);
+      toast.success(
+        isCloning
+          ? "Servicio personalizado para tu catálogo ✨"
+          : initial
+            ? "Servicio actualizado con éxito ✨"
+            : "Servicio creado con éxito ✨",
+      );
+      onSaved();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Error al guardar el servicio";
+      toast.error(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
-        {/* STEPPER HEADER */}
-        <div className="bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 pt-4 pb-2.5 relative border-b border-border/40">
-          <div className="flex items-center justify-between mb-2 pr-10">
-            <div className="flex items-center gap-2.5">
-              <div className="h-9 w-9 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-xs">
-                {step === 1 ? <Wrench className="h-4 w-4" /> : <ImageIcon className="h-4 w-4" />}
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-xl max-h-[90vh] rounded-3xl p-0 overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-2xl bg-background text-foreground flex flex-col">
+        {/* HEADER MODERNO */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/80 px-5 sm:px-6 pt-5 pb-4 border-b border-slate-200/80 dark:border-slate-800 shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-xs shrink-0 overflow-hidden">
+                {f.imagen_url && !imgError ? (
+                  <img
+                    src={f.imagen_url}
+                    alt="Servicio"
+                    className="h-full w-full object-cover"
+                    onError={() => setImgError(true)}
+                  />
+                ) : (
+                  <Sparkles className="h-5 w-5 text-primary" />
+                )}
               </div>
-              <div>
-                <DialogTitle className="text-base font-display text-foreground">
-                  {initial ? "Editar servicio" : "Nuevo servicio"}
+              <div className="min-w-0">
+                <DialogTitle className="text-lg font-display font-black text-foreground truncate leading-tight">
+                  {initial ? `Editar: ${f.nombre || "Servicio"}` : "Nuevo Servicio"}
                 </DialogTitle>
-                <p className="text-xs text-muted-foreground">
-                  {step === 1
-                    ? "Paso 1: Información del servicio y precio"
-                    : "Paso 2: Identificador visual e imagen"}
+                <p className="text-xs text-muted-foreground truncate mt-0.5">
+                  Personaliza los datos del servicio, precio base y opciones
                 </p>
               </div>
             </div>
           </div>
 
-          {/* Stepper Buttons (Centered) */}
-          <div className="grid grid-cols-2 gap-2 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80">
+          {/* PESTAÑAS SEGMENTADAS ELEGANTES */}
+          <div className="grid grid-cols-2 gap-1.5 mt-4 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/70 border border-slate-300/40 dark:border-slate-700/50">
             <button
               type="button"
-              onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                step === 1
-                  ? "bg-primary text-white shadow-md font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              onClick={() => setActiveTab("info")}
+              className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "info"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
               }`}
             >
-              <span
-                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
-                  step === 1
-                    ? "bg-white/25 text-white"
-                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                }`}
-              >
-                1
-              </span>
-              <span>Información Servicio</span>
+              <Wrench className="h-4 w-4 text-primary" />
+              <span>Datos y Precio</span>
             </button>
 
             <button
               type="button"
-              onClick={handleNextStep}
-              className={`flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs font-bold transition-all ${
-                step === 2
-                  ? "bg-primary text-white shadow-md font-bold"
-                  : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+              onClick={() => setActiveTab("visual")}
+              className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                activeTab === "visual"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
               }`}
             >
-              <span
-                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
-                  step === 2
-                    ? "bg-white/25 text-white"
-                    : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
-                }`}
-              >
-                2
-              </span>
-              <span>Identificador Visual</span>
+              <ImageIcon className="h-4 w-4 text-primary" />
+              <span>Icono, Foto y Preview</span>
             </button>
           </div>
         </div>
 
-        {/* DIALOG BODY */}
-        <div className="px-4 sm:px-5 pt-3 pb-4 sm:pb-5">
-          {step === 1 ? (
-            /* STEP 1: INFORMACIÓN SERVICIO */
-            <div className="space-y-3 animate-in fade-in slide-in-from-left-3 duration-200">
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="space-y-1 sm:col-span-2">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Nombre del Servicio *
+        {/* CUERPO DEL MODAL */}
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar">
+          {activeTab === "info" ? (
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* BLOQUE 1: INFORMACIÓN PRINCIPAL */}
+              <div className="space-y-3.5 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="space-y-1.5">
+                  <Label htmlFor="service-name" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                    <Tag className="h-3.5 w-3.5 text-primary" />
+                    Nombre del servicio <span className="text-destructive">*</span>
                   </Label>
                   <Input
+                    id="service-name"
                     value={f.nombre || ""}
                     onChange={(e) => setF({ ...f, nombre: e.target.value })}
-                    placeholder="Ej: Lavado y Secado"
-                    className="h-9.5 rounded-xl text-xs"
+                    placeholder="Ej. Lavado en Seco, Planchado Express, Teñido..."
+                    className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm font-semibold text-foreground focus-visible:ring-primary shadow-2xs"
+                    required
                   />
+                </div>
+
+                {/* DESCRIPCIÓN OPCIONAL */}
+                <div className="pt-1">
+                  {showDesc ? (
+                    <div className="space-y-1.5 animate-in fade-in duration-150">
+                      <div className="flex items-center justify-between">
+                        <Label htmlFor="service-description" className="text-xs font-bold text-foreground">
+                          Descripción o qué incluye este servicio
+                        </Label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setShowDesc(false);
+                            setF({ ...f, descripcion: "" });
+                          }}
+                          className="text-[10px] font-bold text-destructive hover:underline cursor-pointer"
+                        >
+                          Quitar descripción
+                        </button>
+                      </div>
+                      <Textarea
+                        id="service-description"
+                        value={f.descripcion || ""}
+                        onChange={(e) => setF({ ...f, descripcion: e.target.value })}
+                        placeholder="Qué incluye este servicio..."
+                        rows={2}
+                        className="min-h-16 resize-none rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs text-foreground focus-visible:ring-primary shadow-2xs"
+                      />
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setShowDesc(true)}
+                      className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors cursor-pointer"
+                    >
+                      <Plus className="h-3.5 w-3.5" /> Añadir descripción o nota del servicio
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 items-center">
-                <div className="space-y-1">
-                  <Label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Precio (RD$)
-                  </Label>
-                  <Input
-                    type="number"
-                    value={f.precio ?? 0}
-                    onChange={(e) => setF({ ...f, precio: Number(e.target.value) })}
-                    className="h-9.5 rounded-xl text-xs font-bold text-base"
-                  />
-                </div>
-                <div className="flex items-center gap-2 pt-4">
-                  <Switch
-                    checked={!!f.por_libra}
-                    onCheckedChange={(v) => setF({ ...f, por_libra: v })}
-                  />
-                  <Label className="text-xs font-medium cursor-pointer">Cobrar por libra</Label>
-                </div>
-              </div>
-
-              {/* Switches Grid */}
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-primary/5 border border-primary/15">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold text-primary block leading-none">
-                      Exento ITBIS
+              {/* BLOQUE 2: PRECIO BASE Y OPCIONES CON ICONOS LUCIDE SVG */}
+              <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="grid gap-3.5 sm:grid-cols-2 items-center">
+                  <div className="space-y-1.5">
+                    <Label htmlFor="service-price" className="text-xs font-bold text-foreground">
+                      Precio Base
                     </Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Ind: 3</p>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                        RD$
+                      </span>
+                      <Input
+                        id="service-price"
+                        type="number"
+                        min="0"
+                        step="any"
+                        value={f.precio ?? 0}
+                        onChange={(e) => setF({ ...f, precio: Number(e.target.value) || 0 })}
+                        className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs"
+                      />
+                    </div>
                   </div>
-                  <Switch
-                    checked={!!f.is_exento}
-                    onCheckedChange={(v) => setF({ ...f, is_exento: v })}
-                  />
+
+                  <div className="grid grid-cols-1 gap-2 pt-1">
+                    <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                          <Scale className="h-3.5 w-3.5" />
+                        </div>
+                        <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                      </div>
+                      <Switch
+                        checked={!!f.por_libra}
+                        onCheckedChange={(v) => setF({ ...f, por_libra: v })}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </label>
+                  </div>
                 </div>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold block leading-none">Servicio Activo</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Disponible</p>
-                  </div>
-                  <Switch
-                    checked={f.activo ?? true}
-                    onCheckedChange={(v) => setF({ ...f, activo: v })}
-                  />
-                </div>
+                {/* INTERRUPTORES CON ICONOS LUCIDE SVG */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
+                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                        <CheckCircle2 className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Servicio Activo en POS</span>
+                    </div>
+                    <Switch
+                      checked={f.activo ?? true}
+                      onCheckedChange={(v) => setF({ ...f, activo: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold block leading-none">Desglose</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">En órdenes</p>
-                  </div>
-                  <Switch
-                    checked={!!f.permitir_desglose}
-                    onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })}
-                  />
-                </div>
+                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                        <Receipt className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Exento de ITBIS (0%)</span>
+                    </div>
+                    <Switch
+                      checked={!!f.is_exento}
+                      onCheckedChange={(v) => setF({ ...f, is_exento: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
 
-                <div className="flex items-center justify-between p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
-                  <div className="space-y-0.5">
-                    <Label className="text-xs font-bold block leading-none">Editar precio</Label>
-                    <p className="text-[10px] text-muted-foreground leading-none">Al facturar</p>
-                  </div>
-                  <Switch
-                    checked={!!f.permitir_editar_precio}
-                    onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })}
-                  />
-                </div>
-              </div>
+                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                        <Layers className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Permitir Desglose</span>
+                    </div>
+                    <Switch
+                      checked={!!f.permitir_desglose}
+                      onCheckedChange={(v) => setF({ ...f, permitir_desglose: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
 
-              {/* Step 1 Footer */}
-              <div className="pt-2.5 flex justify-between items-center">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => onOpenChange(false)}
-                  className="rounded-xl h-10 px-5 text-xs font-medium cursor-pointer"
-                >
-                  Cancelar
-                </Button>
-                <Button
-                  type="button"
-                  onClick={handleNextStep}
-                  className="rounded-xl h-10 px-5 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
-                >
-                  Siguiente: Identificador <ArrowRight className="h-3.5 w-3.5" />
-                </Button>
+                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Precio Editable en Caja</span>
+                    </div>
+                    <Switch
+                      checked={!!f.permitir_editar_precio}
+                      onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
+                </div>
               </div>
             </div>
           ) : (
-            /* STEP 2: IDENTIFICADOR VISUAL */
-            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
-              {/* Selector de Modo */}
-              <div className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
-                <div>
-                  <span className="text-xs font-bold text-foreground block">
-                    Usar Foto / Imagen
-                  </span>
-                  <span className="text-[10px] text-muted-foreground">
-                    Alternar entre Emoji o foto subida
-                  </span>
-                </div>
-                <Switch
-                  id="mode-toggle-serv-split"
-                  checked={mode === "image"}
-                  onCheckedChange={(v) => setMode(v ? "image" : "emoji")}
-                  className="data-[state=checked]:bg-primary"
-                />
-              </div>
+            /* TAB 2: IDENTIFICADOR VISUAL Y VISTA PREVIA */
+            <div className="space-y-5 animate-in fade-in duration-200">
+              {/* SELECTOR EMOJI VS IMAGEN */}
+              <div className="p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
+                      Identificador Visual
+                    </h4>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Elige si representarás este servicio con un icono o foto
+                    </p>
+                  </div>
 
-              {/* Contenido según modo */}
-              {mode === "emoji" ? (
-                <div className="space-y-2">
-                  <div className="relative">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                    <input
-                      type="text"
-                      placeholder="Buscar icono..."
-                      value={iconSearch}
-                      onChange={(e) => setIconSearch(e.target.value)}
-                      className="w-full h-8 pl-8 pr-3 rounded-lg bg-background border border-border text-xs focus:outline-none focus:ring-1 focus:ring-primary"
-                    />
-                  </div>
-                  <div className="grid grid-cols-5 gap-1.5 max-h-40 overflow-y-auto p-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border">
-                    {filteredIcons.map((i) => (
-                      <button
-                        key={i.char}
-                        type="button"
-                        onClick={() =>
-                          setF({ ...f, icono: f.icono === i.char ? undefined : i.char })
-                        }
-                        className={`flex flex-col items-center gap-1 p-1.5 rounded-lg transition-all border ${
-                          f.icono === i.char
-                            ? "bg-primary text-white border-primary shadow-md font-bold"
-                            : "bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 hover:border-primary/50 hover:bg-slate-50 dark:hover:bg-slate-700 shadow-2xs"
-                        }`}
-                      >
-                        <span className="text-lg">{i.char}</span>
-                        <span
-                          className={`text-[8px] font-bold truncate w-full text-center leading-none ${f.icono === i.char ? "text-white" : "text-muted-foreground"}`}
-                        >
-                          {i.label}
-                        </span>
-                      </button>
-                    ))}
+                  <div className="flex rounded-xl bg-slate-200/70 dark:bg-slate-800 p-1 border border-slate-300/40 dark:border-slate-700 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setMode("emoji")}
+                      className={`flex items-center gap-2 px-4 py-2 text-xs font-bold whitespace-nowrap rounded-lg transition-all cursor-pointer ${
+                        mode === "emoji"
+                          ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <span>Icono / Emoji</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setMode("image")}
+                      className={`flex items-center gap-2 px-4 py-2 text-xs font-bold whitespace-nowrap rounded-lg transition-all cursor-pointer ${
+                        mode === "image"
+                          ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
+                          : "text-muted-foreground hover:text-foreground"
+                      }`}
+                    >
+                      <ImageIcon className="h-3.5 w-3.5 text-primary" />
+                      <span>Foto Real</span>
+                    </button>
                   </div>
                 </div>
-              ) : (
-                <div className="space-y-2">
-                  <div className="flex gap-2">
-                    <Input
-                      value={f.imagen_url || ""}
-                      onChange={(e) => setF({ ...f, imagen_url: e.target.value })}
-                      placeholder="Pegar URL de la imagen..."
-                      className="flex-1 h-9.5 rounded-xl text-xs"
-                    />
+
+                {mode === "emoji" ? (
+                  <div className="space-y-2.5 pt-1">
                     <div className="relative">
-                      <input
-                        type="file"
-                        id="serv-upload"
-                        className="hidden"
-                        accept="image/*"
-                        onChange={handleFileUpload}
-                        disabled={uploading}
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        type="text"
+                        placeholder="Buscar icono por nombre..."
+                        value={iconSearch}
+                        onChange={(e) => setIconSearch(e.target.value)}
+                        className="h-9 pl-9 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs shadow-2xs"
                       />
-                      <Button
-                        type="button"
-                        className="h-9.5 px-3.5 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-1.5 shrink-0 shadow-sm transition-all active:scale-95 cursor-pointer"
-                        disabled={uploading}
-                        onClick={() => document.getElementById("serv-upload")?.click()}
-                      >
-                        {uploading ? (
-                          <div className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-                        ) : (
-                          <>
-                            <ImageIcon className="h-4 w-4" /> Subir imagen
-                          </>
-                        )}
-                      </Button>
+                    </div>
+
+                    <div className="grid grid-cols-4 sm:grid-cols-6 gap-2 max-h-48 overflow-y-auto p-2.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 custom-scrollbar">
+                      {filteredIcons.map((i) => (
+                        <button
+                          key={i.char}
+                          type="button"
+                          onClick={() => setF({ ...f, icono: i.char })}
+                          className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all border cursor-pointer ${
+                            (f.icono || "🧺") === i.char
+                              ? "bg-primary/10 text-primary border-primary shadow-xs ring-2 ring-primary/30"
+                              : "bg-slate-50/80 dark:bg-slate-800/80 border-slate-200 dark:border-slate-700 hover:border-primary/40 hover:bg-white dark:hover:bg-slate-700 shadow-2xs"
+                          }`}
+                        >
+                          <span className="text-2xl">{i.char}</span>
+                          <span className="text-[9px] font-bold truncate w-full text-center text-muted-foreground">
+                            {i.label}
+                          </span>
+                        </button>
+                      ))}
                     </div>
                   </div>
-                </div>
-              )}
-
-              {/* Vista Previa Destacada */}
-              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border flex items-center justify-center gap-4">
-                <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-border shadow-sm flex items-center justify-center overflow-hidden shrink-0">
-                  {mode === "image" && f.imagen_url && !imgError ? (
-                    <img
-                      src={f.imagen_url}
-                      alt="Vista previa"
-                      className="h-full w-full object-cover"
-                      onError={() => setImgError(true)}
-                    />
-                  ) : (
-                    <span className="text-3xl">{f.icono || "🧺"}</span>
-                  )}
-                </div>
-                <div>
-                  <span className="text-xs font-bold text-foreground block">
-                    {f.nombre || "Nombre de Servicio"}
-                  </span>
-                  <span className="text-[11px] text-muted-foreground">
-                    {formatRD(f.precio || 0)} {f.por_libra ? "/lb" : ""}
-                  </span>
-                </div>
+                ) : (
+                  <div className="space-y-3 pt-1">
+                    <div className="flex flex-col sm:flex-row gap-2">
+                      <Input
+                        value={f.imagen_url || ""}
+                        onChange={(e) => {
+                          setF({ ...f, imagen_url: e.target.value });
+                          setImgError(false);
+                        }}
+                        placeholder="Pegar URL directa de la imagen..."
+                        className="flex-1 h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs shadow-2xs"
+                      />
+                      <div>
+                        <input
+                          type="file"
+                          id="serv-upload-redesign"
+                          className="hidden"
+                          accept="image/*"
+                          onChange={handleFileUpload}
+                          disabled={uploading}
+                        />
+                        <Button
+                          type="button"
+                          className="w-full sm:w-auto h-10 px-4 rounded-xl bg-primary hover:bg-primary/90 text-white text-xs font-bold gap-2 shadow-sm cursor-pointer"
+                          disabled={uploading}
+                          onClick={() => document.getElementById("serv-upload-redesign")?.click()}
+                        >
+                          {uploading ? (
+                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                          ) : (
+                            <>
+                              <Upload className="h-4 w-4" /> Subir archivo
+                            </>
+                          )}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* Step 2 Footer */}
-              <div className="pt-2.5 flex justify-between items-center border-t border-border/50">
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setStep(1)}
-                  className="rounded-xl h-10 px-5 text-xs font-medium gap-1 cursor-pointer"
-                >
-                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior
-                </Button>
+              {/* VISTA PREVIA HORIZONTAL COMPACTA */}
+              <div className="p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
+                  Vista Previa en el Catálogo
+                </span>
 
-                <div className="flex items-center gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => onOpenChange(false)}
-                    className="rounded-xl h-10 px-5 text-xs font-medium border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700 cursor-pointer"
-                  >
-                    Cancelar
-                  </Button>
-
-                  <Button
-                    type="button"
-                    onClick={submit}
-                    className="rounded-xl h-10 px-6 text-xs font-bold bg-primary text-white gap-1.5 shadow-md cursor-pointer"
-                  >
-                    Guardar Servicio <CheckCircle2 className="h-3.5 w-3.5" />
-                  </Button>
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-xs flex items-center gap-3.5 max-w-sm">
+                  <div className="h-13 w-13 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                    {f.imagen_url && !imgError ? (
+                      <img
+                        src={f.imagen_url}
+                        alt={f.nombre || "Servicio"}
+                        className="h-full w-full object-cover"
+                        onError={() => setImgError(true)}
+                      />
+                    ) : (
+                      <Sparkles className="h-6 w-6 text-primary" />
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h4 className="font-black text-sm text-foreground truncate leading-tight">
+                      {f.nombre || "Nombre del Servicio"}
+                    </h4>
+                    <p className="text-xs text-muted-foreground truncate mt-1 font-semibold">
+                      Precio base: {formatRD(f.precio || 0)}{f.por_libra ? "/lb" : ""}
+                    </p>
+                    {f.permitir_desglose && (
+                      <span className="inline-block text-[10px] font-bold text-indigo-600 dark:text-indigo-400 mt-0.5">
+                        Permite desglose de prendas
+                      </span>
+                    )}
+                  </div>
                 </div>
               </div>
             </div>
           )}
         </div>
+
+        {/* FOOTER PRINCIPAL CON BOTONES PASO A PASO */}
+        {activeTab === "info" ? (
+          <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="rounded-xl h-10 px-5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+            >
+              Cancelar
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => {
+                if (!f.nombre?.trim()) {
+                  toast.error("El nombre del servicio es requerido");
+                  return;
+                }
+                setActiveTab("visual");
+              }}
+              className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95"
+            >
+              <span>Siguiente: Identificador Visual</span>
+              <ArrowRight className="h-4 w-4" />
+            </Button>
+          </div>
+        ) : (
+          <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setActiveTab("info")}
+              className="rounded-xl h-10 px-5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer gap-1.5"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Anterior</span>
+            </Button>
+
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => onOpenChange(false)}
+                className="rounded-xl h-10 px-5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer"
+              >
+                Cancelar
+              </Button>
+
+              <Button
+                type="button"
+                onClick={submit}
+                disabled={isSubmitting || !f.nombre?.trim()}
+                className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    <span>{initial ? "Guardar cambios" : "Guardar servicio"}</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        )}
       </DialogContent>
     </Dialog>
   );

@@ -127,6 +127,7 @@ import {
   NCF_NOMBRES,
 } from "@/lib/storage";
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
+import { notificarWhatsApp } from "@/lib/whatsapp";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { PlanLimitModal } from "@/components/klynn/PlanLimitModal";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
@@ -462,6 +463,14 @@ function NuevaOrdenPage() {
 
   const [activeCategory, setActiveCategory] = useState<string>("TODOS");
   const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
+
+  useEffect(() => {
+    if (cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") {
+      setPosFilterTab("PRENDAS");
+    } else if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO") {
+      setPosFilterTab("SERVICIOS");
+    }
+  }, [cfg?.pos_modalidad_operativa]);
   const [showAllClothingCategories, setShowAllClothingCategories] = useState(false);
   const [posSearch, setPosSearch] = useState("");
   const [showLimitModal, setShowLimitModal] = useState(false);
@@ -629,6 +638,7 @@ function NuevaOrdenPage() {
   const [desgloseServiceName, setDesgloseServiceName] = useState<string>("");
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categorySearchQuery, setCategorySearchQuery] = useState("");
+  const [servicePickerItem, setServicePickerItem] = useState<CatalogoItem | null>(null);
 
   const { data: catalogoData = [], isLoading: loadingCatalog } = useCatalogo(tenantId);
   const { data: serviciosData = [], isLoading: loadingServicios } = useServicios(tenantId);
@@ -1209,10 +1219,18 @@ function NuevaOrdenPage() {
       setPosFilterTab("SERVICIOS");
       setActiveCategory("TODOS");
     } else {
-      setPosFilterTab("TODOS");
-      setActiveCategory("TODOS");
+      if (cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") {
+        setPosFilterTab("PRENDAS");
+        setActiveCategory("TODAS LAS PRENDAS");
+      } else if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO") {
+        setPosFilterTab("SERVICIOS");
+        setActiveCategory("TODOS");
+      } else {
+        setPosFilterTab("TODOS");
+        setActiveCategory("TODOS");
+      }
     }
-  }, [enableServicios, enablePrendas]);
+  }, [enableServicios, enablePrendas, cfg?.pos_modalidad_operativa]);
 
   const posStateRef = useRef<any>(null);
 
@@ -1416,8 +1434,18 @@ function NuevaOrdenPage() {
 
   const costoServicios = selectedServices.reduce((acc, s) => {
       const qty = serviceCountsMap[s.nombre] || 0;
-      const price =
-        customServicePrices[s.nombre] !== undefined ? customServicePrices[s.nombre] : s.precio;
+      const prendasConPrecio = items.filter(
+        (it) =>
+          it.descripcion.startsWith("↳") &&
+          it.servicio_origen === s.nombre &&
+          (it.precio_unitario || 0) > 0,
+      );
+      let price = s.precio;
+      if (customServicePrices[s.nombre] !== undefined) {
+        price = customServicePrices[s.nombre];
+      } else if (cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0) {
+        price = 0;
+      }
       return acc + price * qty;
     }, 0);
 
@@ -1817,10 +1845,18 @@ function NuevaOrdenPage() {
         servicios: serviciosSel,
         servicios_precios: serviciosSel.reduce(
           (acc, sName) => {
-            const sPrice =
-              customServicePrices[sName] !== undefined
-                ? customServicePrices[sName]
-                : servicios.find((x) => x.nombre === sName)?.precio || 0;
+            const prendasConPrecio = items.filter(
+              (it) =>
+                it.descripcion.startsWith("↳") &&
+                it.servicio_origen === sName &&
+                (it.precio_unitario || 0) > 0,
+            );
+            let sPrice = servicios.find((x) => x.nombre === sName)?.precio || 0;
+            if (customServicePrices[sName] !== undefined) {
+              sPrice = customServicePrices[sName];
+            } else if (cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0) {
+              sPrice = 0;
+            }
             acc[sName] = sPrice;
             return acc;
           },
@@ -1994,6 +2030,30 @@ function NuevaOrdenPage() {
       setShowTicket(true);
       setIsCobroModalOpen(false);
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
+
+      // El ticket de recepción debe salir por el proveedor activo de /admin.
+      // Esperamos el resultado para que la navegación no interrumpa el envío.
+      if (targetCliente?.telefono) {
+        try {
+          const whatsappResult = await notificarWhatsApp(
+            tenant,
+            targetCliente,
+            ordenActualizada,
+            "creada",
+          );
+          if (whatsappResult.ok) {
+            toast.success("Ticket enviado por WhatsApp al cliente ✅");
+          } else if (whatsappResult.reason !== "Notificación desactivada") {
+            toast.warning(`Orden guardada, pero WhatsApp no se envió: ${whatsappResult.reason}`);
+          }
+        } catch (whatsappError) {
+          const reason = whatsappError instanceof Error ? whatsappError.message : "Error desconocido";
+          console.error("Error enviando WhatsApp de orden creada:", whatsappError);
+          toast.warning(`Orden guardada, pero WhatsApp no se envió: ${reason}`);
+        }
+      } else if (cfg.whatsapp?.enabled && cfg.whatsapp.notif_orden_creada) {
+        toast.warning("Orden guardada sin WhatsApp: el cliente no tiene un teléfono registrado.");
+      }
 
       if (cfg.pos_auto_imprimir) {
         handleImprimirTicket({ ...ordenActualizada });
@@ -2556,31 +2616,94 @@ function NuevaOrdenPage() {
                             >
                               {itemsInCat.map((item) => {
                                 const countInCart = itemCountsMap[item.nombre] || 0;
+                                const srvMap = new Map<string, number>();
+                                if (item.precios_servicios && typeof item.precios_servicios === "object") {
+                                  Object.entries(item.precios_servicios).forEach(([k, p]) => {
+                                    const num = Number(p);
+                                    if (num > 0) {
+                                      const srvObj = serviciosData.find(s => s.id === k || s.nombre.toLowerCase() === k.toLowerCase());
+                                      const sName = srvObj ? srvObj.nombre : k;
+                                      if (!srvObj && k.length > 20 && k.includes("-")) return;
+                                      srvMap.set(sName, num);
+                                    }
+                                  });
+                                }
+                                const srvPrices = Array.from(srvMap.entries());
 
                                 return (
                                   <button
                                     key={item.id}
+                                    type="button"
                                     onClick={() => {
-                                      const targetService =
-                                        desgloseServiceName ||
-                                        (serviciosSel.length > 0
-                                          ? serviciosSel[serviciosSel.length - 1]
-                                          : "");
+                                      // 1. Si el usuario está explícitamente desglosando prendas en un servicio
+                                      if (desgloseServiceName) {
+                                        const srvObj = serviciosData.find(s => s.nombre === desgloseServiceName || s.id === desgloseServiceName);
+                                        const matchedPrice = (desgloseServiceName && item.precios_servicios?.[desgloseServiceName] !== undefined)
+                                          ? Number(item.precios_servicios[desgloseServiceName])
+                                          : (srvObj && item.precios_servicios?.[srvObj.id] !== undefined)
+                                            ? Number(item.precios_servicios[srvObj.id])
+                                            : (item.precio || 0);
 
-                                      if (targetService) {
-                                        if (!desgloseServiceName) {
-                                          setDesgloseServiceName(targetService);
-                                          setIndexDesglose(-1);
-                                        }
                                         addItemDesglose({
                                           descripcion: `↳ ${item.nombre}`,
                                           cantidad: 1,
-                                          precio_unitario: item.precio || 0,
+                                          precio_unitario: matchedPrice,
                                           es_libra: item.por_libra || false,
-                                          is_exento: (item.precio || 0) === 0,
-                                          servicio_origen: targetService,
+                                          is_exento: !!item.is_exento,
+                                          servicio_origen: desgloseServiceName,
                                         });
-                                      } else if (enableServicios) {
+                                        return;
+                                      }
+
+                                      // 2. Si la prenda tiene múltiples tratamientos -> Abrir selector de tratamiento
+                                      if (srvPrices.length > 1) {
+                                        setServicePickerItem(item);
+                                        return;
+                                      }
+
+                                      // 3. Si la prenda tiene exactamente 1 tratamiento configurado
+                                      if (srvPrices.length === 1) {
+                                        const [singleSrvKey, singleSrvPrice] = srvPrices[0];
+                                        const srvFound = serviciosData.find(s => s.id === singleSrvKey || s.nombre === singleSrvKey);
+                                        const singleSrvName = srvFound ? srvFound.nombre : singleSrvKey;
+                                        const price = Number(singleSrvPrice);
+                                        setServiciosSel((prev) => {
+                                          if (!prev.includes(singleSrvName)) {
+                                            return [...prev, singleSrvName];
+                                          }
+                                          return prev;
+                                        });
+                                        setItems((arr) => {
+                                          const itemDesc = `↳ ${item.nombre}`;
+                                          const idx = arr.findIndex(
+                                            (x) =>
+                                              x.descripcion === itemDesc &&
+                                              x.precio_unitario === price &&
+                                              x.servicio_origen === singleSrvName,
+                                          );
+                                          if (idx > -1) {
+                                            return arr.map((it, i) =>
+                                              i === idx ? { ...it, cantidad: it.cantidad + 1 } : it,
+                                            );
+                                          }
+                                          return [
+                                            ...arr,
+                                            {
+                                              descripcion: itemDesc,
+                                              cantidad: 1,
+                                              precio_unitario: price,
+                                              servicio_origen: singleSrvName,
+                                              es_libra: item.por_libra || false,
+                                              is_exento: !!item.is_exento,
+                                            },
+                                          ];
+                                        });
+                                        toast.success(`${item.nombre} agregado a ${singleSrvName} ✨`);
+                                        return;
+                                      }
+
+                                      // 4. Si la prenda no tiene servicios configurados y los servicios son obligatorios
+                                      if (enableServicios && serviciosSel.length === 0) {
                                         toast.warning(
                                           "Por favor, selecciona primero un servicio.",
                                           {
@@ -2589,6 +2712,20 @@ function NuevaOrdenPage() {
                                         );
                                         setPosFilterTab("SERVICIOS");
                                         setActiveCategory("TODOS");
+                                        return;
+                                      }
+
+                                      // 5. Prenda estándar suelta o anexada al último servicio si no tiene matriz propia
+                                      const lastService = serviciosSel.length > 0 ? serviciosSel[serviciosSel.length - 1] : "";
+                                      if (lastService && enableServicios) {
+                                        addItemDesglose({
+                                          descripcion: `↳ ${item.nombre}`,
+                                          cantidad: 1,
+                                          precio_unitario: item.precio || 0,
+                                          es_libra: item.por_libra || false,
+                                          is_exento: !!item.is_exento,
+                                          servicio_origen: lastService,
+                                        });
                                       } else {
                                         addItem({
                                           descripcion: item.nombre,
@@ -2599,10 +2736,10 @@ function NuevaOrdenPage() {
                                         });
                                       }
                                     }}
-                                    className="group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center"
+                                    className="group relative flex flex-col items-center justify-center gap-2.5 p-3 sm:p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center cursor-pointer"
                                   >
                                     {item.imagen_url ? (
-                                      <div className="h-24 w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
+                                      <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-2xl bg-background shadow-md overflow-hidden group-hover:scale-105 transition-transform duration-300">
                                         <img
                                           src={item.imagen_url}
                                           alt={item.nombre}
@@ -2610,16 +2747,29 @@ function NuevaOrdenPage() {
                                         />
                                       </div>
                                     ) : (
-                                      <div className="flex h-24 w-24 items-center justify-center rounded-2xl bg-accent/30 text-4xl group-hover:bg-primary/10 transition-colors">
+                                      <div className="flex h-20 w-20 sm:h-24 sm:w-24 items-center justify-center rounded-2xl bg-accent/30 text-3xl sm:text-4xl group-hover:bg-primary/10 transition-colors">
                                         {item.icono || "👕"}
                                       </div>
                                     )}
                                     <div className="w-full text-center">
-                                      <div className="text-sm font-bold leading-tight line-clamp-1">
+                                      <div className="text-xs sm:text-sm font-bold leading-tight line-clamp-1">
                                         {item.nombre}
                                       </div>
-                                      <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
-                                        {formatRD(item.precio)}
+                                      {item.descripcion && (
+                                        <p className="text-[10px] text-muted-foreground line-clamp-1 mt-0.5" title={item.descripcion}>
+                                          {item.descripcion}
+                                        </p>
+                                      )}
+                                      <div className="mt-1 text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
+                                        {srvPrices.length > 1 ? (
+                                          <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                                            {srvPrices.length} servicios
+                                          </span>
+                                        ) : srvPrices.length === 1 ? (
+                                          formatRD(Number(srvPrices[0][1]))
+                                        ) : (
+                                          formatRD(item.precio)
+                                        )}
                                       </div>
                                     </div>
 
@@ -2811,10 +2961,6 @@ function NuevaOrdenPage() {
                   {/* Servicios Seleccionados en Carrito POS */}
                   {selectedServices.map((srv) => {
                       const count = serviceCountsMap[srv.nombre] || 0;
-                      const unitPrice =
-                        customServicePrices[srv.nombre] !== undefined
-                          ? customServicePrices[srv.nombre]
-                          : srv.precio || 0;
                       const prendasDelServicio = indexedItems.filter(
                         ({ item }) =>
                           item.descripcion.startsWith("↳") &&
@@ -2822,6 +2968,14 @@ function NuevaOrdenPage() {
                             ? item.servicio_origen === srv.nombre
                             : serviciosSel[0] === srv.nombre),
                       );
+                      const prendasConPrecio = prendasDelServicio.filter(
+                        ({ item }) => (item.precio_unitario || 0) > 0,
+                      );
+                      const isAgrupador = cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0;
+                      const unitPrice =
+                        customServicePrices[srv.nombre] !== undefined
+                          ? customServicePrices[srv.nombre]
+                          : (isAgrupador ? 0 : srv.precio || 0);
 
                       const isActiveService = desgloseServiceName === srv.nombre;
 
@@ -2833,7 +2987,7 @@ function NuevaOrdenPage() {
                             <div className="flex justify-between items-start">
                               <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
                                 <WashingMachine className="h-3.5 w-3.5 text-primary shrink-0" />
-                                <span className="line-clamp-1">Servicio: {srv.nombre}</span>
+                                <span className="line-clamp-1">{srv.nombre}</span>
                               </div>
                               <Button
                                 variant="ghost"
@@ -3706,10 +3860,17 @@ function NuevaOrdenPage() {
                     {/* Servicios Seleccionados para desglose */}
                     {selectedServices.map((srv) => {
                         const count = serviceCountsMap[srv.nombre] || 0;
+                        const prendasConPrecio = items.filter(
+                          (it) =>
+                            it.descripcion.startsWith("↳") &&
+                            it.servicio_origen === srv.nombre &&
+                            (it.precio_unitario || 0) > 0,
+                        );
+                        const isAgrupador = cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0;
                         const unitPrice =
                           customServicePrices[srv.nombre] !== undefined
                             ? customServicePrices[srv.nombre]
-                            : srv.precio || 0;
+                            : (isAgrupador ? 0 : srv.precio || 0);
                         return (
                           <div
                             key={`srv-${srv.id || srv.nombre}`}
@@ -3717,7 +3878,7 @@ function NuevaOrdenPage() {
                           >
                             <div className="flex-1">
                               <div className="font-semibold text-primary flex items-center gap-1.5 text-sm sm:text-base">
-                                <span>🧺</span> Servicio: {srv.nombre}
+                                <span>🧺</span> {srv.nombre}
                               </div>
                               <div className="text-xs text-muted-foreground">
                                 {srv.permitir_desglose
@@ -3797,10 +3958,19 @@ function NuevaOrdenPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-8 w-8 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md"
-                                onClick={() =>
-                                  setServiciosSel((prev) => prev.filter((x) => x !== srv.nombre))
-                                }
+                                className="h-8 w-8 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md cursor-pointer"
+                                onClick={() => {
+                                  setServiciosSel((prev) => prev.filter((x) => x !== srv.nombre));
+                                  setItems((prev) =>
+                                    prev.filter(
+                                      (it) =>
+                                        !(
+                                          it.descripcion.startsWith("↳") &&
+                                          it.servicio_origen === srv.nombre
+                                        ),
+                                    ),
+                                  );
+                                }}
                               >
                                 <Trash2 className="h-4 w-4" />
                               </Button>
@@ -5054,6 +5224,159 @@ function NuevaOrdenPage() {
         serviceName={desgloseServiceName}
       />
 
+      {/* Modal de Selección Rápida de Servicio para Prenda POS */}
+      <Dialog
+        open={!!servicePickerItem}
+        onOpenChange={(open) => !open && setServicePickerItem(null)}
+      >
+        <DialogContent className="rounded-3xl max-w-md p-0 border-none shadow-2xl bg-card text-foreground overflow-hidden">
+          {/* Header */}
+          <div className="bg-slate-50/80 dark:bg-slate-900/80 p-5 border-b border-border/50">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-sm flex items-center justify-center text-3xl shrink-0 overflow-hidden">
+                {servicePickerItem?.imagen_url ? (
+                  <img
+                    src={servicePickerItem.imagen_url}
+                    alt={servicePickerItem.nombre}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{servicePickerItem?.icono || "👕"}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-lg font-black font-display text-foreground leading-tight truncate">
+                  {servicePickerItem?.nombre}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Selecciona el servicio para esta prenda
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* List of Services */}
+          <div className="p-5 space-y-2.5 max-h-[60vh] overflow-y-auto">
+            <div className="flex items-center justify-between pb-1">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                Tratamientos Disponibles
+              </span>
+              <span className="text-[10px] font-bold text-primary">
+                1 clic para agregar
+              </span>
+            </div>
+
+            {(() => {
+              const map = new Map<string, { price: number; srvObj: any }>();
+              if (servicePickerItem?.precios_servicios && typeof servicePickerItem.precios_servicios === "object") {
+                Object.entries(servicePickerItem.precios_servicios).forEach(([k, p]) => {
+                  const num = Number(p);
+                  if (num > 0) {
+                    const srvObj = serviciosData.find(
+                      (s) => s.id === k || s.nombre.toLowerCase() === k.toLowerCase(),
+                    );
+                    const srvName = srvObj ? srvObj.nombre : k;
+                    if (!srvObj && k.length > 20 && k.includes("-")) return;
+                    if (!map.has(srvName)) {
+                      map.set(srvName, { price: num, srvObj });
+                    }
+                  }
+                });
+              }
+              return Array.from(map.entries()).map(([srvName, { price, srvObj }]) => {
+                return (
+                  <button
+                    key={srvName}
+                    type="button"
+                    onClick={() => {
+                      if (!servicePickerItem) return;
+                      const finalPrice = Number(price);
+                      // Asegurar que el servicio principal esté en la orden / serviciosSel
+                      setServiciosSel((prev) => {
+                        if (!prev.includes(srvName)) {
+                          return [...prev, srvName];
+                        }
+                        return prev;
+                      });
+
+                        // Agregar la prenda como desglose anidado "↳ [Prenda]"
+                        setItems((arr) => {
+                          const itemDesc = `↳ ${servicePickerItem.nombre}`;
+                          const idx = arr.findIndex(
+                            (x) =>
+                              x.descripcion === itemDesc &&
+                              x.precio_unitario === finalPrice &&
+                              x.servicio_origen === srvName,
+                          );
+                          if (idx > -1) {
+                            return arr.map((item, i) =>
+                              i === idx ? { ...item, cantidad: item.cantidad + 1 } : item,
+                            );
+                          }
+                          return [
+                            ...arr,
+                            {
+                              descripcion: itemDesc,
+                              cantidad: 1,
+                              precio_unitario: finalPrice,
+                              servicio_origen: srvName,
+                              es_libra: servicePickerItem.por_libra || false,
+                              is_exento: !!servicePickerItem.is_exento,
+                            },
+                          ];
+                        });
+                        toast.success(`${servicePickerItem.nombre} agregado a ${srvName} ✨`);
+                        setServicePickerItem(null);
+                      }}
+                      className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200/90 dark:border-slate-800 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all text-left cursor-pointer group active:scale-[0.98]"
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-3">
+                        <div className="h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 text-xl overflow-hidden group-hover:scale-105 group-hover:bg-primary/10 group-hover:text-primary transition-all">
+                          {srvObj?.imagen_url ? (
+                            <img
+                              src={srvObj.imagen_url}
+                              alt={srvName}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <span>{srvObj?.icono || "🧺"}</span>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-sm font-bold text-foreground block group-hover:text-primary transition-colors truncate">
+                            {srvName}
+                          </span>
+                          {srvObj?.descripcion ? (
+                            <span className="text-[11px] text-muted-foreground block line-clamp-1 mt-0.5">
+                              {srvObj.descripcion}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <span className="text-lg font-black font-display text-foreground group-hover:text-primary transition-colors block leading-tight">
+                            {formatRD(Number(price))}
+                          </span>
+                          {servicePickerItem?.por_libra && (
+                            <span className="text-[10px] text-muted-foreground font-semibold">
+                              / libra
+                            </span>
+                          )}
+                        </div>
+                        <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-primary group-hover:text-white text-slate-500 flex items-center justify-center transition-all shadow-xs shrink-0">
+                          <Plus className="h-4 w-4" />
+                        </div>
+                      </div>
+                    </button>
+                  );
+                });
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       {/* Modal de Selección de Categorías POS */}
       <Dialog open={showCategoryModal} onOpenChange={setShowCategoryModal}>
         <DialogContent className="max-w-3xl p-6 rounded-3xl overflow-hidden">
@@ -6156,13 +6479,17 @@ function AddItemDialog({
   }, [open]);
 
   function handleItemClick(it: CatalogoItem) {
+    const matchedServicePrice = serviceName && it.precios_servicios?.[serviceName] !== undefined
+      ? Number(it.precios_servicios[serviceName])
+      : (it.precio || 0);
+
     if (isDesglose && onAddDesglose) {
       onAddDesglose({
         descripcion: `↳ ${it.nombre}`,
         cantidad: 1,
-        precio_unitario: it.precio || 0,
+        precio_unitario: matchedServicePrice,
         es_libra: it.por_libra || false,
-        is_exento: (it.precio || 0) === 0,
+        is_exento: !!it.is_exento,
         servicio_origen: serviceName,
       });
       return;
@@ -6174,8 +6501,9 @@ function AddItemDialog({
       onAdd({
         descripcion: it.nombre,
         cantidad: 1,
-        precio_unitario: it.precio,
+        precio_unitario: matchedServicePrice,
         es_libra: it.por_libra,
+        is_exento: it.is_exento,
       });
     }
   }

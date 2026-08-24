@@ -309,10 +309,28 @@ serve(async (req) => {
                     .maybeSingle();
 
                 const wa = tenantRecord?.config?.whatsapp;
+                const { data: globalConfig } = await supabase
+                    .from('global_config')
+                    .select('bank_details')
+                    .eq('id', 1)
+                    .maybeSingle();
+                const activeProvider = globalConfig?.bank_details?.whatsapp_engine || 'klynn_connect';
+                const incomingProvider = isWasender ? 'wasender' : 'klynn_connect';
+
+                // Solo el proveedor seleccionado en /admin puede alimentar la bandeja.
+                // Esto evita que dos webhooks activos inserten el mismo mensaje.
+                if (incomingProvider !== activeProvider) {
+                    console.log(`[whatsapp-webhook] Evento de ${incomingProvider} ignorado; proveedor activo: ${activeProvider}`);
+                    return new Response('Inactive WhatsApp provider ignored.', { status: 200 });
+                }
+
                 const isKlynnConnectOpen = Boolean(wa?.enabled && wa?.klynn_connect_status === 'open');
                 const isWasenderConnected = Boolean(wa?.enabled && wa?.is_connected);
+                const isActiveProviderConnected = activeProvider === 'klynn_connect'
+                    ? isKlynnConnectOpen
+                    : isWasenderConnected;
 
-                if (!isKlynnConnectOpen && !isWasenderConnected) {
+                if (!isActiveProviderConnected) {
                     console.log(`[whatsapp-webhook] Lavandería ${tenantId} tiene WhatsApp DESCONECTADO. Mensaje entrante descartado.`);
                     return new Response('WhatsApp desconectado para este negocio. Mensaje ignorado.', { status: 200 });
                 }
@@ -478,10 +496,21 @@ serve(async (req) => {
                         .single();
                     
                     if (insertErr) {
-                        console.error('Error inserting conversation:', insertErr);
-                        throw insertErr;
+                        if (insertErr.code === '23505') {
+                            const { data: existingConversation } = await supabase
+                                .from('conversations')
+                                .select('id, unread')
+                                .eq('tenant_id', tenantId)
+                                .eq('phone', from)
+                                .maybeSingle();
+                            conversation = existingConversation;
+                        } else {
+                            console.error('Error inserting conversation:', insertErr);
+                            throw insertErr;
+                        }
+                    } else {
+                        conversation = newConv;
                     }
-                    conversation = newConv;
                 }
 
                 if (!conversation) throw new Error('Failed to resolve conversation');
@@ -500,6 +529,10 @@ serve(async (req) => {
                 });
 
                 if (msgInsertErr) {
+                    if (msgInsertErr.code === '23505') {
+                        console.log('Duplicate message rejected by unique index:', wamid);
+                        return new Response('Duplicate message', { status: 200 });
+                    }
                     console.error('Error inserting message:', msgInsertErr);
                     throw msgInsertErr;
                 }

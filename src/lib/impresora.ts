@@ -306,7 +306,7 @@ export function encodeEscPos(
     if (orden.servicios && orden.servicios.length > 0) {
       orden.servicios.forEach((sName) => {
         bytes.push(...BOLD_ON);
-        writeLine(`Servicio: ${sName}`);
+        writeLine(cleanText(`[ ${sName.toUpperCase()} ]`));
         bytes.push(...BOLD_OFF);
         
         const misPrendas = itemsDesglosados.filter(it => 
@@ -401,7 +401,11 @@ export function encodeEscPos(
       orden.servicios.forEach((sName) => {
         const srv = serviciosList.find((x) => x.nombre === sName);
         const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
-        writeLine(formatRow(`Servicio: ${sName}`, `RD$${p.toFixed(2)}`, columns));
+        if (p > 0) {
+          writeLine(formatRow(`${sName}`, `RD$${p.toFixed(2)}`, columns));
+        } else {
+          writeLine(cleanText(`[ ${sName.toUpperCase()} ]`));
+        }
         
         const misPrendas = itemsDesglosados.filter(it => 
           it.servicio_origen ? it.servicio_origen === sName : (orden.servicios.length === 1)
@@ -409,7 +413,7 @@ export function encodeEscPos(
         misPrendas.forEach(it => {
           const sub = it.cantidad * it.precio_unitario;
           const subStr = sub > 0 ? `RD$${sub.toFixed(2)}` : "---";
-          writeLine(formatRow(`  ${it.cantidad}x ${it.descripcion}`, subStr, columns));
+          writeLine(formatRow(`  ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}`, subStr, columns));
         });
       });
     }

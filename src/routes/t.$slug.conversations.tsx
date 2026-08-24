@@ -29,7 +29,7 @@ import { toast } from "sonner";
 import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
 import { useGlobalConfig, useConversations } from "@/hooks/use-queries";
-import { getKlynnConnectInstanceName } from "@/lib/whatsapp";
+import { sendWhatsAppMessage } from "@/lib/whatsapp";
 
 function BoringAvatar({ name, size }: { name: string; size: number }) {
   const colors = ["#00686c", "#32c2b9", "#edecb3", "#fad928", "#ff9915"];
@@ -434,7 +434,16 @@ function ConversationsPage() {
     if (error) {
       console.error("Error loading messages:", error);
     } else {
-      setMessages(data || []);
+      const seenIds = new Set<string>();
+      const seenWamids = new Set<string>();
+      const uniqueMessages = (data || []).filter((message) => {
+        if (seenIds.has(message.id)) return false;
+        if (message.wamid && seenWamids.has(message.wamid)) return false;
+        seenIds.add(message.id);
+        if (message.wamid) seenWamids.add(message.wamid);
+        return true;
+      });
+      setMessages(uniqueMessages);
       // Reset unread count for this conversation in DB
       await supabase
         .from('conversations')
@@ -485,7 +494,7 @@ function ConversationsPage() {
               }
               if (newMsg.conversation_id === selectedConvId) {
                 setMessages(prev => {
-                  if (prev.some(m => m.id === newMsg.id)) return prev;
+                  if (prev.some(m => m.id === newMsg.id || (newMsg.wamid && m.wamid === newMsg.wamid))) return prev;
                   return [...prev, newMsg];
                 });
                 
@@ -661,7 +670,7 @@ function ConversationsPage() {
   };
 
   const uploadAndSendMedia = async (file: File | Blob, type: string) => {
-    if (!isKlynnConnect && (!wa || !wa.enabled || !wa.api_key)) {
+    if (!wa?.enabled) {
       toast.error("❌ WhatsApp no está configurado en tu sucursal");
       return;
     }
@@ -670,31 +679,7 @@ function ConversationsPage() {
       const base64Data = await fileToBase64(file);
       const filename = file instanceof File ? file.name : (type === 'audio' ? 'audio.mp3' : 'archivo');
 
-      if (isKlynnConnect) {
-        await handleSend(type, base64Data, filename);
-      } else {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        // Upload through proxy to avoid CORS
-        const response = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=upload`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
-            api_key: wa.api_key,
-            base_url: wa.base_url || 'https://wasenderapi.com',
-            base64: base64Data
-          }),
-        });
-
-        const result = await response.json().catch(() => ({}));
-        const success = result.success === true;
-        const publicUrl = result.publicUrl || result.data?.url || result.url;
-
-        if (!success || !publicUrl) {
-          throw new Error(result.message || result.error || "Error al subir archivo");
-        }
-
-        await handleSend(type, publicUrl, filename);
-      }
+      await handleSend(type, base64Data, filename);
     } catch (err: any) {
       console.error("Upload error:", err);
       toast.error(`❌ Error al subir archivo: ${err.message}`);
@@ -718,7 +703,7 @@ function ConversationsPage() {
     }
     setReplyingTo(null);
 
-    if (!isKlynnConnect && (!wa || !wa.enabled || !wa.api_key)) {
+    if (!wa?.enabled) {
       toast.error("❌ WhatsApp no está configurado o habilitado en Configuración");
       if (type === 'text') setMessageText(currentMsg);
       return;
@@ -728,8 +713,6 @@ function ConversationsPage() {
     if (!selectedConv) return;
 
     const cleanPhone = selectedConv.phone.replace(/\D/g, '');
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
-    
     // Optimistic UI Update: render message immediately in 0ms!
     const tempId = `temp_${Date.now()}`;
     const initialDisplayContent = type === 'text' ? currentMsg : `[${type}] ${mediaUrl}${filename ? '|' + filename : ''}`;
@@ -748,78 +731,27 @@ function ConversationsPage() {
     setConversations(prev => prev.map(c => c.id === selectedConvId ? { ...c, last_msg: initialDisplayContent, time: new Date().toISOString() } : c));
 
     try {
-      let resData: any = {};
-      let wamid = `wamsg_${Date.now()}`;
+      const replyTo = originalReplyingTo?.wamid
+        ? Number.parseInt(originalReplyingTo.wamid, 10)
+        : undefined;
+      const result = await sendWhatsAppMessage(tenant, cleanPhone, {
+        text: type === "text" ? currentMsg : undefined,
+        mediaUrl,
+        mediaType: type === "text" ? undefined : type as "image" | "audio" | "video" | "document",
+        fileName: filename,
+        replyTo: Number.isFinite(replyTo) ? replyTo : undefined,
+      });
+      if (!result.ok) throw new Error(result.reason || "No se pudo enviar el mensaje");
 
-      if (isKlynnConnect) {
-        const action = type === 'text' ? 'send_message' : 'send_media';
-        const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=${action}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            instance_name: wa?.instance || getKlynnConnectInstanceName(tenant),
-            number: cleanPhone,
-            text: currentMsg,
-            mediaUrl,
-            mediaType: type,
-            fileName: filename,
-            server_url: globalCfg?.klynn_connect_url || 'https://wa.klynn.com.do',
-            api_key: globalCfg?.klynn_connect_apikey || 'klynn_evolution_secret_key_2026',
-          }),
-        });
-
-        resData = await res.json().catch(() => ({}));
-        if (!res.ok || resData.ok === false) {
-          throw new Error(resData.error || resData.message || `HTTP ${res.status}`);
-        }
-        wamid = resData.data?.key?.id || `kc_${Date.now()}`;
-      } else {
-        // WaSender proxy flow
-        let requestBody: any = { 
-          api_key: wa?.api_key,
-          base_url: wa?.base_url || 'https://wasenderapi.com',
-          to: cleanPhone, 
-          instance_id: wa?.instance 
-        };
-
-        if (type === 'text') {
-          requestBody.text = currentMsg;
-        } else if (type === 'image') {
-          requestBody.imageUrl = mediaUrl;
-        } else if (type === 'audio') {
-          requestBody.audioUrl = mediaUrl;
-          requestBody.ptt = true;
-        } else if (type === 'video') {
-          requestBody.videoUrl = mediaUrl;
-        } else if (type === 'document') {
-          requestBody.documentUrl = mediaUrl;
-          requestBody.filename = filename || 'document';
-        }
-
-        if (originalReplyingTo && originalReplyingTo.wamid) {
-          const parsedId = parseInt(originalReplyingTo.wamid, 10);
-          if (!isNaN(parsedId)) {
-            requestBody.replyTo = parsedId;
-          }
-        }
-
-        const res = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=send`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(requestBody),
-        });
-
-        resData = await res.json().catch(() => ({}));
-        if (!res.ok || resData.status === 'error') {
-          throw new Error(resData.message || `HTTP ${res.status}`);
-        }
-        wamid = resData.data?.id || `wsnd_${Date.now()}`;
-      }
+      const resData = result.data || {};
+      const wamid = result.messageId || `${result.provider}_${Date.now()}`;
 
       // Store lightweight reference in DB
       let finalStoredContent = initialDisplayContent;
-      if (type !== 'text' && isKlynnConnect) {
+      if (type !== 'text' && result.provider === "klynn_connect") {
         finalStoredContent = `[${type}] https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}${filename ? '|' + filename : ''}`;
+      } else if (type !== "text" && result.mediaUrl) {
+        finalStoredContent = `[${type}] ${result.mediaUrl}${filename ? '|' + filename : ''}`;
       }
 
       // Insert message into DB from client
