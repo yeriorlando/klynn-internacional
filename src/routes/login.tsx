@@ -14,6 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
+import { getTenantsForUserServer } from "@/lib/server-auth";
 
 export const Route = createFileRoute("/login")({
   head: () => ({
@@ -103,33 +104,45 @@ function LoginPage() {
         return;
       }
 
-      // 3. Buscar todos los perfiles de empleado asociados a este email
-      const { data: allEmps, error: errEmps } = await supabase
-        .from("empleados")
-        .select("*")
-        .eq("email", email.toLowerCase())
-        .eq("activo", true);
+      // 3. Buscar todos los perfiles de empleado asociados a este email de forma resiliente
+      let userTenants: { tenant: any; empleado: any }[] = [];
+      try {
+        userTenants = await getTenantsForUserServer({
+          data: { email: email.toLowerCase(), userId: authData.user.id },
+        });
+      } catch (err) {
+        console.warn("Error consultando tenants vía server function:", err);
+      }
 
-      if (errEmps || !allEmps || allEmps.length === 0) {
+      if (!userTenants || userTenants.length === 0) {
+        const { data: allEmps } = await supabase
+          .from("empleados")
+          .select("*")
+          .eq("email", email.toLowerCase())
+          .eq("activo", true);
+
+        if (allEmps && allEmps.length > 0) {
+          const tenantIds = allEmps.map((e) => e.tenant_id);
+          const { data: tenants } = await supabase.from("tenants").select("*").in("id", tenantIds);
+          if (tenants) {
+            userTenants = tenants
+              .map((t) => ({
+                tenant: t,
+                empleado: allEmps.find((e) => e.tenant_id === t.id),
+              }))
+              .filter((x) => x.empleado);
+          }
+        }
+      }
+
+      if (!userTenants || userTenants.length === 0) {
         setLoading(false);
         setError("No se encontraron lavanderías activas asociadas a tu cuenta.");
         return;
       }
 
-      const tenantIds = allEmps.map((e) => e.tenant_id);
-      const { data: tenants } = await supabase.from("tenants").select("*").in("id", tenantIds);
-
-      if (!tenants || tenants.length === 0) {
-        setLoading(false);
-        setError("Error al cargar la información de las sucursales.");
-        return;
-      }
-
-      if (tenants.length === 1) {
-        const tenant = tenants[0];
-        const emp = allEmps.find((e) => e.tenant_id === tenant.id);
-        if (!emp) throw new Error("Empleado no encontrado para este tenant");
-
+      if (userTenants.length === 1) {
+        const { tenant, empleado: emp } = userTenants[0];
         setSession({
           empleado_id: emp.id,
           tenant_id: tenant.id,
@@ -139,11 +152,9 @@ function LoginPage() {
         setLoading(false);
         setIsEntering(true);
         navigate({ to: "/t/$slug", params: { slug: tenant.slug } });
+        return;
       } else {
-        const accounts = tenants.map((t) => {
-          const emp = allEmps.find((e) => e.tenant_id === t.id);
-          return { emp, tenant: t };
-        });
+        const accounts = userTenants.map((ut) => ({ emp: ut.empleado, tenant: ut.tenant }));
         setMatchingAccounts(accounts);
         setLoading(false);
       }

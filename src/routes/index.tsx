@@ -212,6 +212,22 @@ function LandingPage() {
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [activeWaTab, setActiveWaTab] = useState<"lista" | "recibo">("lista");
 
+  // Interceptar invitaciones y tokens de recuperación que lleguen a la raíz
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hash = window.location.hash || "";
+      const search = window.location.search || "";
+      const isAuthHash = hash.includes("access_token") || hash.includes("type=recovery") || hash.includes("type=invite");
+      const isInviteOrRecovery = search.includes("invitation=") || search.includes("type=recovery") || search.includes("type=invite");
+
+      if (isAuthHash || isInviteOrRecovery) {
+        const query = search ? (search.includes("invitation=") ? search : `${search}&invitation=1`) : "?invitation=1";
+        window.location.replace(`/restablecer-contrasena${query}${hash}`);
+        return;
+      }
+    }
+  }, []);
+
   useEffect(() => {
     getPlans().then((p) => {
       if (p && p.length > 0) setPlans(p);

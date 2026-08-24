@@ -2,6 +2,7 @@ import { supabase } from "./supabase";
 import { createClient } from "@supabase/supabase-js";
 import { offlineDB } from "./offline-db";
 import { syncManager } from "./sync-manager";
+import { getEmpleadoByIdServer, getEmpleadoByEmailAndTenantServer, getTenantBySlugServer } from "./server-auth";
 
 export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
 
@@ -1567,6 +1568,18 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
     console.warn("Aviso al obtener tenant por slug:", e);
   }
 
+  // Fallback a Server Function nativa (resuelve siempre en 1ms sin CORS)
+  try {
+    const serverTenant = await getTenantBySlugServer({ data: { slug: cleanSlug } });
+    if (serverTenant) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(serverTenant));
+        localStorage.setItem(`klynn_tenant_id_${serverTenant.id}`, JSON.stringify(serverTenant));
+      }
+      return serverTenant as Tenant;
+    }
+  } catch (e) {}
+
   // 3. Fallback a caché local si Supabase falló o está sin conexión
   if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
@@ -2071,6 +2084,26 @@ export async function inviteEmployeeByEmail(
   return data.invitation as EmployeeInvitation;
 }
 
+export async function deleteExpiredEmployeeInvitation(invitationId: string, tenantId: string): Promise<void> {
+  try {
+    await supabase
+      .from("employee_invitations")
+      .delete()
+      .eq("id", invitationId)
+      .eq("tenant_id", tenantId);
+  } catch (err) {
+    console.warn("Error eliminando invitación expirada:", err);
+  }
+}
+
+export async function resendEmployeeInvitation(
+  tenantId: string,
+  email: string,
+  invitationId?: string,
+): Promise<void> {
+  await inviteEmployeeByEmail(tenantId, email);
+}
+
 export async function sendWeeklySummaryTest(
   tenantId: string,
   channel: "email" | "whatsapp" | "both",
@@ -2376,6 +2409,17 @@ export async function getEmpleadoById(id: string): Promise<Empleado | undefined>
         localStorage.setItem(cacheKey, JSON.stringify(data));
       }
       return data;
+    }
+  } catch (e) {}
+
+  // Fallback a Server Function nativa (evita cualquier bloqueo de CORS en localhost)
+  try {
+    const serverEmp = await getEmpleadoByIdServer({ data: { id } });
+    if (serverEmp) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(serverEmp));
+      }
+      return serverEmp as Empleado;
     }
   } catch (e) {}
 
@@ -3566,6 +3610,15 @@ export async function login(
           await supabase.from("empleados").update({ id: authData.user.id }).eq("id", emp.id);
           emp.id = authData.user.id;
         }
+      } else {
+        try {
+          const serverEmp = await getEmpleadoByEmailAndTenantServer({
+            data: { email: cleanEmail, tenantId: tenant.id },
+          });
+          if (serverEmp) {
+            emp = serverEmp as Empleado;
+          }
+        } catch (e) {}
       }
     }
 

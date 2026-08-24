@@ -2,9 +2,10 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState } from "react";
 import { 
-  ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
+  ArrowRight, ArrowLeft, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
   MapPin, ShieldCheck 
 } from "lucide-react";
+import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Input } from "@/components/ui/input";
@@ -85,21 +86,49 @@ function TenantLoginPage() {
 
   if (!tenant) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center p-6 text-center bg-slate-950 text-slate-100">
-        <div className="mb-6 rounded-full bg-rose-500/10 p-6 text-rose-500 border border-rose-500/20 shadow-lg">
-          <AlertCircle className="h-12 w-12" />
+      <div className="flex min-h-screen flex-col items-center justify-center p-6 pb-20 sm:pb-28 text-center bg-gradient-to-b from-slate-50 via-slate-100/70 to-slate-200/50 text-slate-800 font-sans antialiased relative overflow-hidden selection:bg-[#F0B900] selection:text-slate-950">
+        <SeedBootstrap />
+
+        {/* Halo ambiental suave */}
+        <div className="absolute w-[450px] h-[450px] rounded-full bg-[#1B4B73]/5 blur-[100px] pointer-events-none z-0" />
+
+        {/* Logotipo de Klynn elevado arriba y más grande */}
+        <div className="mb-7 sm:mb-8 flex flex-col items-center justify-center relative z-10 transition-transform hover:scale-105">
+          <Logo size="lg" />
         </div>
-        <h1 className="text-2xl font-black tracking-tight">Lavandería no encontrada</h1>
-        <p className="mt-2 text-sm text-slate-400 max-w-sm">
-          El subdominio <span className="font-mono text-amber-400 font-bold">"{slug}"</span> no está registrado o fue desactivado.
-        </p>
-        <Link 
-          to="/login" 
-          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#1B4B73] hover:bg-[#153a5b] text-white font-bold text-xs shadow-md transition-all"
-        >
-          <span>Ir al inicio de sesión general</span>
-          <ArrowRight className="h-4 w-4" />
-        </Link>
+
+        {/* Tarjeta Hallmark en tema claro */}
+        <div className="w-full max-w-[420px] bg-white/95 backdrop-blur-xl rounded-3xl border border-slate-200/80 shadow-[0_20px_50px_-15px_rgba(15,23,42,0.08)] p-7 sm:p-8 relative z-10 animate-in fade-in zoom-in-95 duration-300">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-rose-50 border border-rose-100 shadow-xs">
+            <AlertCircle className="h-7 w-7 text-rose-500" />
+          </div>
+
+          <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
+            Lavandería no encontrada
+          </h1>
+          
+          <p className="mt-2 text-xs sm:text-sm text-slate-500 leading-relaxed max-w-xs mx-auto">
+            El subdominio <span className="font-semibold text-slate-800 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200/60 font-mono">"{slug}"</span> no está registrado o fue desactivado.
+          </p>
+
+          <div className="mt-6 flex flex-col gap-2.5">
+            <Link 
+              to="/login" 
+              className="inline-flex items-center justify-center gap-2 w-full px-5 py-3 rounded-2xl bg-[#1B4B73] hover:bg-[#153a5b] text-white font-bold text-xs sm:text-sm shadow-md transition-all active:scale-[0.98]"
+            >
+              <span>Ir al inicio de sesión general</span>
+              <ArrowRight className="h-4 w-4" />
+            </Link>
+
+            <Link
+              to="/"
+              className="inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-800 transition-colors py-1.5"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              <span>Volver a la página principal</span>
+            </Link>
+          </div>
+        </div>
       </div>
     );
   }

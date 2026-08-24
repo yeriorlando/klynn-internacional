@@ -40,6 +40,7 @@ import {
   FilePlus,
   Ban,
   BadgePercent,
+  MessageCircle,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -77,7 +78,9 @@ import {
   resendEmployeeSignUpOtp,
   verifyEmployeeOtpAndSave,
   getEmployeeInvitations,
+  deleteExpiredEmployeeInvitation,
   inviteEmployeeByEmail,
+  resendEmployeeInvitation,
   getGlobalConfig,
   type Empleado,
   type RolEmpleado,
@@ -107,6 +110,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 const PERMISOS_CONFIG: Record<string, { icon: any; color: string; bg: string; border: string }> = {
+  conversations: { icon: MessageCircle, color: "text-green-600 dark:text-green-400", bg: "bg-green-50 dark:bg-green-950/60", border: "border-green-200 dark:border-green-800" },
   dashboard: { icon: LayoutDashboard, color: "text-sky-600 dark:text-sky-400", bg: "bg-sky-50 dark:bg-sky-950/60", border: "border-sky-200 dark:border-sky-800" },
   "nueva-orden": { icon: PlusCircle, color: "text-emerald-600 dark:text-emerald-400", bg: "bg-emerald-50 dark:bg-emerald-950/60", border: "border-emerald-200 dark:border-emerald-800" },
   ordenes: { icon: ShoppingBag, color: "text-blue-600 dark:text-blue-400", bg: "bg-blue-50 dark:bg-blue-950/60", border: "border-blue-200 dark:border-blue-800" },
@@ -162,6 +166,10 @@ function PersonalPage() {
     queryKey: ["employee-invitations", tenantId],
     queryFn: () => getEmployeeInvitations(tenantId),
     enabled: Boolean(tenantId && tenantId !== "__loading__"),
+    staleTime: 0,
+    refetchOnMount: "always",
+    refetchOnWindowFocus: true,
+    refetchInterval: 15_000,
   });
 
   const [edit, setEdit] = useState<Empleado | null>(null);
@@ -182,6 +190,34 @@ function PersonalPage() {
     queryClient.invalidateQueries({ queryKey: ["empleados", tenantId] });
     queryClient.invalidateQueries({ queryKey: ["employee-invitations", tenantId] });
   };
+
+  async function handleDeleteInvitation(invitationId: string) {
+    try {
+      await deleteExpiredEmployeeInvitation(invitationId, tenantId);
+      toast.success("Invitación vencida eliminada");
+      queryClient.setQueryData<EmployeeInvitation[]>(["employee-invitations", tenantId], (current = []) =>
+        current.filter((invitation) => invitation.id !== invitationId),
+      );
+      refresh();
+    } catch (error: any) {
+      toast.error(error?.message || "No se pudo eliminar la invitación");
+    }
+  }
+
+  async function handleResendInvitation(invitation: EmployeeInvitation) {
+    try {
+      const replacement = await resendEmployeeInvitation(invitation.id, tenantId, invitation.email);
+      queryClient.setQueryData<EmployeeInvitation[]>(["employee-invitations", tenantId], (current = []) => [
+        replacement,
+        ...current.filter((item) => item.id !== invitation.id),
+      ]);
+      toast.success(`Invitación reenviada a ${invitation.email}`);
+      refresh();
+    } catch (error: any) {
+      queryClient.invalidateQueries({ queryKey: ["employee-invitations", tenantId] });
+      toast.error(error?.message || "No se pudo reenviar la invitación");
+    }
+  }
 
   if (!user || user.tenant.id === "__loading__" || (loadingEmps && emps.length === 0)) {
     return <GlobalPageLoader text="Cargando personal..." />;
@@ -226,7 +262,12 @@ function PersonalPage() {
       {/* GRID DE 3 COLUMNAS DE TARJETAS */}
       <div className="grid gap-4 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
         {invitations.map((invitation) => (
-          <InvitationCard key={invitation.id} invitation={invitation} />
+          <InvitationCard
+            key={invitation.id}
+            invitation={invitation}
+            onDelete={() => handleDeleteInvitation(invitation.id)}
+            onResend={() => handleResendInvitation(invitation)}
+          />
         ))}
         {emps.map((e) => {
           const stats = ordenes.filter((o) => o.empleado_id === e.id && o.estado !== "ANULADA");
@@ -383,10 +424,33 @@ function EmployeeStatusBadge({ empleado }: { empleado: Empleado }) {
   );
 }
 
-function InvitationCard({ invitation }: { invitation: EmployeeInvitation }) {
+function InvitationCard({
+  invitation,
+  onDelete,
+  onResend,
+}: {
+  invitation: EmployeeInvitation;
+  onDelete: () => Promise<void> | void;
+  onResend: () => Promise<void> | void;
+}) {
   const expired = new Date(invitation.expires_at).getTime() <= Date.now();
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [resendOpen, setResendOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function confirmAction(action: () => Promise<void> | void, close: (open: boolean) => void) {
+    setBusy(true);
+    try {
+      await action();
+      close(false);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
-    <Card className="relative overflow-hidden rounded-2xl border border-dashed border-amber-300 bg-amber-50/40 p-5 shadow-2xs flex flex-col justify-between gap-4">
+    <>
+      <Card className="relative overflow-hidden rounded-2xl border border-dashed border-amber-300 bg-amber-50/40 p-5 shadow-2xs flex flex-col justify-between gap-4">
       <div className="flex items-center gap-3 min-w-0">
         <div className="h-11 w-11 rounded-full bg-amber-100 text-amber-700 border border-amber-200 flex items-center justify-center shrink-0">
           <Mail className="h-5 w-5" />
@@ -405,11 +469,80 @@ function InvitationCard({ invitation }: { invitation: EmployeeInvitation }) {
       </div>
       <div className="flex items-center gap-2 border-t border-amber-200/70 pt-3 text-[11px] font-semibold text-amber-800">
         <Clock3 className="h-3.5 w-3.5" />
-        {expired
-          ? "El enlace ya no permite completar el acceso."
-          : `Vence el ${new Date(invitation.expires_at).toLocaleString("es-DO", { dateStyle: "medium", timeStyle: "short" })}`}
+        <span className="flex-1">
+          {expired
+            ? "El enlace ya no permite completar el acceso."
+            : `Vence el ${new Date(invitation.expires_at).toLocaleString("es-DO", { dateStyle: "medium", timeStyle: "short" })}`}
+        </span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={busy}
+            onClick={() => setResendOpen(true)}
+            className="h-8 rounded-lg border-[#1B4B73]/25 bg-white px-2.5 text-[10px] font-bold text-[#1B4B73] hover:bg-sky-50"
+          >
+            {busy ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" /> : <RotateCcw className="mr-1 h-3.5 w-3.5" />}
+            Reenviar
+          </Button>
+          {expired && (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={busy}
+              onClick={() => setDeleteOpen(true)}
+              className="h-8 rounded-lg border-rose-200 bg-white px-2.5 text-[10px] font-bold text-rose-700 hover:bg-rose-50"
+            >
+              <Trash2 className="mr-1 h-3.5 w-3.5" />
+              Eliminar
+            </Button>
+          )}
+        </div>
       </div>
-    </Card>
+      </Card>
+
+      <AlertDialog open={resendOpen} onOpenChange={setResendOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Reenviar invitación?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se generará un enlace nuevo para <strong>{invitation.email}</strong> y el enlace anterior dejará de estar disponible.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction disabled={busy} onClick={() => confirmAction(onResend, setResendOpen)}>
+              {busy ? "Enviando..." : "Reenviar invitación"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {expired && (
+        <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar invitación vencida?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Se eliminará la invitación vencida de esta lista. Esta acción no elimina ningún empleado ni otro dato.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={busy}>Cancelar</AlertDialogCancel>
+              <AlertDialogAction
+                disabled={busy}
+                className="bg-rose-600 hover:bg-rose-700"
+                onClick={() => confirmAction(onDelete, setDeleteOpen)}
+              >
+                {busy ? "Eliminando..." : "Eliminar invitación"}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      )}
+    </>
   );
 }
 
@@ -467,6 +600,8 @@ function EmpleadoDialog({
   const [resendingOtp, setResendingOtp] = useState(false);
   const [creationMode, setCreationMode] = useState<"manual" | "invite" | null>(empleado ? "manual" : null);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<RolEmpleado>("VENDEDOR");
+  const [invitePermissions, setInvitePermissions] = useState<string[]>(getPermisosPorRol("VENDEDOR"));
   const [inviting, setInviting] = useState(false);
 
   useEffect(() => {
@@ -487,6 +622,8 @@ function EmpleadoDialog({
     setCanResendOtp(false);
     setCreationMode(empleado ? "manual" : null);
     setInviteEmail("");
+    setInviteRole("VENDEDOR");
+    setInvitePermissions(getPermisosPorRol("VENDEDOR"));
     if (empleado) {
       setF({
         ...empty,
@@ -717,7 +854,7 @@ function EmpleadoDialog({
     }
     setInviting(true);
     try {
-      await inviteEmployeeByEmail(tenantId, email);
+      await inviteEmployeeByEmail(tenantId, email, inviteRole, invitePermissions);
       toast.success(`Invitación enviada a ${email}`);
       onDone();
     } catch (error: any) {
@@ -725,6 +862,30 @@ function EmpleadoDialog({
     } finally {
       setInviting(false);
     }
+  }
+
+  function changeInviteRole(role: RolEmpleado) {
+    setInviteRole(role);
+    setInvitePermissions(getPermisosPorRol(role));
+  }
+
+  function toggleInvitePermission(permission: string) {
+    setInvitePermissions((current) => current.includes(permission)
+      ? current.filter((item) => item !== permission)
+      : [...current, permission]
+    );
+  }
+
+  function resetInviteRoleDefaults() {
+    setInvitePermissions(getPermisosPorRol(inviteRole));
+  }
+
+  function selectAllInvitePermissions() {
+    setInvitePermissions(PERMISOS_SISTEMA.map((permission) => permission.id));
+  }
+
+  function deselectAllInvitePermissions() {
+    setInvitePermissions([]);
   }
 
   if (!empleado && creationMode === null) {
@@ -769,12 +930,12 @@ function EmpleadoDialog({
   if (!empleado && creationMode === "invite") {
     return (
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="rounded-2xl max-w-md border-none shadow-2xl bg-background p-5 sm:p-6">
+        <DialogContent className="rounded-2xl max-w-lg max-h-[92vh] overflow-y-auto border-none shadow-2xl bg-background p-4 sm:p-5">
           <DialogHeader className="pr-8">
             <DialogTitle className="font-display text-xl font-black">Invitar por correo</DialogTitle>
             <p className="text-sm text-muted-foreground">Introduce el correo electrónico del empleado.</p>
           </DialogHeader>
-          <div className="space-y-2 pt-2">
+          <div className="space-y-3 pt-1">
             <Label htmlFor="employee-invite-email" className="text-xs font-bold">Correo electrónico</Label>
             <div className="relative">
               <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -791,11 +952,70 @@ function EmpleadoDialog({
                   }
                 }}
                 placeholder="empleado@correo.com"
-                className="h-11 rounded-xl pl-10"
+                className="h-10 rounded-xl pl-10 bg-white border-border/70"
               />
             </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs font-bold">Rol en el negocio</Label>
+              <Select value={inviteRole} onValueChange={(value) => changeInviteRole(value as RolEmpleado)}>
+                <SelectTrigger className="h-10 rounded-xl bg-white border-border/70">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="rounded-xl">
+                  {(["ADMIN", "SUPERVISOR", "VENDEDOR", "RECEPCIONISTA", "REPARTIDOR", "OPERARIO"] as RolEmpleado[]).map((role) => (
+                    <SelectItem key={role} value={role}>{role}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[10px] leading-tight text-muted-foreground">El rol establece los permisos iniciales; puedes ajustarlos abajo.</p>
+            </div>
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-1 p-1.5 px-2.5 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
+                <div className="flex items-center gap-1.5">
+                  <Badge className={`font-semibold text-[10px] px-2 py-0.5 border-none ${getRoleBadgeClass(inviteRole)}`}>
+                    Rol: {inviteRole}
+                  </Badge>
+                  <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
+                    ({invitePermissions.length}/{PERMISOS_SISTEMA.length})
+                  </span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button type="button" variant="ghost" size="sm" onClick={resetInviteRoleDefaults} disabled={inviteRole === "ADMIN"} className="h-7 rounded-lg text-[10px] text-primary hover:bg-primary/10 gap-1 px-1.5 font-bold cursor-pointer">
+                    <RotateCcw className="h-3 w-3" /> Valores del Rol
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={selectAllInvitePermissions} disabled={inviteRole === "ADMIN"} className="h-7 rounded-lg text-[10px] text-slate-700 hover:bg-slate-200 px-1.5 font-bold cursor-pointer">
+                    Todos
+                  </Button>
+                  <Button type="button" variant="ghost" size="sm" onClick={deselectAllInvitePermissions} disabled={inviteRole === "ADMIN"} className="h-7 rounded-lg text-[10px] text-muted-foreground hover:bg-slate-200 px-1.5 font-bold cursor-pointer">
+                    Ninguno
+                  </Button>
+                </div>
+              </div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-bold">Permisos iniciales</Label>
+                <Badge variant="outline" className="text-[10px] bg-white">{invitePermissions.length} seleccionados</Badge>
+              </div>
+              <ScrollArea className="h-32 rounded-xl border border-border/70 bg-white p-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-1">
+                  {PERMISOS_SISTEMA.map((permission) => (
+                    <label key={permission.id} className={`flex items-start gap-1.5 p-1.5 rounded-xl border transition-all cursor-pointer ${invitePermissions.includes(permission.id) ? "bg-white border-primary/40 shadow-xs ring-1 ring-primary/20" : "bg-white border-border/50 hover:border-border"} ${inviteRole === "ADMIN" ? "opacity-90" : ""}`}>
+                      <Checkbox
+                        checked={inviteRole === "ADMIN" || invitePermissions.includes(permission.id)}
+                        disabled={inviteRole === "ADMIN"}
+                        onCheckedChange={() => toggleInvitePermission(permission.id)}
+                        className="mt-0.5 rounded-md h-3.5 w-3.5 cursor-pointer"
+                      />
+                      <span className="grid gap-0.5 leading-tight">
+                        <span className="text-[11px] font-bold">{permission.nombre}</span>
+                        <span className="text-[9px] leading-tight text-muted-foreground">{permission.descripcion}</span>
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
           </div>
-          <DialogFooter className="gap-2 sm:gap-2 pt-3">
+          <DialogFooter className="gap-2 sm:gap-2 pt-2">
             <Button variant="outline" onClick={() => setCreationMode(null)} disabled={inviting} className="rounded-xl">
               <ArrowLeft className="mr-1.5 h-4 w-4" /> Atrás
             </Button>

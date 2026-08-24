@@ -4,6 +4,8 @@ CREATE TABLE IF NOT EXISTS public.employee_invitations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   email TEXT NOT NULL,
+  rol TEXT NOT NULL DEFAULT 'VENDEDOR',
+  permisos TEXT[] NOT NULL DEFAULT ARRAY['dashboard', 'nueva-orden', 'ordenes', 'procesos', 'caja', 'clientes']::TEXT[],
   status TEXT NOT NULL DEFAULT 'pending'
     CHECK (status IN ('pending', 'accepted', 'cancelled')),
   invited_by UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
@@ -13,6 +15,12 @@ CREATE TABLE IF NOT EXISTS public.employee_invitations (
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+ALTER TABLE public.employee_invitations
+  ADD COLUMN IF NOT EXISTS rol TEXT NOT NULL DEFAULT 'VENDEDOR';
+
+ALTER TABLE public.employee_invitations
+  ADD COLUMN IF NOT EXISTS permisos TEXT[] NOT NULL DEFAULT ARRAY['dashboard', 'nueva-orden', 'ordenes', 'procesos', 'caja', 'clientes']::TEXT[];
 
 CREATE UNIQUE INDEX IF NOT EXISTS employee_invitations_pending_email_key
   ON public.employee_invitations (tenant_id, lower(email))
@@ -101,10 +109,10 @@ BEGIN
     employee_name,
     lower(NEW.email),
     '***',
-    'VENDEDOR',
+    COALESCE(invitation_record.rol, 'VENDEDOR'),
     true,
-    ARRAY['dashboard', 'nueva-orden', 'ordenes', 'procesos', 'caja', 'clientes']::TEXT[],
-    10,
+    COALESCE(invitation_record.permisos, ARRAY['dashboard', 'nueva-orden', 'ordenes', 'procesos', 'caja', 'clientes']::TEXT[]),
+    CASE WHEN COALESCE(invitation_record.rol, 'VENDEDOR') = 'ADMIN' THEN 100 ELSE 10 END,
     now()
   )
   ON CONFLICT (id, tenant_id) DO NOTHING;
