@@ -180,6 +180,7 @@ function ConversationsPage() {
   const { data: cachedConversations = [], isLoading: isQueryLoading } = useConversations(tenantId || "");
   const [conversations, setConversations] = useState<DBConversation[]>(() => cachedConversations as any);
   const [messages, setMessages] = useState<DBMessage[]>([]);
+  const [isMessagesLoading, setIsMessagesLoading] = useState(false);
   const [selectedConvId, setSelectedConvId] = useState<string | null>(() => (cachedConversations[0]?.id as string) || null);
   const [search, setSearch] = useState("");
   const [messageText, setMessageText] = useState("");
@@ -205,6 +206,7 @@ function ConversationsPage() {
   }, [cachedConversations]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesRequestRef = useRef(0);
   
   // Media Recording States
   const [isRecording, setIsRecording] = useState(false);
@@ -425,15 +427,30 @@ function ConversationsPage() {
 
   // 2. Fetch Messages for selected conversation
   const fetchMessages = async (convId: string) => {
-    const { data, error } = await supabase
-      .from('messages')
-      .select('*')
-      .eq('conversation_id', convId)
-      .order('time', { ascending: true });
+    const requestId = ++messagesRequestRef.current;
+    setIsMessagesLoading(true);
+    setMessages([]);
 
-    if (error) {
-      console.error("Error loading messages:", error);
-    } else {
+    try {
+      // Fetch only fields rendered by the chat. `payload` can contain a large
+      // provider response and made opening conversations unnecessarily slow.
+      const { data, error } = await supabase
+        .from('messages')
+        .select('id,tenant_id,conversation_id,role,content,time,wamid,reply_to_id,reactions,status')
+        .eq('tenant_id', tenantId)
+        .eq('conversation_id', convId)
+        .order('time', { ascending: false })
+        .limit(150);
+
+      // A slower response from a previously selected chat must never replace
+      // the messages of the current chat.
+      if (requestId !== messagesRequestRef.current) return;
+
+      if (error) {
+        console.error("Error loading messages:", error);
+        return;
+      }
+
       const seenIds = new Set<string>();
       const seenWamids = new Set<string>();
       const uniqueMessages = (data || []).filter((message) => {
@@ -442,15 +459,23 @@ function ConversationsPage() {
         seenIds.add(message.id);
         if (message.wamid) seenWamids.add(message.wamid);
         return true;
-      });
-      setMessages(uniqueMessages);
-      // Reset unread count for this conversation in DB
-      await supabase
+      }).reverse();
+
+      setMessages(uniqueMessages as DBMessage[]);
+      setConversations(prev => prev.map(c => c.id === convId ? { ...c, unread: 0 } : c));
+
+      // Marking as read must not block rendering the messages.
+      void supabase
         .from('conversations')
         .update({ unread: 0 })
-        .eq('id', convId);
-      
-      setConversations(prev => prev.map(c => c.id === convId ? { ...c, unread: 0 } : c));
+        .eq('id', convId)
+        .then(({ error: updateError }) => {
+          if (updateError) console.error("Error marking conversation as read:", updateError);
+        });
+    } finally {
+      if (requestId === messagesRequestRef.current) {
+        setIsMessagesLoading(false);
+      }
     }
   };
 
@@ -1030,7 +1055,12 @@ function ConversationsPage() {
                 opacity: isDarkTheme ? 0.9 : 1
               }}
             >
-              {messages.length === 0 ? (
+              {isMessagesLoading ? (
+                <div className="m-auto flex items-center gap-2 rounded-xl border border-black/5 bg-white/85 px-4 py-3 text-sm font-medium text-muted-foreground shadow-sm dark:bg-[#202c33]/85">
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                  Cargando mensajes...
+                </div>
+              ) : messages.length === 0 ? (
                 <div className="m-auto text-center text-xs p-6 bg-white/80 dark:bg-[#202c33]/80 rounded-2xl max-w-xs shadow-md border border-black/5">
                   <MessageSquare className="h-8 w-8 text-primary mx-auto mb-2 opacity-55 animate-pulse" />
                   <p className="font-bold text-foreground">Comienzo del chat</p>

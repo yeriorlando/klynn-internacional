@@ -2929,15 +2929,29 @@ export async function saveOrden(o: Orden) {
     const { error } = await supabase.from("ordenes").upsert(o);
     if (error) throw error;
   } catch (err) {
-    console.warn("Offline outbox fallback for orden:", err);
-    await offlineDB.addToOutbox({
-      id: o.id,
-      tenant_id: o.tenant_id,
-      table_name: "ordenes",
-      action: "UPSERT",
-      payload: o,
-    });
-    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    const message = err instanceof Error
+      ? err.message
+      : String((err as any)?.message || err || "");
+    const isConnectivityError =
+      (typeof navigator !== "undefined" && !navigator.onLine) ||
+      /failed to fetch|networkerror|network request|load failed|timeout|timed out|connection|fetch failed/i.test(message);
+
+    if (isConnectivityError) {
+      console.warn("Offline outbox fallback for orden:", err);
+      await offlineDB.addToOutbox({
+        id: o.id,
+        tenant_id: o.tenant_id,
+        table_name: "ordenes",
+        action: "UPSERT",
+        payload: o,
+      });
+      window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+      return;
+    }
+
+    // Schema, validation and permission errors are not offline conditions.
+    // Propagate them so the order flow stops and always releases its loader.
+    throw err;
   }
 }
 
