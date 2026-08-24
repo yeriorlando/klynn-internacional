@@ -772,6 +772,12 @@ function NuevaOrdenPage() {
   const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("PAGO_AL_RETIRAR");
   const [recibido, setRecibido] = useState<number>(0);
   const [isCreatingOrden, setIsCreatingOrden] = useState(false);
+  const creatingOrderRef = useRef(false);
+
+  const releaseOrderCreation = () => {
+    creatingOrderRef.current = false;
+    setIsCreatingOrden(false);
+  };
   const [abonoCredito, setAbonoCredito] = useState<number>(0);
   const [referencia, setReferencia] = useState("");
   const [showRefInput, setShowRefInput] = useState(false);
@@ -1588,7 +1594,10 @@ function NuevaOrdenPage() {
 
   
   async function onCrearOrden(forceCreditAuth = false) {
-    if (isCreatingOrden) return;
+    // React state is asynchronous; the ref closes the double-click window
+    // immediately and prevents duplicate orders.
+    if (creatingOrderRef.current || isCreatingOrden) return;
+    creatingOrderRef.current = true;
     setIsCreatingOrden(true);
 
     // 1. Validar cliente para crédito
@@ -1599,7 +1608,7 @@ function NuevaOrdenPage() {
         cliente.tipo === "Consumidor Final"
       ) {
         toast.error("Las ventas a crédito deben asignarse a un cliente registrado.");
-        setIsCreatingOrden(false);
+        releaseOrderCreation();
         return;
       }
     }
@@ -1633,14 +1642,14 @@ function NuevaOrdenPage() {
         targetCliente = c;
       } else {
         toast.error("Selecciona un cliente");
-        setIsCreatingOrden(false);
+        releaseOrderCreation();
         return;
       }
     }
 
     if (items.length === 0 && serviciosSel.length === 0) {
       toast.error("Agrega al menos una prenda o selecciona un servicio");
-      setIsCreatingOrden(false);
+      releaseOrderCreation();
       return;
     }
 
@@ -1654,12 +1663,12 @@ function NuevaOrdenPage() {
     } else if (condicionCobro === "ANTICIPO") {
       if (anticipoMonto <= 0) {
         toast.error("Ingresa un monto de anticipo mayor a RD$0.00");
-        setIsCreatingOrden(false);
+        releaseOrderCreation();
         return;
       }
       if (anticipoMonto >= total) {
         toast.error("El anticipo debe ser menor al total. Si desea pagar completo, use 'Cobrar ahora'.");
-        setIsCreatingOrden(false);
+        releaseOrderCreation();
         return;
       }
       pagado = anticipoMonto;
@@ -1670,7 +1679,7 @@ function NuevaOrdenPage() {
     } else if (condicionCobro === "CREDITO") {
       if (abonoCredito >= total) {
         toast.error("El abono debe ser menor al total. Si desea pagar completo, use 'Cobrar ahora'.");
-        setIsCreatingOrden(false);
+        releaseOrderCreation();
         return;
       }
       pagado = abonoCredito;
@@ -1683,7 +1692,7 @@ function NuevaOrdenPage() {
       const limite = targetCliente?.limite_credito || 0;
       if (limite > 0 && deudaActual + saldo > limite && !forceCreditAuth) {
         setShowCreditLimitConfirm(true);
-        setIsCreatingOrden(false);
+        releaseOrderCreation();
         return;
       }
     }
@@ -1691,7 +1700,7 @@ function NuevaOrdenPage() {
     // 3. Validar caja si hay pago inmediato
     if (pagado > 0 && !caja) {
       toast.error("Abre la caja antes de registrar un pago");
-      setIsCreatingOrden(false);
+      releaseOrderCreation();
       return;
     }
 
@@ -1711,7 +1720,7 @@ function NuevaOrdenPage() {
       if (instrumentoPago === "EFECTIVO") {
         if (recibido < pagado) {
           toast.error("El monto recibido es menor al monto a cobrar");
-          setIsCreatingOrden(false);
+          releaseOrderCreation();
           return;
         }
         metodoFinal = "EFECTIVO";
@@ -1730,7 +1739,7 @@ function NuevaOrdenPage() {
       } else if (instrumentoPago === "TRANSFERENCIA") {
         if (!referencia.trim()) {
           toast.error("La referencia de transferencia es obligatoria.");
-          setIsCreatingOrden(false);
+          releaseOrderCreation();
           return;
         }
         metodoFinal = "TRANSFERENCIA";
@@ -1743,17 +1752,17 @@ function NuevaOrdenPage() {
         const sumaMixto = +(pagoEfectivo + pagoTarjeta + pagoTransferencia).toFixed(2);
         if (Math.abs(sumaMixto - pagado) > 0.01) {
           toast.error(`La suma de los métodos (RD${sumaMixto}) debe ser igual al monto a cobrar (RD${pagado}).`);
-          setIsCreatingOrden(false);
+          releaseOrderCreation();
           return;
         }
         if (pagoTransferencia > 0 && !pagoTransferenciaRef.trim()) {
           toast.error("La referencia es obligatoria para el monto en transferencia.");
-          setIsCreatingOrden(false);
+          releaseOrderCreation();
           return;
         }
         if (pagoEfectivo > 0 && pagoEfectivoRecibido > 0 && pagoEfectivoRecibido < pagoEfectivo) {
           toast.error("El efectivo recibido es menor al monto asignado a efectivo.");
-          setIsCreatingOrden(false);
+          releaseOrderCreation();
           return;
         }
 
@@ -2029,30 +2038,45 @@ function NuevaOrdenPage() {
       setCreada({ ...ordenActualizada });
       setShowTicket(true);
       setIsCobroModalOpen(false);
+      // The critical transaction is complete. Release the UI before any
+      // notification, printing or client-profile follow-up.
+      releaseOrderCreation();
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
 
       // El ticket de recepción debe salir por el proveedor activo de /admin.
-      // Esperamos el resultado para que la navegación no interrumpa el envío.
-      if (targetCliente?.telefono) {
-        try {
-          const whatsappResult = await notificarWhatsApp(
-            tenant,
-            targetCliente,
-            ordenActualizada,
-            "creada",
-          );
-          if (whatsappResult.ok) {
-            toast.success("Ticket enviado por WhatsApp al cliente ✅");
-          } else if (whatsappResult.reason !== "Notificación desactivada") {
-            toast.warning(`Orden guardada, pero WhatsApp no se envió: ${whatsappResult.reason}`);
+      // It must never keep the payment panel in a processing state.
+      const whatsappPhoneDigits = targetCliente?.telefono?.replace(/\D/g, "") || "";
+      const hasValidWhatsAppPhone = whatsappPhoneDigits.length >= 10;
+
+      if (targetCliente && hasValidWhatsAppPhone) {
+        void (async () => {
+          let lastReason = "Error desconocido";
+
+          for (let attempt = 1; attempt <= 3; attempt += 1) {
+            try {
+              const whatsappResult = await notificarWhatsApp(
+                tenant,
+                targetCliente,
+                ordenActualizada,
+                "creada",
+              );
+              if (whatsappResult.ok) {
+                toast.success("Ticket enviado por WhatsApp al cliente ✅");
+                return;
+              }
+              lastReason = whatsappResult.reason || lastReason;
+            } catch (whatsappError) {
+              lastReason = whatsappError instanceof Error ? whatsappError.message : "Error desconocido";
+              console.error(`Error enviando WhatsApp de orden creada (intento ${attempt}/3):`, whatsappError);
+            }
+
+            if (attempt < 3) {
+              await new Promise((resolve) => window.setTimeout(resolve, attempt * 1500));
+            }
           }
-        } catch (whatsappError) {
-          const reason = whatsappError instanceof Error ? whatsappError.message : "Error desconocido";
-          console.error("Error enviando WhatsApp de orden creada:", whatsappError);
-          toast.warning(`Orden guardada, pero WhatsApp no se envió: ${reason}`);
-        }
-      } else if (cfg.whatsapp?.enabled && cfg.whatsapp.notif_orden_creada) {
-        toast.warning("Orden guardada sin WhatsApp: el cliente no tiene un teléfono registrado.");
+
+          toast.warning(`Orden guardada, pero WhatsApp falló después de 3 intentos: ${lastReason}`);
+        })();
       }
 
       if (cfg.pos_auto_imprimir) {
@@ -2065,7 +2089,7 @@ function NuevaOrdenPage() {
         direccionData.direccion.trim() &&
         direccionData.direccion !== targetCliente.direccion
       ) {
-        await saveCliente({
+        void saveCliente({
           ...targetCliente,
           direccion: direccionData.direccion.trim(),
           sector: direccionData.sector || targetCliente.sector,
@@ -2073,6 +2097,8 @@ function NuevaOrdenPage() {
           referencia: direccionData.referencia || targetCliente.referencia,
           lat: direccionData.lat || targetCliente.lat,
           lng: direccionData.lng || targetCliente.lng,
+        }).catch((addressError) => {
+          console.error("Error actualizando dirección del cliente:", addressError);
         });
       }
 
@@ -2084,7 +2110,7 @@ function NuevaOrdenPage() {
       console.error(e);
       toast.error(e?.message || "Error al crear la orden");
     } finally {
-      setIsCreatingOrden(false);
+      releaseOrderCreation();
     }
   }
 

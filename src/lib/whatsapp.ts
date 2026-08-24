@@ -225,7 +225,9 @@ export async function notificarWhatsApp(
     evento === "en_camino" ? true : // Activado por defecto para logística
     evento === "sin_retirar" ? (wa.notif_orden_sin_retirar !== false) :
     wa.notif_orden_entregada;
-  if (!flag) return { ok: false, reason: "Notificación desactivada" };
+  // El ticket de recepción es obligatorio para clientes con teléfono cuando
+  // WhatsApp está habilitado. Los demás eventos conservan su interruptor.
+  if (!flag && evento !== "creada") return { ok: false, reason: "Notificación desactivada" };
 
   const tpl =
     evento === "creada" ? wa.plantilla_creada :
