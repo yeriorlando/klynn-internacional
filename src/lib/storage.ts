@@ -1797,28 +1797,39 @@ export async function getTenantsForUser(email: string): Promise<Tenant[]> {
 }
 
 export async function updateTenantAdmin(tenant_id: string, newEmail: string, newPassword?: string) {
+  const cleanEmail = newEmail.trim().toLowerCase();
   // Update Tenant Email
-  await supabase.from("tenants").update({ email: newEmail }).eq("id", tenant_id);
+  await supabase.from("tenants").update({ email: cleanEmail }).eq("id", tenant_id);
 
   // Update Admin Employee
   const emps = await getEmpleados(tenant_id);
   const admin = emps.find((e) => e.rol === "ADMIN");
   if (admin) {
-    const updates: Partial<Empleado> = { email: newEmail };
+    const updates: Partial<Empleado> = { email: cleanEmail };
 
-    // Actualizar el email en Supabase Auth mediante la función RPC segura
-    await supabase.rpc("admin_set_user_email", {
-      target_user_id: admin.id,
-      new_email: newEmail,
-    });
+    if (admin.email && admin.email.trim().toLowerCase() !== cleanEmail) {
+      // Actualizar el email en Supabase Auth mediante la función RPC segura
+      try {
+        await supabase.rpc("admin_set_user_email", {
+          target_user_id: admin.id,
+          new_email: cleanEmail,
+        });
+      } catch (e) {
+        console.warn("Aviso al actualizar email en Auth:", e);
+      }
+    }
 
-    if (newPassword) {
+    if (newPassword && newPassword.trim()) {
       updates.password = "***"; // No guardamos texto plano
       // Actualizar en Auth mediante la función RPC segura
-      await supabase.rpc("admin_set_user_password", {
-        target_user_id: admin.id,
-        new_password: newPassword,
-      });
+      try {
+        await supabase.rpc("admin_set_user_password", {
+          target_user_id: admin.id,
+          new_password: newPassword.trim(),
+        });
+      } catch (e) {
+        console.warn("Aviso al actualizar password en Auth:", e);
+      }
     }
     await supabase.from("empleados").update(updates).eq("id", admin.id);
   }
@@ -2186,13 +2197,21 @@ export async function getEmployeeInvitations(tenantId: string): Promise<Employee
 export async function inviteEmployeeByEmail(
   tenantId: string,
   email: string,
+  rol?: RolEmpleado,
+  permisos?: string[]
 ): Promise<EmployeeInvitation> {
   const redirectTo =
     typeof window !== "undefined"
       ? `${window.location.origin}/restablecer-contrasena?invitation=1`
       : "https://klynn.com.do/restablecer-contrasena?invitation=1";
   const { data, error } = await supabase.functions.invoke("employee-invitations", {
-    body: { tenantId, email: email.trim().toLowerCase(), redirectTo },
+    body: {
+      tenantId,
+      email: email.trim().toLowerCase(),
+      role: rol || "VENDEDOR",
+      permissions: permisos || [],
+      redirectTo,
+    },
   });
   if (error) {
     let message = error.message || "No se pudo enviar la invitación";
@@ -3999,7 +4018,7 @@ export async function login(
       const { data: empByEmail } = await supabase
         .from("empleados")
         .select("*")
-        .eq("email", cleanEmail)
+        .ilike("email", cleanEmail)
         .eq("tenant_id", tenant.id)
         .maybeSingle();
 
@@ -4228,7 +4247,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   const { data: empsRaw, error: empsErr } = await supabase
     .from("empleados")
     .select("*")
-    .eq("email", email)
+    .ilike("email", email)
     .eq("activo", true);
 
   if (empsErr || !empsRaw || empsRaw.length === 0) {
@@ -5188,8 +5207,28 @@ export async function updateEstadoComercialECF(
 }
 
 export async function updateECFConfig(tenantId: string, updates: Partial<ECFConfig>) {
-  const { error } = await supabase.from("ecf_config").update(updates).eq("tenant_id", tenantId);
+  if (updates.pronesoft_environment || updates.ambiente) {
+    try {
+      const { error: rpcError } = await supabase.rpc("admin_update_ecf_environment", {
+        p_tenant_id: tenantId,
+        p_environment: updates.pronesoft_environment || "TesteCF",
+        p_ambiente: updates.ambiente || (updates.pronesoft_environment === "eCF" ? "produccion" : "pruebas"),
+      });
+      if (!rpcError) {
+        const otherUpdates = { ...updates };
+        delete otherUpdates.pronesoft_environment;
+        delete otherUpdates.ambiente;
+        if (Object.keys(otherUpdates).length > 0) {
+          await supabase.from("ecf_config").update(otherUpdates).eq("tenant_id", tenantId);
+        }
+        return;
+      }
+    } catch (e) {
+      console.warn("Aviso al ejecutar admin_update_ecf_environment RPC:", e);
+    }
+  }
 
+  const { error } = await supabase.from("ecf_config").update(updates).eq("tenant_id", tenantId);
   if (error) throw error;
 }
 
