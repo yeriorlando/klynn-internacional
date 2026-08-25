@@ -404,7 +404,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   async function confirmarConveyor(ubicacionParam?: string) {
     if (!conveyorOrden) return;
-    const ubiToUse = ubicacionParam !== undefined ? ubicacionParam : conveyorUbicacion;
+    const ubiToUse = (ubicacionParam !== undefined ? ubicacionParam : conveyorUbicacion).trim();
+    if (!ubiToUse && tenant?.config?.usar_ubicacion_ropa) {
+      toast.error("Debes seleccionar una ubicación en estantería para marcar la orden como Lista");
+      return;
+    }
     setSavingConveyor(true);
     try {
       const ordenActualizada = { ...conveyorOrden, estado: "LISTA" as EstadoOrden, ubicacion_ropa: ubiToUse || undefined };
@@ -429,7 +433,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         });
       }
       toast.success("Orden marcada como Lista ✓");
-      setShowPrint(ordenActualizada);
       setConveyorOrden(null);
       setConveyorUbicacion("");
     } catch (err: any) {

@@ -107,13 +107,13 @@ export function UbicacionSelectorDialog({
 
   const handleSave = () => {
     const finalVal = (activeTab === "manual" ? manualInput : selectedUbicacion).trim();
+    if (!finalVal) {
+      toast.error("Debes seleccionar o ingresar una ubicación en estantería");
+      return;
+    }
     onSelectUbicacion(finalVal);
     onOpenChange(false);
-    if (finalVal) {
-      toast.success(`Ubicación asignada: ${finalVal} 📍`);
-    } else {
-      toast.info("Ubicación removida");
-    }
+    toast.success(`Ubicación asignada: ${finalVal} 📍`);
   };
 
   const handleClear = () => {
@@ -487,7 +487,8 @@ export function UbicacionSelectorDialog({
               type="button"
               size="sm"
               onClick={handleSave}
-              className="rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold h-8 px-3.5 gap-1 shadow-2xs cursor-pointer"
+              disabled={!(activeTab === "manual" ? manualInput.trim() : selectedUbicacion.trim())}
+              className="rounded-lg bg-indigo-600 hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold h-8 px-3.5 gap-1 shadow-2xs cursor-pointer"
             >
               <CheckCircle2 className="h-3 w-3" />
               Guardar Ubicación
