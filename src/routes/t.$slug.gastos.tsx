@@ -947,11 +947,12 @@ function GastosPage() {
                                 <AlertDialogAction 
                                   onClick={async () => { 
                                     try {
-                                      await deleteGasto(g.id); 
-                                      setRefresh((r) => r + 1); 
+                                      await deleteGasto(g.id, tenantId); 
+                                      refresh(); 
                                       toast.success("Gasto eliminado correctamente 🗑️"); 
-                                    } catch (err) {
-                                      toast.error("Error al eliminar gasto");
+                                    } catch (err: any) {
+                                      console.error("Error al eliminar gasto:", err);
+                                      toast.error(err?.message || "Error al eliminar gasto");
                                     }
                                   }} 
                                   className="bg-destructive text-white rounded-xl text-xs font-bold"
@@ -1089,7 +1090,7 @@ function GastosPage() {
         onOpenChange={setShow} 
         tenantId={user.tenant.id} 
         empleadoId={user.empleado.id} 
-        onDone={() => { setRefresh((r) => r + 1); setShow(false); }} 
+        onDone={() => { refresh(); setShow(false); }} 
       />
 
       {/* PORTAL DE IMPRESIÓN */}
@@ -1211,7 +1212,8 @@ function NewGasto({
       setOtraCategoria("");
       setStep(1);
     } catch (err: any) {
-      toast.error("Error al registrar gasto");
+      console.error("Error al registrar gasto:", err);
+      toast.error(err?.message || "Error al registrar gasto");
     } finally {
       setIsSubmitting(false);
     }

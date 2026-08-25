@@ -890,6 +890,7 @@ function NuevaOrdenPage() {
 
   const handleImprimirTicket = async (ordenToPrint: Orden | null) => {
     if (!ordenToPrint) return;
+    setShowTicket(false);
 
     const imprimirCopiaCaja = !!tenant.config?.ticket_imprimir_copia_caja;
     const imprimirTaller = !!(
@@ -2065,7 +2066,6 @@ function NuevaOrdenPage() {
       }
 
       setCreada({ ...ordenActualizada });
-      setShowTicket(true);
       setIsCobroModalOpen(false);
       // The critical transaction is complete. Release the UI before any
       // notification, printing or client-profile follow-up.
@@ -2109,7 +2109,10 @@ function NuevaOrdenPage() {
       }
 
       if (cfg.pos_auto_imprimir) {
+        setShowTicket(false);
         handleImprimirTicket({ ...ordenActualizada });
+      } else {
+        setShowTicket(true);
       }
 
       if (
@@ -7071,8 +7074,12 @@ function TicketPrintPortal({
     tenant.config?.ticket_imprimir_taller_auto &&
     (!tenant.config?.ticket_taller_solo_con_ubicacion || !!orden.ubicacion_ropa)
   );
+  const hasPrintedRef = useRef(false);
 
   useEffect(() => {
+    if (hasPrintedRef.current) return;
+    hasPrintedRef.current = true;
+
     const printerType = tenant.config?.impresora_tipo || "usb";
     if (printerType === "bluetooth" || printerType === "serial") {
       const runPhysicalPrint = async () => {
@@ -7118,37 +7125,14 @@ function TicketPrintPortal({
       const timer = setTimeout(() => {
         window.print();
         onClose();
-      }, 150);
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [onClose, orden, tenant, cliente, empleado, serviciosList, imprimirCopiaCaja, imprimirTaller]);
 
   return createPortal(
-    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
-      <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
-        <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000] hidden">
-          <Button
-            variant="outline"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              onClose();
-            }}
-            className="cursor-pointer"
-          >
-            Cerrar vista de impresión
-          </Button>
-          <Button
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              window.print();
-            }}
-            className="bg-primary text-white gap-2 cursor-pointer"
-          >
-            <Printer className="h-4 w-4" /> Imprimir ahora
-          </Button>
-        </div>
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
+      <div className="max-w-md mx-auto p-0 print:p-0 print:max-w-none print:m-0">
 
         {/* 1. TICKET CLIENTE (ORIGINAL) */}
         <div className="ticket-page">

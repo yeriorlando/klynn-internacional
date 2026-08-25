@@ -19,6 +19,7 @@ import {
   BadgePercent,
   Truck,
   List,
+  Landmark,
 } from "lucide-react";
 
 interface Props {
@@ -644,7 +645,7 @@ export function Ticket({
         {cfg?.ncf_facturacion_activa && orden.itbis > 0 && (
           <div className="flex justify-between items-center gap-2">
             <div className="flex items-center gap-1.5 font-semibold shrink-0">
-              <Percent className="h-3.5 w-3.5 shrink-0 text-black" />
+              <Landmark className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>ITBIS {cfg?.itbis_porcentaje ?? 18}%</span>
             </div>
             <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.itbis).replace("DOP", "RD$")}</span>
@@ -653,7 +654,10 @@ export function Ticket({
 
         {orden.descuento > 0 && (
           <div className="flex justify-between items-center gap-2">
-            <span className="font-semibold shrink-0">Descuento</span>
+            <div className="flex items-center gap-1.5 font-semibold shrink-0">
+              <Percent className="h-3.5 w-3.5 shrink-0 text-black" />
+              <span>Descuento</span>
+            </div>
             <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">-{formatRD(orden.descuento).replace("DOP", "RD$")}</span>
           </div>
         )}

@@ -1,5 +1,5 @@
 import { QRCodeSVG } from "qrcode.react";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag } from "lucide-react";
 import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
@@ -1866,17 +1866,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         ordenesActivas={ordenes}
         ordenActualId={conveyorOrden?.id}
       />
-
-      {estadoModal && (
-        <TicketPrintPortal 
-          orden={estadoModal} 
-          tenant={tenant} 
-          clientes={clientes} 
-          empleados={empleados} 
-          onClose={() => {}}
-          hiddenPreview={true}
-        />
-      )}
     </div>
   );
 }
@@ -2435,67 +2424,65 @@ export function TicketPrintPortal({
   const [emp, setEmp] = useState<any>(initialEmp);
   const [cli, setCli] = useState<any>(initialCli);
   const [srvList, setSrvList] = useState<any[]>([]);
+  const [ready, setReady] = useState(false);
+  const hasPrintedRef = useRef(false);
 
   // Async data fetch for extra details
   useEffect(() => {
+    let active = true;
     Promise.all([
       getEmpleadoById(orden.empleado_id).catch(() => null),
       Promise.resolve(clientes.find(c => c.id === orden.cliente_id)),
       getServicios(tenant.id)
     ]).then(([e, c, s]) => {
+      if (!active) return;
       if (e) setEmp(e);
       if (c) setCli(c);
-      setSrvList(s);
+      if (s) setSrvList(s);
+      setReady(true);
     });
+    return () => { active = false; };
   }, [orden, tenant.id, clientes, empleados]);
 
-  // Hook para impresión física directa si está configurada
+  // Hook para impresión directa instantánea (Modo Kiosk) - SE EJECUTA EXACTAMENTE UNA SOLA VEZ
   useEffect(() => {
-    if (emp && cli && srvList.length > 0) {
-      const printerType = tenant.config?.impresora_tipo || "usb";
-      if (printerType === "bluetooth" || printerType === "serial") {
-        const runPhysicalPrint = async () => {
-          try {
-            const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion);
-            const success = await printDirectRaw(bytes, tenant.config);
-            if (success) {
-              toast.success("¡Ticket impreso en impresora física!");
-            } else {
-              toast.error("No se pudo imprimir en la impresora física.");
-            }
-          } catch (err: any) {
-            console.error(err);
-            toast.error("Error al imprimir físicamente: " + err.message);
-          } finally {
-            onClose();
+    if (!ready || hasPrintedRef.current) return;
+    hasPrintedRef.current = true;
+
+    const printerType = tenant.config?.impresora_tipo || "usb";
+    if (printerType === "bluetooth" || printerType === "serial") {
+      const runPhysicalPrint = async () => {
+        try {
+          const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion);
+          const success = await printDirectRaw(bytes, tenant.config);
+          if (success) {
+            toast.success("¡Ticket impreso en impresora física!");
+          } else {
+            toast.error("No se pudo imprimir en la impresora física.");
           }
-        };
-        runPhysicalPrint();
-      }
+        } catch (err: any) {
+          console.error(err);
+          toast.error("Error al imprimir físicamente: " + err.message);
+        } finally {
+          onClose();
+        }
+      };
+      runPhysicalPrint();
+    } else {
+      // Disparo automático e instantáneo para impresoras térmicas USB / Sistema (Modo Kiosk)
+      const timer = setTimeout(() => {
+        window.print();
+        onClose();
+      }, 100);
+      return () => clearTimeout(timer);
     }
-  }, [emp, cli, srvList, orden, tenant, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion, onClose]);
+  }, [ready, emp, cli, srvList, orden, tenant, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion, onClose]);
 
   if (!emp || !cli) return null;
 
   return createPortal(
-    <div className={`fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target ${hiddenPreview ? 'opacity-0 pointer-events-none print:opacity-100' : ''}`}>
-      <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
-        <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000]">
-          <Button 
-            variant="outline" 
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); onClose(); }}
-            className="cursor-pointer"
-          >
-            Cerrar vista de impresión
-          </Button>
-          <Button 
-            onClick={(e) => { e.preventDefault(); e.stopPropagation(); window.print(); }}
-            className="bg-primary text-white gap-2 cursor-pointer"
-          >
-            <Printer className="h-4 w-4" /> Imprimir ahora
-          </Button>
-        </div>
-
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
+      <div className="max-w-md mx-auto p-0 print:p-0 print:max-w-none print:m-0">
         <Ticket 
           orden={orden} 
           tenant={tenant} 

@@ -3426,9 +3426,11 @@ export async function saveGasto(g: Gasto) {
   }
 }
 
-export async function deleteGasto(id: string) {
+export async function deleteGasto(id: string, tenant_id?: string) {
   const local = read<Gasto[]>(KEY.gastos, []);
   const target = local.find((item) => item.id === id);
+  const resolvedTenantId = resolveTenantId(tenant_id || target?.tenant_id || "");
+
   if (isBrowser())
     write(
       KEY.gastos,
@@ -3438,15 +3440,15 @@ export async function deleteGasto(id: string) {
     await offlineDB.delete("gastos", id);
   } catch {}
   if (typeof window !== "undefined" && !navigator.onLine) {
-    if (!target?.tenant_id)
-      throw new Error("No se pudo determinar la lavandería del gasto eliminado.");
-    await offlineDB.addToOutbox({
-      id,
-      tenant_id: resolveTenantId(target.tenant_id),
-      table_name: "gastos",
-      action: "DELETE",
-      payload: { id },
-    });
+    if (resolvedTenantId) {
+      await offlineDB.addToOutbox({
+        id,
+        tenant_id: resolvedTenantId,
+        table_name: "gastos",
+        action: "DELETE",
+        payload: { id },
+      });
+    }
     return;
   }
   try {
@@ -3456,14 +3458,15 @@ export async function deleteGasto(id: string) {
     const { error } = await supabase.from("gastos").delete().eq("id", id);
     if (error) throw error;
   } catch (error) {
-    if (!target?.tenant_id) throw error;
-    await offlineDB.addToOutbox({
-      id,
-      tenant_id: resolveTenantId(target.tenant_id),
-      table_name: "gastos",
-      action: "DELETE",
-      payload: { id },
-    });
+    if (resolvedTenantId) {
+      await offlineDB.addToOutbox({
+        id,
+        tenant_id: resolvedTenantId,
+        table_name: "gastos",
+        action: "DELETE",
+        payload: { id },
+      });
+    }
   }
 }
 
