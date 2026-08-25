@@ -264,9 +264,9 @@ body.pos-mode .main-header {
     box-shadow: none !important;
     border: none !important;
     padding-top: 1.5mm !important;
-    padding-bottom: 2mm !important;
-    padding-left: 2mm !important;
-    padding-right: 3.5mm !important;
+    padding-bottom: 2.5mm !important;
+    padding-left: 2.5mm !important;
+    padding-right: 6mm !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;

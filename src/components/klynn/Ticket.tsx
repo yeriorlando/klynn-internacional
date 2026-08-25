@@ -1,5 +1,5 @@
 import type { Orden, Tenant, Empleado, Cliente, Servicio } from "@/lib/storage";
-import { formatRD, formatDateTimeRD, formatDateRD, NCF_NOMBRES } from "@/lib/storage";
+import { formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES } from "@/lib/storage";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ClipboardList,
@@ -142,7 +142,7 @@ export function Ticket({
   if (esProduccion) {
     return (
       <div
-        className={`thermal-ticket mx-auto ${w} ${cols} bg-white pl-2.5 pr-4 py-2 text-[10.5px] leading-tight text-black`}
+        className={`thermal-ticket mx-auto ${w} ${cols} bg-white pl-2.5 pr-6 py-2 text-[10.5px] leading-tight text-black`}
         style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
       >
         <div className="text-center space-y-0.5 mb-1">
@@ -319,7 +319,7 @@ export function Ticket({
   // =========================================================================
   return (
     <div
-      className={`thermal-ticket mx-auto ${w} ${cols} bg-white pl-2.5 pr-4 py-2 text-[11px] leading-snug text-black`}
+      className={`thermal-ticket mx-auto ${w} ${cols} bg-white pl-2.5 pr-6 py-2 text-[11px] leading-snug text-black`}
       style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
     >
       {/* 1. ENCABEZADO / LOGO */}
@@ -334,8 +334,8 @@ export function Ticket({
             <div className="text-[10px] text-black/80 font-medium italic">tu lavandería, simplificada</div>
           </div>
         )}
-        {(cfg?.ticket_mostrar_rnc ?? true) && (tenant.rnc || cfg?.rnc_emisor) && (
-          <div className="text-[10px]"><b>RNC:</b> <span className="font-semibold tabular-nums">{tenant.rnc || cfg?.rnc_emisor}</span></div>
+        {(cfg?.ticket_mostrar_rnc ?? true) && (tenant.rnc || (cfg as any)?.rnc_emisor) && (
+          <div className="text-[10px]"><b>RNC:</b> <span className="font-semibold tabular-nums">{tenant.rnc || (cfg as any)?.rnc_emisor}</span></div>
         )}
         {tenant.telefono && <div className="text-[10px]"><b>Tel:</b> <span className="font-semibold tabular-nums">{formatPhoneDO(tenant.telefono)}</span></div>}
         {tenant.direccion && <div className="text-[9.5px] leading-tight font-semibold text-black/80">{tenant.direccion}</div>}
@@ -356,7 +356,7 @@ export function Ticket({
       <Sep />
 
       {/* 3. METADATOS DE LA ORDEN CON ICONOS */}
-      <div className="space-y-1 text-[11px] pr-1">
+      <div className="space-y-1 text-[11px] pr-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
             <ClipboardList className="h-3.5 w-3.5 shrink-0 text-black" />
@@ -409,7 +409,7 @@ export function Ticket({
             DATOS DEL CLIENTE
           </div>
           <Sep />
-          <div className="space-y-1 text-[11px] pr-1">
+          <div className="space-y-1 text-[11px] pr-2">
             <div className="flex items-start gap-1.5">
               <User className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
               <div>
@@ -449,7 +449,7 @@ export function Ticket({
 
       <Sep />
 
-      {/* 4. ITEMS Y SERVICIOS CON PASTILLA REDONDEADA Y MARGEN DERECHO */}
+      {/* 4. ITEMS Y SERVICIOS CON PASTILLA REDONDEADA Y MARGEN DERECHO AMPLIADO */}
       <div>
         {(() => {
           const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
@@ -480,7 +480,7 @@ export function Ticket({
                 return (
                   <div key={'s'+i} className="mb-2.5">
                     {/* Caja de Servicio con Esquinas Suaves (rounded-md) */}
-                    <div className="my-1.5 rounded-md bg-black text-white pl-2.5 pr-3 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
+                    <div className="my-1.5 rounded-md bg-black text-white pl-2.5 pr-4 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
                       <div className="flex items-center gap-1.5 font-bold shrink-0">
                         <WashingMachine className="h-3.5 w-3.5" />
                         <span className="text-[9.5px] tracking-wider">SERVICIO</span>
@@ -490,16 +490,16 @@ export function Ticket({
                     </div>
 
                     {/* Tabla de encabezados */}
-                    <div className="flex justify-between items-center font-bold uppercase text-[10px] pb-1 border-b border-black text-black">
-                      <div className="w-[48%] flex items-center gap-1">
+                    <div className="flex justify-between items-center font-bold uppercase text-[9.5px] pb-1 border-b border-black text-black">
+                      <div className="flex-1 min-w-0 flex items-center gap-1">
                         <Shirt className="h-3.5 w-3.5 shrink-0" />
                         <span>DESCRIPCIÓN</span>
                       </div>
-                      <div className="w-[22%] text-right flex items-center justify-end gap-1">
+                      <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
                         <BadgePercent className="h-3 w-3 shrink-0" />
                         <span>ITBIS</span>
                       </div>
-                      <div className="w-[30%] text-right pr-2 flex items-center justify-end gap-1">
+                      <div className="w-[28%] text-right pr-3 flex items-center justify-end gap-0.5">
                         <Tag className="h-3 w-3 shrink-0" />
                         <span>VALOR</span>
                       </div>
@@ -508,15 +508,15 @@ export function Ticket({
                     {/* Fila del servicio si tiene precio directo */}
                     {p > 0 && (
                       <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
-                        <div className="w-[48%] pr-1">
+                        <div className="flex-1 min-w-0 pr-1">
                           <div className="font-bold text-[10.5px]">Servicio {sName}</div>
-                          <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatRD(p).replace("RD$", "")}</div>
+                          <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(p)}</div>
                         </div>
-                        <div className="w-[22%] text-right font-semibold pt-0.5 tabular-nums">
-                          {cfg?.ncf_facturacion_activa && orden.itbis > 0 ? (p * ((cfg.itbis_porcentaje || 18) / 100)).toFixed(2) : "0.00"}
+                        <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                          {cfg?.ncf_facturacion_activa && orden.itbis > 0 ? formatNumber(p * ((cfg.itbis_porcentaje || 18) / 100)) : "0.00"}
                         </div>
-                        <div className="w-[30%] text-right pr-2 font-bold pt-0.5 tabular-nums">
-                          {formatRD(p).replace("RD$", "")}
+                        <div className="w-[28%] text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
+                          {formatNumber(p)}
                         </div>
                       </div>
                     )}
@@ -541,18 +541,18 @@ export function Ticket({
 
                         return (
                           <div key={'sd'+dIdx} className="flex justify-between items-start py-1">
-                            <div className="w-[48%] pr-1">
-                              <div className="font-semibold text-black text-[10.5px] leading-tight">
+                            <div className="flex-1 min-w-0 pr-1">
+                              <div className="font-semibold text-black text-[10.5px] leading-tight break-words">
                                 {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb)` : ""}
                               </div>
                               {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
                               {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                             </div>
-                            <div className="w-[22%] text-right font-semibold pt-0.5 text-black tabular-nums">
-                              {baseTotal > 0 ? (itemItbis > 0 ? itemItbis.toFixed(2) : "0.00") : "—"}
+                            <div className="w-[20%] text-right font-semibold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                              {baseTotal > 0 ? (itemItbis > 0 ? formatNumber(itemItbis) : "0.00") : "—"}
                             </div>
-                            <div className="w-[30%] text-right pr-2 font-bold pt-0.5 text-black tabular-nums">
-                              {baseTotal > 0 ? valor.toFixed(2) : "—"}
+                            <div className="w-[28%] text-right pr-3 font-bold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
+                              {baseTotal > 0 ? formatNumber(valor) : "—"}
                             </div>
                           </div>
                         );
@@ -565,16 +565,16 @@ export function Ticket({
               {/* Prendas sueltas si no tienen servicio padre */}
               {itemsSueltos.length > 0 && (
                 <div className="mb-2">
-                  <div className="flex justify-between items-center font-bold uppercase text-[10px] pb-1 border-b border-black text-black">
-                    <div className="w-[48%] flex items-center gap-1">
+                  <div className="flex justify-between items-center font-bold uppercase text-[9.5px] pb-1 border-b border-black text-black">
+                    <div className="flex-1 min-w-0 flex items-center gap-1">
                       <Shirt className="h-3.5 w-3.5 shrink-0" />
                       <span>DESCRIPCIÓN</span>
                     </div>
-                    <div className="w-[22%] text-right flex items-center justify-end gap-1">
+                    <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
                       <BadgePercent className="h-3 w-3 shrink-0" />
                       <span>ITBIS</span>
                     </div>
-                    <div className="w-[30%] text-right pr-2 flex items-center justify-end gap-1">
+                    <div className="w-[28%] text-right pr-3 flex items-center justify-end gap-0.5">
                       <Tag className="h-3 w-3 shrink-0" />
                       <span>VALOR</span>
                     </div>
@@ -595,17 +595,17 @@ export function Ticket({
                       }
                       return (
                         <div key={'suelto'+i} className="flex justify-between items-start py-1">
-                          <div className="w-[48%] pr-1">
-                            <div className="font-semibold leading-tight text-[10.5px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                          <div className="flex-1 min-w-0 pr-1">
+                            <div className="font-semibold leading-tight text-[10.5px] break-words">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
                             {it.servicio_origen && (
                               <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
                             )}
-                            <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
+                            <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatNumber(it.precio_unitario)}</div>
                             {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>
-                          <div className="w-[22%] text-right font-semibold pt-0.5 tabular-nums">{itemItbis > 0 ? itemItbis.toFixed(2) : "0.00"}</div>
-                          <div className="w-[30%] text-right pr-2 font-bold pt-0.5 tabular-nums">{valor.toFixed(2)}</div>
+                          <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">{itemItbis > 0 ? formatNumber(itemItbis) : "0.00"}</div>
+                          <div className="w-[28%] text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">{formatNumber(valor)}</div>
                         </div>
                       );
                     })}
@@ -620,7 +620,7 @@ export function Ticket({
       <Sep />
 
       {/* 5. RECUADRO DE TOTAL DE PRENDAS (ESQUINAS SUAVES Y MISMA FUENTE) */}
-      <div className="my-2 rounded-md border border-black py-1 pl-2.5 pr-3 flex items-center">
+      <div className="my-2 rounded-md border border-black py-1 pl-2.5 pr-4 flex items-center">
         <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[11px] uppercase tracking-wide">
           <Package className="h-4 w-4 shrink-0 text-black" />
           <span>TOTAL DE PRENDAS:</span>
@@ -632,63 +632,63 @@ export function Ticket({
       </div>
 
       {/* 6. DESGLOSE FINANCIERO */}
-      <div className="space-y-1 text-[11px] pt-1 pr-1.5">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5 font-semibold">
+      <div className="space-y-1 text-[11px] pt-1 pr-3">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-1.5 font-semibold shrink-0">
             <Calculator className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Subtotal</span>
           </div>
-          <span className="font-semibold tabular-nums">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
+          <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
         </div>
 
         {cfg?.ncf_facturacion_activa && orden.itbis > 0 && (
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-1.5 font-semibold">
+          <div className="flex justify-between items-center gap-2">
+            <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Percent className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>ITBIS {cfg?.itbis_porcentaje ?? 18}%</span>
             </div>
-            <span className="font-semibold tabular-nums">{formatRD(orden.itbis).replace("DOP", "RD$")}</span>
+            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.itbis).replace("DOP", "RD$")}</span>
           </div>
         )}
 
         {orden.descuento > 0 && (
-          <div className="flex justify-between items-center">
-            <span className="font-semibold">Descuento</span>
-            <span className="font-semibold tabular-nums">-{formatRD(orden.descuento).replace("DOP", "RD$")}</span>
+          <div className="flex justify-between items-center gap-2">
+            <span className="font-semibold shrink-0">Descuento</span>
+            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">-{formatRD(orden.descuento).replace("DOP", "RD$")}</span>
           </div>
         )}
 
         {orden.costo_envio && orden.costo_envio > 0 && (
-          <div className="flex justify-between items-center">
-            <div className="flex items-center gap-1.5 font-semibold">
+          <div className="flex justify-between items-center gap-2">
+            <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Truck className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>Envío a domicilio</span>
             </div>
-            <span className="font-semibold tabular-nums">{formatRD(orden.costo_envio).replace("DOP", "RD$")}</span>
+            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.costo_envio).replace("DOP", "RD$")}</span>
           </div>
         )}
 
         <div className="my-1 border-t-[1.5px] border-dashed border-black" />
 
-        <div className="flex justify-between items-center py-0.5">
-          <div className="flex items-center gap-1.5 text-[13px] font-black tracking-tight">
+        <div className="flex justify-between items-center py-0.5 gap-2">
+          <div className="flex items-center gap-1.5 text-[12.5px] font-black tracking-tight shrink-0">
             <CircleDollarSign className="h-4 w-4 shrink-0 text-black" />
             <span>TOTAL</span>
           </div>
-          <span className="font-black text-[15px] tabular-nums">{formatRD(orden.total).replace("DOP", "RD$")}</span>
+          <span className="font-black text-[14.5px] tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.total).replace("DOP", "RD$")}</span>
         </div>
       </div>
 
       <Sep />
 
       {/* 7. DETALLES DE PAGO Y LOGÍSTICA */}
-      <div className="space-y-1 text-[11px] pr-1.5">
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5 font-semibold">
+      <div className="space-y-1 text-[11px] pr-3">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-1.5 font-semibold shrink-0">
             <CreditCard className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Método de pago:</span>
           </div>
-          <span className="font-semibold uppercase">
+          <span className="font-semibold uppercase truncate">
             {orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago === "MIXTO" ? "MIXTO" : orden.metodo_pago}
           </span>
         </div>
@@ -712,12 +712,12 @@ export function Ticket({
           </div>
         )}
 
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5 font-semibold">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-1.5 font-semibold shrink-0">
             <FileText className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Estado de factura:</span>
           </div>
-          <span className="font-black uppercase tracking-wide">{orden.saldo === 0 ? "PAGADA" : "PENDIENTE"}</span>
+          <span className="font-black uppercase tracking-wide shrink-0">{orden.saldo === 0 ? "PAGADA" : "PENDIENTE"}</span>
         </div>
 
         {pagoRecibido !== undefined && (
@@ -741,20 +741,20 @@ export function Ticket({
           </>
         )}
 
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5 font-semibold">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-1.5 font-semibold shrink-0">
             <Calendar className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Fecha de entrega:</span>
           </div>
-          <span className="font-semibold">{humanizeDate(orden.fecha_entrega, false)}</span>
+          <span className="font-semibold truncate">{humanizeDate(orden.fecha_entrega, false)}</span>
         </div>
 
-        <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1.5 font-semibold">
+        <div className="flex justify-between items-center gap-2">
+          <div className="flex items-center gap-1.5 font-semibold shrink-0">
             <Package className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Estado de la orden:</span>
           </div>
-          <span className="font-black uppercase tracking-wide">{orden.estado.replace("_", " ")}</span>
+          <span className="font-black uppercase tracking-wide truncate">{orden.estado.replace("_", " ")}</span>
         </div>
       </div>
 
