@@ -263,7 +263,7 @@ body.pos-mode .main-header {
     margin: 0 auto !important;
     box-shadow: none !important;
     border: none !important;
-    padding: 1mm 1.5mm !important;
+    padding: 1.5mm !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
     color-adjust: exact !important;

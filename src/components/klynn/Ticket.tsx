@@ -165,10 +165,14 @@ export function Ticket({
           </div>
         )}
 
-        <div className="my-1 p-1.5 border border-black bg-black/5 text-center">
-          <div className="text-[8.5px] font-bold uppercase tracking-wider text-black">CANTIDAD TOTAL DE PRENDAS:</div>
-          <div className="text-[15px] font-bold tracking-tight leading-none mt-0.5">
-            {totalPrendas} {totalPrendas === 1 ? "PRENDA" : "PRENDAS"}
+        <div className="my-1.5 rounded-md border border-black py-1 px-2.5 flex items-center">
+          <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[10.5px] uppercase tracking-wide">
+            <Package className="h-4 w-4 shrink-0 text-black" />
+            <span>TOTAL DE PRENDAS:</span>
+          </div>
+          <div className="h-4 w-px bg-black/40" />
+          <div className="w-16 flex items-center justify-center font-bold text-[15px]" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+            {totalPrendas}
           </div>
         </div>
 
@@ -311,11 +315,11 @@ export function Ticket({
   }
 
   // =========================================================================
-  // ★ FORMATO COMERCIAL / FISCAL / CLIENTE (DISEÑO ESTILIZADO CON ICONOS COMPACTOS) ★
+  // ★ FORMATO COMERCIAL / FISCAL / CLIENTE (DISEÑO ESTILIZADO CON ELEMENTOS CENTRADOS) ★
   // =========================================================================
   return (
     <div
-      className={`thermal-ticket mx-auto ${w} ${cols} bg-white px-1 py-1.5 text-[10.5px] leading-tight text-black`}
+      className={`thermal-ticket mx-auto ${w} ${cols} bg-white px-2 py-2 text-[11px] leading-snug text-black`}
       style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
     >
       {/* 1. ENCABEZADO / LOGO */}
@@ -326,40 +330,39 @@ export function Ticket({
           </div>
         ) : (
           <div className="flex flex-col items-center">
-            <div className="text-xl font-bold tracking-tight">{tenant.nombre || "Klynn"}</div>
-            <div className="text-[9.5px] text-black/80 font-medium italic">tu lavandería, simplificada</div>
+            <div className="text-2xl font-bold tracking-tight">{tenant.nombre || "Klynn"}</div>
+            <div className="text-[10px] text-black/80 font-medium italic">tu lavandería, simplificada</div>
           </div>
         )}
         {(cfg?.ticket_mostrar_rnc ?? true) && (tenant.rnc || cfg?.rnc_emisor) && (
-          <div className="text-[9.5px]"><b>RNC:</b> <span className="font-semibold tabular-nums">{tenant.rnc || cfg?.rnc_emisor}</span></div>
+          <div className="text-[10px]"><b>RNC:</b> <span className="font-semibold tabular-nums">{tenant.rnc || cfg?.rnc_emisor}</span></div>
         )}
-        {tenant.telefono && <div className="text-[9.5px]"><b>Tel:</b> <span className="font-semibold tabular-nums">{formatPhoneDO(tenant.telefono)}</span></div>}
-        {tenant.direccion && <div className="text-[9px] leading-tight font-semibold text-black/80">{tenant.direccion}</div>}
+        {tenant.telefono && <div className="text-[10px]"><b>Tel:</b> <span className="font-semibold tabular-nums">{formatPhoneDO(tenant.telefono)}</span></div>}
+        {tenant.direccion && <div className="text-[9.5px] leading-tight font-semibold text-black/80">{tenant.direccion}</div>}
       </div>
 
       <Sep />
 
       {/* 2. ESTADO PRINCIPAL DE FACTURA */}
-      <div className="text-center font-extrabold uppercase text-[11.5px] py-0.5 tracking-wider">
+      <div className="text-center font-extrabold uppercase text-[12px] py-0.5 tracking-wider">
         {orden.saldo === 0 ? "★ FACTURA PAGADA ★" : `⚠️ PENDIENTE: ${formatRD(orden.saldo)}`}
       </div>
       {esCopiaCaja && (
-        <div className="text-center font-extrabold uppercase text-[9.5px] py-0.5 bg-black text-white my-1 rounded-xs tracking-wider">
+        <div className="text-center font-extrabold uppercase text-[10px] py-0.5 bg-black text-white my-1 rounded-xs tracking-wider">
           ★ COPIA DE CAJA ★
         </div>
       )}
 
       <Sep />
 
-      {/* 3. METADATOS DE LA ORDEN CON MICRO-ICONOS */}
-      <div className="space-y-0.5 text-[10.5px]">
+      {/* 3. METADATOS DE LA ORDEN */}
+      <div className="space-y-1 text-[11px]">
         <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1 min-w-0">
-            <ClipboardList className="h-3 w-3 shrink-0 text-black" />
-            <span className="truncate"><b>Orden No.:</b> <span className="font-bold tabular-nums ml-0.5">{orden.numero}</span></span>
+          <div>
+            <b>Orden No°:</b> <span className="font-bold tabular-nums ml-0.5">{orden.numero}</span>
           </div>
           {orden.es_urgente && (
-            <span className="font-bold text-[8.5px] bg-black text-white px-1 py-0.5 rounded-xs uppercase shrink-0">
+            <span className="font-bold text-[9px] bg-black text-white px-1.5 py-0.5 rounded-xs uppercase">
               ★ URGENTE ★
             </span>
           )}
@@ -367,55 +370,51 @@ export function Ticket({
 
         {orden.nota_credito_ncf ? (
           <>
-            <div className="flex items-center gap-1 text-destructive font-bold">
-              <FileText className="h-3 w-3 shrink-0" />
-              <span><b>{isECF ? 'e-NCF Mod.:' : 'NCF Mod.:'}</b> <span className="tabular-nums ml-0.5">{orden.nota_credito_ncf}</span></span>
+            <div className="text-destructive font-bold">
+              <b>{isECF ? 'e-NCF Modificado:' : 'NCF Modificado:'}</b> <span className="tabular-nums ml-0.5">{orden.nota_credito_ncf}</span>
             </div>
-            <div className="flex items-center gap-1 text-[9.5px]">
-              <FileText className="h-3 w-3 shrink-0" />
-              <span><b>Doc. Mod.:</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span></span>
+            <div className="text-[10px]">
+              <b>Doc. Modificado:</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span>
             </div>
           </>
         ) : (
           orden.ncf && (
-            <div className="flex items-center gap-1">
-              <FileText className="h-3 w-3 shrink-0 text-black" />
-              <span><b>{isECF ? "e-NCF:" : "NCF:"}</b> <span className="font-bold tabular-nums ml-0.5">{orden.ncf}</span></span>
+            <div>
+              <b>{isECF ? "e-NCF:" : "NCF:"}</b> <span className="font-bold tabular-nums ml-0.5">{orden.ncf}</span>
             </div>
           )
         )}
 
-        <div className="flex items-center gap-1">
-          <Calendar className="h-3 w-3 shrink-0 text-black" />
-          <span><b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(orden.creado_en)}</span></span>
+        <div>
+          <b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(orden.creado_en)}</span>
         </div>
 
         {orden.notas && ((cfg?.ticket_mostrar_notas || esCopiaCaja) && !ocultarNotas) && (
-          <div className="border border-black px-1.5 py-0.5 my-1 text-[9.5px] leading-tight bg-black/5">
+          <div className="border border-black px-1.5 py-0.5 my-1 text-[10px] leading-tight bg-black/5">
             <b>NOTA:</b> {orden.notas}
           </div>
         )}
       </div>
 
-      {/* SECCIÓN: DATOS DEL CLIENTE CON ENCABEZADO Y MICRO-ICONOS */}
+      {/* SECCIÓN: DATOS DEL CLIENTE */}
       {cliente && cliente.nombre !== "Consumidor" && (
         <>
           <Sep />
-          <div className="text-center font-bold tracking-widest text-[10.5px] uppercase py-0.5">
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
             DATOS DEL CLIENTE
           </div>
           <Sep />
-          <div className="space-y-0.5 text-[10px]">
-            <div className="flex items-start gap-1">
-              <User className="h-3 w-3 shrink-0 mt-0.5 text-black" />
+          <div className="space-y-1 text-[11px]">
+            <div className="flex items-start gap-1.5">
+              <User className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
               <div>
                 <b>Cliente:</b> <span className="font-semibold ml-0.5">{cliente.nombre} {cliente.apellido || ""}</span>
               </div>
             </div>
 
             {cliente.cedula && (
-              <div className="flex items-start gap-1">
-                <CreditCard className="h-3 w-3 shrink-0 mt-0.5 text-black" />
+              <div className="flex items-start gap-1.5 text-[10px]">
+                <CreditCard className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
                 <div>
                   <b>{cliente.tipo === 'Empresa' ? 'RNC:' : 'Cédula:'}</b> <span className="font-semibold tabular-nums ml-0.5">{cliente.cedula}</span>
                 </div>
@@ -423,8 +422,8 @@ export function Ticket({
             )}
 
             {cliente.telefono && cliente.telefono !== "---" && (
-              <div className="flex items-start gap-1">
-                <Phone className="h-3 w-3 shrink-0 mt-0.5 text-black" />
+              <div className="flex items-start gap-1.5 text-[10px]">
+                <Phone className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
                 <div>
                   <b>Teléfono:</b> <span className="font-semibold tabular-nums ml-0.5">{formatPhoneDO(cliente.telefono)}</span>
                 </div>
@@ -432,8 +431,8 @@ export function Ticket({
             )}
 
             {cliente.direccion && (
-              <div className="flex items-start gap-1 leading-tight">
-                <MapPin className="h-3 w-3 shrink-0 mt-0.5 text-black" />
+              <div className="flex items-start gap-1.5 text-[10px] leading-tight">
+                <MapPin className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
                 <div className="break-words">
                   <b>Dirección:</b> <span className="font-normal ml-0.5">{cliente.direccion}</span>
                 </div>
@@ -445,7 +444,7 @@ export function Ticket({
 
       <Sep />
 
-      {/* 4. ITEMS Y SERVICIOS */}
+      {/* 4. ITEMS Y SERVICIOS CON PASTILLA REDONDEADA */}
       <div>
         {(() => {
           const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
@@ -460,7 +459,7 @@ export function Ticket({
 
           return (
             <>
-              {/* Servicios con caja de servicio */}
+              {/* Servicios con caja de servicio redondeada */}
               {orden.servicios?.map((sName, i) => {
                 const srv = srvListSafe.find(s => s.nombre === sName);
                 const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
@@ -474,40 +473,41 @@ export function Ticket({
                 );
 
                 return (
-                  <div key={'s'+i} className="mb-2">
-                    {/* Caja de Servicio Estilizada */}
-                    <div className="my-1 rounded border border-black bg-black text-white px-2 py-0.5 flex items-center justify-between text-[10px] uppercase tracking-wide">
-                      <div className="flex items-center gap-1 font-bold">
-                        <WashingMachine className="h-2.5 w-2.5" />
-                        <span className="text-[8.5px] tracking-wider">SERVICIO</span>
+                  <div key={'s'+i} className="mb-2.5">
+                    {/* Caja de Servicio con Esquinas Suaves (rounded-md) */}
+                    <div className="my-1.5 rounded-md bg-black text-white px-2.5 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
+                      <div className="flex items-center gap-1.5 font-bold shrink-0">
+                        <WashingMachine className="h-3.5 w-3.5" />
+                        <span className="text-[9.5px] tracking-wider">SERVICIO</span>
                       </div>
-                      <span className="font-bold truncate text-[10px]">{sName}</span>
+                      <div className="h-3.5 w-px bg-white/40 mx-2" />
+                      <span className="font-bold truncate text-[10.5px] tracking-wide text-right">{sName}</span>
                     </div>
 
                     {/* Tabla de encabezados */}
-                    <div className="flex justify-between items-center font-bold uppercase text-[9.5px] pb-0.5 border-b border-black text-black">
-                      <div className="w-[50%] flex items-center gap-0.5">
-                        <List className="h-2.5 w-2.5 shrink-0" />
+                    <div className="flex justify-between items-center font-bold uppercase text-[10px] pb-1 border-b border-black text-black">
+                      <div className="w-[48%] flex items-center gap-1">
+                        <Shirt className="h-3.5 w-3.5 shrink-0" />
                         <span>DESCRIPCIÓN</span>
                       </div>
-                      <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
-                        <BadgePercent className="h-2.5 w-2.5 shrink-0" />
+                      <div className="w-[22%] text-right flex items-center justify-end gap-1">
+                        <BadgePercent className="h-3 w-3 shrink-0" />
                         <span>ITBIS</span>
                       </div>
-                      <div className="w-[30%] text-right flex items-center justify-end gap-0.5">
-                        <Tag className="h-2.5 w-2.5 shrink-0" />
+                      <div className="w-[30%] text-right flex items-center justify-end gap-1">
+                        <Tag className="h-3 w-3 shrink-0" />
                         <span>VALOR</span>
                       </div>
                     </div>
 
                     {/* Fila del servicio si tiene precio directo */}
                     {p > 0 && (
-                      <div className="flex justify-between items-start py-0.5 border-b border-dotted border-black/30 font-medium">
-                        <div className="w-[50%] pr-0.5">
-                          <div className="font-bold text-[10px]">Servicio {sName}</div>
-                          <div className="text-[9px] text-black/80 font-semibold tabular-nums">1 × {formatRD(p).replace("RD$", "")}</div>
+                      <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
+                        <div className="w-[48%] pr-1">
+                          <div className="font-bold text-[10.5px]">Servicio {sName}</div>
+                          <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatRD(p).replace("RD$", "")}</div>
                         </div>
-                        <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums">
+                        <div className="w-[22%] text-right font-semibold pt-0.5 tabular-nums">
                           {cfg?.ncf_facturacion_activa && orden.itbis > 0 ? (p * ((cfg.itbis_porcentaje || 18) / 100)).toFixed(2) : "0.00"}
                         </div>
                         <div className="w-[30%] text-right font-bold pt-0.5 tabular-nums">
@@ -535,15 +535,15 @@ export function Ticket({
                         const cantPrefix = it.cantidad > 1 ? `${it.cantidad}x ` : "";
 
                         return (
-                          <div key={'sd'+dIdx} className="flex justify-between items-start py-0.5">
-                            <div className="w-[50%] pr-0.5">
-                              <div className="font-semibold text-black text-[10px] leading-tight">
+                          <div key={'sd'+dIdx} className="flex justify-between items-start py-1">
+                            <div className="w-[48%] pr-1">
+                              <div className="font-semibold text-black text-[10.5px] leading-tight">
                                 {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb)` : ""}
                               </div>
-                              {it.color && <div className="text-[8.5px] text-black/80 font-medium">Color: {it.color}</div>}
-                              {it.notas && <div className="text-[8.5px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
+                              {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
+                              {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                             </div>
-                            <div className="w-[20%] text-right font-semibold pt-0.5 text-black tabular-nums">
+                            <div className="w-[22%] text-right font-semibold pt-0.5 text-black tabular-nums">
                               {baseTotal > 0 ? (itemItbis > 0 ? itemItbis.toFixed(2) : "0.00") : "—"}
                             </div>
                             <div className="w-[30%] text-right font-bold pt-0.5 text-black tabular-nums">
@@ -560,17 +560,17 @@ export function Ticket({
               {/* Prendas sueltas si no tienen servicio padre */}
               {itemsSueltos.length > 0 && (
                 <div className="mb-2">
-                  <div className="flex justify-between items-center font-bold uppercase text-[9.5px] pb-0.5 border-b border-black text-black">
-                    <div className="w-[50%] flex items-center gap-0.5">
-                      <List className="h-2.5 w-2.5 shrink-0" />
+                  <div className="flex justify-between items-center font-bold uppercase text-[10px] pb-1 border-b border-black text-black">
+                    <div className="w-[48%] flex items-center gap-1">
+                      <Shirt className="h-3.5 w-3.5 shrink-0" />
                       <span>DESCRIPCIÓN</span>
                     </div>
-                    <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
-                      <BadgePercent className="h-2.5 w-2.5 shrink-0" />
+                    <div className="w-[22%] text-right flex items-center justify-end gap-1">
+                      <BadgePercent className="h-3 w-3 shrink-0" />
                       <span>ITBIS</span>
                     </div>
-                    <div className="w-[30%] text-right flex items-center justify-end gap-0.5">
-                      <Tag className="h-2.5 w-2.5 shrink-0" />
+                    <div className="w-[30%] text-right flex items-center justify-end gap-1">
+                      <Tag className="h-3 w-3 shrink-0" />
                       <span>VALOR</span>
                     </div>
                   </div>
@@ -589,17 +589,17 @@ export function Ticket({
                         }
                       }
                       return (
-                        <div key={'suelto'+i} className="flex justify-between items-start py-0.5">
-                          <div className="w-[50%] pr-0.5">
-                            <div className="font-semibold leading-tight text-[10px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                        <div key={'suelto'+i} className="flex justify-between items-start py-1">
+                          <div className="w-[48%] pr-1">
+                            <div className="font-semibold leading-tight text-[10.5px]">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
                             {it.servicio_origen && (
-                              <div className="text-[8.5px] font-bold text-black/80">↳ {it.servicio_origen}</div>
+                              <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
                             )}
-                            <div className="text-[9px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
-                            {it.color && <div className="text-[8.5px] text-black/80 font-medium">Color: {it.color}</div>}
-                            {it.notas && <div className="text-[8.5px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
+                            <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatRD(it.precio_unitario).replace("RD$", "")}</div>
+                            {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
+                            {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>
-                          <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums">{itemItbis > 0 ? itemItbis.toFixed(2) : "0.00"}</div>
+                          <div className="w-[22%] text-right font-semibold pt-0.5 tabular-nums">{itemItbis > 0 ? itemItbis.toFixed(2) : "0.00"}</div>
                           <div className="w-[30%] text-right font-bold pt-0.5 tabular-nums">{valor.toFixed(2)}</div>
                         </div>
                       );
@@ -614,20 +614,23 @@ export function Ticket({
 
       <Sep />
 
-      {/* 5. RECUADRO DE TOTAL DE PRENDAS */}
-      <div className="my-1 rounded border border-black py-1 px-2 flex items-center justify-between bg-black/[0.02]">
-        <div className="flex items-center gap-1 font-bold text-[10.5px] uppercase tracking-wider">
-          <Shirt className="h-3.5 w-3.5 shrink-0 text-black" />
+      {/* 5. RECUADRO DE TOTAL DE PRENDAS (ESQUINAS SUAVES Y MISMA FUENTE) */}
+      <div className="my-2 rounded-md border border-black py-1 px-2.5 flex items-center">
+        <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[11px] uppercase tracking-wide">
+          <Package className="h-4 w-4 shrink-0 text-black" />
           <span>TOTAL DE PRENDAS:</span>
         </div>
-        <div className="font-black text-[14px] tabular-nums">{totalPrendas}</div>
+        <div className="h-4 w-px bg-black/40" />
+        <div className="w-16 flex items-center justify-center font-bold text-[15px]" style={{ fontFamily: '"Plus Jakarta Sans", sans-serif' }}>
+          {totalPrendas}
+        </div>
       </div>
 
-      {/* 6. DESGLOSE FINANCIERO CON MICRO-ICONOS */}
-      <div className="space-y-0.5 text-[10.5px] pt-0.5">
+      {/* 6. DESGLOSE FINANCIERO */}
+      <div className="space-y-1 text-[11px] pt-1">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1 font-semibold">
-            <Calculator className="h-3 w-3 shrink-0 text-black" />
+          <div className="flex items-center gap-1.5 font-semibold">
+            <Calculator className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Subtotal</span>
           </div>
           <span className="font-semibold tabular-nums">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
@@ -635,8 +638,8 @@ export function Ticket({
 
         {cfg?.ncf_facturacion_activa && orden.itbis > 0 && (
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-1 font-semibold">
-              <Percent className="h-3 w-3 shrink-0 text-black" />
+            <div className="flex items-center gap-1.5 font-semibold">
+              <Percent className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>ITBIS {cfg?.itbis_porcentaje ?? 18}%</span>
             </div>
             <span className="font-semibold tabular-nums">{formatRD(orden.itbis).replace("DOP", "RD$")}</span>
@@ -652,8 +655,8 @@ export function Ticket({
 
         {orden.costo_envio && orden.costo_envio > 0 && (
           <div className="flex justify-between items-center">
-            <div className="flex items-center gap-1 font-semibold">
-              <Truck className="h-3 w-3 shrink-0 text-black" />
+            <div className="flex items-center gap-1.5 font-semibold">
+              <Truck className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>Envío a domicilio</span>
             </div>
             <span className="font-semibold tabular-nums">{formatRD(orden.costo_envio).replace("DOP", "RD$")}</span>
@@ -663,38 +666,38 @@ export function Ticket({
         <div className="my-1 border-t-[1.5px] border-dashed border-black" />
 
         <div className="flex justify-between items-center py-0.5">
-          <div className="flex items-center gap-1 text-[12px] font-black tracking-tight">
-            <CircleDollarSign className="h-3.5 w-3.5 shrink-0 text-black" />
+          <div className="flex items-center gap-1.5 text-[13px] font-black tracking-tight">
+            <CircleDollarSign className="h-4 w-4 shrink-0 text-black" />
             <span>TOTAL</span>
           </div>
-          <span className="font-black text-[14px] tabular-nums">{formatRD(orden.total).replace("DOP", "RD$")}</span>
+          <span className="font-black text-[15px] tabular-nums">{formatRD(orden.total).replace("DOP", "RD$")}</span>
         </div>
       </div>
 
       <Sep />
 
-      {/* 7. DETALLES DE PAGO Y LOGÍSTICA CON MICRO-ICONOS */}
-      <div className="space-y-0.5 text-[10.5px]">
+      {/* 7. DETALLES DE PAGO Y LOGÍSTICA */}
+      <div className="space-y-1 text-[11px]">
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1 font-semibold">
-            <CreditCard className="h-3 w-3 shrink-0 text-black" />
+          <div className="flex items-center gap-1.5 font-semibold">
+            <CreditCard className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Método de pago:</span>
           </div>
-          <span className="font-bold uppercase">
+          <span className="font-semibold uppercase">
             {orden.metodo_pago === "PAGO_AL_RETIRAR" ? "AL RETIRAR" : orden.metodo_pago === "CREDITO" ? "CRÉDITO" : orden.metodo_pago === "MIXTO" ? "MIXTO" : orden.metodo_pago}
           </span>
         </div>
 
         {orden.condicion_cobro && orden.condicion_cobro !== "COBRAR_AHORA" && (
-          <div className="flex justify-between items-center text-[9.5px]">
+          <div className="flex justify-between items-center text-[10px]">
             <span className="text-black/70">Modalidad:</span>
             <span className="font-semibold">{orden.condicion_cobro === "ANTICIPO" ? "ANTICIPO" : orden.condicion_cobro === "AL_RETIRAR" ? "AL RETIRAR" : "CRÉDITO"}</span>
           </div>
         )}
 
         {orden.pagos_detalle && orden.pagos_detalle.length > 1 && (
-          <div className="py-1 my-0.5 border-y border-dotted border-black/60 text-[9px]">
-            <div className="font-bold uppercase text-[8.5px] text-black/70 mb-0.5">Desglose de cobro:</div>
+          <div className="py-1 my-1 border-y border-dotted border-black/60 text-[9.5px]">
+            <div className="font-bold uppercase text-[9px] text-black/70 mb-0.5">Desglose de cobro:</div>
             {orden.pagos_detalle.map((pd, pidx) => (
               <div key={pidx} className="flex justify-between font-medium">
                 <span>• {pd.metodo}{pd.referencia ? ` (${pd.referencia})` : ""}:</span>
@@ -705,8 +708,8 @@ export function Ticket({
         )}
 
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1 font-semibold">
-            <FileText className="h-3 w-3 shrink-0 text-black" />
+          <div className="flex items-center gap-1.5 font-semibold">
+            <FileText className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Estado de factura:</span>
           </div>
           <span className="font-black uppercase tracking-wide">{orden.saldo === 0 ? "PAGADA" : "PENDIENTE"}</span>
@@ -734,16 +737,16 @@ export function Ticket({
         )}
 
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1 font-semibold">
-            <Calendar className="h-3 w-3 shrink-0 text-black" />
+          <div className="flex items-center gap-1.5 font-semibold">
+            <Calendar className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Fecha de entrega:</span>
           </div>
           <span className="font-semibold">{humanizeDate(orden.fecha_entrega, false)}</span>
         </div>
 
         <div className="flex justify-between items-center">
-          <div className="flex items-center gap-1 font-semibold">
-            <Package className="h-3 w-3 shrink-0 text-black" />
+          <div className="flex items-center gap-1.5 font-semibold">
+            <Package className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Estado de la orden:</span>
           </div>
           <span className="font-black uppercase tracking-wide">{orden.estado.replace("_", " ")}</span>
@@ -754,8 +757,8 @@ export function Ticket({
 
       {/* 8. ATENDIDO POR & PIE DE PÁGINA */}
       <div className="text-center py-0.5">
-        <div className="text-[10px] font-bold text-black uppercase tracking-wide">Atendido por:</div>
-        <div className="text-[13px] font-black text-black mt-0.5">{empleado.nombre}</div>
+        <div className="text-[11px] font-bold text-black uppercase tracking-wide">Atendido por:</div>
+        <div className="text-[14px] font-black text-black mt-0.5">{empleado.nombre}</div>
       </div>
 
       <Sep />
