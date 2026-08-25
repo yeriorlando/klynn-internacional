@@ -83,7 +83,14 @@ export function Ticket({
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
   const ecfStatus = String((orden as any).ecf_status || '').toUpperCase();
   const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
-  const isAcceptedECF = isECF && (ecfStatus === 'ACCEPTED' || ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS');
+  const isAcceptedECF = isECF && !isRejectedECF && (
+    ecfStatus === 'ACCEPTED' || 
+    ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS' || 
+    ecfStatus === 'REGISTERED' || 
+    ecfStatus === 'SIGNED' || 
+    ecfStatus === 'DELIVERED' ||
+    (!!orden.ecf_qr && orden.ecf_qr !== "null" && orden.ecf_qr.length > 5)
+  );
   const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
 
   const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");

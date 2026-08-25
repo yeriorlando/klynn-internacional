@@ -186,16 +186,16 @@ serve(async (req) => {
       ? "https://api.ecf.sandbox.pronesoft.com/api/v1"
       : "https://api.ecf.pronesoft.com/api/v1";
     const clientId = usesSandboxCredentials
-      ? Deno.env.get("PRONESOFT_SANDBOX_CLIENT_ID")
+      ? Deno.env.get("PRONESOFT_SANDBOX_CLIENT_ID") || Deno.env.get("PRONESOFT_CLIENT_ID")
       : Deno.env.get("PRONESOFT_PRODUCTION_CLIENT_ID") || Deno.env.get("PRONESOFT_CLIENT_ID");
     const clientSecret = usesSandboxCredentials
-      ? Deno.env.get("PRONESOFT_SANDBOX_CLIENT_SECRET")
+      ? Deno.env.get("PRONESOFT_SANDBOX_CLIENT_SECRET") || Deno.env.get("PRONESOFT_CLIENT_SECRET")
       : Deno.env.get("PRONESOFT_PRODUCTION_CLIENT_SECRET") ||
         Deno.env.get("PRONESOFT_CLIENT_SECRET");
     if (!clientId || !clientSecret) {
       const prefix = usesSandboxCredentials ? "PRONESOFT_SANDBOX" : "PRONESOFT_PRODUCTION";
       throw new Error(
-        `Faltan los secretos ${prefix}_CLIENT_ID y ${prefix}_CLIENT_SECRET en la Edge Function.`,
+        `Faltan los secretos ${prefix}_CLIENT_ID y ${prefix}_CLIENT_SECRET (o PRONESOFT_CLIENT_ID y PRONESOFT_CLIENT_SECRET) en la Edge Function.`,
       );
     }
 

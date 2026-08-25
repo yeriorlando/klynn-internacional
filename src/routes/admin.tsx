@@ -6,7 +6,7 @@ import {
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
   Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes,
-  Server, HardDrive, Database, ArrowUpRight, Activity, Globe
+  Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -778,19 +778,11 @@ function AdminPage() {
             </TabsTrigger>
 
             <TabsTrigger 
-              value="fiscal-companies"
+              value="fiscal"
               className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
             >
-              <ShieldCheck className="h-4 w-4 shrink-0" />
-              <span>Empresas Fiscales (Pronesoft)</span>
-            </TabsTrigger>
-
-            <TabsTrigger
-              value="security"
-              className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
-            >
-              <Lock className="h-4 w-4 shrink-0" />
-              <span>Seguridad</span>
+              <ShieldCheck className="h-4 w-4 shrink-0 text-emerald-600 data-[state=active]:text-white" />
+              <span>Fiscal</span>
             </TabsTrigger>
 
             <TabsTrigger 
@@ -1984,206 +1976,281 @@ function AdminPage() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="fiscal-companies" className="mt-6 sm:mt-8 space-y-6">
-            <div className="mb-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
-              <div>
-                <h2 className="font-display text-xl font-bold flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-emerald-600" /> Empresas Fiscales Asociadas (Pronesoft / DGII)
-                </h2>
-                <p className="text-sm text-muted-foreground">
-                  Directorio maestro de lavanderías registradas como empresas emisoras e-CF en la API de Pronesoft.
-                </p>
-              </div>
-              
-              <div className="flex flex-wrap items-center gap-2.5">
-                {/* Selector de Ambiente */}
-                <div className="flex items-center gap-1 bg-muted/60 border border-border/70 rounded-xl p-1 shrink-0">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFiscalEnvFilter('all');
-                      loadPronesoftData('all');
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'all' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    Todos ({pronesoftCompanies.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFiscalEnvFilter('sandbox');
-                      loadPronesoftData('sandbox');
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'sandbox' ? 'bg-amber-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    Pruebas / Sandbox
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setFiscalEnvFilter('production');
-                      loadPronesoftData('production');
-                    }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'production' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
-                  >
-                    Producción (Live)
-                  </button>
-                </div>
-
-                <Button 
-                  onClick={() => loadPronesoftData(fiscalEnvFilter)} 
-                  disabled={loadingPronesoft}
-                  variant="outline"
-                  className="h-9 px-4 rounded-xl font-bold border-primary/20 text-primary hover:bg-primary/5 gap-1.5 shrink-0"
-                >
-                  <RefreshCw className={`h-4 w-4 ${loadingPronesoft ? "animate-spin" : ""}`} /> 
-                  {loadingPronesoft ? "Consultando..." : "Refrescar"}
-                </Button>
-              </div>
-            </div>
-
-            <Card className="overflow-hidden border-none shadow-card">
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground border-b border-border">
-                    <tr>
-                      <th className="px-6 py-4 text-left font-bold">Empresa / Razón Social</th>
-                      <th className="px-6 py-4 text-center font-bold">RNC / Cédula</th>
-                      <th className="px-6 py-4 text-center font-bold">Pronesoft Tenant ID</th>
-                      <th className="px-6 py-4 text-center font-bold">Ambiente DGII</th>
-                      <th className="px-6 py-4 text-center font-bold">Lavandería Klynn</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {pronesoftCompanies.map((c: any) => {
-                      const rnc = (c.rnc || c.taxId || c.identification || "").trim();
-                      const tenantId = (c.id || c.tenantId || c.pronesoft_tenant_id || "").trim();
-                      const name = c.name || c.companyName || c.razon_social || "Lavandería Registrada";
-                      
-                      const cleanRnc = rnc.replace(/^SBX/i, '').replace(/\D/g, '');
-                      const matchedConfig = ecfConfigsMap[rnc.toUpperCase()] || ecfConfigsMap[tenantId] || (cleanRnc ? ecfConfigsMap[cleanRnc] : null);
-                      const matchedTenant = matchedConfig 
-                        ? tenants.find(t => t.id === matchedConfig.tenant_id) 
-                        : tenants.find(t => t.rnc === rnc || (cleanRnc && t.rnc?.replace(/\D/g, '') === cleanRnc));
-
-                      const isProd = c._ambiente === 'production' || c.ambiente === 'produccion' || matchedConfig?.ambiente === 'produccion';
-
-                      return (
-                        <tr key={`${tenantId || rnc}-${c._ambiente || 'env'}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
-                          <td className="px-6 py-4 font-bold text-foreground">
-                            <div className="flex items-center gap-2">
-                              <Building2 className={`h-4 w-4 shrink-0 ${isProd ? "text-emerald-600" : "text-amber-600"}`} />
-                              <span>{name}</span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
-                            {rnc || "N/A"}
-                          </td>
-                          <td className="px-6 py-4 text-center font-mono text-xs text-muted-foreground">
-                            <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 select-all">
-                              {tenantId || "Automático"}
-                            </span>
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {isProd ? (
-                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase gap-1">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                                Producción (Live)
-                              </Badge>
-                            ) : (
-                              <Badge className="bg-amber-50 text-amber-800 hover:bg-amber-50 border-amber-300 text-[10px] font-bold uppercase gap-1">
-                                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
-                                Pruebas (Sandbox)
-                              </Badge>
-                            )}
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            {matchedTenant ? (
-                              <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-bold">
-                                {matchedTenant.nombre}
-                              </Badge>
-                            ) : (
-                              <span className="text-xs text-muted-foreground italic">No vinculada</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {pronesoftCompanies.length === 0 && !loadingPronesoft && (
-                      <tr>
-                        <td colSpan={5} className="py-12 text-center text-muted-foreground font-medium">
-                          No se encontraron empresas asociadas en la API de Pronesoft {fiscalEnvFilter === 'all' ? '' : `para ${fiscalEnvFilter}`}.
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </Card>
-          </TabsContent>
-
-          <TabsContent value="security" className="space-y-6 mt-6">
-            <Card className="rounded-3xl border border-border/70 overflow-hidden shadow-sm">
+          <TabsContent value="fiscal" className="mt-6 sm:mt-8 space-y-8">
+            {/* 1. SECCIÓN: CONTROL DE AMBIENTE FISCAL */}
+            <Card className="rounded-3xl border border-border/70 overflow-hidden shadow-sm bg-surface">
               <div className="p-5 sm:p-6 border-b border-border/60 bg-gradient-to-r from-slate-50 to-blue-50/60 dark:from-slate-900 dark:to-blue-950/30">
-                <div className="flex items-start gap-3">
-                  <div className="h-11 w-11 rounded-2xl bg-blue-600 text-white flex items-center justify-center shadow-sm shrink-0">
-                    <ShieldCheck className="h-5 w-5" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-700 text-white flex items-center justify-center shadow-md shadow-blue-500/20 shrink-0">
+                      <ShieldCheck className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h2 className="font-display text-xl font-bold">Control de Ambiente Fiscal Global</h2>
+                        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 font-extrabold text-[10px] uppercase">
+                          Pronesoft / DGII
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">
+                        Define la política global de transmisión de comprobantes fiscales electrónicos (e-CF). Las credenciales OAuth permanecen cifradas en Deno Edge Runtime.
+                      </p>
+                    </div>
                   </div>
-                  <div>
-                    <h2 className="font-display text-xl font-bold">Control de ambiente fiscal</h2>
-                    <p className="text-sm text-muted-foreground mt-1 max-w-3xl">
-                      Define si toda la plataforma usa un ambiente Pronesoft o si cada lavandería conserva su asignación individual. Las credenciales permanecen en Edge Runtime y nunca se muestran aquí.
-                    </p>
-                  </div>
+
+                  <Button
+                    type="button"
+                    onClick={async () => {
+                      await saveGlobalConfig(globalConfig);
+                      toast.success("Política fiscal global actualizada y guardada");
+                    }}
+                    className="rounded-xl font-bold gap-2 px-5 shadow-sm shrink-0 cursor-pointer"
+                  >
+                    <CheckCircle2 className="h-4 w-4" />
+                    Guardar política
+                  </Button>
                 </div>
               </div>
 
-              <div className="p-5 sm:p-6 space-y-5">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                  {([
-                    { value: "per_tenant", title: "Por lavandería", description: "Respeta el ambiente asignado al editar cada negocio.", tone: "border-slate-300 bg-slate-50 dark:bg-slate-900" },
-                    { value: "TesteCF", title: "TesteCF", description: "Fuerza pruebas técnicas para toda la plataforma.", tone: "border-sky-300 bg-sky-50 dark:bg-sky-950/30" },
-                    { value: "CerteCF", title: "CerteCF", description: "Fuerza homologación y certificación DGII.", tone: "border-amber-300 bg-amber-50 dark:bg-amber-950/30" },
-                    { value: "eCF", title: "Producción eCF", description: "Usa credenciales y operaciones fiscales reales.", tone: "border-emerald-300 bg-emerald-50 dark:bg-emerald-950/30" },
-                  ] as const).map((option) => {
-                    const active = (globalConfig.fiscal_environment_policy || "per_tenant") === option.value;
+              <div className="p-5 sm:p-6 space-y-6">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                  {[
+                    {
+                      value: "per_tenant",
+                      title: "Por lavandería",
+                      subtitle: "Multitenant / Flexible",
+                      description: "Cada lavandería conserva su ambiente individual (pruebas o producción).",
+                      pill: "Recomendado",
+                      icon: Building2,
+                      activeClass: "border-indigo-600 bg-indigo-50/70 dark:bg-indigo-950/30 text-indigo-900 dark:text-indigo-200 shadow-md ring-2 ring-indigo-500/30",
+                      badgeClass: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/50 dark:text-indigo-300",
+                      iconBg: "bg-indigo-600 text-white",
+                    },
+                    {
+                      value: "TesteCF",
+                      title: "TesteCF",
+                      subtitle: "Pruebas Sandbox",
+                      description: "Fuerza pruebas técnicas con RNCs simulados (SBX). No envía a DGII.",
+                      pill: "Sin Certificado P12",
+                      icon: FlaskConical,
+                      activeClass: "border-sky-600 bg-sky-50/70 dark:bg-sky-950/30 text-sky-900 dark:text-sky-200 shadow-md ring-2 ring-sky-500/30",
+                      badgeClass: "bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300",
+                      iconBg: "bg-sky-600 text-white",
+                    },
+                    {
+                      value: "CerteCF",
+                      title: "CerteCF",
+                      subtitle: "Certificación DGII",
+                      description: "Fuerza homologación y sets de pruebas oficiales con la DGII.",
+                      pill: "Requiere Cert P12",
+                      icon: FileCheck2,
+                      activeClass: "border-amber-600 bg-amber-50/70 dark:bg-amber-950/30 text-amber-900 dark:text-amber-200 shadow-md ring-2 ring-amber-500/30",
+                      badgeClass: "bg-amber-100 text-amber-800 dark:bg-amber-900/50 dark:text-amber-300",
+                      iconBg: "bg-amber-600 text-white",
+                    },
+                    {
+                      value: "eCF",
+                      title: "Producción eCF",
+                      subtitle: "DGII Live (Real)",
+                      description: "Emisión de facturas reales con validez tributaria y reporte en tiempo real.",
+                      pill: "Comprobantes Reales",
+                      icon: Globe,
+                      activeClass: "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 text-emerald-900 dark:text-emerald-200 shadow-md ring-2 ring-emerald-500/30",
+                      badgeClass: "bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300",
+                      iconBg: "bg-emerald-600 text-white",
+                    },
+                  ].map((opt) => {
+                    const active = (globalConfig.fiscal_environment_policy || "per_tenant") === opt.value;
+                    const IconComp = opt.icon;
                     return (
                       <button
-                        key={option.value}
+                        key={opt.value}
                         type="button"
-                        onClick={() => setGlobalConfig({ ...globalConfig, fiscal_environment_policy: option.value })}
-                        className={`text-left rounded-2xl border-2 p-4 transition-all cursor-pointer ${option.tone} ${active ? "ring-2 ring-primary/25 border-primary shadow-sm" : "opacity-80 hover:opacity-100"}`}
+                        onClick={() => setGlobalConfig({ ...globalConfig, fiscal_environment_policy: opt.value })}
+                        className={`relative text-left rounded-2xl border-2 p-5 transition-all duration-200 cursor-pointer flex flex-col justify-between h-full group ${
+                          active
+                            ? opt.activeClass
+                            : "border-border/80 bg-surface hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs"
+                        }`}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="font-bold text-sm">{option.title}</span>
-                          {active && <CheckCircle2 className="h-4 w-4 text-primary" />}
+                        <div>
+                          <div className="flex items-start justify-between gap-2 mb-3">
+                            <div className={`h-10 w-10 rounded-xl flex items-center justify-center shadow-xs transition-transform group-hover:scale-105 ${active ? opt.iconBg : "bg-muted text-foreground"}`}>
+                              <IconComp className="h-5 w-5" />
+                            </div>
+                            <div className="flex items-center gap-1.5">
+                              <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${opt.badgeClass}`}>
+                                {opt.subtitle}
+                              </span>
+                              <div className={`h-5 w-5 rounded-full border-2 flex items-center justify-center transition-colors ${active ? "border-primary bg-primary text-white" : "border-muted-foreground/40 bg-transparent"}`}>
+                                {active && <CheckCircle2 className="h-3.5 w-3.5" />}
+                              </div>
+                            </div>
+                          </div>
+
+                          <h3 className="font-bold text-base text-foreground group-hover:text-primary transition-colors">
+                            {opt.title}
+                          </h3>
+                          <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
+                            {opt.description}
+                          </p>
                         </div>
-                        <p className="text-xs text-muted-foreground mt-2 leading-relaxed">{option.description}</p>
+
+                        <div className="mt-4 pt-3 border-t border-border/50 flex items-center justify-between text-[11px] font-semibold text-muted-foreground">
+                          <span>{opt.pill}</span>
+                          {active && <span className="font-bold text-primary flex items-center gap-1">Activo ✓</span>}
+                        </div>
                       </button>
                     );
                   })}
                 </div>
 
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20 p-4">
-                  <div className="flex items-start gap-2.5">
-                    <AlertCircle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-                    <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                      Cambiar el modo global afecta las próximas llamadas al SDK. No mueve certificados, empresas ni secuencias entre ambientes.
-                    </p>
-                  </div>
-                  <Button
-                    type="button"
-                    onClick={async () => {
-                      await saveGlobalConfig(globalConfig);
-                      toast.success("Política fiscal guardada");
-                    }}
-                    className="rounded-xl font-bold shrink-0"
-                  >
-                    Guardar política
-                  </Button>
+                <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20 p-4">
+                  <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
+                  <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+                    <strong>Nota importante:</strong> Cambiar el ambiente fiscal global afecta inmediatamente las próximas llamadas al SDK de Pronesoft. No altera certificados, empresas ni secuencias ya creadas en cada ambiente.
+                  </p>
                 </div>
               </div>
             </Card>
+
+            {/* 2. SECCIÓN: EMPRESAS FISCALES ASOCIADAS */}
+            <div className="space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-5 sm:p-6 rounded-3xl border border-border/70 shadow-xs">
+                <div>
+                  <h2 className="font-display text-xl font-bold flex items-center gap-2">
+                    <Building2 className="h-5 w-5 text-blue-600" /> Empresas Fiscales Asociadas (Pronesoft / DGII)
+                  </h2>
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    Directorio maestro de lavanderías registradas como emisoras e-CF en la API de Pronesoft.
+                  </p>
+                </div>
+                
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="flex items-center gap-1 bg-muted/60 border border-border/70 rounded-xl p-1 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFiscalEnvFilter('all');
+                        loadPronesoftData('all');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'all' ? 'bg-primary text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Todos ({pronesoftCompanies.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFiscalEnvFilter('sandbox');
+                        loadPronesoftData('sandbox');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'sandbox' ? 'bg-amber-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Pruebas / Sandbox
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFiscalEnvFilter('production');
+                        loadPronesoftData('production');
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${fiscalEnvFilter === 'production' ? 'bg-emerald-600 text-white shadow-xs' : 'text-muted-foreground hover:text-foreground'}`}
+                    >
+                      Producción (Live)
+                    </button>
+                  </div>
+
+                  <Button 
+                    onClick={() => loadPronesoftData(fiscalEnvFilter)} 
+                    disabled={loadingPronesoft}
+                    variant="outline"
+                    className="h-9 px-4 rounded-xl font-bold border-primary/20 text-primary hover:bg-primary/5 gap-1.5 shrink-0 cursor-pointer"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loadingPronesoft ? "animate-spin" : ""}`} /> 
+                    {loadingPronesoft ? "Consultando..." : "Refrescar"}
+                  </Button>
+                </div>
+              </div>
+
+              <Card className="overflow-hidden border border-border/70 rounded-3xl shadow-sm">
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-surface-elevated text-xs uppercase text-muted-foreground border-b border-border">
+                      <tr>
+                        <th className="px-6 py-4 text-left font-bold">Empresa / Razón Social</th>
+                        <th className="px-6 py-4 text-center font-bold">RNC / Cédula</th>
+                        <th className="px-6 py-4 text-center font-bold">Pronesoft Tenant ID</th>
+                        <th className="px-6 py-4 text-center font-bold">Ambiente DGII</th>
+                        <th className="px-6 py-4 text-center font-bold">Lavandería Klynn</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pronesoftCompanies.map((c: any) => {
+                        const rnc = (c.rnc || c.taxId || c.identification || "").trim();
+                        const tenantId = (c.id || c.tenantId || c.pronesoft_tenant_id || "").trim();
+                        const name = c.name || c.companyName || c.razon_social || "Lavandería Registrada";
+                        
+                        const cleanRnc = rnc.replace(/^SBX/i, '').replace(/\D/g, '');
+                        const matchedConfig = ecfConfigsMap[rnc.toUpperCase()] || ecfConfigsMap[tenantId] || (cleanRnc ? ecfConfigsMap[cleanRnc] : null);
+                        const matchedTenant = matchedConfig 
+                          ? tenants.find(t => t.id === matchedConfig.tenant_id) 
+                          : tenants.find(t => t.rnc === rnc || (cleanRnc && t.rnc?.replace(/\D/g, '') === cleanRnc));
+
+                        const isProd = c._ambiente === 'production' || c.ambiente === 'produccion' || matchedConfig?.ambiente === 'produccion';
+
+                        return (
+                          <tr key={`${tenantId || rnc}-${c._ambiente || 'env'}`} className="border-b border-border/50 hover:bg-muted/30 transition-colors">
+                            <td className="px-6 py-4 font-bold text-foreground">
+                              <div className="flex items-center gap-2">
+                                <Building2 className={`h-4 w-4 shrink-0 ${isProd ? "text-emerald-600" : "text-amber-600"}`} />
+                                <span>{name}</span>
+                              </div>
+                            </td>
+                            <td className="px-6 py-4 text-center font-mono font-bold text-slate-800 dark:text-slate-200">
+                              {rnc || "N/A"}
+                            </td>
+                            <td className="px-6 py-4 text-center font-mono text-xs text-muted-foreground">
+                              <span className="bg-slate-100 dark:bg-slate-800 px-2 py-1 rounded-md border border-slate-200 dark:border-slate-700 select-all">
+                                {tenantId || "Automático"}
+                              </span>
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {isProd ? (
+                                <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold uppercase gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                  Producción (Live)
+                                </Badge>
+                              ) : (
+                                <Badge className="bg-amber-50 text-amber-800 hover:bg-amber-50 border-amber-300 text-[10px] font-bold uppercase gap-1">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                                  Pruebas (Sandbox)
+                                </Badge>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 text-center">
+                              {matchedTenant ? (
+                                <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 font-bold">
+                                  {matchedTenant.nombre}
+                                </Badge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground italic">No vinculada</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                      {pronesoftCompanies.length === 0 && !loadingPronesoft && (
+                        <tr>
+                          <td colSpan={5} className="py-12 text-center text-muted-foreground font-medium">
+                            No se encontraron empresas asociadas en la API de Pronesoft {fiscalEnvFilter === 'all' ? '' : `para ${fiscalEnvFilter}`}.
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </div>
           </TabsContent>
 
           <TabsContent value="invitaciones" className="space-y-6 mt-6">

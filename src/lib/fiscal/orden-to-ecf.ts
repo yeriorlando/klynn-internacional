@@ -83,13 +83,23 @@ export function ordenToECFPayload(
   // 2. Buyer (comprador) — la API de Pronesoft usa "buyer", NO "customer"
   let buyer: ECFBuyer | undefined;
   if (cliente) {
-    buyer = { name: cliente.nombre + (cliente.apellido ? ` ${cliente.apellido}` : '') };
+    buyer = { name: cliente.nombre + (cliente.apellido ? ` ${cliente.apellido}` : "") };
     // Si es crédito fiscal (E31), el RNC/Cédula es requerido
-    if (cliente.cedula) buyer.taxId = cliente.cedula.replace(/[^0-9]/g, '');
+    if (cliente.cedula) {
+      const rawCedula = cliente.cedula.trim().toUpperCase();
+      if (rawCedula.startsWith("SBX")) {
+        buyer.taxId = rawCedula;
+      } else {
+        buyer.taxId = rawCedula.replace(/[^0-9]/g, "");
+      }
+    }
   }
 
-  const requiresBuyerTaxId = ['31', '33', '34', '41', '44', '45', '46', '47'].includes(invoiceType);
-  if (requiresBuyerTaxId && (!buyer?.name?.trim() || !buyer.taxId || ![9, 11].includes(buyer.taxId.length))) {
+  const requiresBuyerTaxId = ["31", "33", "34", "41", "44", "45", "46", "47"].includes(invoiceType);
+  const isValidTaxId =
+    buyer?.taxId &&
+    ([9, 11].includes(buyer.taxId.replace(/\D/g, "").length) || buyer.taxId.startsWith("SBX"));
+  if (requiresBuyerTaxId && (!buyer?.name?.trim() || !isValidTaxId)) {
     throw new Error(`El comprobante E${invoiceType} requiere nombre y RNC/Cédula válido del comprador.`);
   }
 

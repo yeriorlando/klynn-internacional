@@ -2571,7 +2571,14 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
   const ecfStatus = String((orden as any).ecf_status || '').toUpperCase();
   const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
-  const isAcceptedECF = isECF && (ecfStatus === 'ACCEPTED' || ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS');
+  const isAcceptedECF = isECF && !isRejectedECF && (
+    ecfStatus === 'ACCEPTED' || 
+    ecfStatus === 'ACCEPTED_WITH_OBSERVATIONS' || 
+    ecfStatus === 'REGISTERED' || 
+    ecfStatus === 'SIGNED' || 
+    ecfStatus === 'DELIVERED' ||
+    (!!orden.ecf_qr && orden.ecf_qr !== "null" && orden.ecf_qr.length > 5)
+  );
   const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
   const isCréditoFiscal = orden.tipo_ecf === "E31" || orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
   const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
@@ -2796,8 +2803,16 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
             )}
 
             {isECF && !isPendingECF && qrData && (
-              <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-col items-center gap-1.5">
                 <QRCodeSVG value={qrData} size={100} level="M" />
+                <div className="text-[10px] text-center leading-tight text-slate-600 font-medium">
+                  {orden.ecf_security_code && orden.ecf_security_code !== "null" && (
+                    <div>Código de Seguridad: <span className="font-mono font-bold">{orden.ecf_security_code}</span></div>
+                  )}
+                  {orden.ecf_signature_date && orden.ecf_signature_date !== "null" && (
+                    <div>Fecha Firma: {formatDateTimeRD(orden.ecf_signature_date)}</div>
+                  )}
+                </div>
                 <div className="text-[10px] text-center font-bold text-slate-500">
                   Consulte su factura en:<br/>dgii.gov.do
                 </div>

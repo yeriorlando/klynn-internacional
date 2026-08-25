@@ -33,7 +33,7 @@ import {
   type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC, ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC } from "@/lib/fiscal";
+import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC } from "@/lib/fiscal";
 import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -4121,15 +4121,15 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     const raw = (target || "").trim().toUpperCase();
     if (!raw) return;
 
-    // Los RNC SBX conservan el comportamiento normal del Sandbox. Un RNC
-    // numÃ©rico continÃºa hacia la consulta DGII y no se transforma automÃ¡ticamente.
-    if (raw.startsWith('SBX')) {
-      const sandboxContrib = await consultarRNC(raw, 'pruebas');
+    if (!isProductionEnvironment) {
+      const digits = raw.replace(/\D/g, "");
+      const sbxRnc = raw.startsWith("SBX") ? raw : `SBX${digits || "133190907"}`;
+      const sandboxContrib = await consultarRNC(sbxRnc, "pruebas");
       if (sandboxContrib) {
         setDraft((prev) => ({
           ...prev,
           rnc_emisor: sandboxContrib.rnc,
-          razon_social: prev.razon_social || sandboxContrib.name,
+          razon_social: prev.razon_social && prev.razon_social !== "Lavandería" ? prev.razon_social : sandboxContrib.name,
         }));
         toast.success(`Modo Pruebas Sandbox: ${sandboxContrib.rnc} (${sandboxContrib.name})`, { id: "dgii-config-toast" });
         return;
@@ -4144,7 +4144,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
 
     setLoadingRNC(true);
     try {
-      const contrib = await consultarRNC(clean, 'produccion');
+      const contrib = await consultarRNC(clean, "produccion");
       if (contrib && contrib.name) {
         setDraft((prev) => ({
           ...prev,
@@ -4152,11 +4152,6 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
           razon_social: contrib.name,
         }));
         toast.success(`Contribuyente DGII: ${contrib.name} ✅`, { id: "dgii-config-toast" });
-      } else if (!isProductionEnvironment && ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC) {
-        // Prueba temporal: si la consulta no responde, conservamos exactamente
-        // el RNC numérico escrito y no agregamos el prefijo SBX.
-        setDraft((prev) => ({ ...prev, rnc_emisor: clean }));
-        toast.info(`RNC ${clean} conservado manualmente para la prueba Sandbox.`, { id: "dgii-config-toast" });
       } else {
         toast.error("No se encontró el contribuyente en DGII", { id: "dgii-config-toast" });
       }
@@ -4188,9 +4183,6 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     setDraft(d => ({ ...d, is_active: activeValue }));
 
     try {
-      // 1. En pruebas normalmente se usa SBX. La excepción temporal permite
-      // conservar un RNC numérico de 9/11 dígitos para diagnosticar el XSD.
-      // En producción, limpiar a dígitos reales y validar el certificado.
       let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').trim().toUpperCase();
       if (!isProductionEnvironment) {
         if (!cleanRNC.startsWith('SBX')) {

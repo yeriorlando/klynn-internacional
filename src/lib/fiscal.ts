@@ -39,11 +39,6 @@ import { supabase } from "@/lib/supabase";
 import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig } from "./storage";
 import { toast } from "sonner";
 
-// TEMPORAL: habilitado exclusivamente para diagnosticar el rechazo del XSD
-// Sandbox de Pronesoft con un RNC numÃ©rico autorizado por el usuario.
-// Cambiar a false elimina la excepciÃ³n y restaura el prefijo SBX obligatorio.
-export const ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC = true;
-
 function getConfiguredPronesoftEnvironment(config?: ECFConfig | null): ProneSoftEnvironment {
   if (config?.pronesoft_environment === "CerteCF") return "homologacion";
   if (config?.pronesoft_environment === "eCF" || config?.ambiente === "produccion")
@@ -505,20 +500,12 @@ export async function registerTenantInPronesoft(
   const companyName = config.razon_social || tenantData?.nombre || "Lavanderia Klynn";
   let rncToRegister = (config.rnc_emisor || tenantData?.rnc || "SBX987654321").trim().toUpperCase();
 
-  // El contrato sandbox documentado usa SBX. Durante el diagnÃ³stico autorizado
-  // tambiÃ©n preservamos un RNC real de 9/11 dÃ­gitos escrito manualmente.
   if (proneSoftEnv === "sandbox") {
-    const numericRnc = rncToRegister.replace(/\D/g, "");
-    const isAllowedNumericDiagnostic =
-      ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC &&
-      (numericRnc.length === 9 || numericRnc.length === 11);
-    if (!rncToRegister.startsWith("SBX") && !isAllowedNumericDiagnostic) {
+    if (!rncToRegister.startsWith("SBX")) {
       const digitsOnly = rncToRegister.replace(/\D/g, "") || "987654321";
       rncToRegister = `SBX${digitsOnly}`;
-    } else if (isAllowedNumericDiagnostic) {
-      rncToRegister = numericRnc;
     }
-  } else if (proneSoftEnv === "production") {
+  } else {
     rncToRegister = rncToRegister.replace(/^SBX/i, "").replace(/\D/g, "");
   }
 
