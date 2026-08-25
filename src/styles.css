@@ -256,14 +256,23 @@ body.pos-mode .main-header {
     color: black !important;
   }
 
-  /* Ticket térmico — respetar su ancho natural (80mm / 58mm) */
+  /* Ticket térmico — respetar su ancho natural (80mm / 58mm) y forzar gráficos de fondo exactos */
   .thermal-ticket {
     display: block !important;
     position: relative !important;
     margin: 0 auto !important;
     box-shadow: none !important;
     border: none !important;
-    padding: 2mm !important;
+    padding: 1mm 1.5mm !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
+  }
+  
+  .thermal-ticket * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+    color-adjust: exact !important;
   }
   
   /* Reportes (se imprimen con flujo normal para permitir paginación) */

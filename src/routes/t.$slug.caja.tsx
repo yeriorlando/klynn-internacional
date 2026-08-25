@@ -3210,7 +3210,7 @@ function ReporteCuadreThermal({
             box-sizing: border-box !important;
           }
 
-          .thermal-ticket { border: none !important; padding: 0 !important; width: 100% !important; }
+          .thermal-ticket { border: none !important; padding: 0 !important; width: 100% !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
           
           /* Evitar cortes */
           .atomic-print-target * {

@@ -1054,9 +1054,30 @@ function NuevaOrdenPage() {
     check();
   }, [user]);
 
+  const catalogoEfectivo = useMemo(() => {
+    // En modalidad "PRENDAS_CON_SERVICIOS", SOLO mostramos prendas que tengan tratamientos configurados
+    if (cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") {
+      return catalogo.filter((item) => {
+        if (!item.precios_servicios || typeof item.precios_servicios !== "object") return false;
+        let treatmentsCount = 0;
+        for (const [k, p] of Object.entries(item.precios_servicios)) {
+          const num = Number(p);
+          if (num > 0) {
+            const srvObj = serviciosData.find(s => s.id === k || s.nombre.toLowerCase() === k.toLowerCase());
+            if (srvObj || !(k.length > 20 && k.includes("-"))) {
+              treatmentsCount++;
+            }
+          }
+        }
+        return treatmentsCount > 0;
+      });
+    }
+    return catalogo;
+  }, [catalogo, cfg?.pos_modalidad_operativa, serviciosData]);
+
   const categoriesPrendas = useMemo(() => {
     const map = new Map<string, string>();
-    catalogo.forEach((c) => {
+    catalogoEfectivo.forEach((c) => {
       const cat = (c.categoria || "Otros").trim();
       if (cat) {
         const upper = cat.toUpperCase();
@@ -1066,7 +1087,7 @@ function NuevaOrdenPage() {
       }
     });
     return Array.from(map.values());
-  }, [catalogo]);
+  }, [catalogoEfectivo]);
 
   const itemCountsMap = useMemo(() => {
     const map: Record<string, number> = {};
@@ -1101,8 +1122,9 @@ function NuevaOrdenPage() {
   );
 
   const catalogFiltered = useMemo(() => {
-    let list = catalogo;
-    if (posFilterTab === "PRENDAS") {
+    let list = catalogoEfectivo;
+
+    if (posFilterTab === "PRENDAS" || cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") {
       if (activeCategory !== "TODAS LAS PRENDAS" && activeCategory !== "TODOS") {
         list = list.filter(
           (c) =>
@@ -1114,7 +1136,7 @@ function NuevaOrdenPage() {
       list = list.filter((c) => c.nombre.toLowerCase().includes(posSearch.toLowerCase()));
     }
     return list;
-  }, [catalogo, activeCategory, posSearch, posFilterTab]);
+  }, [catalogo, activeCategory, posSearch, posFilterTab, cfg?.pos_modalidad_operativa, serviciosData]);
 
   const catalogByCategory = useMemo(() => {
     const groups = new Map<string, CatalogoItem[]>();
@@ -1135,7 +1157,8 @@ function NuevaOrdenPage() {
   }, [servicios, posSearch]);
 
   const internalCatalogHeading = useMemo(() => {
-    const showsServices = enableServicios && posFilterTab !== "PRENDAS";
+    const isPrendasConTratamiento = cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS";
+    const showsServices = enableServicios && !isPrendasConTratamiento && posFilterTab !== "PRENDAS";
 
     if (showsServices) {
       return {
@@ -1164,10 +1187,13 @@ function NuevaOrdenPage() {
     enableServicios,
     posFilterTab,
     servicesFiltered.length,
+    cfg?.pos_modalidad_operativa,
   ]);
 
   const catalogSummary = useMemo(() => {
-    if (posFilterTab === "SERVICIOS") {
+    const isPrendasConTratamiento = cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS";
+
+    if (posFilterTab === "SERVICIOS" && !isPrendasConTratamiento) {
       return {
         title: "Servicios",
         count: servicesFiltered.length,
@@ -1175,11 +1201,13 @@ function NuevaOrdenPage() {
       };
     }
 
-    if (posFilterTab === "PRENDAS") {
+    if (posFilterTab === "PRENDAS" || isPrendasConTratamiento) {
       return {
         title: "Prendas",
         count: catalogFiltered.length,
-        helper: "Toca un artículo para agregarlo a la orden",
+        helper: isPrendasConTratamiento
+          ? "Toca una prenda para seleccionar su tratamiento"
+          : "Toca un artículo para agregarlo a la orden",
       };
     }
 
@@ -1196,6 +1224,7 @@ function NuevaOrdenPage() {
     enableServicios,
     posFilterTab,
     servicesFiltered.length,
+    cfg?.pos_modalidad_operativa,
   ]);
 
   // Efecto para calcular la fecha de entrega automáticamente
@@ -2443,11 +2472,22 @@ function NuevaOrdenPage() {
 
                     {enableServicios && enablePrendas && (
                       <div className="inline-flex w-fit max-w-full items-center gap-1 overflow-x-auto rounded-xl bg-slate-100/90 p-1 shadow-inner shadow-slate-200/40 dark:bg-slate-900 dark:shadow-none">
-                        {[
-                          { id: "TODOS", label: "Todos", icon: LayoutGrid },
-                          { id: "SERVICIOS", label: "Servicios", icon: WashingMachine },
-                          { id: "PRENDAS", label: "Prendas", icon: Shirt },
-                        ].map((tab) => {
+                        {(cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
+                          ? [
+                              { id: "TODOS", label: "Todos", icon: LayoutGrid },
+                              { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                            ]
+                          : cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO"
+                            ? [
+                                { id: "SERVICIOS", label: "Servicios", icon: WashingMachine },
+                                { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                              ]
+                            : [
+                                { id: "TODOS", label: "Todos", icon: LayoutGrid },
+                                { id: "SERVICIOS", label: "Servicios", icon: WashingMachine },
+                                { id: "PRENDAS", label: "Prendas", icon: Shirt },
+                              ]
+                        ).map((tab) => {
                           const isSelected = posFilterTab === tab.id;
                           const Icon = tab.icon;
 
@@ -2526,7 +2566,7 @@ function NuevaOrdenPage() {
                           placeholder={
                             posFilterTab === "SERVICIOS"
                               ? "Búsqueda de servicios..."
-                              : posFilterTab === "PRENDAS"
+                              : posFilterTab === "PRENDAS" || cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
                                 ? "Búsqueda de prendas..."
                                 : "Buscar prenda o servicio..."
                           }
@@ -2535,7 +2575,7 @@ function NuevaOrdenPage() {
                         />
                       </div>
 
-                      {enablePrendas && posFilterTab === "PRENDAS" && (
+                      {enablePrendas && (posFilterTab === "PRENDAS" || cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") && (
                         <Button
                           type="button"
                           variant="outline"
@@ -2545,7 +2585,7 @@ function NuevaOrdenPage() {
                           <Tag className="h-3.5 w-3.5 text-primary shrink-0" />
                           <span className="truncate max-w-[130px]">
                             {activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS"
-                              ? `CATEGORÍAS (${catalogo.length})`
+                              ? `CATEGORÍAS (${catalogByCategory.length})`
                               : activeCategory}
                           </span>
                           <ChevronDown className="h-3.5 w-3.5 text-slate-400 shrink-0 stroke-[2.5]" />
@@ -2556,6 +2596,7 @@ function NuevaOrdenPage() {
 
                   {/* SECCION SERVICIOS */}
                   {enableServicios &&
+                    cfg?.pos_modalidad_operativa !== "PRENDAS_CON_SERVICIOS" &&
                     (posFilterTab === "TODOS" || posFilterTab === "SERVICIOS") &&
                     servicesFiltered.length > 0 && (
                       <div className="space-y-4 animate-in fade-in duration-200">
@@ -5456,7 +5497,7 @@ function NuevaOrdenPage() {
                 <span
                   className={`text-[10px] font-black px-2 py-0.5 rounded-full shrink-0 ${activeCategory === "TODAS LAS PRENDAS" || activeCategory === "TODOS" ? "bg-white/25 text-white" : "bg-slate-200/80 text-slate-600 dark:bg-slate-800 dark:text-slate-400"}`}
                 >
-                  {catalogo.length}
+                  {catalogoEfectivo.length}
                 </span>
               </button>
             )}
@@ -5465,7 +5506,7 @@ function NuevaOrdenPage() {
             {categoriesPrendas
               .filter((cat) => cat.toLowerCase().includes(categorySearchQuery.toLowerCase()))
               .map((cat, idx) => {
-                const catCount = catalogo.filter(
+                const catCount = catalogoEfectivo.filter(
                   (c) => (c.categoria || "Otros").trim().toUpperCase() === cat.trim().toUpperCase(),
                 ).length;
                 const isSelected = activeCategory.trim().toUpperCase() === cat.trim().toUpperCase();

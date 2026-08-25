@@ -6,7 +6,6 @@ import {
   Pencil,
   Trash2,
   Shirt,
-  Sparkles,
   Image as ImageIcon,
   PackagePlus,
   Search,
@@ -41,6 +40,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import {
@@ -51,6 +51,7 @@ import {
   saveServicio,
   deleteServicio,
   formatRD,
+  formatAmountInput,
   uid,
   type CatalogoItem,
   type Servicio,
@@ -196,7 +197,7 @@ function CatalogoPage() {
             value="servicios"
             className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
           >
-            <Sparkles className={`h-4 w-4 shrink-0 transition-colors ${tab === "servicios" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
+            <Layers className={`h-4 w-4 shrink-0 transition-colors ${tab === "servicios" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
             <span>Servicios</span>
             <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "servicios" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
               {servicios.length}
@@ -678,6 +679,8 @@ function ItemDialog({
   const [iconSearch, setIconSearch] = useState("");
   const [showDesc, setShowDesc] = useState(false);
   const [serviceSearch, setServiceSearch] = useState("");
+  const [showTreatmentsModal, setShowTreatmentsModal] = useState(false);
+  const [hasFixedPrice, setHasFixedPrice] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
@@ -712,6 +715,8 @@ function ItemDialog({
       setImgError(false);
       setIconSearch("");
       setServiceSearch("");
+      setShowTreatmentsModal(false);
+      setHasFixedPrice(Boolean(initial?.precio && Number(initial.precio) > 0));
       setIsSubmitting(false);
     }
   }, [open, initial]);
@@ -800,7 +805,7 @@ function ItemDialog({
       }
 
       const basePrecio =
-        Number(f.precio) > 0
+        hasFixedPrice && Number(f.precio) > 0
           ? Number(f.precio)
           : Object.values(cleanPreciosServicios)[0] || 0;
 
@@ -836,7 +841,8 @@ function ItemDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl max-h-[90vh] rounded-3xl p-0 overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-2xl bg-background text-foreground flex flex-col">
         {/* HEADER MODERNO */}
         <div className="bg-slate-50/80 dark:bg-slate-900/80 px-5 sm:px-6 pt-5 pb-4 border-b border-slate-200/80 dark:border-slate-800 shrink-0">
@@ -865,21 +871,31 @@ function ItemDialog({
             </div>
           </div>
 
-          {/* PESTAÑAS SEGMENTADAS ELEGANTES */}
-          <div className="grid grid-cols-2 gap-1.5 mt-4 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/70 border border-slate-300/40 dark:border-slate-700/50">
+          {/* PESTAÑAS SEGMENTADAS ELEGANTES CON COLORES PRIMARIOS */}
+          <div className="grid grid-cols-2 gap-1.5 mt-4 p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 border border-slate-300/50 dark:border-slate-700/60">
             <button
               type="button"
               onClick={() => setActiveTab("info")}
               className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "info"
-                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
+                  ? "bg-[#1B4B73] text-white shadow-md border border-[#1B4B73] font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-[#1B4B73] dark:hover:text-sky-300 hover:bg-white/50 dark:hover:bg-slate-800"
               }`}
             >
-              <Shirt className="h-4 w-4 text-primary" />
+              <Shirt
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  activeTab === "info" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
+                }`}
+              />
               <span>Datos y Tarifas</span>
               {activeServicesCount > 0 && (
-                <Badge className="h-4 px-1.5 text-[9px] bg-primary/15 text-primary border-none font-bold">
+                <Badge
+                  className={`h-4 px-1.5 text-[9px] font-black border-none transition-colors ${
+                    activeTab === "info"
+                      ? "bg-[#F0B900] text-[#1B4B73]"
+                      : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
+                  }`}
+                >
                   {activeServicesCount}
                 </Badge>
               )}
@@ -890,12 +906,16 @@ function ItemDialog({
               onClick={() => setActiveTab("visual")}
               className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "visual"
-                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
+                  ? "bg-[#1B4B73] text-white shadow-md border border-[#1B4B73] font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-[#1B4B73] dark:hover:text-sky-300 hover:bg-white/50 dark:hover:bg-slate-800"
               }`}
             >
-              <ImageIcon className="h-4 w-4 text-primary" />
-              <span>Icono, Foto y Preview</span>
+              <ImageIcon
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  activeTab === "visual" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
+                }`}
+              />
+              <span>Icono / Foto (Opcional)</span>
             </button>
           </div>
         </div>
@@ -978,189 +998,168 @@ function ItemDialog({
                 </div>
               </div>
 
-              {/* BLOQUE 2: MATRIZ DE SERVICIOS Y TARIFAS */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
+              {/* BLOQUE 2: TARIFAS POR TRATAMIENTO CON ACCESO A MODAL DEDICADO */}
+              <div className="p-4 rounded-2xl bg-slate-50/70 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shrink-0">
+                      <SlidersHorizontal className="h-4 w-4" />
+                    </div>
+                    <div>
                       <h4 className="text-xs font-black uppercase tracking-wider text-foreground">
                         Tarifas por Tratamiento
                       </h4>
-                      <Badge className="h-4 px-1.5 text-[9px] bg-primary/10 text-primary border-primary/20 font-bold">
-                        {activeServicesCount} activos
-                      </Badge>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">
+                        Precios por pieza según el tratamiento elegido en caja
+                      </p>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Activa los tratamientos aplicables a esta prenda y define su precio en caja
-                    </p>
                   </div>
-
-                  {serviciosList.length > 4 && (
-                    <div className="relative w-full sm:w-44 shrink-0">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
-                      <Input
-                        value={serviceSearch}
-                        onChange={(e) => setServiceSearch(e.target.value)}
-                        placeholder="Filtrar servicio..."
-                        className="h-8 pl-8 pr-2.5 rounded-lg bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-xs text-foreground shadow-2xs"
-                      />
-                    </div>
-                  )}
+                  <Badge className="h-5 px-2 text-[10px] bg-primary/10 text-primary border-primary/20 font-black shrink-0">
+                    {activeServicesCount} {activeServicesCount === 1 ? "activo" : "activos"}
+                  </Badge>
                 </div>
 
-                <div className="grid gap-2.5 max-h-56 overflow-y-auto pr-1 sm:grid-cols-2 custom-scrollbar pt-1">
-                  {serviciosList
-                    .filter(
-                      (service) =>
-                        service.activo &&
-                        service.nombre.toLowerCase().includes(serviceSearch.toLowerCase()),
-                    )
-                    .map((service) => {
-                      const prices = f.precios_servicios || {};
-                      const isAssigned =
-                        Object.prototype.hasOwnProperty.call(prices, service.nombre) ||
-                        Object.prototype.hasOwnProperty.call(prices, service.id);
-                      const currentVal = prices[service.nombre] ?? prices[service.id] ?? "";
-
-                      return (
-                        <div
-                          key={service.id}
-                          className={`p-3 rounded-2xl border transition-all ${
-                            isAssigned
-                              ? "border-primary bg-primary/[0.04] shadow-xs ring-1 ring-primary/20"
-                              : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 hover:border-primary/40 shadow-2xs"
-                          }`}
-                        >
-                          <div className="flex items-center justify-between gap-2">
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/15 overflow-hidden shadow-2xs">
-                                {service.imagen_url ? (
-                                  <img
-                                    src={service.imagen_url}
-                                    alt={service.nombre}
-                                    className="h-full w-full object-cover"
-                                  />
-                                ) : (
-                                  <Sparkles className="h-4 w-4 text-primary" />
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <span className="block text-xs font-black text-foreground truncate leading-tight">
-                                  {service.nombre}
-                                </span>
-                                {service.precio > 0 && (
-                                  <span className="block text-[10px] font-semibold text-muted-foreground mt-0.5">
-                                    Base: {formatRD(service.precio)}
-                                  </span>
-                                )}
-                              </div>
+                {/* Resumen / Chips de tratamientos activos */}
+                {activeServicesCount > 0 ? (
+                  <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto custom-scrollbar">
+                    {Object.entries(f.precios_servicios || {})
+                      .filter(([k, val]) => Number(val) > 0 && !(k.length > 20 && k.includes("-")))
+                      .map(([srvName, val]) => {
+                        const srvObj = serviciosList.find(
+                          (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName,
+                        );
+                        return (
+                          <div
+                            key={srvName}
+                            className="inline-flex items-center gap-2 pl-2 pr-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-2xs text-xs font-semibold text-foreground animate-in fade-in duration-150"
+                          >
+                            <div className="h-6 w-6 rounded-lg bg-slate-100 dark:bg-slate-700 border border-slate-200 dark:border-slate-600 flex items-center justify-center shrink-0 overflow-hidden text-[10px]">
+                              {srvObj?.imagen_url ? (
+                                <img src={srvObj.imagen_url} alt={srvName} className="h-full w-full object-cover" />
+                              ) : (
+                                <Layers className="h-3.5 w-3.5 text-slate-500 dark:text-slate-300" />
+                              )}
                             </div>
-
-                            <Switch
-                              checked={isAssigned}
-                              onCheckedChange={(checked) => {
+                            <span className="font-bold text-foreground truncate max-w-[130px]">{srvObj?.nombre || srvName}</span>
+                            <span className="font-display font-black text-xs px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/15">
+                              {formatRD(Number(val))}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => {
                                 setF((prev) => {
                                   const updated = { ...(prev.precios_servicios || {}) };
-                                  delete updated[service.id];
-                                  if (!checked) {
-                                    delete updated[service.nombre];
-                                  } else {
-                                    updated[service.nombre] =
-                                      Number(service.precio) > 0
-                                        ? Number(service.precio)
-                                        : Number(prev.precio) || 0;
-                                  }
+                                  delete updated[srvName];
+                                  if (srvObj) delete updated[srvObj.id];
                                   return { ...prev, precios_servicios: updated };
                                 });
                               }}
-                              className="data-[state=checked]:bg-primary"
-                            />
+                              className="h-5 w-5 rounded-md text-slate-400 hover:text-destructive hover:bg-destructive/10 flex items-center justify-center transition-colors cursor-pointer"
+                              title="Quitar tarifa"
+                            >
+                              <X className="h-3.5 w-3.5" />
+                            </button>
                           </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <div className="py-3 px-3.5 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 bg-white/50 dark:bg-slate-900/50 text-center text-xs text-muted-foreground">
+                    Esta prenda aún no tiene tarifas por tratamiento configuradas.
+                  </div>
+                )}
 
-                          {isAssigned && (
-                            <div className="mt-2.5 pt-2 border-t border-primary/15 flex items-center justify-between gap-2 animate-in fade-in duration-150">
-                              <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">
-                                Precio prenda:
-                              </span>
-                              <div className="flex items-center gap-1 w-32 shrink-0">
-                                <span className="text-[10px] font-bold text-muted-foreground">RD$</span>
-                                <Input
-                                  type="number"
-                                  min="0"
-                                  step="any"
-                                  placeholder="0.00"
-                                  value={currentVal}
-                                  onChange={(e) => {
-                                    const val = e.target.value;
-                                    setF((prev) => {
-                                      const updated = { ...(prev.precios_servicios || {}) };
-                                      delete updated[service.id];
-                                      updated[service.nombre] = val === "" ? ("" as any) : Number(val) || 0;
-                                      return { ...prev, precios_servicios: updated };
-                                    });
-                                  }}
-                                  className="h-8 text-xs font-black rounded-lg text-right bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs"
-                                />
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-
-                  {serviciosList.filter((s) => s.activo).length === 0 && (
-                    <div className="col-span-full py-6 text-center text-xs text-muted-foreground border border-dashed rounded-2xl">
-                      No hay servicios activos creados en el sistema.
-                    </div>
-                  )}
-                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowTreatmentsModal(true)}
+                  className="w-full h-10 rounded-xl border-primary/30 bg-primary/5 hover:bg-primary/10 text-primary hover:text-primary font-bold text-xs flex items-center justify-center gap-2 cursor-pointer shadow-2xs transition-all"
+                >
+                  <SlidersHorizontal className="h-4 w-4" />
+                  <span>{activeServicesCount > 0 ? "Modificar / Añadir Tarifas por Tratamiento" : "+ Añadir Tarifas por Tratamiento"}</span>
+                </Button>
               </div>
 
-              {/* BLOQUE 3: PRECIO GENERAL Y OPCIONES RÁPIDAS */}
-              <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
-                <div className="grid gap-3.5 sm:grid-cols-2 items-center">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="item-base-price" className="text-xs font-bold text-foreground">
-                      Precio General / Base (Opcional)
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                        RD$
-                      </span>
-                      <Input
-                        id="item-base-price"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={f.precio ?? 0}
-                        onChange={(e) => setF({ ...f, precio: Number(e.target.value) || 0 })}
-                        className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs"
-                      />
-                    </div>
-                  </div>
-
-                  {/* CARDS DE INTERRUPTORES LIMPIOS CON ICONOS LUCIDE SVG */}
-                  <div className="grid grid-cols-1 gap-2 pt-1">
-                    <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                          <Scale className="h-3.5 w-3.5" />
+              {/* BLOQUE 3: OPCIONES RÁPIDAS Y PRECIO POR PIEZA */}
+              <div className="space-y-2.5 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  {/* TOGGLE PRECIO POR PRENDA / PIEZA */}
+                  <div
+                    className={`p-3 rounded-xl bg-white dark:bg-slate-800/90 border transition-all shadow-2xs ${
+                      hasFixedPrice
+                        ? "border-primary/40 ring-1 ring-primary/20"
+                        : "border-slate-200/80 dark:border-slate-700/80"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Tag className="h-3.5 w-3.5" />
                         </div>
-                        <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                        <div className="min-w-0">
+                          <span className="text-xs font-bold text-foreground block truncate">
+                            Precio por Prenda / Pieza
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            Habilitar precio fijo directo
+                          </span>
+                        </div>
                       </div>
                       <Switch
-                        checked={!!f.por_libra}
-                        onCheckedChange={(v) => setF({ ...f, por_libra: v })}
+                        checked={hasFixedPrice}
+                        onCheckedChange={(v) => {
+                          setHasFixedPrice(v);
+                          if (!v) setF((prev) => ({ ...prev, precio: 0 }));
+                        }}
                         className="data-[state=checked]:bg-primary"
                       />
-                    </label>
-                  </div>
-                </div>
+                    </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
-                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    {hasFixedPrice && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 animate-in fade-in duration-150">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
+                            RD$
+                          </span>
+                          <Input
+                            id="item-base-price"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={f.precio ? formatAmountInput(String(f.precio)) : ""}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/,/g, "");
+                              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+                                setF({ ...f, precio: raw === "" ? 0 : Number(raw) || 0 });
+                              }
+                            }}
+                            className="h-9 rounded-xl bg-slate-50/70 dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-xs border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-xs text-right"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* COBRAR POR LIBRA */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Scale className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                    </div>
+                    <Switch
+                      checked={!!f.por_libra}
+                      onCheckedChange={(v) => setF({ ...f, por_libra: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
+
+                  {/* PRENDA ACTIVA EN POS */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       </div>
                       <span className="text-xs font-bold text-foreground">Prenda Activa en POS</span>
@@ -1172,9 +1171,10 @@ function ItemDialog({
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                  {/* EXENTO DE ITBIS */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                         <Receipt className="h-3.5 w-3.5" />
                       </div>
                       <span className="text-xs font-bold text-foreground">Exento de ITBIS (0%)</span>
@@ -1343,7 +1343,7 @@ function ItemDialog({
           )}
         </div>
 
-        {/* FOOTER PRINCIPAL CON BOTONES PASO A PASO */}
+        {/* FOOTER PRINCIPAL CON GUARDADO DIRECTO */}
         {activeTab === "info" ? (
           <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
             <Button
@@ -1355,24 +1355,33 @@ function ItemDialog({
               Cancelar
             </Button>
 
-            <Button
-              type="button"
-              onClick={() => {
-                if (!f.nombre?.trim()) {
-                  toast.error("El nombre de la prenda es requerido");
-                  return;
-                }
-                if (!f.categoria?.trim()) {
-                  toast.error("La categoría es requerida");
-                  return;
-                }
-                setActiveTab("visual");
-              }}
-              className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95"
-            >
-              <span>Siguiente: Identificador Visual</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveTab("visual")}
+                className="rounded-xl h-10 px-3.5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer gap-1.5 hidden sm:inline-flex"
+              >
+                <ImageIcon className="h-4 w-4 text-primary" />
+                <span>Foto / Icono (Opcional)</span>
+              </Button>
+
+              <Button
+                type="button"
+                onClick={submit}
+                disabled={isSubmitting || !f.nombre?.trim() || !f.categoria?.trim()}
+                className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    <span>{initial ? "Guardar cambios" : "Guardar prenda"}</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
@@ -1416,7 +1425,192 @@ function ItemDialog({
         )}
       </DialogContent>
     </Dialog>
-  );
+
+    {/* MODAL DEDICADO Y ESPACIOSO: TARIFAS POR TRATAMIENTO */}
+    <Dialog open={showTreatmentsModal} onOpenChange={setShowTreatmentsModal}>
+      <DialogContent className="w-[calc(100vw-1.5rem)] sm:max-w-2xl md:max-w-3xl max-h-[88vh] rounded-3xl p-0 overflow-hidden border border-slate-200/90 dark:border-slate-800 shadow-2xl bg-background text-foreground flex flex-col">
+        {/* Header */}
+        <div className="bg-slate-50/90 dark:bg-slate-900/90 px-6 py-5 border-b border-slate-200/80 dark:border-slate-800 shrink-0 pr-16">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-11 w-11 rounded-2xl bg-primary/10 text-primary flex items-center justify-center border border-primary/20 shadow-xs shrink-0">
+                <SlidersHorizontal className="h-5 w-5 text-primary" />
+              </div>
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <DialogTitle className="text-lg font-display font-black text-foreground truncate leading-tight">
+                    Tarifas por Tratamiento
+                  </DialogTitle>
+                  <Badge className="h-5 px-2 text-[10px] bg-primary/10 text-primary border-primary/20 font-black shrink-0">
+                    {activeServicesCount} {activeServicesCount === 1 ? "activo" : "activos"}
+                  </Badge>
+                </div>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5 truncate">
+                  {f.nombre ? `Prenda: ${f.nombre}` : "Personaliza las tarifas individuales en caja"}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* Buscador de servicios */}
+          <div className="relative mt-4">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              value={serviceSearch}
+              onChange={(e) => setServiceSearch(e.target.value)}
+              placeholder="Buscar tratamiento (ej. Lavado en seco, Planchado, Sastrería)..."
+              className="h-10 pl-10 pr-3 rounded-xl bg-white dark:bg-slate-950 border-slate-300 dark:border-slate-700 text-xs font-semibold text-foreground shadow-2xs focus-visible:ring-primary"
+            />
+          </div>
+        </div>
+
+        {/* Grid amplio de servicios */}
+        <div className="p-5 sm:p-6 overflow-y-auto custom-scrollbar max-h-[55vh] flex-1">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {serviciosList
+              .filter(
+                (service) =>
+                  service.activo &&
+                  service.nombre.toLowerCase().includes(serviceSearch.toLowerCase()),
+              )
+              .map((service) => {
+                const prices = f.precios_servicios || {};
+                const isAssigned =
+                  Object.prototype.hasOwnProperty.call(prices, service.nombre) ||
+                  Object.prototype.hasOwnProperty.call(prices, service.id);
+                const currentVal = prices[service.nombre] ?? prices[service.id] ?? "";
+
+                return (
+                  <div
+                    key={service.id}
+                    className={`rounded-2xl border transition-all overflow-hidden ${
+                      isAssigned
+                        ? "border-primary/50 bg-primary/[0.03] shadow-sm ring-1 ring-primary/20"
+                        : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/90 hover:border-slate-300 dark:hover:border-slate-700 shadow-2xs"
+                    }`}
+                  >
+                    {/* Cabecera de la tarjeta del servicio */}
+                    <div className="p-3.5 flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                          {service.imagen_url ? (
+                            <img
+                              src={service.imagen_url}
+                              alt={service.nombre}
+                              className="h-full w-full object-cover"
+                            />
+                          ) : (
+                            <Layers className="h-5 w-5 text-slate-500 dark:text-slate-400" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <span className="block text-sm font-bold text-foreground truncate leading-tight">
+                            {service.nombre}
+                          </span>
+                          {service.descripcion ? (
+                            <span
+                              className="block text-[11px] text-muted-foreground truncate mt-0.5"
+                              title={service.descripcion}
+                            >
+                              {service.descripcion}
+                            </span>
+                          ) : (
+                            <span className="block text-[10px] text-muted-foreground/70 italic mt-0.5">
+                              Tratamiento disponible
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      <Switch
+                        checked={isAssigned}
+                        onCheckedChange={(checked) => {
+                          setF((prev) => {
+                            const updated = { ...(prev.precios_servicios || {}) };
+                            delete updated[service.id];
+                            if (!checked) {
+                              delete updated[service.nombre];
+                            } else {
+                              updated[service.nombre] =
+                                Number(service.precio) > 0
+                                  ? Number(service.precio)
+                                  : Number(prev.precio) || 0;
+                            }
+                            return { ...prev, precios_servicios: updated };
+                          });
+                        }}
+                        className="data-[state=checked]:bg-primary"
+                      />
+                    </div>
+
+                    {/* Barra integrada de precio en caja */}
+                    {isAssigned && (
+                      <div className="bg-primary/5 dark:bg-primary/10 border-t border-primary/15 px-3.5 py-2.5 flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                        <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          <Tag className="h-3.5 w-3.5 text-primary" />
+                          Precio en caja:
+                        </span>
+                        <div className="relative w-36 shrink-0">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-slate-500 pointer-events-none select-none">
+                            RD$
+                          </span>
+                          <Input
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={
+                              currentVal !== "" && currentVal !== undefined
+                                ? formatAmountInput(String(currentVal))
+                                : ""
+                            }
+                            onChange={(e) => {
+                              const val = e.target.value.replace(/,/g, "");
+                              if (val === "" || /^\d*\.?\d*$/.test(val)) {
+                                setF((prev) => {
+                                  const updated = { ...(prev.precios_servicios || {}) };
+                                  delete updated[service.id];
+                                  updated[service.nombre] =
+                                    val === "" ? ("" as any) : Number(val) || 0;
+                                  return { ...prev, precios_servicios: updated };
+                                });
+                              }
+                            }}
+                            className="h-9 w-full pl-11 pr-3 text-right text-xs font-black rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-foreground focus-visible:ring-primary shadow-xs"
+                            autoFocus={isAssigned && !currentVal}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+
+            {serviciosList.filter((s) => s.activo).length === 0 && (
+              <div className="col-span-full py-12 text-center text-sm text-muted-foreground border border-dashed rounded-3xl">
+                No hay servicios activos creados en el sistema.
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Footer del modal de tratamientos */}
+        <div className="bg-slate-50/80 dark:bg-slate-900/80 px-6 py-4 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
+          <span className="text-xs font-semibold text-muted-foreground">
+            {activeServicesCount} {activeServicesCount === 1 ? "tratamiento seleccionado" : "tratamientos seleccionados"}
+          </span>
+          <Button
+            type="button"
+            onClick={() => setShowTreatmentsModal(false)}
+            className="h-10 px-6 rounded-xl font-black text-xs bg-primary hover:bg-primary/90 text-white shadow-sm flex items-center gap-2 cursor-pointer"
+          >
+            <Check className="h-4 w-4" />
+            <span>Listo / Guardar Tarifas</span>
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  </>
+);
 }
 
 function ServDialog({
@@ -1563,7 +1757,7 @@ function ServDialog({
                     onError={() => setImgError(true)}
                   />
                 ) : (
-                  <Sparkles className="h-5 w-5 text-primary" />
+                  <Wrench className="h-5 w-5 text-primary" />
                 )}
               </div>
               <div className="min-w-0">
@@ -1577,18 +1771,22 @@ function ServDialog({
             </div>
           </div>
 
-          {/* PESTAÑAS SEGMENTADAS ELEGANTES */}
-          <div className="grid grid-cols-2 gap-1.5 mt-4 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/70 border border-slate-300/40 dark:border-slate-700/50">
+          {/* PESTAÑAS SEGMENTADAS ELEGANTES CON COLORES PRIMARIOS */}
+          <div className="grid grid-cols-2 gap-1.5 mt-4 p-1 rounded-xl bg-slate-200/70 dark:bg-slate-800/80 border border-slate-300/50 dark:border-slate-700/60">
             <button
               type="button"
               onClick={() => setActiveTab("info")}
               className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "info"
-                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
+                  ? "bg-[#1B4B73] text-white shadow-md border border-[#1B4B73] font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-[#1B4B73] dark:hover:text-sky-300 hover:bg-white/50 dark:hover:bg-slate-800"
               }`}
             >
-              <Wrench className="h-4 w-4 text-primary" />
+              <Wrench
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  activeTab === "info" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
+                }`}
+              />
               <span>Datos y Precio</span>
             </button>
 
@@ -1597,12 +1795,16 @@ function ServDialog({
               onClick={() => setActiveTab("visual")}
               className={`flex items-center justify-center gap-2 h-9 px-3 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 activeTab === "visual"
-                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs font-black"
-                  : "text-slate-600 dark:text-slate-400 hover:text-foreground"
+                  ? "bg-[#1B4B73] text-white shadow-md border border-[#1B4B73] font-black"
+                  : "text-slate-600 dark:text-slate-400 hover:text-[#1B4B73] dark:hover:text-sky-300 hover:bg-white/50 dark:hover:bg-slate-800"
               }`}
             >
-              <ImageIcon className="h-4 w-4 text-primary" />
-              <span>Icono, Foto y Preview</span>
+              <ImageIcon
+                className={`h-4 w-4 shrink-0 transition-colors ${
+                  activeTab === "visual" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
+                }`}
+              />
+              <span>Icono / Foto (Opcional)</span>
             </button>
           </div>
         </div>
@@ -1611,21 +1813,51 @@ function ServDialog({
         <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-5 custom-scrollbar">
           {activeTab === "info" ? (
             <div className="space-y-5 animate-in fade-in duration-200">
-              {/* BLOQUE 1: INFORMACIÓN PRINCIPAL */}
+              {/* BLOQUE 1: INFORMACIÓN PRINCIPAL (NOMBRE Y PRECIO EN 2 COLUMNAS) */}
               <div className="space-y-3.5 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
-                <div className="space-y-1.5">
-                  <Label htmlFor="service-name" className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                    <Tag className="h-3.5 w-3.5 text-primary" />
-                    Nombre del servicio <span className="text-destructive">*</span>
-                  </Label>
-                  <Input
-                    id="service-name"
-                    value={f.nombre || ""}
-                    onChange={(e) => setF({ ...f, nombre: e.target.value })}
-                    placeholder="Ej. Lavado en Seco, Planchado Express, Teñido..."
-                    className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm font-semibold text-foreground focus-visible:ring-primary shadow-2xs"
-                    required
-                  />
+                <div className="grid gap-3.5 sm:grid-cols-2 items-start">
+                  {/* COL 1: NOMBRE DEL SERVICIO */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="service-name" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Tag className="h-3.5 w-3.5 text-primary" />
+                      Nombre del servicio <span className="text-destructive">*</span>
+                    </Label>
+                    <Input
+                      id="service-name"
+                      value={f.nombre || ""}
+                      onChange={(e) => setF({ ...f, nombre: e.target.value })}
+                      placeholder="Ej. Lavado en Seco, Planchado..."
+                      className="h-10 rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-sm font-semibold text-foreground focus-visible:ring-primary shadow-2xs"
+                      required
+                    />
+                  </div>
+
+                  {/* COL 2: PRECIO BASE */}
+                  <div className="space-y-1.5">
+                    <Label htmlFor="service-price" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                      <Receipt className="h-3.5 w-3.5 text-primary" />
+                      Precio Base
+                    </Label>
+                    <div className="relative">
+                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
+                        RD$
+                      </span>
+                      <Input
+                        id="service-price"
+                        type="text"
+                        inputMode="decimal"
+                        placeholder="0.00"
+                        value={f.precio ? formatAmountInput(String(f.precio)) : ""}
+                        onChange={(e) => {
+                          const raw = e.target.value.replace(/,/g, "");
+                          if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+                            setF({ ...f, precio: raw === "" ? 0 : Number(raw) || 0 });
+                          }
+                        }}
+                        className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs text-right"
+                      />
+                    </div>
+                  </div>
                 </div>
 
                 {/* DESCRIPCIÓN OPCIONAL */}
@@ -1668,51 +1900,26 @@ function ServDialog({
                 </div>
               </div>
 
-              {/* BLOQUE 2: PRECIO BASE Y OPCIONES CON ICONOS LUCIDE SVG */}
+              {/* BLOQUE 2: OPCIONES Y CONTROLES DEL SERVICIO */}
               <div className="space-y-3 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
-                <div className="grid gap-3.5 sm:grid-cols-2 items-center">
-                  <div className="space-y-1.5">
-                    <Label htmlFor="service-price" className="text-xs font-bold text-foreground">
-                      Precio Base
-                    </Label>
-                    <div className="relative">
-                      <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                        RD$
-                      </span>
-                      <Input
-                        id="service-price"
-                        type="number"
-                        min="0"
-                        step="any"
-                        value={f.precio ?? 0}
-                        onChange={(e) => setF({ ...f, precio: Number(e.target.value) || 0 })}
-                        className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-2xs"
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-2 pt-1">
-                    <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
-                      <div className="flex items-center gap-2.5">
-                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
-                          <Scale className="h-3.5 w-3.5" />
-                        </div>
-                        <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
-                      </div>
-                      <Switch
-                        checked={!!f.por_libra}
-                        onCheckedChange={(v) => setF({ ...f, por_libra: v })}
-                        className="data-[state=checked]:bg-primary"
-                      />
-                    </label>
-                  </div>
-                </div>
-
-                {/* INTERRUPTORES CON ICONOS LUCIDE SVG */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800/60">
-                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <Scale className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                    </div>
+                    <Switch
+                      checked={!!f.por_libra}
+                      onCheckedChange={(v) => setF({ ...f, por_libra: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
+
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
                         <CheckCircle2 className="h-3.5 w-3.5" />
                       </div>
                       <span className="text-xs font-bold text-foreground">Servicio Activo en POS</span>
@@ -1724,9 +1931,9 @@ function ServDialog({
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                         <Receipt className="h-3.5 w-3.5" />
                       </div>
                       <span className="text-xs font-bold text-foreground">Exento de ITBIS (0%)</span>
@@ -1738,9 +1945,9 @@ function ServDialog({
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 flex items-center justify-center shrink-0">
                         <Layers className="h-3.5 w-3.5" />
                       </div>
                       <span className="text-xs font-bold text-foreground">Permitir Desglose</span>
@@ -1752,12 +1959,15 @@ function ServDialog({
                     />
                   </label>
 
-                  <label className="flex items-center justify-between p-2.5 px-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors sm:col-span-2">
                     <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+                      <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
                         <Pencil className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-xs font-bold text-foreground">Precio Editable en Caja</span>
+                      <div>
+                        <span className="text-xs font-bold text-foreground block">Precio Editable en Caja</span>
+                        <span className="text-[10px] text-muted-foreground block">Permite al cajero ajustar el precio manualmente al cobrar</span>
+                      </div>
                     </div>
                     <Switch
                       checked={!!f.permitir_editar_precio}
@@ -1793,7 +2003,7 @@ function ServDialog({
                           : "text-muted-foreground hover:text-foreground"
                       }`}
                     >
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      <Wrench className="h-3.5 w-3.5 text-primary" />
                       <span>Icono / Emoji</span>
                     </button>
                     <button
@@ -1901,7 +2111,7 @@ function ServDialog({
                         onError={() => setImgError(true)}
                       />
                     ) : (
-                      <Sparkles className="h-6 w-6 text-primary" />
+                      <Wrench className="h-6 w-6 text-primary" />
                     )}
                   </div>
                   <div className="min-w-0 flex-1">
@@ -1923,7 +2133,7 @@ function ServDialog({
           )}
         </div>
 
-        {/* FOOTER PRINCIPAL CON BOTONES PASO A PASO */}
+        {/* FOOTER PRINCIPAL CON GUARDADO DIRECTO */}
         {activeTab === "info" ? (
           <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
             <Button
@@ -1935,20 +2145,33 @@ function ServDialog({
               Cancelar
             </Button>
 
-            <Button
-              type="button"
-              onClick={() => {
-                if (!f.nombre?.trim()) {
-                  toast.error("El nombre del servicio es requerido");
-                  return;
-                }
-                setActiveTab("visual");
-              }}
-              className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95"
-            >
-              <span>Siguiente: Identificador Visual</span>
-              <ArrowRight className="h-4 w-4" />
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setActiveTab("visual")}
+                className="rounded-xl h-10 px-3.5 text-xs font-semibold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer gap-1.5 hidden sm:inline-flex"
+              >
+                <ImageIcon className="h-4 w-4 text-primary" />
+                <span>Foto / Icono (Opcional)</span>
+              </Button>
+
+              <Button
+                type="button"
+                onClick={submit}
+                disabled={isSubmitting || !f.nombre?.trim()}
+                className="rounded-xl h-10 px-6 text-xs font-bold bg-primary hover:bg-primary/90 text-white gap-2 shadow-md cursor-pointer transition-all active:scale-95 disabled:opacity-50"
+              >
+                {isSubmitting ? (
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                ) : (
+                  <>
+                    <span>{initial ? "Guardar cambios" : "Guardar servicio"}</span>
+                    <CheckCircle2 className="h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </div>
           </div>
         ) : (
           <div className="px-5 sm:px-6 py-3.5 bg-slate-50/80 dark:bg-slate-900/80 border-t border-slate-200/80 dark:border-slate-800 flex items-center justify-between gap-3 shrink-0">
