@@ -142,7 +142,7 @@ export function Ticket({
   if (esProduccion) {
     return (
       <div
-        className={`thermal-ticket mx-auto ${w} ${cols} bg-white px-1 py-1.5 text-[10.5px] leading-tight text-black`}
+        className={`thermal-ticket mx-auto ${w} ${cols} bg-white pl-2.5 pr-4 py-2 text-[10.5px] leading-tight text-black`}
         style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
       >
         <div className="text-center space-y-0.5 mb-1">
@@ -315,11 +315,11 @@ export function Ticket({
   }
 
   // =========================================================================
-  // ★ FORMATO COMERCIAL / FISCAL / CLIENTE (DISEÑO ESTILIZADO CON ELEMENTOS CENTRADOS) ★
+  // ★ FORMATO COMERCIAL / FISCAL / CLIENTE (DISEÑO ESTILIZADO CON MARGEN DERECHO SEGURO) ★
   // =========================================================================
   return (
     <div
-      className={`thermal-ticket mx-auto ${w} ${cols} bg-white px-2 py-2 text-[11px] leading-snug text-black`}
+      className={`thermal-ticket mx-auto ${w} ${cols} bg-white pl-2.5 pr-4 py-2 text-[11px] leading-snug text-black`}
       style={{ fontFamily: '"Plus Jakarta Sans", sans-serif', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}
     >
       {/* 1. ENCABEZADO / LOGO */}
@@ -355,14 +355,15 @@ export function Ticket({
 
       <Sep />
 
-      {/* 3. METADATOS DE LA ORDEN */}
-      <div className="space-y-1 text-[11px]">
+      {/* 3. METADATOS DE LA ORDEN CON ICONOS */}
+      <div className="space-y-1 text-[11px] pr-1">
         <div className="flex items-center justify-between">
-          <div>
-            <b>Orden No°:</b> <span className="font-bold tabular-nums ml-0.5">{orden.numero}</span>
+          <div className="flex items-center gap-1.5 min-w-0">
+            <ClipboardList className="h-3.5 w-3.5 shrink-0 text-black" />
+            <span><b>Orden No°:</b> <span className="font-bold tabular-nums ml-0.5">{orden.numero}</span></span>
           </div>
           {orden.es_urgente && (
-            <span className="font-bold text-[9px] bg-black text-white px-1.5 py-0.5 rounded-xs uppercase">
+            <span className="font-bold text-[9px] bg-black text-white px-1.5 py-0.5 rounded-xs uppercase shrink-0">
               ★ URGENTE ★
             </span>
           )}
@@ -370,23 +371,27 @@ export function Ticket({
 
         {orden.nota_credito_ncf ? (
           <>
-            <div className="text-destructive font-bold">
-              <b>{isECF ? 'e-NCF Modificado:' : 'NCF Modificado:'}</b> <span className="tabular-nums ml-0.5">{orden.nota_credito_ncf}</span>
+            <div className="flex items-center gap-1.5 text-destructive font-bold">
+              <FileText className="h-3.5 w-3.5 shrink-0" />
+              <span><b>{isECF ? 'e-NCF Mod.:' : 'NCF Mod.:'}</b> <span className="tabular-nums ml-0.5">{orden.nota_credito_ncf}</span></span>
             </div>
-            <div className="text-[10px]">
-              <b>Doc. Modificado:</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span>
+            <div className="flex items-center gap-1.5 text-[10px]">
+              <FileText className="h-3.5 w-3.5 shrink-0" />
+              <span><b>Doc. Mod.:</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span></span>
             </div>
           </>
         ) : (
           orden.ncf && (
-            <div>
-              <b>{isECF ? "e-NCF:" : "NCF:"}</b> <span className="font-bold tabular-nums ml-0.5">{orden.ncf}</span>
+            <div className="flex items-center gap-1.5">
+              <FileText className="h-3.5 w-3.5 shrink-0 text-black" />
+              <span><b>{isECF ? "e-NCF:" : "NCF:"}</b> <span className="font-bold tabular-nums ml-0.5">{orden.ncf}</span></span>
             </div>
           )
         )}
 
-        <div>
-          <b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(orden.creado_en)}</span>
+        <div className="flex items-center gap-1.5">
+          <Calendar className="h-3.5 w-3.5 shrink-0 text-black" />
+          <span><b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(orden.creado_en)}</span></span>
         </div>
 
         {orden.notas && ((cfg?.ticket_mostrar_notas || esCopiaCaja) && !ocultarNotas) && (
@@ -404,7 +409,7 @@ export function Ticket({
             DATOS DEL CLIENTE
           </div>
           <Sep />
-          <div className="space-y-1 text-[11px]">
+          <div className="space-y-1 text-[11px] pr-1">
             <div className="flex items-start gap-1.5">
               <User className="h-3.5 w-3.5 shrink-0 mt-0.5 text-black" />
               <div>
@@ -444,7 +449,7 @@ export function Ticket({
 
       <Sep />
 
-      {/* 4. ITEMS Y SERVICIOS CON PASTILLA REDONDEADA */}
+      {/* 4. ITEMS Y SERVICIOS CON PASTILLA REDONDEADA Y MARGEN DERECHO */}
       <div>
         {(() => {
           const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
@@ -475,7 +480,7 @@ export function Ticket({
                 return (
                   <div key={'s'+i} className="mb-2.5">
                     {/* Caja de Servicio con Esquinas Suaves (rounded-md) */}
-                    <div className="my-1.5 rounded-md bg-black text-white px-2.5 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
+                    <div className="my-1.5 rounded-md bg-black text-white pl-2.5 pr-3 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
                       <div className="flex items-center gap-1.5 font-bold shrink-0">
                         <WashingMachine className="h-3.5 w-3.5" />
                         <span className="text-[9.5px] tracking-wider">SERVICIO</span>
@@ -494,7 +499,7 @@ export function Ticket({
                         <BadgePercent className="h-3 w-3 shrink-0" />
                         <span>ITBIS</span>
                       </div>
-                      <div className="w-[30%] text-right flex items-center justify-end gap-1">
+                      <div className="w-[30%] text-right pr-2 flex items-center justify-end gap-1">
                         <Tag className="h-3 w-3 shrink-0" />
                         <span>VALOR</span>
                       </div>
@@ -510,7 +515,7 @@ export function Ticket({
                         <div className="w-[22%] text-right font-semibold pt-0.5 tabular-nums">
                           {cfg?.ncf_facturacion_activa && orden.itbis > 0 ? (p * ((cfg.itbis_porcentaje || 18) / 100)).toFixed(2) : "0.00"}
                         </div>
-                        <div className="w-[30%] text-right font-bold pt-0.5 tabular-nums">
+                        <div className="w-[30%] text-right pr-2 font-bold pt-0.5 tabular-nums">
                           {formatRD(p).replace("RD$", "")}
                         </div>
                       </div>
@@ -546,7 +551,7 @@ export function Ticket({
                             <div className="w-[22%] text-right font-semibold pt-0.5 text-black tabular-nums">
                               {baseTotal > 0 ? (itemItbis > 0 ? itemItbis.toFixed(2) : "0.00") : "—"}
                             </div>
-                            <div className="w-[30%] text-right font-bold pt-0.5 text-black tabular-nums">
+                            <div className="w-[30%] text-right pr-2 font-bold pt-0.5 text-black tabular-nums">
                               {baseTotal > 0 ? valor.toFixed(2) : "—"}
                             </div>
                           </div>
@@ -569,7 +574,7 @@ export function Ticket({
                       <BadgePercent className="h-3 w-3 shrink-0" />
                       <span>ITBIS</span>
                     </div>
-                    <div className="w-[30%] text-right flex items-center justify-end gap-1">
+                    <div className="w-[30%] text-right pr-2 flex items-center justify-end gap-1">
                       <Tag className="h-3 w-3 shrink-0" />
                       <span>VALOR</span>
                     </div>
@@ -600,7 +605,7 @@ export function Ticket({
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>
                           <div className="w-[22%] text-right font-semibold pt-0.5 tabular-nums">{itemItbis > 0 ? itemItbis.toFixed(2) : "0.00"}</div>
-                          <div className="w-[30%] text-right font-bold pt-0.5 tabular-nums">{valor.toFixed(2)}</div>
+                          <div className="w-[30%] text-right pr-2 font-bold pt-0.5 tabular-nums">{valor.toFixed(2)}</div>
                         </div>
                       );
                     })}
@@ -615,7 +620,7 @@ export function Ticket({
       <Sep />
 
       {/* 5. RECUADRO DE TOTAL DE PRENDAS (ESQUINAS SUAVES Y MISMA FUENTE) */}
-      <div className="my-2 rounded-md border border-black py-1 px-2.5 flex items-center">
+      <div className="my-2 rounded-md border border-black py-1 pl-2.5 pr-3 flex items-center">
         <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[11px] uppercase tracking-wide">
           <Package className="h-4 w-4 shrink-0 text-black" />
           <span>TOTAL DE PRENDAS:</span>
@@ -627,7 +632,7 @@ export function Ticket({
       </div>
 
       {/* 6. DESGLOSE FINANCIERO */}
-      <div className="space-y-1 text-[11px] pt-1">
+      <div className="space-y-1 text-[11px] pt-1 pr-1.5">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5 font-semibold">
             <Calculator className="h-3.5 w-3.5 shrink-0 text-black" />
@@ -677,7 +682,7 @@ export function Ticket({
       <Sep />
 
       {/* 7. DETALLES DE PAGO Y LOGÍSTICA */}
-      <div className="space-y-1 text-[11px]">
+      <div className="space-y-1 text-[11px] pr-1.5">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-1.5 font-semibold">
             <CreditCard className="h-3.5 w-3.5 shrink-0 text-black" />
@@ -688,10 +693,10 @@ export function Ticket({
           </span>
         </div>
 
-        {orden.condicion_cobro && orden.condicion_cobro !== "COBRAR_AHORA" && (
+        {orden.condicion_cobro === "ANTICIPO" && (
           <div className="flex justify-between items-center text-[10px]">
             <span className="text-black/70">Modalidad:</span>
-            <span className="font-semibold">{orden.condicion_cobro === "ANTICIPO" ? "ANTICIPO" : orden.condicion_cobro === "AL_RETIRAR" ? "AL RETIRAR" : "CRÉDITO"}</span>
+            <span className="font-semibold uppercase">ANTICIPO</span>
           </div>
         )}
 
