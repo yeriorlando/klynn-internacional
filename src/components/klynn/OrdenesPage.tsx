@@ -24,7 +24,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -1272,8 +1272,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <td className="px-4 py-3">
                       {(() => {
                         const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
-                        const isSignedECF = isECFOrder && Boolean(o.ecf_security_code && o.ecf_security_code !== "null" && o.ecf_security_code.trim() !== "");
-                        const isPendingECF = isECFOrder && !isSignedECF;
+                        const isAcceptedECF = isECFOrder && (o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
+                        const isRejectedECF = isECFOrder && (o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
+                        const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
 
                         return (
                           <div className="flex items-center gap-3">
@@ -1287,18 +1288,26 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 </span>
                                 {isPendingECF && (
                                   <span
-                                    title="Pendiente de timbrado e-CF (se firmará con Pronesoft/DGII al sincronizar)"
+                                    title={`e-CF Pendiente de validación DGII (${o.ncf || o.tipo_ecf})`}
                                     className="inline-flex items-center text-amber-500 hover:text-amber-600 transition-colors"
                                   >
                                     <Clock className="h-3.5 w-3.5 animate-pulse" />
                                   </span>
                                 )}
-                                {isSignedECF && (
+                                {isAcceptedECF && (
                                   <span
-                                    title={`e-CF Firmado con Pronesoft / DGII (${o.ncf || o.tipo_ecf})`}
+                                    title={`e-CF Aceptado por DGII (${o.ncf || o.tipo_ecf})`}
                                     className="inline-flex items-center text-emerald-600 dark:text-emerald-400 hover:text-emerald-500 transition-colors"
                                   >
                                     <ShieldCheck className="h-3.5 w-3.5" />
+                                  </span>
+                                )}
+                                {isRejectedECF && (
+                                  <span
+                                    title={`e-CF Rechazado por DGII (${o.ncf || o.tipo_ecf}) - Ver /fiscal`}
+                                    className="inline-flex items-center text-rose-500 hover:text-rose-600 transition-colors"
+                                  >
+                                    <ShieldAlert className="h-3.5 w-3.5" />
                                   </span>
                                 )}
                               </div>

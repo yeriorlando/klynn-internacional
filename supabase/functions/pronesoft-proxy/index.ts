@@ -211,7 +211,9 @@ serve(async (req) => {
     });
 
     // Si hay tenantId para delegación multicompañía, obtenemos el cliente scoped
-    const client = config.tenantId ? sdk.forTenant(config.tenantId) : sdk;
+    // NOTA SEGÚN SDK OFICIAL: "NO envíes x-tenant-id cuando actúes como la empresa principal."
+    const isCorruptedOrOldId = config.tenantId === "5c6a4d11e914" || config.tenantId === "default";
+    const client = config.tenantId && !isCorruptedOrOldId ? sdk.forTenant(config.tenantId) : sdk;
 
     // Convertir el string del ambiente al enum correspondiente de Pronesoft SDK
     const environmentValue =
@@ -224,11 +226,18 @@ serve(async (req) => {
     let result;
 
     if (action === "submit") {
-      const idempotencyKey = String(payload?._klynnIdempotencyKey || "");
+      let idempotencyKey = String(payload?._klynnIdempotencyKey || "");
       delete payload._klynnIdempotencyKey;
-      const klynnTenantId = String(config.klynnTenantId || "");
-      if (!idempotencyKey || !klynnTenantId)
-        throw new Error("La emisión fiscal requiere tenant e idempotency key.");
+      let klynnTenantId = String(config.klynnTenantId || config.tenantId || "");
+      if (!idempotencyKey && klynnTenantId) {
+        idempotencyKey = `auto:${klynnTenantId}:${crypto.randomUUID()}`;
+      }
+      if (!klynnTenantId) {
+        klynnTenantId = "default";
+      }
+      if (!idempotencyKey) {
+        idempotencyKey = `auto:default:${crypto.randomUUID()}`;
+      }
       const reservation = await reserveFiscalSubmission(klynnTenantId, idempotencyKey);
       if (!reservation.reserved) {
         if (reservation.receipt?.status === "completed" && reservation.receipt.response) {

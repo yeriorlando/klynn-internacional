@@ -86,11 +86,9 @@ export function ordenToECFPayload(
     buyer = { name: cliente.nombre + (cliente.apellido ? ` ${cliente.apellido}` : "") };
     // Si es crédito fiscal (E31), el RNC/Cédula es requerido
     if (cliente.cedula) {
-      const rawCedula = cliente.cedula.trim().toUpperCase();
-      if (rawCedula.startsWith("SBX")) {
-        buyer.taxId = rawCedula;
-      } else {
-        buyer.taxId = rawCedula.replace(/[^0-9]/g, "");
+      const cleanCedula = cliente.cedula.replace(/^SBX/i, "").replace(/\D/g, "");
+      if (cleanCedula) {
+        buyer.taxId = cleanCedula;
       }
     }
   }
@@ -98,9 +96,9 @@ export function ordenToECFPayload(
   const requiresBuyerTaxId = ["31", "33", "34", "41", "44", "45", "46", "47"].includes(invoiceType);
   const isValidTaxId =
     buyer?.taxId &&
-    ([9, 11].includes(buyer.taxId.replace(/\D/g, "").length) || buyer.taxId.startsWith("SBX"));
+    [9, 11].includes(buyer.taxId.replace(/\D/g, "").length);
   if (requiresBuyerTaxId && (!buyer?.name?.trim() || !isValidTaxId)) {
-    throw new Error(`El comprobante E${invoiceType} requiere nombre y RNC/Cédula válido del comprador.`);
+    throw new Error(`El comprobante E${invoiceType} requiere nombre y RNC/Cédula válido del comprador (9 u 11 dígitos).`);
   }
 
   // 3. Items

@@ -175,7 +175,10 @@ export class ProneSoftClient {
     // Sandbox menciona environment en el body, la API activa lo rechaza como
     // propiedad adicional ("property environment should not exist").
     delete (cleanPayload as any).environment;
-    return this.callProxy("submit", { ...cleanPayload, _klynnIdempotencyKey: idempotencyKey });
+    const resolvedKey =
+      idempotencyKey ||
+      `ecf:${this.config.klynnTenantId || this.config.tenantId || "auto"}:${payload.invoiceType}:${crypto.randomUUID()}`;
+    return this.callProxy("submit", { ...cleanPayload, _klynnIdempotencyKey: resolvedKey });
   }
 
   async getDocumentStatus(documentId: string): Promise<ECFStatusResponse> {
@@ -196,6 +199,10 @@ export class ProneSoftClient {
 
   async listAssociatedCompanies(params?: { page?: number; limit?: number }): Promise<any> {
     return this.callProxy("list-associated-companies", params || {});
+  }
+
+  async deleteAssociatedCompany(companyId: string): Promise<any> {
+    return this.callProxy("delete-associated-company", { companyId });
   }
 
   async uploadCertificate(data: {

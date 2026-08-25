@@ -861,12 +861,18 @@ function CentroFiscalPage() {
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" /> Consultando logs de Pronesoft...
               </div>
-            ) : diagnosticLogs.length > 0 ? diagnosticLogs.map((log: any) => (
-              <div key={log.id || `${log.createdAt}-${log.message}`} className={`rounded-xl border p-3 text-sm ${log.type === 'ERROR' ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
-                <div className="mb-1 text-[10px] font-bold uppercase opacity-70">{log.type || 'INFO'} · {log.createdAt ? new Date(log.createdAt).toLocaleString('es-DO') : ''}</div>
-                <div className="whitespace-pre-wrap break-words">{log.message || 'Sin detalle adicional.'}</div>
-              </div>
-            )) : (
+            ) : diagnosticLogs.length > 0 ? diagnosticLogs.map((log: any) => {
+              const cleanMsg = (log.message || 'Sin detalle adicional.')
+                .replace(/^\[Envío RMQ\]\[[a-zA-Z0-9_-]+\]\s*/i, '')
+                .replace(/^RECHAZO PERMANENTE\s*\[\d+\]:\s*/i, 'Rechazo DGII: ')
+                .trim();
+              return (
+                <div key={log.id || `${log.createdAt}-${log.message}`} className={`rounded-xl border p-3 text-sm ${log.type === 'ERROR' ? 'border-rose-200 bg-rose-50 text-rose-900' : 'border-slate-200 bg-slate-50 text-slate-700'}`}>
+                  <div className="mb-1 text-[10px] font-bold uppercase opacity-70">{log.type || 'INFO'} · {log.createdAt ? new Date(log.createdAt).toLocaleString('es-DO') : ''}</div>
+                  <div className="whitespace-pre-wrap break-words font-medium">{cleanMsg}</div>
+                </div>
+              );
+            }) : (
               <div className="py-8 text-center text-sm text-muted-foreground">Pronesoft no devolvió detalles adicionales.</div>
             )}
           </div>

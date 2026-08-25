@@ -452,13 +452,16 @@ function mapStatus(
 export async function registerTenantInPronesoft(
   tenantId: string,
   explicitConfig?: Partial<ECFConfig>,
+  forceRecreate?: boolean,
 ): Promise<string> {
   // 1. Obtener datos del negocio y config actual
-  let config = await getECFConfig(tenantId);
-  if (!config && explicitConfig) {
-    config = explicitConfig as ECFConfig;
-  }
-  if (!config) {
+  const existingConfig = await getECFConfig(tenantId);
+  let config: ECFConfig = {
+    ...(existingConfig || {}),
+    ...(explicitConfig || {}),
+  } as ECFConfig;
+
+  if (!config.id) {
     const { data: tData } = await supabase
       .from("tenants")
       .select("nombre, rnc")
@@ -467,8 +470,8 @@ export async function registerTenantInPronesoft(
     config = {
       id: crypto.randomUUID(),
       tenant_id: tenantId,
-      rnc_emisor: tData?.rnc || "",
-      razon_social: tData?.nombre || "Lavandería",
+      rnc_emisor: explicitConfig?.rnc_emisor || tData?.rnc || "SBX133190907",
+      razon_social: explicitConfig?.razon_social || tData?.nombre || "Lavandería Klynn",
       ambiente: "pruebas",
       pronesoft_environment: "TesteCF",
       is_active: true,
@@ -497,32 +500,45 @@ export async function registerTenantInPronesoft(
     tenantId,
   );
 
-  const companyName = config.razon_social || tenantData?.nombre || "Lavanderia Klynn";
-  let rncToRegister = (config.rnc_emisor || tenantData?.rnc || "SBX987654321").trim().toUpperCase();
-
-  if (proneSoftEnv === "sandbox") {
-    if (!rncToRegister.startsWith("SBX")) {
-      const digitsOnly = rncToRegister.replace(/\D/g, "") || "987654321";
-      rncToRegister = `SBX${digitsOnly}`;
-    }
-  } else {
-    rncToRegister = rncToRegister.replace(/^SBX/i, "").replace(/\D/g, "");
+  const companyName = (explicitConfig?.razon_social || config.razon_social || tenantData?.nombre || "Lavanderia Klynn SRL").trim();
+  // El RNC registrado en Pronesoft para la DGII debe ser SIEMPRE numérico puro (9 u 11 dígitos)
+  let rncToRegister = (explicitConfig?.rnc_emisor || config.rnc_emisor || tenantData?.rnc || "133190907")
+    .replace(/^SBX/i, "")
+    .replace(/\D/g, "");
+  if (!rncToRegister) {
+    rncToRegister = proneSoftEnv === "sandbox" ? "133190907" : "";
   }
 
-  // 2. Buscar primero por RNC para que el alta sea idempotente.
+  // REGLA DEL SDK DE PRONESOFT:
+  // "NO envíes x-tenant-id cuando actúes como la empresa principal."
+  // En Sandbox, 133190907 es la Empresa Principal por defecto de la cuenta.
+  if (proneSoftEnv === "sandbox" && (rncToRegister === "133190907" || rncToRegister === "")) {
+    await updateECFConfig(tenantId, {
+      pronesoft_tenant_id: null,
+      is_active: true,
+      rnc_emisor: "133190907",
+      razon_social: companyName,
+    });
+    return "";
+  }
+
+  // 2. Buscar primero por RNC para que el alta sea idempotente (a menos que se fuerce recreación).
   try {
     let pronesoftTenantId = "";
-    for (let page = 1; page <= 100 && !pronesoftTenantId; page++) {
-      const listed = await client.listAssociatedCompanies({ page, limit: 100 });
-      const companies = Array.isArray(listed) ? listed : listed?.data || [];
-      const match = companies.find(
-        (company: any) =>
-          String(company?.rnc || "")
-            .trim()
-            .toUpperCase() === rncToRegister,
-      );
-      if (match) pronesoftTenantId = match.id || match.businessId || "";
-      if (companies.length < 100) break;
+    if (!forceRecreate) {
+      for (let page = 1; page <= 100 && !pronesoftTenantId; page++) {
+        const listed = await client.listAssociatedCompanies({ page, limit: 100 });
+        const companies = Array.isArray(listed) ? listed : listed?.data || [];
+        const match = companies.find(
+          (company: any) =>
+            String(company?.rnc || "")
+              .trim()
+              .toUpperCase() === rncToRegister &&
+            String(company?.name || "").trim().length > 0,
+        );
+        if (match) pronesoftTenantId = match.id || match.businessId || "";
+        if (companies.length < 100) break;
+      }
     }
 
     if (!pronesoftTenantId) {
@@ -530,9 +546,9 @@ export async function registerTenantInPronesoft(
         rnc: rncToRegister,
         name: companyName,
         email: `ecf-${tenantId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}@klynn.com.do`,
-        phone: tenantData?.telefono || undefined,
-        address: tenantData?.direccion || undefined,
-        city: tenantData?.ciudad || undefined,
+        phone: tenantData?.telefono || "8299416534",
+        address: tenantData?.direccion || "Santo Domingo Este",
+        city: tenantData?.ciudad || "Santo Domingo",
       });
 
       const tenantResultId =

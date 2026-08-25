@@ -4183,16 +4183,10 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     setDraft(d => ({ ...d, is_active: activeValue }));
 
     try {
-      let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').trim().toUpperCase();
-      if (!isProductionEnvironment) {
-        if (!cleanRNC.startsWith('SBX')) {
-          const digits = cleanRNC.replace(/\D/g, '');
-          const keepNumeric = ALLOW_NUMERIC_RNC_IN_SANDBOX_DIAGNOSTIC
-            && (digits.length === 9 || digits.length === 11);
-          cleanRNC = keepNumeric ? digits : `SBX${digits || '987654321'}`;
-        }
-      } else {
-        cleanRNC = cleanRNC.replace(/\D/g, '');
+      // El RNC para DGII y Pronesoft SIEMPRE debe ser numérico puro (9 u 11 dígitos), sin prefijos como "SBX"
+      let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').replace(/^SBX/i, '').replace(/\D/g, '');
+      if (!cleanRNC && !isProductionEnvironment) {
+        cleanRNC = '133190907';
       }
 
       // VALIDACIÓN ESTRICTA: El modo PRODUCCIÓN exige Certificado Digital y RNC real
@@ -4246,9 +4240,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
 
       // 2. Si es electrónico y no está usando credenciales propias (Modalidad 1), auto-registrar en Pronesoft silenciosamente
       let pTenantId = draft.pronesoft_tenant_id || config?.pronesoft_tenant_id;
-      if (activeValue && !draft.usar_credenciales_propias) {
+      if (!isProductionEnvironment && (cleanRNC === '133190907' || !cleanRNC)) {
+        // En Sandbox, 133190907 es la Empresa Principal; según el SDK oficial de Pronesoft:
+        // "NO envíes x-tenant-id cuando actúes como la empresa principal."
+        pTenantId = undefined;
+      } else if (activeValue && !draft.usar_credenciales_propias) {
         try {
-          pTenantId = await registerTenantInPronesoft(tenant.id, configPayload);
+          pTenantId = await registerTenantInPronesoft(tenant.id, configPayload, true);
         } catch (pronesoftErr: any) {
           await updateECFConfig(tenant.id, { is_active: false });
           throw new Error(`No se pudo registrar la empresa en Pronesoft: ${pronesoftErr.message || pronesoftErr}`);

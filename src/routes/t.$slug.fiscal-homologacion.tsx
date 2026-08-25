@@ -124,7 +124,8 @@ function HomologacionPage() {
         payload.items[0].billingIndicator = '4'; // Exento para Gastos Menores
       }
 
-      const response = await client.submitDocument(payload);
+      const idempotencyKey = `homologacion:${tenant.id}:${casoId}:${Date.now()}`;
+      const response = await client.submitDocument(payload, idempotencyKey);
       
       setCasos(prev => prev.map(c => c.id === casoId ? { 
         ...c, 
