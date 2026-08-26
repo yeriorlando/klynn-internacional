@@ -183,7 +183,7 @@ function AdminPage() {
   const [openCreateInvModal, setOpenCreateInvModal] = useState(false);
   const [invNota, setInvNota] = useState("");
   const [invPlanId, setInvPlanId] = useState<PlanId>("pro");
-  const [invExpiraHoras, setInvExpiraHoras] = useState<number | null>(24);
+  const [invExpiraHoras, setInvExpiraHoras] = useState<number | null>(168);
   const [invDiasTrial, setInvDiasTrial] = useState<number>(14);
   const [invSearchQuery, setInvSearchQuery] = useState("");
   const [invStatusFilter, setInvStatusFilter] = useState<string>("all");
@@ -2466,9 +2466,13 @@ function AdminPage() {
                               <div className="text-muted-foreground">
                                 Creado: {new Date(inv.creado_en).toLocaleDateString("es-DO")}
                               </div>
-                              <div className="text-[11px] font-medium text-slate-500 mt-0.5">
-                                {inv.expira_en ? (
-                                  <span>Expira: {new Date(inv.expira_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
+                              <div className="text-[11px] font-medium mt-0.5">
+                                {isUsed && inv.usado_en ? (
+                                  <span className="text-purple-600 dark:text-purple-400 font-bold">
+                                    Canjeado: {new Date(inv.usado_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: true })}
+                                  </span>
+                                ) : inv.expira_en ? (
+                                  <span className="text-slate-500">Expira: {new Date(inv.expira_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit", hour12: true })}</span>
                                 ) : (
                                   <span className="text-emerald-600 font-bold">Sin expiración</span>
                                 )}
@@ -3497,10 +3501,11 @@ function AdminPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="rounded-xl">
-                  <SelectItem value="1" className="text-xs">1 Hora</SelectItem>
-                  <SelectItem value="3" className="text-xs">3 Horas</SelectItem>
-                  <SelectItem value="5" className="text-xs">5 Horas</SelectItem>
-                  <SelectItem value="24" className="text-xs">24 Horas (1 día - Recomendado)</SelectItem>
+                  <SelectItem value="24" className="text-xs">24 Horas (1 Día)</SelectItem>
+                  <SelectItem value="72" className="text-xs">3 Días</SelectItem>
+                  <SelectItem value="168" className="text-xs">7 Días (1 semana - Recomendado)</SelectItem>
+                  <SelectItem value="720" className="text-xs">30 Días (1 Mes)</SelectItem>
+                  <SelectItem value="null" className="text-xs">Sin límite de tiempo (Hasta canjearse)</SelectItem>
                 </SelectContent>
               </Select>
               <p className="text-[9.5px] text-muted-foreground leading-tight">

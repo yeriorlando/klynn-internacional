@@ -1256,7 +1256,10 @@ Característica escritura: —
                   </div>
                   <Switch 
                     checked={cfg.usar_ubicacion_ropa || false} 
-                    onCheckedChange={(v) => updateCfg({ usar_ubicacion_ropa: v })} 
+                    onCheckedChange={async (v) => {
+                      updateCfg({ usar_ubicacion_ropa: v });
+                      await saveCfg({ usar_ubicacion_ropa: v });
+                    }} 
                   />
                 </div>
 

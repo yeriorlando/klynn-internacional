@@ -97,6 +97,7 @@ import {
   isMetodoCredito,
   EstadoOrdenDialog,
 } from "@/components/klynn/OrdenesPage";
+import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
 
 export const Route = createFileRoute("/t/$slug/")({
   component: DashboardPage,
@@ -237,6 +238,10 @@ function DashboardPage() {
     }
   }
 
+  const [conveyorOrden, setConveyorOrden] = useState<Orden | null>(null);
+  const [conveyorUbicacion, setConveyorUbicacion] = useState("");
+  const [savingConveyor, setSavingConveyor] = useState(false);
+
   async function cambiarEstado(o: Orden, estado: EstadoOrden): Promise<boolean> {
     if (!esTransicionEstadoPermitida(o.estado, estado, o.saldo, o.metodo_pago)) {
       if (estado === "ENTREGADA" && o.saldo > 0 && !isMetodoCredito(o.metodo_pago)) {
@@ -244,6 +249,22 @@ function DashboardPage() {
       }
       return true;
     }
+
+    // If marking as LISTA and conveyor is enabled, show the modal first
+    const isConveyorEnabled = Boolean(
+      tenant?.config?.usar_ubicacion_ropa ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.usar_ubicacion_ropa ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.usar_ubicacion_ropa
+      ))
+    );
+
+    if (estado === "LISTA" && isConveyorEnabled) {
+      setConveyorOrden(o);
+      setConveyorUbicacion(o.ubicacion_ropa || "");
+      return false;
+    }
+
     try {
       const ordenActualizada: Orden = { ...o, estado };
 
@@ -296,6 +317,46 @@ function DashboardPage() {
       toast.error("Error al actualizar estado");
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       return true;
+    }
+  }
+
+  async function confirmarConveyor(ubicacionParam?: string) {
+    if (!conveyorOrden) return;
+    const ubiToUse = (ubicacionParam !== undefined ? ubicacionParam : conveyorUbicacion).trim();
+    if (!ubiToUse && tenant?.config?.usar_ubicacion_ropa) {
+      toast.error("Debes seleccionar una ubicación en estantería para marcar la orden como Lista");
+      return;
+    }
+    setSavingConveyor(true);
+    try {
+      const ordenActualizada = { ...conveyorOrden, estado: "LISTA" as EstadoOrden, ubicacion_ropa: ubiToUse || undefined };
+      
+      queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+        if (!old) return [ordenActualizada];
+        return old.map(item => item.id === conveyorOrden.id ? ordenActualizada : item);
+      });
+      queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+        if (!old) return old;
+        return old.map(item => item.id === conveyorOrden.id ? ordenActualizada : item);
+      });
+
+      await saveOrden(ordenActualizada);
+      await updateOrdenEstado(conveyorOrden.id, "LISTA" as EstadoOrden, ubiToUse || undefined);
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      
+      const cli = clientes.find((c) => c.id === conveyorOrden.cliente_id);
+      if (cli) {
+        notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then((r) => {
+          if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+        });
+      }
+      toast.success("Orden marcada como Lista ✓");
+      setConveyorOrden(null);
+      setConveyorUbicacion("");
+    } catch (err: any) {
+      toast.error("Error al guardar ubicación");
+    } finally {
+      setSavingConveyor(false);
     }
   }
 
@@ -1105,6 +1166,25 @@ function DashboardPage() {
         setCobrarOrden={setCobrarOrden}
         setShowPrint={setShowPrint}
         setShowPrintProduccion={setShowPrintProduccion}
+      />
+
+      {/* Modal Estantería Virtual / Conveyor Ubicación */}
+      <UbicacionSelectorDialog
+        open={!!conveyorOrden}
+        onOpenChange={(o) => {
+          if (!o) {
+            setConveyorOrden(null);
+            setConveyorUbicacion("");
+          }
+        }}
+        ubicacionActual={conveyorUbicacion}
+        onSelectUbicacion={(ubi) => {
+          setConveyorUbicacion(ubi);
+          confirmarConveyor(ubi);
+        }}
+        tenant={tenant}
+        ordenesActivas={ordenes}
+        ordenActualId={conveyorOrden?.id}
       />
     </div>
   );

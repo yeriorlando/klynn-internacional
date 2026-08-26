@@ -350,10 +350,18 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       return true;
     }
     // If marking as LISTA and conveyor is enabled, show the modal first
-    if (estado === "LISTA" && tenant?.config?.usar_ubicacion_ropa) {
+    const isConveyorEnabled = Boolean(
+      tenant?.config?.usar_ubicacion_ropa ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.usar_ubicacion_ropa ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.usar_ubicacion_ropa
+      ))
+    );
+
+    if (estado === "LISTA" && isConveyorEnabled) {
       setConveyorOrden(o);
-      setConveyorUbicacion("");
-      return false; // Don't close the current modal immediately
+      setConveyorUbicacion(o.ubicacion_ropa || "");
+      return false; // Don't close or treat as completed immediately
     }
     try {
       const ordenActualizada: Orden = { ...o, estado };
@@ -2000,12 +2008,13 @@ export function EstadoOrdenDialog({
                 type="button"
                 onClick={async () => {
                   if (isAllowed) {
-                    setEstadoModal({ ...estadoModal, estado: s.value });
                     const shouldCloseImmediately = await cambiarEstado(estadoModal, s.value);
                     if (shouldCloseImmediately) {
+                      setEstadoModal({ ...estadoModal, estado: s.value });
                       setTimeout(() => setEstadoModal(null), 350);
                     } else {
-                      setTimeout(() => setEstadoModal(null), 100);
+                      // El modal de conveyor se activó: cerramos el selector de estados de inmediato
+                      setEstadoModal(null);
                     }
                   }
                 }}
@@ -2326,7 +2335,12 @@ export function OrderDetail({
                     }`}
                     onClick={async () => { 
                       const shouldChange = await cambiarEstado(view, s); 
-                      if (shouldChange) setView({ ...view, estado: s }); 
+                      if (shouldChange) {
+                        setView({ ...view, estado: s }); 
+                      } else {
+                        // El modal de conveyor se activó: cerramos la vista de detalles para mostrarlo
+                        setView(null);
+                      }
                     }}
                   >
                     <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
