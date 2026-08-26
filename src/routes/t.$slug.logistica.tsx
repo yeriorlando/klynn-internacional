@@ -498,7 +498,7 @@ function LogisticaPage() {
           cliente={clientes.find(c => c.id === podOrder.cliente_id)}
           tenant={tenant}
           onDelivered={() => {
-            setRefresh(r => r + 1);
+            queryClient.invalidateQueries({ queryKey: ["ordenes", tenant?.id] });
             setPodOrder(null);
           }}
         />
@@ -513,7 +513,7 @@ function LogisticaPage() {
           cliente={clientes.find(c => c.id === incidenciaOrder.cliente_id)}
           tenant={tenant}
           onSaved={() => {
-            setRefresh(r => r + 1);
+            queryClient.invalidateQueries({ queryKey: ["ordenes", tenant?.id] });
             setIncidenciaOrder(null);
           }}
         />

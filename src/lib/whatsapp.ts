@@ -236,13 +236,16 @@ export async function notificarWhatsApp(
     evento === "sin_retirar" ? (wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp?.plantilla_sin_retirar || "") :
     wa.plantilla_entregada;
 
+  const cleanItemDesc = (desc: string) => (desc || "").replace(/^[↳\s•\-–—>]+/g, "").trim();
+
   const detalleStr = (evento === "creada")
-    ? orden.items.map(it => 
-        `${it.descripcion} x${it.cantidad}\n${it.cantidad} × ${formatRD(it.precio_unitario).replace("DOP", "RD$")} = ${formatRD(it.precio_unitario * it.cantidad).replace("DOP", "RD$")}`
-      ).join("\n\n")
+    ? orden.items.map(it => {
+        const desc = cleanItemDesc(it.descripcion);
+        return `${desc} x${it.cantidad}\n${it.cantidad} × ${formatRD(it.precio_unitario).replace("DOP", "RD$")} = ${formatRD(it.precio_unitario * it.cantidad).replace("DOP", "RD$")}`;
+      }).join("\n\n")
     : (evento === "lista" || evento === "sin_retirar")
-    ? orden.items.map(it => `↳ ${it.descripcion} x${it.cantidad}`).join(",\n")
-    : orden.items.map(it => `${it.descripcion} x${it.cantidad}`).join(", ");
+    ? orden.items.map(it => `↳ ${cleanItemDesc(it.descripcion)} x${it.cantidad}`).join("\n")
+    : orden.items.map(it => `${cleanItemDesc(it.descripcion)} x${it.cantidad}`).join(", ");
 
   const serviciosList = await getServicios(tenant.id);
   const serviciosStr = (orden.servicios || []).map(sName => {

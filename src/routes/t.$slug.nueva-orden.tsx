@@ -438,7 +438,8 @@ function NuevaOrdenPage() {
   const tenantId = tenant?.id ?? "";
 
   const cfg = tenant?.config || DEFAULT_CONFIG;
-  const enableServicios = cfg.pos_habilitar_servicios !== false;
+  const modalidad = cfg.pos_modalidad_operativa || "FLEXIBLE";
+  const enableServicios = modalidad === "SOLO_PRENDAS" ? false : (cfg.pos_habilitar_servicios !== false);
   const enablePrendas = cfg.pos_habilitar_prendas !== false;
 
   function irAlPasoSiguienteDelCliente() {
@@ -465,10 +466,18 @@ function NuevaOrdenPage() {
   const [posFilterTab, setPosFilterTab] = useState<"TODOS" | "SERVICIOS" | "PRENDAS">("TODOS");
 
   useEffect(() => {
-    if (cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") {
+    if (cfg?.pos_modalidad_operativa === "SOLO_PRENDAS") {
       setPosFilterTab("PRENDAS");
+      setActiveCategory("TODAS LAS PRENDAS");
+    } else if (cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") {
+      setPosFilterTab("PRENDAS");
+      setActiveCategory("TODAS LAS PRENDAS");
     } else if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO") {
       setPosFilterTab("SERVICIOS");
+      setActiveCategory("TODOS");
+    } else {
+      setPosFilterTab("TODOS");
+      setActiveCategory("TODOS");
     }
   }, [cfg?.pos_modalidad_operativa]);
   const [showAllClothingCategories, setShowAllClothingCategories] = useState(false);
@@ -2705,6 +2714,18 @@ function NuevaOrdenPage() {
                                     key={item.id}
                                     type="button"
                                     onClick={() => {
+                                      // 0. Modo SOLO_PRENDAS: Agregar de inmediato con precio base
+                                      if (cfg?.pos_modalidad_operativa === "SOLO_PRENDAS") {
+                                        addItem({
+                                          descripcion: item.nombre,
+                                          cantidad: 1,
+                                          precio_unitario: item.precio || 0,
+                                          es_libra: item.por_libra,
+                                          is_exento: item.is_exento,
+                                        });
+                                        return;
+                                      }
+
                                       // 1. Si el usuario está explícitamente desglosando prendas en un servicio
                                       if (desgloseServiceName) {
                                         const srvObj = serviciosData.find(s => s.nombre === desgloseServiceName || s.id === desgloseServiceName);
@@ -2772,8 +2793,8 @@ function NuevaOrdenPage() {
                                         return;
                                       }
 
-                                      // 4. Si la prenda no tiene servicios configurados y los servicios son obligatorios
-                                      if (enableServicios && serviciosSel.length === 0) {
+                                      // 4. Si la modalidad es SERVICIOS_PRIMERO y no ha seleccionado servicio
+                                      if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO" && enableServicios && serviciosSel.length === 0) {
                                         toast.warning(
                                           "Por favor, selecciona primero un servicio.",
                                           {
@@ -2831,7 +2852,9 @@ function NuevaOrdenPage() {
                                         </p>
                                       )}
                                       <div className="mt-1 text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
-                                        {srvPrices.length > 1 ? (
+                                        {cfg?.pos_modalidad_operativa === "SOLO_PRENDAS" ? (
+                                          formatRD(item.precio)
+                                        ) : srvPrices.length > 1 ? (
                                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
                                             {srvPrices.length} servicios
                                           </span>

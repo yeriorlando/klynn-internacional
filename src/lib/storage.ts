@@ -203,7 +203,7 @@ export interface TenantConfig {
   max_sucursales?: number;
   pos_habilitar_servicios?: boolean;
   pos_habilitar_prendas?: boolean;
-  pos_modalidad_operativa?: "PRENDAS_CON_SERVICIOS" | "SERVICIOS_PRIMERO" | "FLEXIBLE";
+  pos_modalidad_operativa?: "SOLO_PRENDAS" | "PRENDAS_CON_SERVICIOS" | "SERVICIOS_PRIMERO" | "FLEXIBLE";
   pos_modal_desglose?: boolean;
   pos_modo_defecto?: boolean;
   pos_auto_imprimir?: boolean;

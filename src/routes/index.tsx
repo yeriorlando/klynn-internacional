@@ -1902,7 +1902,7 @@ function LandingPage() {
         <div className="mx-auto max-w-7xl px-6 py-12">
           <div className="grid gap-8 md:grid-cols-5">
             <div>
-              <Logo size="sm" />
+              <Logo size="sm" className="[&_img]:!h-[52px]" />
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
                 Software de gestión hecho en República Dominicana 🇩🇴 para lavanderías que quieren crecer ordenadas, cobrar bien y dormir tranquilas.
               </p>

@@ -47,7 +47,7 @@ import {
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
-  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock
+  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine
 } from "lucide-react";
 import {
   connectBluetoothDevice,
@@ -2136,24 +2136,62 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     </div>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-3 pt-1">
-                    {/* Opción 1: Prendas con Tratamientos */}
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 pt-1">
+                    {/* Opción 1: Solo Prendas (Precio Directo) */}
                     <button
                       type="button"
-                      onClick={() => updateCfg({ pos_modalidad_operativa: "PRENDAS_CON_SERVICIOS" })}
+                      onClick={() => updateCfg({ pos_modalidad_operativa: "SOLO_PRENDAS" })}
                       className={`flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                        (cfg.pos_modalidad_operativa || "FLEXIBLE") === "PRENDAS_CON_SERVICIOS"
+                        cfg.pos_modalidad_operativa === "SOLO_PRENDAS"
                           ? "border-primary bg-primary/5 shadow-xs"
                           : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
                       }`}
                     >
                       <div className="flex items-center justify-between w-full mb-1.5">
-                        <Shirt className={`h-4 w-4 ${
-                          (cfg.pos_modalidad_operativa || "FLEXIBLE") === "PRENDAS_CON_SERVICIOS"
+                        <Shirt className={`h-4.5 w-4.5 ${
+                          cfg.pos_modalidad_operativa === "SOLO_PRENDAS"
                             ? "text-primary"
                             : "text-muted-foreground"
                         }`} />
-                        {(cfg.pos_modalidad_operativa || "FLEXIBLE") === "PRENDAS_CON_SERVICIOS" && (
+                        {cfg.pos_modalidad_operativa === "SOLO_PRENDAS" && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
+                        )}
+                      </div>
+                      <span className="text-xs font-bold text-foreground">Solo Prendas</span>
+                      <span className="text-[10px] text-muted-foreground mt-1 leading-tight">
+                        Tarifa fija por prenda sin requerir servicios ni tratamientos (1 solo toque).
+                      </span>
+                    </button>
+
+                    {/* Opción 2: Prendas con Tratamientos */}
+                    <button
+                      type="button"
+                      onClick={() => updateCfg({ pos_modalidad_operativa: "PRENDAS_CON_SERVICIOS" })}
+                      className={`flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
+                        cfg.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
+                          ? "border-primary bg-primary/5 shadow-xs"
+                          : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full mb-1.5">
+                        <div className="flex items-center gap-1">
+                          <Shirt className={`h-4.5 w-4.5 ${
+                            cfg.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`} />
+                          <span className={`text-[11px] font-black leading-none ${
+                            cfg.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
+                              ? "text-primary"
+                              : "text-slate-400"
+                          }`}>+</span>
+                          <Sparkles className={`h-3.5 w-3.5 ${
+                            cfg.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`} />
+                        </div>
+                        {cfg.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS" && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                         )}
                       </div>
@@ -2163,23 +2201,23 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       </span>
                     </button>
 
-                    {/* Opción 2: Servicios Primero */}
+                    {/* Opción 3: Servicios Primero */}
                     <button
                       type="button"
                       onClick={() => updateCfg({ pos_modalidad_operativa: "SERVICIOS_PRIMERO" })}
                       className={`flex flex-col text-left p-3.5 rounded-xl border-2 transition-all cursor-pointer ${
-                        (cfg.pos_modalidad_operativa || "FLEXIBLE") === "SERVICIOS_PRIMERO"
+                        cfg.pos_modalidad_operativa === "SERVICIOS_PRIMERO"
                           ? "border-primary bg-primary/5 shadow-xs"
                           : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-300"
                       }`}
                     >
                       <div className="flex items-center justify-between w-full mb-1.5">
-                        <Sparkles className={`h-4 w-4 ${
-                          (cfg.pos_modalidad_operativa || "FLEXIBLE") === "SERVICIOS_PRIMERO"
+                        <WashingMachine className={`h-4.5 w-4.5 ${
+                          cfg.pos_modalidad_operativa === "SERVICIOS_PRIMERO"
                             ? "text-primary"
                             : "text-muted-foreground"
                         }`} />
-                        {(cfg.pos_modalidad_operativa || "FLEXIBLE") === "SERVICIOS_PRIMERO" && (
+                        {cfg.pos_modalidad_operativa === "SERVICIOS_PRIMERO" && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                         )}
                       </div>
@@ -2189,7 +2227,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       </span>
                     </button>
 
-                    {/* Opción 3: Flexible / Híbrido */}
+                    {/* Opción 4: Flexible / Híbrido */}
                     <button
                       type="button"
                       onClick={() => updateCfg({ pos_modalidad_operativa: "FLEXIBLE" })}
@@ -2200,11 +2238,23 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       }`}
                     >
                       <div className="flex items-center justify-between w-full mb-1.5">
-                        <Layers className={`h-4 w-4 ${
-                          (cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE"
-                            ? "text-primary"
-                            : "text-muted-foreground"
-                        }`} />
+                        <div className="flex items-center gap-1">
+                          <WashingMachine className={`h-4.5 w-4.5 ${
+                            (cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`} />
+                          <span className={`text-[11px] font-black leading-none ${
+                            (cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE"
+                              ? "text-primary"
+                              : "text-slate-400"
+                          }`}>+</span>
+                          <Shirt className={`h-4.5 w-4.5 ${
+                            (cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE"
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`} />
+                        </div>
                         {(cfg.pos_modalidad_operativa || "FLEXIBLE") === "FLEXIBLE" && (
                           <CheckCircle2 className="h-3.5 w-3.5 text-primary" />
                         )}
@@ -2220,39 +2270,6 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
 
               {/* Fila 2: Switches de Configuración POS */}
               <div className="grid gap-4 md:grid-cols-2 pt-2">
-                {/* Switch: Selección de servicios */}
-                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Sparkles className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-foreground block">Habilitar selección de servicios</span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Botones de servicios (lavado, secado, planchado).</p>
-                    </div>
-                  </div>
-                  <Switch 
-                    checked={cfg.pos_habilitar_servicios !== false} 
-                    onCheckedChange={(v) => updateCfg({ pos_habilitar_servicios: v })} 
-                  />
-                </div>
-
-                {/* Switch: Selección de prendas */}
-                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Shirt className="h-4.5 w-4.5" />
-                    </div>
-                    <div>
-                      <span className="text-xs font-bold text-foreground block">Habilitar selección de prendas</span>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">Desglose de prendas individuales en nueva orden.</p>
-                    </div>
-                  </div>
-                  <Switch 
-                    checked={cfg.pos_habilitar_prendas !== false} 
-                    onCheckedChange={(v) => updateCfg({ pos_habilitar_prendas: v })} 
-                  />
-                </div>
 
                 {/* Switch: Interfaz de venta POS */}
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
