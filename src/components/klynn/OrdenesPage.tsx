@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag } from "lucide-react";
+import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag, MapPin, Layers } from "lucide-react";
 import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -18,7 +18,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
-  type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant,
+  type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant, type EstanteriaZona,
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
   updateOrdenEstado, can
 } from "@/lib/storage";
@@ -97,6 +97,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas" | "sin_retirar">("todas");
   const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar">("todas");
   const [filtroPago, setFiltroPago] = useState<"todas" | MetodoPago>("todas");
+  const [filtroUbicacion, setFiltroUbicacion] = useState<string>("todas");
+  const [editingUbicacionOrden, setEditingUbicacionOrden] = useState<Orden | null>(null);
+  const [editingUbicacionValue, setEditingUbicacionValue] = useState<string>("");
   const [view, setView] = useState<Orden | null>(null);
   const [anular, setAnular] = useState<Orden | null>(null);
   const [motivoAnular, setMotivoAnular] = useState("");
@@ -139,6 +142,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   const tenant = user?.tenant;
   const tenantId = tenant?.id || '';
+
+  const isConveyorEnabled = useMemo(() => {
+    return Boolean(
+      tenant?.config?.usar_ubicacion_ropa ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.usar_ubicacion_ropa ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.usar_ubicacion_ropa
+      ))
+    );
+  }, [tenant?.config?.usar_ubicacion_ropa, tenant?.slug, tenantId]);
 
   const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
@@ -223,6 +236,42 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   const loading = loadingOrdenes || loadingClientes || loadingCaja;
 
+  const zonas: EstanteriaZona[] = useMemo(() => {
+    if (tenant?.config?.estanteria_zonas && tenant.config.estanteria_zonas.length > 0) {
+      return tenant.config.estanteria_zonas;
+    }
+    return [];
+  }, [tenant?.config?.estanteria_zonas]);
+
+  async function cambiarUbicacionDirecta(orden: Orden, nuevaUbicacion: string) {
+    const ubi = nuevaUbicacion.trim();
+    const ordenActualizada: Orden = { ...orden, ubicacion_ropa: ubi || undefined };
+    
+    queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (old) => {
+      if (!old) return [ordenActualizada];
+      return old.map(item => item.id === orden.id ? ordenActualizada : item);
+    });
+    queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) => {
+      if (!old) return old;
+      return old.map(item => item.id === orden.id ? ordenActualizada : item);
+    });
+    if (estadoModal && estadoModal.id === orden.id) {
+      setEstadoModal(ordenActualizada);
+    }
+    if (view && view.id === orden.id) {
+      setView(ordenActualizada);
+    }
+
+    try {
+      await saveOrden(ordenActualizada);
+      await updateOrdenEstado(orden.id, orden.estado, ubi || undefined);
+      queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
+      toast.success(ubi ? `Ubicación actualizada: ${ubi}` : "Ubicación eliminada");
+    } catch (err: any) {
+      toast.error("Error al actualizar la ubicación");
+    }
+  }
+
   const filt = useMemo(() => {
     return ordenes.filter((o) => {
       if (filtroEstado === "hoy") {
@@ -251,6 +300,26 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       // Filtro de pago
       if (filtroPago !== "todas" && o.metodo_pago !== filtroPago) return false;
 
+      // Filtro de ubicación (solo si conveyor está activo)
+      if (isConveyorEnabled) {
+        if (filtroUbicacion === "con_ubicacion") {
+          if (!o.ubicacion_ropa || !o.ubicacion_ropa.trim()) return false;
+        } else if (filtroUbicacion === "sin_ubicacion") {
+          if (o.ubicacion_ropa && o.ubicacion_ropa.trim()) return false;
+        } else if (filtroUbicacion.startsWith("zona:")) {
+          const zonaId = filtroUbicacion.replace("zona:", "");
+          const targetZona = zonas.find(z => z.id === zonaId);
+          if (targetZona) {
+            if (!o.ubicacion_ropa) return false;
+            const ubiLower = o.ubicacion_ropa.toLowerCase().trim();
+            const matchesSlot = targetZona.slots?.some(s => s.toLowerCase().trim() === ubiLower);
+            const matchesPrefix = targetZona.prefijo && ubiLower.startsWith(targetZona.prefijo.toLowerCase());
+            const matchesName = targetZona.nombre && ubiLower.includes(targetZona.nombre.toLowerCase());
+            if (!matchesSlot && !matchesPrefix && !matchesName) return false;
+          }
+        }
+      }
+
       if (!q) return true;
       const c = clientes.find((x) => x.id === o.cliente_id);
       const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
@@ -262,13 +331,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       return o.numero.toLowerCase().includes(searchLower) || 
              nombreCompleto.toLowerCase().includes(searchLower) ||
+             (isConveyorEnabled && o.ubicacion_ropa && o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
              (o.pago_referencia && o.pago_referencia.toLowerCase().includes(searchLower)) ||
              dateStr.includes(searchLower) ||
              dateStrFull.includes(searchLower) ||
              totalStr.includes(searchLower) ||
              saldoStr.includes(searchLower);
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, q]);
+  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, zonas, q, isConveyorEnabled]);
 
   const pendientesCobroList = useMemo(() => {
     return ordenes
@@ -296,6 +366,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       return o.numero.toLowerCase().includes(searchLower) ||
         clienteNombre.includes(searchLower) ||
+        (o.ubicacion_ropa && o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
         String(o.total).includes(searchLower) ||
         String(o.saldo).includes(searchLower) ||
         dateStr.includes(searchLower) ||
@@ -320,23 +391,28 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filt.length, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, q]);
+  }, [filt.length, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, q]);
 
   const exportData = useMemo(() => {
     return {
       filename: "Ordenes",
-      columns: ["Número", "Cliente", "Estado", "Total", "Saldo", "Pago", "Fecha"],
-      data: filt.map(o => [
-        o.numero, 
-        clientes.find(c => c.id === o.cliente_id)?.nombre || "—",
-        o.estado,
-        formatRD(o.total),
-        formatRD(o.saldo),
-        o.metodo_pago,
-        formatDateTimeRD(o.creado_en)
-      ])
+      columns: isConveyorEnabled
+        ? ["Número", "Cliente", "Estado", "Ubicación", "Total", "Saldo", "Pago", "Fecha"]
+        : ["Número", "Cliente", "Estado", "Total", "Saldo", "Pago", "Fecha"],
+      data: filt.map(o => {
+        const row = [
+          o.numero, 
+          clientes.find(c => c.id === o.cliente_id)?.nombre || "—",
+          o.estado,
+        ];
+        if (isConveyorEnabled) {
+          row.push(o.ubicacion_ropa || "Sin asignar");
+        }
+        row.push(formatRD(o.total), formatRD(o.saldo), o.metodo_pago, formatDateTimeRD(o.creado_en));
+        return row;
+      })
     };
-  }, [filt, clientes]);
+  }, [filt, clientes, isConveyorEnabled]);
 
   if (!user || user.tenant.id === '__loading__' || (loading && ordenes.length === 0)) {
     return <GlobalPageLoader text="Cargando órdenes..." />;
@@ -1212,6 +1288,34 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <SelectItem value="MIXTO">Mixto</SelectItem>
           </SelectContent>
         </Select>
+        {isConveyorEnabled && (
+          <Select value={filtroUbicacion} onValueChange={(v: any) => setFiltroUbicacion(v)}>
+            <SelectTrigger className="w-[170px] font-semibold text-xs shrink-0">
+              <MapPin className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent className="min-w-[210px]">
+              <SelectItem value="todas">Todas las ubicaciones</SelectItem>
+              <SelectItem value="con_ubicacion">📍 Con ubicación asignada</SelectItem>
+              <SelectItem value="sin_ubicacion">Sin ubicación</SelectItem>
+              {zonas.length > 0 && (
+                <>
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-t border-border/50 mt-1">
+                    Por Zona de Estantería
+                  </div>
+                  {zonas.map((z) => (
+                    <SelectItem key={z.id} value={`zona:${z.id}`}>
+                      <span className="flex items-center gap-1.5">
+                        <Layers className="h-3 w-3 text-primary shrink-0" />
+                        <span>{z.nombre}</span>
+                      </span>
+                    </SelectItem>
+                  ))}
+                </>
+              )}
+            </SelectContent>
+          </Select>
+        )}
       </Card>
 
       {/* Badge tabs de estado */}
@@ -1293,10 +1397,24 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               <Receipt className="h-5 w-5" />
                             </div>
                             <div className="flex flex-col min-w-0">
-                              <div className="flex items-center gap-1.5">
+                              <div className="flex items-center gap-1.5 flex-wrap">
                                 <span className="font-mono text-sm font-bold text-[#2c4e82] dark:text-[#5c85c2]">
                                   {o.numero}
                                 </span>
+                                {isConveyorEnabled && o.ubicacion_ropa && (
+                                  <span
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setEditingUbicacionOrden(o);
+                                      setEditingUbicacionValue(o.ubicacion_ropa || "");
+                                    }}
+                                    title={`Ubicación en estantería / conveyor: ${o.ubicacion_ropa} (Clic para cambiar)`}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 hover:bg-amber-500/20 text-amber-700 dark:text-amber-300 border border-amber-500/25 text-[10.5px] font-bold transition-all cursor-pointer shadow-2xs hover:scale-105 active:scale-95 shrink-0"
+                                  >
+                                    <MapPin className="h-3 w-3 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span className="truncate max-w-[120px]">{o.ubicacion_ropa}</span>
+                                  </span>
+                                )}
                                 {isPendingECF && (
                                   <span
                                     title={`e-CF Pendiente de validación DGII (${o.ncf || o.tipo_ecf})`}
@@ -1492,6 +1610,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               >
                                 <Tag className="text-amber-600 dark:text-amber-400" /> Imprimir Ticket de Taller
                               </button>
+
+                              {isConveyorEnabled && o.estado !== "ANULADA" && (
+                                <button
+                                  onClick={() => {
+                                    setOpenMenuId(null);
+                                    setEditingUbicacionOrden(o);
+                                    setEditingUbicacionValue(o.ubicacion_ropa || "");
+                                  }}
+                                  className="text-amber-700 dark:text-amber-300 font-semibold"
+                                >
+                                  <MapPin className="text-amber-600 dark:text-amber-400" /> {o.ubicacion_ropa ? `Ubicación: ${o.ubicacion_ropa}` : "Asignar Ubicación / Estantería"}
+                                </button>
+                              )}
                               
                               <button 
                                 onClick={() => { setOpenMenuId(null); setShowDownloadA4(o); }}
@@ -1632,6 +1763,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               onPrint={() => setShowPrint(view)}
               onPrintProduccion={() => setShowPrintProduccion(view)}
               setCobrarOrden={setCobrarOrden}
+              isConveyorEnabled={isConveyorEnabled}
+              onEditUbicacion={(ord) => {
+                setEditingUbicacionOrden(ord);
+                setEditingUbicacionValue(ord.ubicacion_ropa || "");
+              }}
             />
           )}
         </DialogContent>
@@ -1857,9 +1993,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         setCobrarOrden={setCobrarOrden}
         setShowPrint={setShowPrint}
         setShowPrintProduccion={setShowPrintProduccion}
+        isConveyorEnabled={isConveyorEnabled}
       />
 
-      {/* Modal Estantería Virtual / Ubicación */}
+      {/* Modal Estantería Virtual / Ubicación Directa */}
+      <UbicacionSelectorDialog
+        open={!!editingUbicacionOrden}
+        onOpenChange={(o) => {
+          if (!o) {
+            setEditingUbicacionOrden(null);
+            setEditingUbicacionValue("");
+          }
+        }}
+        ubicacionActual={editingUbicacionValue}
+        onSelectUbicacion={(ubi) => {
+          if (editingUbicacionOrden) {
+            cambiarUbicacionDirecta(editingUbicacionOrden, ubi);
+          }
+          setEditingUbicacionOrden(null);
+          setEditingUbicacionValue("");
+        }}
+        tenant={tenant}
+        ordenesActivas={ordenes}
+        ordenActualId={editingUbicacionOrden?.id}
+      />
+
+      {/* Modal Estantería Virtual / Ubicación al pasar a Lista */}
       <UbicacionSelectorDialog
         open={!!conveyorOrden}
         onOpenChange={(o) => {
@@ -1901,6 +2060,7 @@ export interface EstadoOrdenDialogProps {
   setCobrarOrden?: (o: Orden) => void;
   setShowPrint?: (o: Orden) => void;
   setShowPrintProduccion?: (o: Orden) => void;
+  isConveyorEnabled?: boolean;
 }
 
 export function EstadoOrdenDialog({
@@ -1923,6 +2083,7 @@ export function EstadoOrdenDialog({
   setCobrarOrden,
   setShowPrint,
   setShowPrintProduccion,
+  isConveyorEnabled = false,
 }: EstadoOrdenDialogProps) {
   if (!estadoModal) return null;
 
@@ -1944,7 +2105,14 @@ export function EstadoOrdenDialog({
               {estadoModal.estado === "ENTREGADA" && <Truck className="h-4 w-4" />}
             </div>
             <div>
-              <DialogTitle className="text-sm font-black leading-tight text-slate-900">{estadoModal.numero}</DialogTitle>
+              <div className="flex items-center gap-1.5">
+                <DialogTitle className="text-sm font-black leading-tight text-slate-900">{estadoModal.numero}</DialogTitle>
+                {isConveyorEnabled && estadoModal.ubicacion_ropa && (
+                  <Badge className="bg-amber-500/15 text-amber-800 border-amber-300 text-[10px] font-bold px-1.5 py-0 shadow-2xs">
+                    📍 {estadoModal.ubicacion_ropa}
+                  </Badge>
+                )}
+              </div>
               <div className="text-[10px] font-bold text-blue-600 uppercase tracking-wide">
                 {clientes.find(c => c.id === estadoModal.cliente_id)?.nombre || "Consumidor Final"}
               </div>
@@ -2194,7 +2362,9 @@ export function OrderDetail({
   setView, 
   onPrint, 
   onPrintProduccion,
-  setCobrarOrden 
+  setCobrarOrden,
+  onEditUbicacion,
+  isConveyorEnabled = false,
 }: { 
   view: Orden; 
   tenant: any; 
@@ -2205,6 +2375,8 @@ export function OrderDetail({
   onPrint: () => void; 
   onPrintProduccion?: () => void;
   setCobrarOrden: any;
+  onEditUbicacion?: (orden: Orden) => void;
+  isConveyorEnabled?: boolean;
 }) {
   const [empleadoView, setEmpleadoView] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
@@ -2271,6 +2443,38 @@ export function OrderDetail({
                   <span className="font-semibold text-sm">Teléfono</span>
                 </div>
                 <div className="font-extrabold text-slate-900 text-[15px]">{formatPhoneRD(c.telefono)}</div>
+              </div>
+            )}
+
+            {isConveyorEnabled && (
+              <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
+                <div className="flex items-center gap-3 text-slate-600">
+                  <MapPin className="h-5 w-5 text-primary" />
+                  <span className="font-semibold text-sm">Ubicación / Conveyor</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  {view.ubicacion_ropa ? (
+                    <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 text-xs font-black px-2.5 py-0.5 shadow-2xs">
+                      📍 {view.ubicacion_ropa}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground text-xs italic">Sin asignar</span>
+                  )}
+                  {onEditUbicacion && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs font-bold px-2.5 rounded-lg border-slate-200 hover:bg-slate-100 dark:border-slate-700 active:scale-95"
+                      onClick={() => {
+                        setView(null);
+                        onEditUbicacion(view);
+                      }}
+                    >
+                      {view.ubicacion_ropa ? "Cambiar" : "Asignar"}
+                    </Button>
+                  )}
+                </div>
               </div>
             )}
 

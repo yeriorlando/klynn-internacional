@@ -40,6 +40,11 @@ import {
   updateTenantMaxSucursales,
   updateTenantTrialHasta,
   updateTenantModulosOverride,
+  updateTenantSubscriptionBilling,
+  resetTenantMonthlyOrderCount,
+  getNextRenewalDate,
+  parseDateSafe,
+  getBillingCycleStart,
   updateECFConfig,
   getGlobalConfig,
   saveGlobalConfig,
@@ -162,6 +167,9 @@ function AdminPage() {
   const [newMaxSucursales, setNewMaxSucursales] = useState<number>(1);
   const [newDaysLimit, setNewDaysLimit] = useState<number>(30);
   const [newMesesPagados, setNewMesesPagados] = useState<number>(1);
+  const [autoRenovacion, setAutoRenovacion] = useState<boolean>(true);
+  const [planFechaInicio, setPlanFechaInicio] = useState<string>("");
+  const [resetOrdersOnSave, setResetOrdersOnSave] = useState<boolean>(false);
 
   const [isCustomOverride, setIsCustomOverride] = useState(false);
   const [modOverrideWa, setModOverrideWa] = useState(false);
@@ -515,6 +523,19 @@ function AdminPage() {
     setNewStatus(t.estado);
     setNewMaxSucursales(t.max_sucursales || t.config?.max_sucursales || 1);
 
+    const isAuto = t.auto_renovacion !== undefined
+      ? t.auto_renovacion
+      : (t.config?.auto_renovacion !== undefined ? t.config.auto_renovacion : (t.estado === "ACTIVO"));
+    setAutoRenovacion(isAuto);
+
+    const initialDateStr = t.plan_fecha_inicio
+      ? t.plan_fecha_inicio.substring(0, 10)
+      : (t.config?.plan_fecha_inicio
+          ? t.config.plan_fecha_inicio.substring(0, 10)
+          : (t.creado_en ? t.creado_en.substring(0, 10) : new Date().toISOString().substring(0, 10)));
+    setPlanFechaInicio(initialDateStr);
+    setResetOrdersOnSave(false);
+
     let fiscalConfig = ecfConfigsMap[t.id];
     if (!fiscalConfig) {
       try {
@@ -582,8 +603,21 @@ function AdminPage() {
       await updateTenantStatus(editingTenant.id, newStatus);
       await updateTenantMaxSucursales(editingTenant.id, newMaxSucursales);
 
-      const trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
-      await updateTenantTrialHasta(editingTenant.id, trialHasta);
+      let trialHasta = "";
+      if (autoRenovacion) {
+        const nextRenewDate = getNextRenewalDate(planFechaInicio);
+        trialHasta = nextRenewDate.toISOString();
+      } else {
+        trialHasta = new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toISOString();
+      }
+
+      await updateTenantSubscriptionBilling(
+        editingTenant.id,
+        autoRenovacion,
+        planFechaInicio ? new Date(planFechaInicio + "T12:00:00").toISOString() : undefined,
+        trialHasta,
+        resetOrdersOnSave
+      );
 
       if (ecfConfigsMap[editingTenant.id]) {
         await updateECFConfig(editingTenant.id, {
@@ -1079,9 +1113,30 @@ function AdminPage() {
 
                             <td className="px-2 py-2.5 text-center whitespace-nowrap bg-emerald-500/[0.015] border-r border-border/20">
                               {t.estado === "ACTIVO" ? (
-                                <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
-                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
-                                </Badge>
+                                <div className="flex flex-col items-center gap-0.5">
+                                  <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
+                                  </Badge>
+                                  {(() => {
+                                    const isAuto = t.auto_renovacion !== undefined
+                                      ? t.auto_renovacion
+                                      : (t.config?.auto_renovacion !== undefined ? t.config.auto_renovacion : true);
+                                    if (isAuto) {
+                                      const nextRen = getNextRenewalDate(t.plan_fecha_inicio || t.config?.plan_fecha_inicio || t.creado_en);
+                                      return (
+                                        <span className="text-[9.5px] text-emerald-700/90 dark:text-emerald-400 font-bold flex items-center gap-0.5" title={`Renovación Automática. Próximo corte: ${nextRen.toLocaleDateString("es-DO")}`}>
+                                          <RefreshCw className="h-2.5 w-2.5 text-emerald-600" />
+                                          {nextRen.toLocaleDateString("es-DO")}
+                                        </span>
+                                      );
+                                    }
+                                    return (
+                                      <span className="text-[9.5px] text-muted-foreground font-medium" title={`Vigencia manual: ${daysRemaining} días restantes`}>
+                                        {daysRemaining}d vigencia
+                                      </span>
+                                    );
+                                  })()}
+                                </div>
                               ) : t.estado === "TRIAL" ? (
                                 <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
                                   <Clock className="h-3 w-3 text-amber-600" /> Prueba ({daysRemaining}d)
@@ -1324,9 +1379,30 @@ function AdminPage() {
                               {isSelected && <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />}
                             </h3>
                             {t.estado === "ACTIVO" ? (
-                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                                Activo
-                              </Badge>
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                                  Activo
+                                </Badge>
+                                {(() => {
+                                  const isAuto = t.auto_renovacion !== undefined
+                                    ? t.auto_renovacion
+                                    : (t.config?.auto_renovacion !== undefined ? t.config.auto_renovacion : true);
+                                  if (isAuto) {
+                                    const nextRen = getNextRenewalDate(t.plan_fecha_inicio || t.config?.plan_fecha_inicio || t.creado_en);
+                                    return (
+                                      <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-0.5" title={`Próxima renovación: ${nextRen.toLocaleDateString("es-DO")}`}>
+                                        <RefreshCw className="h-2.5 w-2.5 text-emerald-600" />
+                                        {nextRen.toLocaleDateString("es-DO")}
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-[9.5px] text-muted-foreground font-medium">
+                                      {daysRemaining}d
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             ) : t.estado === "TRIAL" ? (
                               <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
                                 Prueba ({daysRemaining}d)
@@ -3150,42 +3226,160 @@ function AdminPage() {
                   </div>
                 </div>
 
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-days-limit" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Días de vigencia / renovación
-                    </Label>
-                    <div className="relative">
-                      <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="edit-days-limit"
-                        type="number"
-                        min={0}
-                        className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
-                        value={newDaysLimit}
-                        onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)}
+                {/* BLOQUE DE VIGENCIA Y RENOVACIÓN */}
+                <div className="p-3 sm:p-3.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/40 space-y-3">
+                  <div className="flex items-center justify-between gap-2 border-b border-border/50 pb-2.5">
+                    <div className="flex items-center gap-2">
+                      <div className={`h-7 w-7 rounded-lg flex items-center justify-center ${autoRenovacion ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400" : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"}`}>
+                        <RefreshCw className={`h-3.5 w-3.5 ${autoRenovacion ? "text-emerald-600 dark:text-emerald-400" : ""}`} />
+                      </div>
+                      <div>
+                        <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                          Vigencia & Renovación
+                          {autoRenovacion ? (
+                            <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100/70 dark:bg-emerald-950/70 px-1.5 py-0.2 rounded-md">
+                              Automática
+                            </span>
+                          ) : (
+                            <span className="text-[9.5px] font-bold text-slate-600 dark:text-slate-400 bg-slate-200/70 dark:bg-slate-800 px-1.5 py-0.2 rounded-md">
+                              Manual
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[10.5px] text-muted-foreground">
+                          {autoRenovacion
+                            ? "Calcula el corte y renueva el plan de forma continua."
+                            : "Vigencia fija asignada por días manuales."}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Label htmlFor="toggle-auto-renovacion" className="text-xs font-bold text-foreground cursor-pointer select-none">
+                        Auto-renovación
+                      </Label>
+                      <Switch
+                        id="toggle-auto-renovacion"
+                        checked={autoRenovacion}
+                        onCheckedChange={setAutoRenovacion}
                       />
                     </div>
-                    <p className="text-[11px] text-muted-foreground pt-0.5">
-                      Próxima renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
-                    </p>
                   </div>
 
-                  <div className="space-y-1">
-                    <Label htmlFor="edit-max-sucursales" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                      Cupo de Sucursales Habilitadas
-                    </Label>
-                    <div className="relative">
-                      <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        id="edit-max-sucursales"
-                        type="number"
-                        min={1}
-                        className="pl-9.5 rounded-xl h-10 font-bold text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
-                        value={newMaxSucursales}
-                        onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)}
-                      />
+                  <div className="grid gap-3 sm:grid-cols-2 pt-0.5">
+                    {autoRenovacion ? (
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-plan-start-date" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                          <Calendar className="h-3 w-3 text-primary" /> Fecha Inicial / Día de Corte *
+                        </Label>
+                        <div className="relative">
+                          <Input
+                            id="edit-plan-start-date"
+                            type="date"
+                            className="rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-semibold"
+                            value={planFechaInicio}
+                            onChange={(e) => setPlanFechaInicio(e.target.value)}
+                          />
+                        </div>
+                        {(() => {
+                          const nextRenewal = getNextRenewalDate(planFechaInicio);
+                          const daysUntil = Math.max(0, Math.ceil((nextRenewal.getTime() - Date.now()) / 86400000));
+                          const parsed = parseDateSafe(planFechaInicio);
+                          const cutoffDay = parsed ? parsed.getDate() : 1;
+                          return (
+                            <div className="text-[11px] text-muted-foreground pt-0.5 space-y-0.5">
+                              <div>
+                                Próxima renovación: <strong className="text-emerald-600 dark:text-emerald-400 font-bold">{nextRenewal.toLocaleDateString("es-DO")}</strong>{" "}
+                                <span className="text-[10px] text-muted-foreground/80 font-medium">({daysUntil} {daysUntil === 1 ? "día" : "días"})</span>
+                              </div>
+                              <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                                Corte: los días <strong>{cutoffDay}</strong> de cada mes • Resetea órdenes del ciclo.
+                              </div>
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Label htmlFor="edit-days-limit" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1">
+                          <Clock className="h-3 w-3 text-amber-500" /> Días de Vigencia Manual
+                        </Label>
+                        <div className="relative">
+                          <Clock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                          <Input
+                            id="edit-days-limit"
+                            type="number"
+                            min={0}
+                            className="pl-9.5 rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-semibold"
+                            value={newDaysLimit}
+                            onChange={(e) => setNewDaysLimit(Number(e.target.value) || 0)}
+                          />
+                        </div>
+                        <div className="text-[11px] text-muted-foreground pt-0.5 space-y-0.5">
+                          <div>
+                            Próxima renovación: <strong className="text-primary font-bold">{new Date(Date.now() + newDaysLimit * 24 * 60 * 60 * 1000).toLocaleDateString("es-DO")}</strong>
+                          </div>
+                          <div className="text-[10px] text-slate-500 dark:text-slate-400">
+                            Vigencia manual fija de {newDaysLimit} días.
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-1">
+                      <Label htmlFor="edit-max-sucursales" className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground">
+                        Cupo de Sucursales Habilitadas
+                      </Label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                          id="edit-max-sucursales"
+                          type="number"
+                          min={1}
+                          className="pl-9.5 rounded-xl h-10 font-bold text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20"
+                          value={newMaxSucursales}
+                          onChange={(e) => setNewMaxSucursales(Number(e.target.value) || 1)}
+                        />
+                      </div>
+                      <p className="text-[10.5px] text-muted-foreground pt-0.5">
+                        Cantidad máxima de sucursales permitidas para esta lavandería.
+                      </p>
                     </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-border/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <Checkbox
+                        id="reset-orders-checkbox"
+                        checked={resetOrdersOnSave}
+                        onCheckedChange={(c) => setResetOrdersOnSave(!!c)}
+                      />
+                      <Label htmlFor="reset-orders-checkbox" className="text-xs text-foreground font-semibold cursor-pointer select-none">
+                        Reiniciar órdenes consumidas a 0 al guardar
+                      </Label>
+                    </div>
+
+                    {editingTenant && (
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-7 text-xs font-bold px-2.5 rounded-lg border-primary/30 text-primary hover:bg-primary/10 gap-1.5"
+                        onClick={async () => {
+                          if (!editingTenant) return;
+                          const success = await resetTenantMonthlyOrderCount(editingTenant.id);
+                          if (success) {
+                            toast.success(`Órdenes consumidas reiniciadas a 0 para ${editingTenant.nombre}`);
+                            setTick(t => t + 1);
+                          } else {
+                            toast.error("No se pudo reiniciar el contador de órdenes");
+                          }
+                        }}
+                      >
+                        <RefreshCw className="h-3 w-3 text-primary" />
+                        Reiniciar a 0 ahora
+                      </Button>
+                    )}
                   </div>
                 </div>
               </div>

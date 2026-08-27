@@ -53,6 +53,7 @@ import {
   getGastos,
   getMovimientos,
   getEmpleados,
+  getNextRenewalDate,
   getCajas,
   type Tenant,
   type Plan 
@@ -730,9 +731,30 @@ function DashboardAdminPage() {
 
                           <td className="px-2 py-2.5 text-center whitespace-nowrap bg-emerald-500/[0.015] border-r border-border/20">
                             {t.estado === "ACTIVO" ? (
-                              <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
-                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
-                              </Badge>
+                              <div className="flex flex-col items-center gap-0.5">
+                                <Badge className="bg-emerald-50 text-emerald-700 hover:bg-emerald-50 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" /> Activo
+                                </Badge>
+                                {(() => {
+                                  const isAuto = t.auto_renovacion !== undefined
+                                    ? t.auto_renovacion
+                                    : (t.config?.auto_renovacion !== undefined ? t.config.auto_renovacion : true);
+                                  if (isAuto) {
+                                    const nextRen = getNextRenewalDate(t.plan_fecha_inicio || t.config?.plan_fecha_inicio || t.creado_en);
+                                    return (
+                                      <span className="text-[9.5px] text-emerald-700/90 dark:text-emerald-400 font-bold flex items-center gap-0.5" title={`Renovación Automática. Próximo corte: ${nextRen.toLocaleDateString("es-DO")}`}>
+                                        <RefreshCw className="h-2.5 w-2.5 text-emerald-600" />
+                                        {nextRen.toLocaleDateString("es-DO")}
+                                      </span>
+                                    );
+                                  }
+                                  return (
+                                    <span className="text-[9.5px] text-muted-foreground font-medium">
+                                      {daysRemaining}d vigencia
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             ) : t.estado === "TRIAL" ? (
                               <Badge className="bg-amber-50 text-amber-700 hover:bg-amber-50 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full gap-1 shadow-2xs">
                                 <Clock className="h-3 w-3 text-amber-600" /> Prueba ({daysRemaining}d)
@@ -897,9 +919,30 @@ function DashboardAdminPage() {
                         <div className="flex items-center justify-between gap-1">
                           <h3 className="font-bold text-foreground text-sm truncate">{t.nombre}</h3>
                           {t.estado === "ACTIVO" ? (
-                            <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                              Activo
-                            </Badge>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
+                                Activo
+                              </Badge>
+                              {(() => {
+                                const isAuto = t.auto_renovacion !== undefined
+                                  ? t.auto_renovacion
+                                  : (t.config?.auto_renovacion !== undefined ? t.config.auto_renovacion : true);
+                                if (isAuto) {
+                                  const nextRen = getNextRenewalDate(t.plan_fecha_inicio || t.config?.plan_fecha_inicio || t.creado_en);
+                                  return (
+                                    <span className="text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 flex items-center gap-0.5" title={`Próxima renovación: ${nextRen.toLocaleDateString("es-DO")}`}>
+                                      <RefreshCw className="h-2.5 w-2.5 text-emerald-600" />
+                                      {nextRen.toLocaleDateString("es-DO")}
+                                    </span>
+                                  );
+                                }
+                                return (
+                                  <span className="text-[9.5px] text-muted-foreground font-medium">
+                                    {daysRemaining}d
+                                  </span>
+                                );
+                              })()}
+                            </div>
                           ) : t.estado === "TRIAL" ? (
                             <Badge className="bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
                               Prueba ({daysRemaining}d)

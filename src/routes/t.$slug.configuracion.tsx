@@ -29,7 +29,7 @@ import {
   saveTenant, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
   getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
-  isModuleEnabled, sendWeeklySummaryTest,
+  isModuleEnabled, sendWeeklySummaryTest, getNextRenewalDate,
   type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
@@ -2518,11 +2518,20 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                   {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expiró el" : "Vence el") : "Próxima renovación"}
                 </div>
                 <div className="text-sm font-black tracking-wide text-foreground">
-                  {tenant.trial_hasta ? (
-                    <span>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</span>
-                  ) : (
-                    <span className="text-muted-foreground font-semibold">Sin fecha</span>
-                  )}
+                  {(() => {
+                    const isAuto = tenant.auto_renovacion !== undefined
+                      ? tenant.auto_renovacion
+                      : (tenant.config?.auto_renovacion !== undefined ? tenant.config.auto_renovacion : true);
+                    if (tenant.estado === "ACTIVO" && isAuto) {
+                      const nextDate = getNextRenewalDate(tenant.plan_fecha_inicio || tenant.config?.plan_fecha_inicio || tenant.creado_en);
+                      return <span>{nextDate.toLocaleDateString("es-DO")}</span>;
+                    }
+                    return tenant.trial_hasta ? (
+                      <span>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</span>
+                    ) : (
+                      <span className="text-muted-foreground font-semibold">Sin fecha</span>
+                    );
+                  })()}
                 </div>
               </div>
             </div>

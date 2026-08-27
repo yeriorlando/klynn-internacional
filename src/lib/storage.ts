@@ -153,6 +153,7 @@ export interface Tenant {
   max_sucursales?: number;
   limite_credito_dias?: number;
   plan_fecha_inicio?: string;
+  auto_renovacion?: boolean;
   nombre_sucursal?: string;
 }
 
@@ -214,6 +215,9 @@ export interface TenantConfig {
   usar_ubicacion_ropa?: boolean;
   estanteria_zonas?: EstanteriaZona[];
   meses_pagados_override?: number;
+  auto_renovacion?: boolean;
+  plan_fecha_inicio?: string;
+  ordenes_reset_at?: string;
   modulos_override?: {
     whatsapp?: boolean;
     facturacion_fiscal?: boolean;
@@ -1920,6 +1924,92 @@ export async function updateTenantModulosOverride(
 
   if (error) {
     console.error("Error saving tenant config overrides:", error);
+    return false;
+  }
+  return true;
+}
+
+export async function updateTenantSubscriptionBilling(
+  tenantId: string,
+  autoRenovacion: boolean,
+  planFechaInicio?: string,
+  trialHasta?: string,
+  resetOrders = false,
+): Promise<boolean> {
+  const { data: tenant, error: fetchError } = await supabase
+    .from("tenants")
+    .select("config")
+    .eq("id", tenantId)
+    .single();
+
+  const nowIso = new Date().toISOString();
+  const currentConfig = tenant?.config || {};
+  const nextConfig: TenantConfig = {
+    ...currentConfig,
+    auto_renovacion: autoRenovacion,
+    plan_fecha_inicio: planFechaInicio || currentConfig.plan_fecha_inicio,
+    ...(resetOrders ? { ordenes_reset_at: nowIso } : {}),
+  };
+
+  const updates: Record<string, any> = {
+    config: nextConfig,
+    auto_renovacion: autoRenovacion,
+  };
+
+  if (planFechaInicio) {
+    updates.plan_fecha_inicio = planFechaInicio;
+  }
+  if (trialHasta) {
+    updates.trial_hasta = trialHasta;
+  }
+
+  const { error } = await supabase
+    .from("tenants")
+    .update(updates)
+    .eq("id", tenantId);
+
+  if (error) {
+    console.warn("Retrying tenant billing update without top-level auto_renovacion column if missing:", error);
+    delete updates.auto_renovacion;
+    const { error: fallbackError } = await supabase
+      .from("tenants")
+      .update(updates)
+      .eq("id", tenantId);
+
+    if (fallbackError) {
+      console.error("Error updating tenant subscription billing fallback:", fallbackError);
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export async function resetTenantMonthlyOrderCount(tenantId: string): Promise<boolean> {
+  const { data: tenant, error: fetchError } = await supabase
+    .from("tenants")
+    .select("config")
+    .eq("id", tenantId)
+    .single();
+
+  const nowIso = new Date().toISOString();
+  const currentConfig = tenant?.config || {};
+  const nextConfig: TenantConfig = {
+    ...currentConfig,
+    ordenes_reset_at: nowIso,
+    plan_fecha_inicio: nowIso,
+  };
+
+  const { error } = await supabase
+    .from("tenants")
+    .update({ 
+      config: nextConfig,
+      plan_fecha_inicio: nowIso
+    })
+    .eq("id", tenantId);
+
+  if (error) {
+    console.error("Error resetting tenant monthly orders:", error);
     return false;
   }
   return true;
@@ -4367,38 +4457,109 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   return null;
 }
 
+export function parseDateSafe(dateInput: string | Date | undefined | null): Date | null {
+  if (!dateInput) return null;
+  if (dateInput instanceof Date) return isNaN(dateInput.getTime()) ? null : dateInput;
+  if (typeof dateInput === "string") {
+    const trimmed = dateInput.trim();
+    if (!trimmed) return null;
+    const match = trimmed.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (match) {
+      const year = parseInt(match[1], 10);
+      const month = parseInt(match[2], 10) - 1;
+      const day = parseInt(match[3], 10);
+      return new Date(year, month, day, 0, 0, 0, 0);
+    }
+    const d = new Date(trimmed);
+    return isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+export function getNextRenewalDate(
+  startDateInput: string | Date | undefined | null,
+  fromDate: Date = new Date(),
+): Date {
+  const parsed = parseDateSafe(startDateInput);
+  if (!parsed) {
+    const d = new Date(fromDate);
+    d.setDate(d.getDate() + 30);
+    return d;
+  }
+
+  const now = new Date(fromDate);
+  now.setHours(0, 0, 0, 0);
+
+  const start = new Date(parsed);
+  start.setHours(0, 0, 0, 0);
+
+  if (start.getTime() > now.getTime()) {
+    return start;
+  }
+
+  const targetDay = start.getDate();
+  let candidateYear = now.getFullYear();
+  let candidateMonth = now.getMonth();
+
+  const makeDate = (y: number, m: number, d: number) => {
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const clampedDay = Math.min(d, daysInMonth);
+    return new Date(y, m, clampedDay, 23, 59, 59, 999);
+  };
+
+  let candidate = makeDate(candidateYear, candidateMonth, targetDay);
+
+  if (candidate.getTime() <= now.getTime()) {
+    candidateMonth += 1;
+    if (candidateMonth > 11) {
+      candidateMonth = 0;
+      candidateYear += 1;
+    }
+    candidate = makeDate(candidateYear, candidateMonth, targetDay);
+  }
+
+  return candidate;
+}
+
 export function getBillingCycleStart(
-  planStartDateStr: string | Date,
+  planStartDateStr: string | Date | undefined | null,
   now: Date = new Date(),
 ): Date {
-  const start = new Date(planStartDateStr);
-  if (isNaN(start.getTime())) return new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  if (now < start)
-    return new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
+  const parsed = parseDateSafe(planStartDateStr);
+  if (!parsed) return new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+
+  const start = new Date(parsed);
+
+  if (now.getTime() < start.getTime()) {
+    return start;
+  }
 
   const year = now.getFullYear();
   const month = now.getMonth();
-  const day = start.getDate();
+  const targetDay = start.getDate();
 
-  let cycleStart = new Date(year, month, day, 0, 0, 0, 0);
-
-  // Manejar el desbordamiento de fin de mes (ej. si el mes tiene menos días que el día de aniversario)
-  if (cycleStart.getDate() !== day) {
-    cycleStart = new Date(year, month + 1, 0, 0, 0, 0, 0);
+  // Si el cliente inició o renovó en el mismo mes actual, el ciclo comienza en esa fecha/hora exacta
+  if (start.getFullYear() === year && start.getMonth() === month) {
+    return start;
   }
 
+  const makeCycleStart = (y: number, m: number, d: number) => {
+    const daysInMonth = new Date(y, m + 1, 0).getDate();
+    const clampedDay = Math.min(d, daysInMonth);
+    return new Date(y, m, clampedDay, 0, 0, 0, 0);
+  };
+
+  let cycleStart = makeCycleStart(year, month, targetDay);
+
   // Si la fecha calculada está en el futuro, el ciclo actual comenzó en el mes anterior
-  if (cycleStart > now) {
+  if (cycleStart.getTime() > now.getTime()) {
     let prevMonth = month - 1;
     let prevYear = year;
     if (prevMonth < 0) {
       prevMonth = 11;
       prevYear = year - 1;
     }
-    cycleStart = new Date(prevYear, prevMonth, day, 0, 0, 0, 0);
-    if (cycleStart.getDate() !== day) {
-      cycleStart = new Date(prevYear, prevMonth + 1, 0, 0, 0, 0, 0);
-    }
+    cycleStart = makeCycleStart(prevYear, prevMonth, targetDay);
   }
 
   return cycleStart;
@@ -4407,31 +4568,27 @@ export function getBillingCycleStart(
 export async function getMonthlyOrderCount(
   tenantId: string,
   planFechaInicio?: string,
+  tenantObj?: Tenant | null,
 ): Promise<number> {
   const all = (await getOrdenes(tenantId)).filter((o) => o.estado !== "ANULADA");
 
-  let refDateStr = planFechaInicio;
-  if (!refDateStr) {
-    const t = await getTenantById(tenantId);
-    refDateStr = t?.plan_fecha_inicio || t?.creado_en;
-  }
-
-  if (!refDateStr) {
-    const now = new Date();
-    const month = now.getMonth();
-    const year = now.getFullYear();
-    return all.filter((o) => {
-      const d = new Date(o.creado_en);
-      return d.getMonth() === month && d.getFullYear() === year;
-    }).length;
-  }
+  const t = tenantObj || (await getTenantById(tenantId));
+  const refDateStr = planFechaInicio || t?.plan_fecha_inicio || t?.config?.plan_fecha_inicio || t?.creado_en;
+  const resetAtStr = t?.config?.ordenes_reset_at;
 
   const now = new Date();
-  const cycleStart = getBillingCycleStart(refDateStr, now);
+  let cycleStart = getBillingCycleStart(refDateStr, now);
+
+  if (resetAtStr) {
+    const resetDate = new Date(resetAtStr);
+    if (!isNaN(resetDate.getTime()) && resetDate.getTime() > cycleStart.getTime()) {
+      cycleStart = resetDate;
+    }
+  }
 
   return all.filter((o) => {
     const d = new Date(o.creado_en);
-    return d >= cycleStart;
+    return d.getTime() >= cycleStart.getTime();
   }).length;
 }
 
@@ -4462,7 +4619,11 @@ export async function checkPlanLimits(tenant: Tenant | string) {
   const plans = await getPlans();
   const plan = plans.find((p) => p.id === t.plan_id) || PLANS[0];
 
-  const orderCount = await getMonthlyOrderCount(t.id, t.plan_fecha_inicio || t.creado_en);
+  const orderCount = await getMonthlyOrderCount(
+    t.id,
+    t.plan_fecha_inicio || t.config?.plan_fecha_inicio || t.creado_en,
+    t,
+  );
   const employeeCount = (await getEmpleados(t.id)).filter((e) => e.rol !== "ADMIN").length;
 
   const baseLimit = plan.limite_ordenes_mes;
