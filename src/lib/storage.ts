@@ -420,6 +420,9 @@ export interface ECFConfig {
   ambiente: "pruebas" | "produccion";
   pronesoft_environment?: "TesteCF" | "CerteCF" | "eCF";
   is_active: boolean;
+  proveedor_ecf?: "ef2" | "pronesoft";
+  ef2_token?: string;
+  ef2_environment?: "TesteCF" | "CerteCF" | "eCF";
   api_auth_token?: string;
   api_token_expires_at?: string;
   // Pronesoft multi-empresa
@@ -1206,6 +1209,7 @@ export async function saveTenant(t: Tenant) {
     config: {
       ...DEFAULT_CONFIG,
       ...t.config,
+      impresora_tipo: "usb",
       nombre_sucursal: branchName,
     },
   };
@@ -1257,6 +1261,10 @@ export async function saveTenant(t: Tenant) {
 
 export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
   const realId = resolveTenantId(tenantId);
+  const cleanConfig: TenantConfig = {
+    ...config,
+    impresora_tipo: "usb",
+  };
 
   // 1. Actualizar caché local de inmediato para 0ms de respuesta y persistencia offline
   if (typeof window !== "undefined") {
@@ -1278,7 +1286,7 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
       }
     }
     if (cachedTenant) {
-      cachedTenant.config = { ...(cachedTenant.config || {}), ...config };
+      cachedTenant.config = { ...(cachedTenant.config || {}), ...cleanConfig };
       localStorage.setItem(cacheKey, JSON.stringify(cachedTenant));
       if (cachedTenant.slug) {
         localStorage.setItem(
@@ -1291,7 +1299,7 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
         try {
           const parsed = JSON.parse(lastAuthStr);
           if (parsed?.tenant) {
-            parsed.tenant.config = { ...(parsed.tenant.config || {}), ...config };
+            parsed.tenant.config = { ...(parsed.tenant.config || {}), ...cleanConfig };
             localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
           }
         } catch {}
@@ -1306,7 +1314,7 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
       tenant_id: realId,
       table_name: "tenants",
       action: "UPDATE",
-      payload: { config },
+      payload: { config: cleanConfig },
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     return;
@@ -1314,7 +1322,7 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
 
   // 3. Intentar guardar en Supabase
   try {
-    const { error } = await supabase.from("tenants").update({ config }).eq("id", realId);
+    const { error } = await supabase.from("tenants").update({ config: cleanConfig }).eq("id", realId);
     if (error) throw error;
   } catch (err) {
     await offlineDB.addToOutbox({
@@ -1322,7 +1330,7 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
       tenant_id: realId,
       table_name: "tenants",
       action: "UPDATE",
-      payload: { config },
+      payload: { config: cleanConfig },
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
   }
@@ -2877,7 +2885,7 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
     return local;
   }
 
-  // 2. Buscar en Supabase con paginación automática por bloques de 1000 para superar el límite de PostgREST
+  // 2. Buscar en Supabase con paginación automática y reintento resiliente
   try {
     const PAGE_SIZE = 1000;
     let allData: Orden[] = [];
@@ -2885,12 +2893,25 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
     let hasMore = true;
 
     while (hasMore) {
-      const { data, error } = await supabase
+      let result = await supabase
         .from("ordenes")
         .select("*")
         .eq("tenant_id", realId)
         .order("creado_en", { ascending: false })
         .range(from, from + PAGE_SIZE - 1);
+
+      // Reintento silencioso en caso de fallo momentáneo de red / HTTP2 ping
+      if (result.error) {
+        await new Promise((r) => setTimeout(r, 400));
+        result = await supabase
+          .from("ordenes")
+          .select("*")
+          .eq("tenant_id", realId)
+          .order("creado_en", { ascending: false })
+          .range(from, from + PAGE_SIZE - 1);
+      }
+
+      const { data, error } = result;
 
       if (error || !data || data.length === 0) {
         hasMore = false;
@@ -2924,12 +2945,25 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
       return allData;
     }
   } catch (e) {
-    console.warn("Aviso al consultar órdenes en Supabase:", e);
+    // Fallback silencioso a almacenamiento local e IndexedDB
   }
 
-  return read<Orden[]>(KEY.ordenes, [])
+  const localFallback = read<Orden[]>(KEY.ordenes, [])
     .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
     .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+
+  if (localFallback.length > 0) return localFallback;
+
+  try {
+    const idb = await offlineDB.getAll<Orden>("ordenes");
+    if (idb && idb.length > 0) {
+      return idb
+        .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
+        .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+    }
+  } catch {}
+
+  return [];
 }
 
 export async function getOrdenesByPeriod(filters: {

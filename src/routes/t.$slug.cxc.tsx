@@ -1179,9 +1179,9 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
                 finalEcfSecurityCode = accepted ? result.security_code || '' : undefined;
                 finalEcfSignatureDate = accepted ? result.document.signature_date : undefined;
 
-                toast.info(accepted
+                toast.success(accepted
                   ? `Comprobante DGII ${result.encf} aceptado para orden #${o.numero}`
-                  : `e-CF ${result.encf} registrado; validación DGII pendiente.`);
+                  : `Comprobante ${result.encf} emitido con éxito`);
               } catch (fErr: any) {
                 console.error("Error Fiscal en Cobrar Todo:", fErr);
                 const message = String(fErr?.message || fErr || '');

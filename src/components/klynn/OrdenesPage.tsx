@@ -1262,32 +1262,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <SelectItem value="sin_retirar">Sin retirar ({`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`})</SelectItem>
           </SelectContent>
         </Select>
-        <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
-          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
-            <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Prioridades</SelectItem>
-            <SelectItem value="urgente">Urgentes</SelectItem>
-            <SelectItem value="estandar">Estándar</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
-          <SelectTrigger className="w-[160px] font-semibold text-xs shrink-0">
-            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Formas de Pago</SelectItem>
-            <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-            <SelectItem value="TARJETA">Tarjeta</SelectItem>
-            <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-            <SelectItem value="CREDITO">Crédito</SelectItem>
-            <SelectItem value="PAGO_AL_RETIRAR">Pago al retirar</SelectItem>
-            <SelectItem value="MIXTO">Mixto</SelectItem>
-          </SelectContent>
-        </Select>
         {isConveyorEnabled && (
           <Select value={filtroUbicacion} onValueChange={(v: any) => setFiltroUbicacion(v)}>
             <SelectTrigger className="w-[170px] font-semibold text-xs shrink-0">
@@ -1296,7 +1270,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </SelectTrigger>
             <SelectContent className="min-w-[210px]">
               <SelectItem value="todas">Todas las ubicaciones</SelectItem>
-              <SelectItem value="con_ubicacion">📍 Con ubicación asignada</SelectItem>
+              <SelectItem value="con_ubicacion">Con ubicación asignada</SelectItem>
               <SelectItem value="sin_ubicacion">Sin ubicación</SelectItem>
               {zonas.length > 0 && (
                 <>
@@ -1316,6 +1290,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </SelectContent>
           </Select>
         )}
+        <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
+          <SelectTrigger className="w-[160px] font-semibold text-xs shrink-0">
+            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Formas de Pago</SelectItem>
+            <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+            <SelectItem value="TARJETA">Tarjeta</SelectItem>
+            <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+            <SelectItem value="CREDITO">Crédito</SelectItem>
+            <SelectItem value="PAGO_AL_RETIRAR">Pago al retirar</SelectItem>
+            <SelectItem value="MIXTO">Mixto</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
+          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
+            <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Prioridades</SelectItem>
+            <SelectItem value="urgente">Urgentes</SelectItem>
+            <SelectItem value="estandar">Estándar</SelectItem>
+          </SelectContent>
+        </Select>
       </Card>
 
       {/* Badge tabs de estado */}
@@ -3401,7 +3401,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             } else if (rejected) {
               toast.error(`El e-CF ${result.encf} fue rechazado por DGII/Pronesoft.`);
             } else {
-              toast.info(`e-CF ${result.encf} registrado en Pronesoft. Validación DGII pendiente.`);
+              toast.success(`Comprobante ${result.encf} emitido con éxito`);
             }
           } catch (fErr: any) {
             console.error("Error Fiscal al cobrar:", fErr);

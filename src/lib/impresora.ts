@@ -47,28 +47,17 @@ export function formatPhoneDO(phoneStr?: string): string {
 
 // Verifica si la API de Puerto Serie está disponible en el navegador
 export function isSerialSupported(): boolean {
-  return typeof window !== "undefined" && "serial" in navigator;
+  return false;
 }
 
 // Verifica si la API de Bluetooth está disponible en el navegador
 export function isBluetoothSupported(): boolean {
-  return typeof window !== "undefined" && "bluetooth" in navigator;
+  return false;
 }
 
 // --- CONEXIÓN WEB SERIAL ---
-export async function connectSerialPort(baudRate = 9600): Promise<any> {
-  if (!isSerialSupported()) {
-    throw new Error("La API Web Serial no está soportada en este navegador.");
-  }
-  try {
-    const port = await (navigator as any).serial.requestPort();
-    await port.open({ baudRate });
-    activeSerialPort = port;
-    return port;
-  } catch (err) {
-    console.error("Error al conectar puerto serie:", err);
-    throw err;
-  }
+export async function connectSerialPort(_baudRate = 9600): Promise<any> {
+  return null;
 }
 
 export async function disconnectSerial(): Promise<void> {
@@ -84,85 +73,15 @@ export async function disconnectSerial(): Promise<void> {
 
 // Intenta reconectar a puertos previamente autorizados
 export async function getAutoConnectedSerialPort(): Promise<any | null> {
-  if (!isSerialSupported()) return null;
-  try {
-    const ports = await (navigator as any).serial.getPorts();
-    if (ports && ports.length > 0) {
-      const port = ports[0];
-      // Si el puerto ya está abierto, retornar. Si no, intentar abrirlo.
-      if (port.writable) {
-        activeSerialPort = port;
-        return port;
-      }
-      try {
-        await port.open({ baudRate: 9600 });
-        activeSerialPort = port;
-        return port;
-      } catch {
-        return null;
-      }
-    }
-  } catch (e) {
-    console.error("Auto-connect serial error:", e);
-  }
   return null;
 }
 
 // --- CONEXIÓN WEB BLUETOOTH ---
 export async function connectBluetoothDevice(): Promise<any> {
-  if (!isBluetoothSupported()) {
-    throw new Error("Web Bluetooth no está soportado en este navegador.");
-  }
-  try {
-    // Escaneo genérico para impresoras
-    const device = await (navigator as any).bluetooth.requestDevice({
-      acceptAllDevices: true,
-      optionalServices: [
-        "00001101-0000-1000-8000-00805f9b34fb", // SPP (Serial Port Profile)
-        "000018f0-0000-1000-8000-00805f9b34fb", // Servicio de Impresión Raw común
-        "49535343-fe7d-4ae5-8fa9-9fafd205e455", // ISSC
-        "e7e1a000-bc75-4f5a-b1e1-d4d114091697"  // Xprinter
-      ]
-    });
-
-    const server = await device.gatt.connect();
-    activeBluetoothDevice = device;
-
-    // Escanear los servicios para encontrar una característica con permiso de escritura
-    const services = await server.getPrimaryServices();
-    let writeChar = null;
-
-    for (const service of services) {
-      try {
-        const characteristics = await service.getCharacteristics();
-        for (const char of characteristics) {
-          if (char.properties.write || char.properties.writeWithoutResponse) {
-            writeChar = char;
-            break;
-          }
-        }
-      } catch (e) {
-        // Ignorar errores de acceso a servicios protegidos del sistema
-      }
-      if (writeChar) break;
-    }
-
-    if (!writeChar) {
-      throw new Error("No se encontró una característica de escritura en el dispositivo Bluetooth.");
-    }
-
-    activeBluetoothCharacteristic = writeChar;
-    return device;
-  } catch (err) {
-    console.error("Error al conectar por Bluetooth:", err);
-    throw err;
-  }
+  return null;
 }
 
 export async function disconnectBluetooth(): Promise<void> {
-  if (activeBluetoothDevice && activeBluetoothDevice.gatt.connected) {
-    activeBluetoothDevice.gatt.disconnect();
-  }
   activeBluetoothDevice = null;
   activeBluetoothCharacteristic = null;
 }
@@ -574,64 +493,7 @@ export function simulateEscPosDump(bytes: Uint8Array): string {
 
 // --- MANDAR A IMPRIMIR (ENTRADA PRINCIPAL) ---
 export async function printDirectRaw(bytes: Uint8Array, config: any): Promise<boolean> {
-  const type = config.impresora_tipo || "usb";
-  
-  if (type === "usb") {
-    // Para USB/Sistema, la impresión directa raw no aplica en web de la misma manera que BT/Serial,
-    // por lo tanto siempre delegamos en window.print() el cual tiene su propio flujo estructurado.
-    return false;
-  }
-
-  // --- ESCRIBIR EN SERIAL ---
-  if (type === "serial") {
-    try {
-      let port = activeSerialPort;
-      if (!port) {
-        port = await getAutoConnectedSerialPort();
-      }
-      if (!port) {
-        port = await connectSerialPort(config.impresora_serial_baud || 9600);
-      }
-      
-      const writer = port.writable.getWriter();
-      await writer.write(bytes);
-      writer.releaseLock();
-      return true;
-    } catch (err) {
-      console.error("Error al enviar bytes a impresora serial:", err);
-      // Limpiar puerto activo en caso de fallo para forzar re-selección
-      activeSerialPort = null;
-      throw err;
-    }
-  }
-
-  // --- ESCRIBIR EN BLUETOOTH ---
-  if (type === "bluetooth") {
-    try {
-      if (!activeBluetoothCharacteristic) {
-        await connectBluetoothDevice();
-      }
-      
-      // La especificación de Web Bluetooth indica que se debe escribir en chunks pequeños (ej: 512 bytes)
-      // para evitar saturar el buffer de la característica BLE
-      const chunkSize = 20; // 20 bytes es el MTU predeterminado seguro para BLE antiguo
-      let offset = 0;
-      while (offset < bytes.length) {
-        const chunk = bytes.slice(offset, offset + chunkSize);
-        await activeBluetoothCharacteristic.writeValue(chunk);
-        offset += chunkSize;
-        // Pequeño retardo para no colapsar la conexión
-        await new Promise((r) => setTimeout(r, 20));
-      }
-      return true;
-    } catch (err) {
-      console.error("Error al enviar bytes a impresora Bluetooth:", err);
-      activeBluetoothDevice = null;
-      activeBluetoothCharacteristic = null;
-      throw err;
-    }
-  }
-
+  // Desactivado temporalmente a petición: siempre delegamos a la impresión nativa estándar del navegador
   return false;
 }
 

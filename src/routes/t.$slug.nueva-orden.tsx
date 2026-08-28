@@ -1998,7 +1998,7 @@ function NuevaOrdenPage() {
             if (result.legal_status === "ACCEPTED" || result.legal_status === "ACCEPTED_WITH_OBSERVATIONS") {
               toast.success(`Comprobante ${result.encf} aceptado por DGII`);
             } else {
-              toast.info(`e-CF ${result.encf} registrado en Pronesoft. Validación DGII pendiente.`);
+              toast.success(`Comprobante ${result.encf} emitido con éxito`);
             }
           } catch (fErr: any) {
             console.error("Error Fiscal:", fErr);
@@ -7101,10 +7101,12 @@ function TicketPrintPortal({
 
   useEffect(() => {
     if (hasPrintedRef.current) return;
-    hasPrintedRef.current = true;
 
     const printerType = tenant.config?.impresora_tipo || "usb";
     if (printerType === "bluetooth" || printerType === "serial") {
+      // La impresión física comienza inmediatamente y no debe duplicarse si
+      // alguna consulta provoca un nuevo render mientras la promesa sigue activa.
+      hasPrintedRef.current = true;
       const runPhysicalPrint = async () => {
         try {
           const ticketListBytes: Uint8Array[] = [];
@@ -7146,6 +7148,11 @@ function TicketPrintPortal({
       runPhysicalPrint();
     } else {
       const timer = setTimeout(() => {
+        // Marcar como impreso solamente cuando el temporizador realmente se
+        // ejecuta. Si un re-render cancela el timer antes de estos 100 ms, el
+        // siguiente efecto podrá programarlo otra vez en vez de perderlo.
+        if (hasPrintedRef.current) return;
+        hasPrintedRef.current = true;
         window.print();
         onClose();
       }, 100);

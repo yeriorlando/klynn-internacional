@@ -14,7 +14,7 @@ import {
   getECFConfig, getECFSequences, saveECFConfig,
   type ECFConfig, type ECFSequence, type Tenant
 } from "@/lib/storage";
-import { getProneSoftClient } from "@/lib/fiscal";
+import { getProneSoftClient, getConfiguredPronesoftEnvironment, resolveProneSoftTenantId } from "@/lib/fiscal";
 
 export const Route = createFileRoute("/t/$slug/fiscal-homologacion")({ component: HomologacionPage });
 
@@ -61,9 +61,11 @@ function HomologacionPage() {
     
     try {
       const caso = casos.find(c => c.id === casoId)!;
+      const targetProneEnv = getConfiguredPronesoftEnvironment(config);
+      const effectiveProneTenantId = resolveProneSoftTenantId(config, targetProneEnv);
       const client = getProneSoftClient(
-        config.pronesoft_tenant_id || undefined,
-        'homologacion',
+        effectiveProneTenantId,
+        targetProneEnv,
         config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
         config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
         tenant.id

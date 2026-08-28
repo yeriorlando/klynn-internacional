@@ -39,11 +39,28 @@ import { supabase } from "@/lib/supabase";
 import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig } from "./storage";
 import { toast } from "sonner";
 
-function getConfiguredPronesoftEnvironment(config?: ECFConfig | null): ProneSoftEnvironment {
+export function getConfiguredPronesoftEnvironment(config?: ECFConfig | null): ProneSoftEnvironment {
   if (config?.pronesoft_environment === "CerteCF") return "homologacion";
   if (config?.pronesoft_environment === "eCF" || config?.ambiente === "produccion")
     return "production";
   return "sandbox";
+}
+
+export function resolveProneSoftTenantId(
+  config?: ECFConfig | null,
+  env?: ProneSoftEnvironment,
+): string | undefined {
+  if (!config) return undefined;
+  if (config.usar_credenciales_propias) return undefined;
+
+  const targetEnv = env || getConfiguredPronesoftEnvironment(config);
+  // En Sandbox / Homologación (TesteCF / CerteCF), si la empresa asociada no tiene su propio
+  // certificado digital cargado (.p12), NO se debe enviar x-tenant-id para que Pronesoft use
+  // el certificado pre-cargado de la Empresa Principal de Sandbox (133190907).
+  if (targetEnv !== "production" && !config.certificate_uploaded_at) {
+    return undefined;
+  }
+  return config.pronesoft_tenant_id || undefined;
 }
 
 // ─── Función principal: Emitir un eCF para una orden ─────────────────────────
@@ -95,8 +112,9 @@ export async function emitirECF(
   }
 
   const targetProneEnv = getConfiguredPronesoftEnvironment(ecfConf);
+  const effectiveProneTenantId = resolveProneSoftTenantId(ecfConf, targetProneEnv) || (targetProneEnv === "production" ? ecfTenantId : undefined);
   const client = getProneSoftClient(
-    ecfTenantId,
+    effectiveProneTenantId,
     targetProneEnv,
     customClientId,
     customClientSecret,
@@ -421,7 +439,7 @@ export async function consultarRNC(
 /**
  * Evalúa si la configuración fiscal está lista para emitir o comunicarse con Pronesoft.
  *
- * - Modalidad 1 (Cuenta Maestra Klynn): Requiere is_active y pronesoft_tenant_id.
+ * - Modalidad 1 (Cuenta Maestra Klynn): En Sandbox está listo si is_active es true; en Producción requiere pronesoft_tenant_id o certificado subido.
  * - Modalidad 2 (Credenciales Propias): Requiere is_active y que existan client_id y client_secret.
  */
 export function isECFReady(config: ECFConfig | null | undefined): boolean {
@@ -429,7 +447,11 @@ export function isECFReady(config: ECFConfig | null | undefined): boolean {
   if (config.usar_credenciales_propias) {
     return Boolean(config.pronesoft_client_id?.trim() && config.pronesoft_client_secret?.trim());
   }
-  return Boolean(config.pronesoft_tenant_id);
+  const isProd = config.ambiente === "produccion" || config.pronesoft_environment === "eCF";
+  if (!isProd) {
+    return true;
+  }
+  return Boolean(config.pronesoft_tenant_id || config.certificate_uploaded_at);
 }
 
 function mapStatus(
@@ -513,10 +535,11 @@ export async function registerTenantInPronesoft(
   // "NO envíes x-tenant-id cuando actúes como la empresa principal."
   // En Sandbox, 133190907 es la Empresa Principal por defecto de la cuenta.
   if (proneSoftEnv === "sandbox" && (rncToRegister === "133190907" || rncToRegister === "")) {
+    const preservedRncEmisor = (explicitConfig?.rnc_emisor || config.rnc_emisor || tenantData?.rnc || "133190907").trim();
     await updateECFConfig(tenantId, {
       pronesoft_tenant_id: null,
       is_active: true,
-      rnc_emisor: "133190907",
+      rnc_emisor: preservedRncEmisor,
       razon_social: companyName,
     });
     return "";
@@ -558,10 +581,11 @@ export async function registerTenantInPronesoft(
     }
 
     // 3. Actualizar configuración en Supabase
+    const preservedRncEmisor = (explicitConfig?.rnc_emisor || config.rnc_emisor || tenantData?.rnc || rncToRegister).trim();
     await updateECFConfig(tenantId, {
       pronesoft_tenant_id: pronesoftTenantId,
       is_active: true,
-      rnc_emisor: rncToRegister,
+      rnc_emisor: preservedRncEmisor,
       razon_social: companyName,
     });
 
@@ -616,7 +640,7 @@ export async function createSequencePronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id || undefined,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -684,7 +708,7 @@ export async function listAssociatedCompaniesPronesoft(
 export async function listSequencesPronesoft(tenantId: string, params?: any): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id || undefined,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -701,7 +725,7 @@ export async function getNextNumberPronesoft(tenantId: string, type: string): Pr
     );
   }
   const client = getProneSoftClient(
-    config.pronesoft_tenant_id || undefined,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -724,7 +748,7 @@ export async function anularSecuenciasPronesoft(
   }
 
   const client = getProneSoftClient(
-    config.pronesoft_tenant_id || undefined,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
@@ -748,7 +772,7 @@ export async function listSentDocumentsPronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -763,7 +787,7 @@ export async function getSentDocumentDiagnosticsPronesoft(
 ): Promise<{ detail: any; logs: any[] }> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -782,17 +806,18 @@ export async function listReceivedDocumentsPronesoft(
   pageSize: number = 50,
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
+  const resolvedTenantId = resolveProneSoftTenantId(config);
   const isUUID =
-    config?.pronesoft_tenant_id &&
+    resolvedTenantId &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      config.pronesoft_tenant_id,
+      resolvedTenantId,
     );
-  if (!config?.is_active || !isUUID) {
+  if (!config?.is_active || (getConfiguredPronesoftEnvironment(config) === "production" && !isUUID)) {
     return { data: [], total: 0 };
   }
 
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    resolvedTenantId,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -809,7 +834,7 @@ export async function submitCommercialApprovalPronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    config?.pronesoft_tenant_id,
+    resolveProneSoftTenantId(config),
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
