@@ -32,6 +32,13 @@ entrypoint = "./functions/pronesoft-webhook/index.ts"
 [functions.pronesoft-proxy]
 verify_jwt = true
 
+[functions.ef2-proxy]
+verify_jwt = true
+
+[functions.ef2-reconciler]
+# Solo el programador del backend puede invocarla mediante x-cron-secret.
+verify_jwt = false
+
 [functions.employee-invitations]
 verify_jwt = true
 

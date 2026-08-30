@@ -172,9 +172,11 @@ export interface TenantConfig {
   itbis_incluido: boolean;
   itbis_porcentaje: number;
   formato_ticket: "57mm" | "80mm";
-  impresora_tipo?: "usb" | "bluetooth" | "serial";
+  impresora_tipo?: "usb" | "bluetooth" | "serial" | "sistema";
   impresora_perfil?: "basica" | "estandar" | "completa";
   impresora_serial_baud?: number;
+  /** Etiqueta legible del puerto/impresora seleccionada (Web Serial o sistema). */
+  impresora_nombre?: string;
   ticket_mostrar_rnc: boolean;
   mostrar_empleado: boolean;
   pie_pagina_ticket: string;
@@ -212,6 +214,7 @@ export interface TenantConfig {
   ticket_imprimir_taller_auto?: boolean;
   ticket_taller_solo_con_ubicacion?: boolean;
   ticket_imprimir_copia_caja?: boolean;
+  ticket_imprimir_marquillas_auto?: boolean;
   usar_ubicacion_ropa?: boolean;
   estanteria_zonas?: EstanteriaZona[];
   meses_pagados_override?: number;
@@ -227,6 +230,9 @@ export interface TenantConfig {
     estanteria?: boolean;
     pos_offline?: boolean;
   };
+  habilitar_control_marbetes?: boolean;
+  ultimo_marbete_color?: string;
+  ultimo_marbete_secuencia?: number;
 }
 
 export interface WeeklySummaryConfig {
@@ -403,6 +409,17 @@ export interface Orden {
   ecf_signature_date?: string;
   ncf_vencimiento?: string;
   pago_referencia?: string;
+  marbete_color?: string;
+  marbete_piezas?: number;
+  marbete_secuencia?: number;
+  marbetes?: MarbeteItem[];
+}
+
+export interface MarbeteItem {
+  id?: string;
+  color: string;
+  piezas: number;
+  secuencia: number | string;
 }
 
 // ============ ECF Types ============
@@ -421,6 +438,7 @@ export interface ECFConfig {
   pronesoft_environment?: "TesteCF" | "CerteCF" | "eCF";
   is_active: boolean;
   proveedor_ecf?: "ef2" | "pronesoft";
+  ef2_username?: string;
   ef2_token?: string;
   ef2_environment?: "TesteCF" | "CerteCF" | "eCF";
   api_auth_token?: string;
@@ -453,6 +471,8 @@ export interface ECFDocumentRecibido {
 export interface ECFSequence {
   id: string;
   pronesoft_sequence_id?: string;
+  ef2_sequence_id?: number;
+  ef2_synced_at?: string;
   tenant_id: string;
   tipo_ecf: string;
   prefijo: string;
@@ -489,6 +509,8 @@ export interface ECFDocument {
   contingency_mode?: boolean;
   legal_status?: string;
   pronesoft_id?: string;
+  provider?: "ef2" | "pronesoft";
+  provider_document_id?: string;
 }
 
 export type EstadoCaja = "ABIERTA" | "CERRADA";
@@ -751,6 +773,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   impresora_tipo: "usb",
   impresora_perfil: "basica",
   impresora_serial_baud: 9600,
+  impresora_nombre: "POS80 Printer",
   ticket_mostrar_rnc: true,
   mostrar_empleado: true,
   pie_pagina_ticket: "¡Gracias por su preferencia!",
@@ -779,10 +802,12 @@ export const DEFAULT_CONFIG: TenantConfig = {
     whatsapp_phone: "",
   },
   pos_modalidad_operativa: "FLEXIBLE",
-  pos_auto_imprimir: false,
+  pos_auto_imprimir: true,
   ticket_imprimir_taller_auto: false,
   ticket_taller_solo_con_ubicacion: false,
   ticket_imprimir_copia_caja: false,
+  ticket_imprimir_marquillas_auto: false,
+  habilitar_control_marbetes: false,
   whatsapp: {
     enabled: false,
     api_key: "",
@@ -944,6 +969,11 @@ export const PERMISOS_SISTEMA = [
   { id: "nueva-orden", nombre: "Nueva Orden", descripcion: "Crear y recibir pedidos" },
   { id: "ordenes", nombre: "Órdenes", descripcion: "Ver historial y estados de órdenes" },
   {
+    id: "control-marbetes",
+    nombre: "Control de Marbetes",
+    descripcion: "Tiras hidrofix y secuencias físicas",
+  },
+  {
     id: "procesos",
     nombre: "Operaciones",
     descripcion: "Control de producción y etapas",
@@ -983,6 +1013,7 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
         "dashboard",
         "nueva-orden",
         "ordenes",
+        "control-marbetes",
         "procesos",
         "caja",
         "clientes",
@@ -994,7 +1025,7 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
     case "VENDEDOR":
       return ["dashboard", "nueva-orden", "ordenes", "procesos", "caja", "clientes"];
     case "RECEPCIONISTA":
-      return ["nueva-orden", "clientes", "ordenes", "procesos"];
+      return ["nueva-orden", "clientes", "ordenes", "control-marbetes", "procesos"];
     case "REPARTIDOR":
       return ["logistica"];
     case "OPERARIO":
@@ -1209,7 +1240,6 @@ export async function saveTenant(t: Tenant) {
     config: {
       ...DEFAULT_CONFIG,
       ...t.config,
-      impresora_tipo: "usb",
       nombre_sucursal: branchName,
     },
   };
@@ -1221,6 +1251,16 @@ export async function saveTenant(t: Tenant) {
         `klynn_tenant_cache_${updatedTenant.slug}`,
         JSON.stringify(updatedTenant),
       );
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.tenant?.id === realId || parsed?.tenant?.slug === updatedTenant.slug) {
+          parsed.tenant = updatedTenant;
+          localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
+        }
+      } catch {}
     }
   }
 
@@ -1263,7 +1303,6 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
   const realId = resolveTenantId(tenantId);
   const cleanConfig: TenantConfig = {
     ...config,
-    impresora_tipo: "usb",
   };
 
   // 1. Actualizar caché local de inmediato para 0ms de respuesta y persistencia offline
@@ -3035,6 +3074,14 @@ export async function saveOrden(o: Orden) {
   else local.push(o);
   write(KEY.ordenes, local);
 
+  const isValidUUID =
+    typeof o.ecf_id === "string" &&
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(o.ecf_id);
+  const dbPayload = {
+    ...o,
+    ecf_id: isValidUUID ? o.ecf_id : null,
+  };
+
   // 2. Si estamos sin conexión, agregar directamente a la cola Outbox
   if (typeof window !== "undefined" && !navigator.onLine) {
     await offlineDB.addToOutbox({
@@ -3042,7 +3089,7 @@ export async function saveOrden(o: Orden) {
       tenant_id: o.tenant_id,
       table_name: "ordenes",
       action: "UPSERT",
-      payload: o,
+      payload: dbPayload,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
     return;
@@ -3050,7 +3097,7 @@ export async function saveOrden(o: Orden) {
 
   // 3. Intentar guardar en Supabase; si falla por timeout o corte, encolar en Outbox
   try {
-    const { error } = await supabase.from("ordenes").upsert(o);
+    const { error } = await supabase.from("ordenes").upsert(dbPayload);
     if (error) throw error;
   } catch (err) {
     const message = err instanceof Error
@@ -3067,7 +3114,7 @@ export async function saveOrden(o: Orden) {
         tenant_id: o.tenant_id,
         table_name: "ordenes",
         action: "UPSERT",
-        payload: o,
+        payload: dbPayload,
       });
       window.dispatchEvent(new CustomEvent("klynn-offline-save"));
       return;
@@ -5010,6 +5057,9 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
         ? `tenant_id.eq.${realId},tenant_id.eq.${tenantId}`
         : `tenant_id.eq.${realId}`;
 
+    // Mantener el contrato histórico completo de ecf_config. Los campos legacy
+    // de Pronesoft siguen disponibles para respaldos/otras versiones; el token
+    // EF2 nuevo nunca se persiste aquí (vive en ecf_provider_credentials).
     const fetchPromise = supabase.from("ecf_config").select("*").or(filter).maybeSingle();
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
@@ -5040,7 +5090,10 @@ export async function getECFConfig(tenantId: string): Promise<ECFConfig | null> 
 
 export async function saveECFConfig(config: ECFConfig) {
   const realId = resolveTenantId(config.tenant_id);
-  const configToSave = { ...config, tenant_id: realId };
+  // Los tokens EF2 se guardan exclusivamente mediante ef2-proxy en
+  // ecf_provider_credentials; jamás deben quedar en caché/localStorage.
+  const { ef2_token: _ef2Token, ...safeConfig } = config;
+  const configToSave = { ...safeConfig, tenant_id: realId } as ECFConfig;
   const cacheKey = `klynn_ecf_cfg_${realId}`;
   if (typeof window !== "undefined") {
     localStorage.setItem(cacheKey, JSON.stringify(configToSave));
@@ -5202,6 +5255,10 @@ export async function saveECFDocument(doc: ECFDocument) {
     rnc_receptor: doc.rnc_receptor || null,
     track_id: doc.track_id || null,
     status: doc.status || "pending",
+    // EF2 se identifica explícitamente para que el conciliador de servidor
+    // procese únicamente sus documentos, sin tocar los registros legacy.
+    provider: (doc as any).provider || null,
+    provider_document_id: (doc as any).provider_document_id || null,
     dgii_response: doc.dgii_response || {
       pdf_url: (doc as any).pdf_url,
       xml_url: (doc as any).xml_url,
@@ -5326,73 +5383,10 @@ export async function nextECFNumero(
   return { ncf: encf, expiration_date: seq?.fecha_vencimiento };
 }
 
-import { getProneSoftClient } from "./fiscal/pronesoft-client";
-
 export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDocumentRecibido[]> {
-  try {
-    // 1. Obtener la config fiscal para saber si tiene pronesoft_tenant_id y está activo
-    const { data: config } = await supabase
-      .from("ecf_config")
-      .select(
-        "is_active, pronesoft_tenant_id, ambiente, pronesoft_environment, usar_credenciales_propias, pronesoft_client_id, pronesoft_client_secret",
-      )
-      .eq("tenant_id", tenantId)
-      .maybeSingle();
-
-    const isUUID =
-      config?.pronesoft_tenant_id &&
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-        config.pronesoft_tenant_id,
-      );
-
-    if (config?.is_active && isUUID) {
-      const pronesoft = getProneSoftClient(
-        config.pronesoft_tenant_id,
-        config.pronesoft_environment === "CerteCF"
-          ? "homologacion"
-          : config.pronesoft_environment === "eCF" || config.ambiente === "produccion"
-            ? "production"
-            : "sandbox",
-        config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-        tenantId,
-      );
-      const res = await pronesoft.listReceivedDocuments(1, 100);
-
-      // Si hay datos, upsertarlos en la base de datos local
-      if (res && res.data && res.data.length > 0) {
-        const ops = res.data.map((doc: any) => ({
-          tenant_id: tenantId,
-          id: doc.id || doc.trackId || doc.eNcf || doc.encf,
-          tipo_ecf:
-            doc.documentType ||
-            (doc.eNcf ? doc.eNcf.substring(0, 3) : doc.encf ? doc.encf.substring(0, 3) : "E31"),
-          rnc_emisor: doc.issuerRnc || doc.sellerRnc || "N/A",
-          nombre_emisor: doc.issuerName || doc.sellerName || "Proveedor",
-          encf: doc.eNcf || doc.encf || "",
-          monto_total: doc.totalAmount || doc.totals?.totalAmount || 0,
-          monto_itbis: doc.totalItbis || doc.totals?.totalITBIS || 0,
-          estado_comercial:
-            doc.commercialStatus === "ACCEPTED" || doc.commercialStatus === "APROBADO"
-              ? "APROBADO"
-              : doc.commercialStatus === "REJECTED" || doc.commercialStatus === "RECHAZADO"
-                ? "RECHAZADO"
-                : "PENDIENTE",
-          pdf_url: doc.pdfUrl || doc.fileUrl || null,
-          creado_en: doc.receivedAt || doc.issueDate || doc.createdAt || new Date().toISOString(),
-        }));
-
-        // Guardamos los documentos en batch si no existen
-        for (const op of ops) {
-          await supabase.from("ecf_documentos_recibidos").upsert(op, { onConflict: "id" });
-        }
-      }
-    }
-  } catch (error) {
-    console.warn("Aviso al sincronizar facturas recibidas con Pronesoft:", error);
-  }
-
-  // 2. Obtener de la base de datos local
+  // EF2 no documenta un endpoint de comprobantes recibidos ni de aprobación
+  // comercial. Conservamos y mostramos los registros ya ingeridos en Supabase,
+  // pero no consultamos al proveedor legado.
   const { data, error } = await supabase
     .from("ecf_documentos_recibidos")
     .select("*")
@@ -5419,32 +5413,7 @@ export async function updateEstadoComercialECF(
   estado: "APROBADO" | "RECHAZADO",
   tenantId?: string,
 ) {
-  // Primero notificar al SDK si hay tenantId
-  if (tenantId) {
-    try {
-      const config = await getECFConfig(tenantId);
-      if (config?.is_active) {
-        const pronesoft = getProneSoftClient(
-          config.pronesoft_tenant_id,
-          config.pronesoft_environment === "CerteCF"
-            ? "homologacion"
-            : config.pronesoft_environment === "eCF" || config.ambiente === "produccion"
-              ? "production"
-              : "sandbox",
-          config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-          config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-          tenantId,
-        );
-        await pronesoft.submitCommercialApproval(
-          id,
-          estado === "APROBADO" ? "ACCEPTED" : "REJECTED",
-        );
-      }
-    } catch (err) {
-      console.warn("Aviso al enviar aprobación comercial a Pronesoft:", err);
-    }
-  }
-
+  void tenantId;
   const { error } = await supabase
     .from("ecf_documentos_recibidos")
     .update({ estado_comercial: estado })
@@ -5454,12 +5423,15 @@ export async function updateEstadoComercialECF(
 }
 
 export async function updateECFConfig(tenantId: string, updates: Partial<ECFConfig>) {
-  if (updates.pronesoft_environment || updates.ambiente) {
+  const { ef2_token: _ef2Token, ...safeUpdates } = updates;
+  updates = safeUpdates;
+  const targetEnv = updates.ef2_environment || updates.pronesoft_environment;
+  if (targetEnv || updates.ambiente) {
     try {
       const { error: rpcError } = await supabase.rpc("admin_update_ecf_environment", {
         p_tenant_id: tenantId,
-        p_environment: updates.pronesoft_environment || "TesteCF",
-        p_ambiente: updates.ambiente || (updates.pronesoft_environment === "eCF" ? "produccion" : "pruebas"),
+        p_environment: targetEnv || "TesteCF",
+        p_ambiente: updates.ambiente || (targetEnv === "eCF" ? "produccion" : "pruebas"),
       });
       if (!rpcError) {
         const otherUpdates = { ...updates };

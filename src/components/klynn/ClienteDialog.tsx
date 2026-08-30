@@ -22,9 +22,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { saveCliente, deleteCliente, formatPhoneRD, uid, type Cliente, saveOrden, saveMovimiento, formatRD, type Orden, type MetodoPago } from "@/lib/storage";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase";
+import { consultarRNC } from "@/lib/fiscal";
 import { useRequireAuth } from "@/lib/useRequireAuth";
-import { useOrdenes, useCajaAbierta } from "@/hooks/use-queries";
+import { useOrdenes, useCajaAbierta, useECFSequences } from "@/hooks/use-queries";
 import { AddressAutocomplete } from "./logistica/AddressAutocomplete";
 
 interface ClienteDialogProps {
@@ -41,6 +41,31 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
   
   const { data: allOrders = [] } = useOrdenes(tenant.id);
   const { data: cajaAbierta } = useCajaAbierta(tenant.id);
+  const { data: ecfSequences = [] } = useECFSequences(tenant.id);
+
+  const sequenceAvailable = (type: string) =>
+    ecfSequences.some((sequence: any) => {
+      const normalized = String(sequence.tipo_ecf || "").toUpperCase();
+      const matches = normalized === type || normalized === type.replace("E", "");
+      const current = Number(sequence.valor_actual ?? sequence.secuencia_actual ?? 0);
+      const last = Number(sequence.valor_final ?? sequence.hasta ?? 0);
+      return matches && sequence.is_active !== false && (last === 0 || current < last);
+    });
+
+  const hasElectronicRanges = ecfSequences.some((sequence: any) =>
+    String(sequence.tipo_ecf || "").toUpperCase().startsWith("E"),
+  );
+  // Con rangos EF2 sincronizados, una empresa solo se puede elegir si E31
+  // está activa y disponible. Antes de la primera sincronización se conserva
+  // el comportamiento fiscal ya existente para no bloquear la configuración.
+  const isFiscalActive = !!(
+    tenant.config?.ncf_facturacion_activa ||
+    tenant.config?.modo_facturacion === "tradicional" ||
+    tenant.config?.modo_facturacion === "electronica"
+  );
+  const canSelectCompany = isFiscalActive &&
+    (!hasElectronicRanges || sequenceAvailable("E31") || sequenceAvailable("B01"));
+  const canSelectConsumer = !hasElectronicRanges || sequenceAvailable("E32");
 
   const [montoPago, setMontoPago] = useState<string>("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
@@ -88,21 +113,17 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
     }
     setLoadingRNC(true);
     try {
-      const { data, error } = await supabase.functions.invoke('pronesoft-proxy', {
-        body: {
-          action: 'get-rnc',
-          payload: { rnc }
-        }
-      });
-      if (error || !data) throw new Error();
+      const data = await consultarRNC(rnc);
+      if (!data) throw new Error();
       if (data?.name) {
         setF(prev => ({ ...prev, nombre: data.name, cedula: data.rnc || rnc }));
         toast.success("Datos obtenidos ✅");
       } else {
-        toast.error("No se encontró el contribuyente");
+        setF(prev => ({ ...prev, cedula: data.rnc || rnc }));
+        toast.info("RNC validado. EF2 no ofrece consulta de razón social; complétala manualmente.");
       }
     } catch (e) {
-      toast.error("Error al conectar con el servicio DGII");
+      toast.error("El RNC/Cédula debe tener 9 u 11 dígitos.");
     } finally {
       setLoadingRNC(false);
     }
@@ -357,17 +378,17 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                   <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
                     <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm font-medium"><SelectValue /></SelectTrigger>
                     <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
-                      <SelectItem value="Consumidor Final">
+                      <SelectItem value="Consumidor Final" disabled={!canSelectConsumer}>
                         <span className="flex items-center gap-2">
                           <User className="h-4 w-4 text-teal-600" />
-                          <span>Consumidor Final</span>
+                          <span>{canSelectConsumer ? "Consumidor Final" : "Consumidor Final — requiere secuencia E32 activa"}</span>
                         </span>
                       </SelectItem>
                       {tenant.config?.ncf_facturacion_activa && (
-                        <SelectItem value="Empresa">
+                        <SelectItem value="Empresa" disabled={!canSelectCompany}>
                           <span className="flex items-center gap-2">
                             <Building2 className="h-4 w-4 text-purple-600" />
-                            <span>Empresa</span>
+                            <span>{canSelectCompany ? "Empresa" : "Empresa — requiere secuencia E31 activa"}</span>
                           </span>
                         </SelectItem>
                       )}
@@ -564,9 +585,9 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                       setF({
                         ...f,
                         direccion: addr.direccion,
-                        sector: addr.sector,
-                        edificio_apto: addr.edificio_apto,
-                        referencia: addr.referencia,
+                        sector: addr.sector || "",
+                        edificio_apto: addr.edificio_apto || "",
+                        referencia: addr.referencia || "",
                         lat: addr.lat,
                         lng: addr.lng,
                       });

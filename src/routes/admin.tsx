@@ -46,6 +46,7 @@ import {
   parseDateSafe,
   getBillingCycleStart,
   updateECFConfig,
+  saveECFConfig,
   getGlobalConfig,
   saveGlobalConfig,
   triggerStandbySync,
@@ -64,7 +65,7 @@ import {
   type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal, type BankDetails, type InvitacionCodigo
 } from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
-import { listAssociatedCompaniesPronesoft } from "@/lib/fiscal";
+import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA } from "@/lib/fiscal";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -180,6 +181,9 @@ function AdminPage() {
   const [modOverrideEstanteria, setModOverrideEstanteria] = useState(true);
   const [modOverridePosOffline, setModOverridePosOffline] = useState(false);
   const [tenantFiscalEnvironment, setTenantFiscalEnvironment] = useState<"TesteCF" | "CerteCF" | "eCF">("TesteCF");
+  const [tenantFiscalActive, setTenantFiscalActive] = useState(false);
+  const [tenantEf2Token, setTenantEf2Token] = useState<string>("");
+  const [tenantEf2Username, setTenantEf2Username] = useState<string>("");
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -201,6 +205,8 @@ function AdminPage() {
   const [ecfConfigsMap, setEcfConfigsMap] = useState<Record<string, any>>({});
   const [loadingPronesoft, setLoadingPronesoft] = useState(false);
   const [fiscalEnvFilter, setFiscalEnvFilter] = useState<'all' | 'sandbox' | 'production'>('sandbox');
+  const [testingEf2, setTestingEf2] = useState(false);
+  const [ef2Status, setEf2Status] = useState<any>(null);
 
   // Standby Hetzner
   const [isSyncingStandby, setIsSyncingStandby] = useState(false);
@@ -341,36 +347,47 @@ function AdminPage() {
     const targetEnv = selectedEnv || fiscalEnvFilter;
     setLoadingPronesoft(true);
     try {
-      // 1. Cargar mapa de configuraciones ECF locales desde Supabase
-      const { data: ecfList } = await supabase.from('ecf_config').select('*');
+      // EF2 no ofrece "empresas asociadas": cada token pertenece a una empresa.
+      // El directorio maestro se construye sin exponer credenciales, uniendo
+      // tenants y ecf_config en Supabase.
+      const { data: ecfList, error } = await supabase
+        .from('ecf_config')
+        .select('id,tenant_id,rnc_emisor,razon_social,is_active,proveedor_ecf,ef2_username,ef2_environment,ambiente,updated_at');
+      if (error) throw error;
       if (ecfList) {
         const map: Record<string, any> = {};
         for (const cfg of ecfList) {
           if (cfg.rnc_emisor) map[cfg.rnc_emisor.trim().toUpperCase()] = cfg;
-          if (cfg.pronesoft_tenant_id) map[cfg.pronesoft_tenant_id.trim()] = cfg;
           if (cfg.tenant_id) map[cfg.tenant_id] = cfg;
         }
         setEcfConfigsMap(map);
+        const filtered = ecfList.filter((cfg: any) => {
+          // EF2 no publica un endpoint para listar empresas de una cuenta. El
+          // directorio muestra solo lavanderías locales que ya tienen datos EF2.
+          if (cfg.proveedor_ecf !== 'ef2' && !cfg.ef2_username) return false;
+          if (targetEnv === 'all') return true;
+          const environment = cfg.ef2_environment || (cfg.ambiente === 'produccion' ? 'eCF' : 'TesteCF');
+          return targetEnv === 'production' ? environment === 'eCF' : environment !== 'eCF';
+        });
+        const uniqueConfigs = Array.from(
+          new Map(filtered.map((cfg: any) => [cfg.tenant_id || cfg.id, cfg])).values(),
+        );
+        setPronesoftCompanies(uniqueConfigs.map((cfg: any) => {
+          const linked = tenants.find((tenant) => tenant.id === cfg.tenant_id);
+          return {
+            id: cfg.tenant_id,
+            tenantId: cfg.tenant_id,
+            rnc: cfg.rnc_emisor || linked?.rnc,
+            name: cfg.razon_social || linked?.nombre,
+            _ambiente: cfg.ef2_environment === 'eCF' || cfg.ambiente === 'produccion' ? 'production' : 'sandbox',
+            ef2_username: cfg.ef2_username,
+            is_active: cfg.is_active,
+          };
+        }));
       }
-
-      // 2. Consultar empresas asociadas en la API de Pronesoft
-      const res = await listAssociatedCompaniesPronesoft(undefined, targetEnv);
-      console.log("[Pronesoft API] Empresas asociadas recibidas:", res);
-      const apiItems: any[] = Array.isArray(res) ? res : ((res as any)?.data || []);
-      setPronesoftCompanies(apiItems);
     } catch (err: any) {
-      console.warn("Aviso al cargar empresas de Pronesoft:", err.message);
-      const errMsg = err?.message || String(err);
-      if (errMsg.includes('401') || errMsg.includes('Invalid client credentials')) {
-        if (targetEnv === 'production') {
-          toast.info("Ambiente Producción: Tus credenciales actuales son de Pruebas (Sandbox). Para Producción se activarán tras certificar ante DGII.");
-        } else {
-          toast.error("Credenciales de Pronesoft no autorizadas en Sandbox. Revisa tu Client ID y Secret.");
-        }
-        setPronesoftCompanies([]);
-      } else {
-        toast.error("Error al consultar Pronesoft: " + errMsg);
-      }
+      console.warn("Aviso al cargar empresas EF2:", err.message);
+      toast.error("Error al consultar la configuración EF2: " + (err?.message || String(err)));
     } finally {
       setLoadingPronesoft(false);
     }
@@ -384,7 +401,7 @@ function AdminPage() {
         getGlobalConfig(),
         getLicenciasLocales(),
         getInvitaciones(),
-        supabase.from('ecf_config').select('*'),
+        supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at'),
       ]);
       setTenants(t);
       setPlans(p);
@@ -539,7 +556,7 @@ function AdminPage() {
     let fiscalConfig = ecfConfigsMap[t.id];
     if (!fiscalConfig) {
       try {
-        const { data } = await supabase.from('ecf_config').select('*').eq('tenant_id', t.id).maybeSingle();
+        const { data } = await supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at').eq('tenant_id', t.id).maybeSingle();
         if (data) {
           fiscalConfig = data;
           setEcfConfigsMap(prev => ({
@@ -555,8 +572,11 @@ function AdminPage() {
     }
 
     setTenantFiscalEnvironment(
-      fiscalConfig?.pronesoft_environment || (fiscalConfig?.ambiente === "produccion" ? "eCF" : "TesteCF")
+      fiscalConfig?.ef2_environment || fiscalConfig?.pronesoft_environment || (fiscalConfig?.ambiente === "produccion" ? "eCF" : "TesteCF")
     );
+    setTenantFiscalActive(Boolean(fiscalConfig?.is_active));
+    setTenantEf2Username(fiscalConfig?.ef2_username || "");
+    setTenantEf2Token("");
 
     const daysRemaining = t.trial_hasta
       ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -619,17 +639,51 @@ function AdminPage() {
         resetOrdersOnSave
       );
 
-      if (ecfConfigsMap[editingTenant.id]) {
-        await updateECFConfig(editingTenant.id, {
-          pronesoft_environment: tenantFiscalEnvironment,
+      if (ecfConfigsMap[editingTenant.id] || tenantEf2Token || tenantFiscalActive) {
+        const existingFiscal = ecfConfigsMap[editingTenant.id];
+        const fiscalUpdates = {
+          ef2_environment: tenantFiscalEnvironment,
+          proveedor_ecf: "ef2",
+          ef2_username: tenantEf2Username.trim() || undefined,
           ambiente: tenantFiscalEnvironment === "eCF" ? "produccion" : "pruebas",
-        });
+          is_active: tenantFiscalActive,
+        } as const;
+        if (tenantEf2Token.trim()) {
+          await getEF2Client({
+            tenantId: editingTenant.id,
+            environment: tenantFiscalEnvironment,
+            username: tenantEf2Username.trim() || undefined,
+            token: tenantEf2Token.trim(),
+          }).guardarCredenciales();
+        } else if (tenantFiscalActive) {
+          await getEF2Client({
+            tenantId: editingTenant.id,
+            environment: tenantFiscalEnvironment,
+          }).verificarToken();
+        }
+        if (existingFiscal) {
+          await updateECFConfig(editingTenant.id, fiscalUpdates);
+        } else {
+          await saveECFConfig({
+            id: crypto.randomUUID(),
+            tenant_id: editingTenant.id,
+            rnc_emisor: editingTenant.rnc || "",
+            razon_social: editingTenant.nombre,
+            nombre_comercial: editingTenant.nombre,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+            ...fiscalUpdates,
+          });
+        }
         setEcfConfigsMap(prev => ({
           ...prev,
           [editingTenant.id]: {
             ...prev[editingTenant.id],
-            pronesoft_environment: tenantFiscalEnvironment,
+            ef2_environment: tenantFiscalEnvironment,
+            proveedor_ecf: "ef2",
+            ef2_username: tenantEf2Username.trim() || undefined,
             ambiente: tenantFiscalEnvironment === "eCF" ? "produccion" : "pruebas",
+            is_active: tenantFiscalActive,
           }
         }));
       }
@@ -2065,7 +2119,7 @@ function AdminPage() {
                       <div className="flex items-center gap-2">
                         <h2 className="font-display text-xl font-bold">Control de Ambiente Fiscal Global</h2>
                         <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 font-extrabold text-[10px] uppercase">
-                          Pronesoft / DGII
+                          EF2 / DGII
                         </Badge>
                       </div>
                       <p className="text-sm text-muted-foreground mt-1 max-w-3xl leading-relaxed">
@@ -2142,7 +2196,7 @@ function AdminPage() {
                       <button
                         key={opt.value}
                         type="button"
-                        onClick={() => setGlobalConfig({ ...globalConfig, fiscal_environment_policy: opt.value })}
+                        onClick={() => setGlobalConfig({ ...globalConfig, fiscal_environment_policy: opt.value as GlobalConfig["fiscal_environment_policy"] })}
                         className={`relative text-left rounded-2xl border-2 p-5 transition-all duration-200 cursor-pointer flex flex-col justify-between h-full group ${
                           active
                             ? opt.activeClass
@@ -2181,10 +2235,63 @@ function AdminPage() {
                   })}
                 </div>
 
+                {/* EF2 API Status Card */}
+                <div className="rounded-2xl border border-sky-200 dark:border-sky-900/60 bg-sky-50/60 dark:bg-sky-950/20 p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div className="flex items-start gap-3.5">
+                    <div className="h-11 w-11 rounded-2xl bg-sky-600 text-white flex items-center justify-center shadow-xs shrink-0 mt-0.5">
+                      <Zap className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-base text-foreground">Proveedor Activo: EF2 API (e-CF DGII)</h4>
+                        <Badge className="bg-sky-100 text-sky-800 dark:bg-sky-900/50 dark:text-sky-300 text-[10px] font-bold">
+                          master.ef2.do
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-1 max-w-2xl leading-relaxed">
+                        API REST síncrona de alta velocidad con asignación automática de secuencias eNCF, firma digital y generación de código QR en tiempo real.
+                      </p>
+                      {ef2Status && (
+                        <div className="mt-2 text-xs font-semibold flex items-center gap-1.5 text-emerald-700 dark:text-emerald-300">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Conexión verificada: {ef2Status.empresa?.nombre || "Token verificado con éxito"} (RNC: {ef2Status.empresa?.rnc || "132596161"})
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={testingEf2}
+                    onClick={async () => {
+                      setTestingEf2(true);
+                      try {
+                        const client = getEF2Client();
+                        const res = await client.verificarToken();
+                        setEf2Status(res);
+                        if (res.success || res.empresa) {
+                          toast.success(`Conexión con EF2 API exitosa: ${res.empresa?.nombre || "Token verificado"}`);
+                        } else {
+                          toast.info(`Respuesta de EF2: ${res.message || "Token validado"}`);
+                        }
+                      } catch (err: any) {
+                        toast.error(`Error conectando a EF2: ${err.message}`);
+                      } finally {
+                        setTestingEf2(false);
+                      }
+                    }}
+                    className="h-10 px-5 rounded-xl font-bold border-sky-300 dark:border-sky-800 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/40 gap-2 shrink-0 cursor-pointer shadow-xs"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${testingEf2 ? "animate-spin" : ""}`} />
+                    {testingEf2 ? "Probando..." : "Verificar EF2 Sandbox"}
+                  </Button>
+                </div>
+
                 <div className="flex items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50/70 dark:bg-amber-950/20 p-4">
                   <AlertCircle className="h-4 w-4 text-amber-600 shrink-0" />
                   <p className="text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
-                    <strong>Nota importante:</strong> Cambiar el ambiente fiscal global afecta inmediatamente las próximas llamadas al SDK de Pronesoft. No altera certificados, empresas ni secuencias ya creadas en cada ambiente.
+                    <strong>Nota importante:</strong> El ambiente fiscal global fijado arriba prevalece sobre todas las lavanderías. Si se selecciona <strong>Por lavandería</strong>, cada negocio operará en el ambiente que tenga configurado en su perfil individual.
                   </p>
                 </div>
               </div>
@@ -2195,10 +2302,10 @@ function AdminPage() {
               <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-surface p-5 sm:p-6 rounded-3xl border border-border/70 shadow-xs">
                 <div>
                   <h2 className="font-display text-xl font-bold flex items-center gap-2">
-                    <Building2 className="h-5 w-5 text-blue-600" /> Empresas Fiscales Asociadas (Pronesoft / DGII)
+                    <Building2 className="h-5 w-5 text-blue-600" /> Lavanderías configuradas con EF2
                   </h2>
                   <p className="text-sm text-muted-foreground mt-0.5">
-                    Directorio maestro de lavanderías registradas como emisoras e-CF en la API de Pronesoft.
+                    Directorio local de credenciales EF2 verificadas por lavandería. EF2 no publica un endpoint para enumerar empresas de una cuenta.
                   </p>
                 </div>
                 
@@ -2255,7 +2362,7 @@ function AdminPage() {
                       <tr>
                         <th className="px-6 py-4 text-left font-bold">Empresa / Razón Social</th>
                         <th className="px-6 py-4 text-center font-bold">RNC / Cédula</th>
-                        <th className="px-6 py-4 text-center font-bold">Pronesoft Tenant ID</th>
+                        <th className="px-6 py-4 text-center font-bold">Tenant Klynn</th>
                         <th className="px-6 py-4 text-center font-bold">Ambiente DGII</th>
                         <th className="px-6 py-4 text-center font-bold">Lavandería Klynn</th>
                       </tr>
@@ -2318,7 +2425,7 @@ function AdminPage() {
                       {pronesoftCompanies.length === 0 && !loadingPronesoft && (
                         <tr>
                           <td colSpan={5} className="py-12 text-center text-muted-foreground font-medium">
-                            No se encontraron empresas asociadas en la API de Pronesoft {fiscalEnvFilter === 'all' ? '' : `para ${fiscalEnvFilter}`}.
+                            No se encontraron lavanderías configuradas en EF2 {fiscalEnvFilter === 'all' ? '' : `para ${fiscalEnvFilter}`}.
                           </td>
                         </tr>
                       )}
@@ -3386,32 +3493,75 @@ function AdminPage() {
             ) : (
               /* STEP 2: MÓDULOS HABILITADOS (OVERRIDES) */
               <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
-                <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/20 p-3.5 space-y-2.5">
+                <div className="rounded-2xl border border-blue-200 dark:border-blue-900 bg-blue-50/70 dark:bg-blue-950/20 p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <ShieldCheck className="h-4 w-4 text-blue-600" />
                     <div>
-                      <div className="text-xs font-bold">Ambiente Pronesoft de esta lavandería</div>
+                      <div className="text-xs font-bold">Facturación Electrónica e-CF de esta Lavandería</div>
                       <div className="text-[10px] text-muted-foreground">
-                        Se aplica cuando Seguridad está configurada en “Por lavandería”.
+                        Configura el ambiente individual y la credencial EF2 de este negocio.
                       </div>
                     </div>
                   </div>
-                  {ecfConfigsMap[editingTenant?.id || ""] ? (
-                    <Select value={tenantFiscalEnvironment} onValueChange={(value: "TesteCF" | "CerteCF" | "eCF") => setTenantFiscalEnvironment(value)}>
-                      <SelectTrigger className="h-9 rounded-xl bg-background text-xs font-bold">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="TesteCF">TesteCF — Pruebas técnicas</SelectItem>
-                        <SelectItem value="CerteCF">CerteCF — Homologación DGII</SelectItem>
-                        <SelectItem value="eCF">eCF — Producción real</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  ) : (
-                    <p className="text-[11px] text-amber-700 dark:text-amber-300">
-                      Esta lavandería debe configurar primero Facturación Electrónica en su pestaña Fiscal.
-                    </p>
-                  )}
+
+                  <div className="flex items-center justify-between rounded-xl border bg-background p-3">
+                    <div>
+                      <div className="text-xs font-bold">Emisión EF2 activa</div>
+                      <div className="text-[10px] text-muted-foreground">Autoriza o bloquea la emisión electrónica para esta lavandería.</div>
+                    </div>
+                    <Switch checked={tenantFiscalActive} onCheckedChange={setTenantFiscalActive} />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Proveedor e-CF</label>
+                      <div className="h-9 rounded-xl bg-background border flex items-center px-3 text-xs font-bold text-sky-700">⚡ EF2 API · Proveedor único</div>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Ambiente Individual</label>
+                      <Select value={tenantFiscalEnvironment} onValueChange={(value: "TesteCF" | "CerteCF" | "eCF") => setTenantFiscalEnvironment(value)}>
+                        <SelectTrigger className="h-9 rounded-xl bg-background text-xs font-bold">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="TesteCF">TesteCF — Pruebas Sandbox</SelectItem>
+                          <SelectItem value="CerteCF">CerteCF — Homologación DGII</SelectItem>
+                          <SelectItem value="eCF">eCF — Producción Live Real</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+                        Usuario API EF2
+                      </label>
+                      <Input
+                        placeholder="api_empresa_codigo"
+                        value={tenantEf2Username}
+                        onChange={(e) => setTenantEf2Username(e.target.value)}
+                        className="h-9 rounded-xl bg-background text-xs font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
+                        Token API EF2 (Bearer Token)
+                      </label>
+                      <Input
+                        type="password"
+                        autoComplete="new-password"
+                        placeholder="Vacío conserva el token guardado"
+                        value={tenantEf2Token}
+                        onChange={(e) => setTenantEf2Token(e.target.value)}
+                        className="h-9 rounded-xl bg-background text-xs font-mono"
+                      />
+                      <span className="text-[10px] text-muted-foreground mt-0.5 block">
+                        Se verifica y guarda solo en el servidor.
+                      </span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/60">
@@ -4503,7 +4653,7 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
               <div className="flex items-center justify-between p-2 rounded-lg hover:bg-white/40 transition-colors">
                 <div className="space-y-0.5">
                   <Label className="text-sm font-bold">Módulo Facturación Fiscal</Label>
-                  <p className="text-xs text-muted-foreground">Desbloquear e-CFs por Pronesoft.</p>
+                  <p className="text-xs text-muted-foreground">Habilitar emisión e-CF mediante EF2.</p>
                 </div>
                 <Switch checked={f.facturacion_activa} onCheckedChange={(v) => setF({ ...f, facturacion_activa: v })} />
               </div>

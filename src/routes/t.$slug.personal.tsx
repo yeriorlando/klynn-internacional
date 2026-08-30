@@ -177,6 +177,16 @@ function PersonalPage() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limits, setLimits] = useState<any>({ employeesReached: false, employeeLimit: 0 });
 
+  const isMarbetesEnabled = Boolean(tenant?.config?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
+  const permisosDisponibles = useMemo(() => {
+    return PERMISOS_SISTEMA.filter((p) => {
+      if (p.id === "control-marbetes") {
+        return isMarbetesEnabled;
+      }
+      return true;
+    });
+  }, [isMarbetesEnabled]);
+
   useEffect(() => {
     async function checkLimits() {
       if (!tenant || tenantId === "__loading__") return;
@@ -273,8 +283,8 @@ function PersonalPage() {
           const stats = ordenes.filter((o) => o.empleado_id === e.id && o.estado !== "ANULADA");
           const total = stats.reduce((s, o) => s + o.total, 0);
           const approvedPerms = e.rol === "ADMIN"
-            ? PERMISOS_SISTEMA
-            : PERMISOS_SISTEMA.filter((p) =>
+            ? permisosDisponibles
+            : permisosDisponibles.filter((p) =>
                 (e.permisos && e.permisos.length > 0 ? e.permisos : getPermisosPorRol(e.rol)).includes(p.id)
               );
 
@@ -387,6 +397,7 @@ function PersonalPage() {
         }}
         empleado={edit}
         tenantId={user.tenant.id}
+        tenant={user.tenant}
         existingEmployees={emps}
         currentUserEmail={user.empleado.email}
         currentEmployeeId={user.empleado.id}
@@ -551,6 +562,7 @@ function EmpleadoDialog({
   onOpenChange,
   empleado,
   tenantId,
+  tenant,
   existingEmployees = [],
   currentUserEmail,
   currentEmployeeId,
@@ -561,12 +573,23 @@ function EmpleadoDialog({
   onOpenChange: (o: boolean) => void;
   empleado: Empleado | null;
   tenantId: string;
+  tenant?: any;
   existingEmployees?: Empleado[];
   currentUserEmail?: string;
   currentEmployeeId?: string;
   requireEmployeeOtp?: boolean;
   onDone: () => void;
 }) {
+  const isMarbetesEnabled = Boolean(tenant?.config?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
+  const permisosDisponibles = useMemo(() => {
+    return PERMISOS_SISTEMA.filter((p) => {
+      if (p.id === "control-marbetes") {
+        return isMarbetesEnabled;
+      }
+      return true;
+    });
+  }, [isMarbetesEnabled]);
+
   const empty = {
     nombre: "",
     apellido: "",
@@ -661,7 +684,7 @@ function EmpleadoDialog({
   };
 
   const selectAllPermisos = () => {
-    setF({ ...f, permisos: PERMISOS_SISTEMA.map((p) => p.id) });
+    setF({ ...f, permisos: permisosDisponibles.map((p) => p.id) });
   };
 
   const deselectAllPermisos = () => {
@@ -881,7 +904,7 @@ function EmpleadoDialog({
   }
 
   function selectAllInvitePermissions() {
-    setInvitePermissions(PERMISOS_SISTEMA.map((permission) => permission.id));
+    setInvitePermissions(permisosDisponibles.map((permission) => permission.id));
   }
 
   function deselectAllInvitePermissions() {
@@ -976,7 +999,7 @@ function EmpleadoDialog({
                     Rol: {inviteRole}
                   </Badge>
                   <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
-                    ({invitePermissions.length}/{PERMISOS_SISTEMA.length})
+                    ({invitePermissions.length}/{permisosDisponibles.length})
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -997,7 +1020,7 @@ function EmpleadoDialog({
               </div>
               <ScrollArea className="h-32 rounded-xl border border-border/70 bg-white p-2">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-1">
-                  {PERMISOS_SISTEMA.map((permission) => (
+                  {permisosDisponibles.map((permission) => (
                     <label key={permission.id} className={`flex items-start gap-1.5 p-1.5 rounded-xl border transition-all cursor-pointer ${invitePermissions.includes(permission.id) ? "bg-white border-primary/40 shadow-xs ring-1 ring-primary/20" : "bg-white border-border/50 hover:border-border"} ${inviteRole === "ADMIN" ? "opacity-90" : ""}`}>
                       <Checkbox
                         checked={inviteRole === "ADMIN" || invitePermissions.includes(permission.id)}
@@ -1307,7 +1330,7 @@ function EmpleadoDialog({
                     Rol: {f.rol}
                   </Badge>
                   <span className="text-[11px] font-medium text-primary-dark dark:text-primary-light">
-                    ({f.permisos.length}/{PERMISOS_SISTEMA.length})
+                    ({f.permisos.length}/{permisosDisponibles.length})
                   </span>
                 </div>
                 <div className="flex items-center gap-1">
@@ -1388,7 +1411,7 @@ function EmpleadoDialog({
               {/* Grid of Permissions */}
               <ScrollArea className="h-[220px] pr-1.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-1">
-                  {PERMISOS_SISTEMA.map((p) => {
+                  {permisosDisponibles.map((p) => {
                     const isChecked = f.permisos.includes(p.id);
                     return (
                       <div

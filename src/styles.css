@@ -237,15 +237,14 @@ body.pos-mode .main-header {
   /* Excepción: si el portal contiene un ticket térmico, mostrarlo */
   [data-radix-portal]:has(.thermal-ticket) { display: block !important; }
 
-  /* Mostrar el portal de prueba de impresión desde configuración */
+  /* Mostrar el portal de impresión como bloque para permitir saltos de página y corte térmico */
   .atomic-print-target {
-    display: flex !important;
+    display: block !important;
     position: static !important;
-    width: auto !important;
+    width: 100% !important;
     height: auto !important;
     overflow: visible !important;
     padding: 0 !important;
-    justify-content: flex-start !important;
   }
   
   /* Permitir que el body crezca dinámicamente y se ponga blanco */
@@ -297,9 +296,44 @@ body.pos-mode .main-header {
     print-color-adjust: exact !important;
   }
 
+  /* Control de Saltos de Página y Cortes Térmicos */
+  .marquillas-container {
+    display: block !important;
+    width: 100% !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
+  }
+
+  .ticket-page,
+  .marquilla-item {
+    display: block !important;
+    width: 100% !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .ticket-page:last-child,
+  .marquilla-item:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  .page-break-divider {
+    display: block !important;
+    page-break-after: always !important;
+    break-after: page !important;
+    height: 0px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    clear: both !important;
+  }
+
   @page { 
     margin: 0 !important;
-    size: 80mm auto;
   }
 }
 
@@ -351,46 +385,75 @@ body.pos-mode .main-header {
 /* Contenedor del Menú de Acciones */
 .action-menu {
   position: relative;
-  align-items: center !important;
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
   overflow: visible !important;
   --menu-border: var(--border);
   --menu-muted: var(--muted-foreground);
   --menu-anil: var(--primary);
   --menu-card: var(--card);
-  --menu-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.15);
+  --menu-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.12), 0 4px 12px -2px rgba(0, 0, 0, 0.08);
   --menu-surface: var(--accent);
   --menu-brick: var(--destructive);
 }
 
 .dark .action-menu {
-  --menu-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.5);
+  --menu-shadow: 0 14px 36px -4px rgba(0, 0, 0, 0.5), 0 4px 14px -2px rgba(0, 0, 0, 0.4);
 }
 
-/* El botón del disparador de tres puntos (...) */
-.order-actions .action-menu > button {
-  width: 32px;
-  height: 32px;
-  border: 1px solid var(--menu-border);
-  background: transparent;
-  color: var(--menu-muted);
-  border-radius: 6px;
-  display: grid;
-  place-items: center;
+/* El botón del disparador de acciones (tres puntos) */
+.order-actions.action-menu > button,
+.order-actions .action-menu > button,
+.action-menu > button {
+  width: 34px;
+  height: 34px;
+  border: 1.5px solid var(--menu-border);
+  background: var(--card);
+  color: var(--foreground);
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
-  transition: all 0.15s ease;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-.order-actions .action-menu > button svg {
-  width: 15px;
-  height: 15px;
+.order-actions.action-menu > button svg,
+.order-actions .action-menu > button svg,
+.action-menu > button svg {
+  width: 17px;
+  height: 17px;
+  stroke-width: 2.2px;
+  color: inherit;
+  transition: transform 0.15s ease;
 }
 
 /* Hover e Indicador de Abierto en el Botón */
+.order-actions.action-menu > button:hover,
+.order-actions.action-menu.is-open > button,
 .order-actions .action-menu > button:hover,
-.order-actions .action-menu.is-open > button {
-  border-color: var(--menu-anil);
-  color: var(--menu-anil);
-  background: color-mix(in srgb, var(--menu-anil), transparent 93%);
+.order-actions .action-menu.is-open > button,
+.action-menu > button:hover,
+.action-menu.is-open > button {
+  border-color: #1B4B73;
+  color: #ffffff !important;
+  background: #1B4B73 !important;
+  box-shadow: 0 4px 12px -2px rgba(27, 75, 115, 0.35);
+  transform: translateY(-1px);
+}
+
+.dark .order-actions.action-menu > button:hover,
+.dark .order-actions.action-menu.is-open > button,
+.dark .order-actions .action-menu > button:hover,
+.dark .order-actions .action-menu.is-open > button,
+.dark .action-menu > button:hover,
+.dark .action-menu.is-open > button {
+  border-color: #38bdf8;
+  color: #0f172a !important;
+  background: #38bdf8 !important;
+  box-shadow: 0 4px 14px -2px rgba(56, 189, 248, 0.45);
 }
 
 /* El menú desplegable (Popover) */
@@ -398,14 +461,21 @@ body.pos-mode .main-header {
 .action-menu-popover {
   position: absolute;
   right: 0;
-  top: 34px;
+  top: 38px;
   z-index: 70;
-  width: 220px;
+  min-width: 220px;
   background: var(--menu-card);
   border: 1px solid var(--menu-border);
-  border-radius: 7px;
+  border-radius: 12px;
   box-shadow: var(--menu-shadow);
+  padding: 5px;
   overflow: hidden;
+  animation: popoverFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: scale(0.95) translateY(-4px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 /* Botones internos del menú desplegable */
@@ -414,14 +484,17 @@ body.pos-mode .main-header {
   width: 100%;
   border: 0;
   background: transparent;
-  padding: 10px 14px;
+  padding: 8px 12px;
+  border-radius: 8px;
   display: flex;
   gap: 10px;
   align-items: center;
   font-size: 12px;
+  font-weight: 600;
   text-align: left;
   cursor: pointer;
   color: var(--foreground);
+  transition: background-color 0.15s ease, color 0.15s ease;
 }
 
 .action-menu > div button:hover,
@@ -431,7 +504,9 @@ body.pos-mode .main-header {
 
 .action-menu > div svg,
 .action-menu-popover svg {
-  width: 16px;
+  width: 15px;
+  height: 15px;
+  flex-shrink: 0;
 }
 
 /* Botón peligroso (Eliminar) */

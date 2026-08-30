@@ -23,7 +23,7 @@ import {
   updateECFConfig, saveECFConfig, validarCodigoInvitacion, marcarCodigoUsado,
   type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan, type ECFConfig, type InvitacionCodigo,
 } from "@/lib/storage";
-import { registerTenantInPronesoft, consultarRNC } from "@/lib/fiscal";
+import { consultarRNC } from "@/lib/fiscal";
 import { sendWelcomeEmail } from "@/lib/email";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 import { toast } from "sonner";
@@ -523,6 +523,8 @@ function RegistroPage() {
           razon_social: form.razon_social || form.nombre,
           nombre_comercial: form.nombre,
           ambiente: "pruebas",
+          proveedor_ecf: "ef2",
+          ef2_environment: "TesteCF",
           usar_credenciales_propias: false,
           is_active: !!cleanRnc || !!rawRnc,
           created_at: new Date().toISOString(),
@@ -530,15 +532,6 @@ function RegistroPage() {
         };
         await saveECFConfig(initialECFConfig);
 
-        // Si el usuario ingresó un RNC o Cédula, auto-registrar la empresa asociada en Pronesoft de fondo
-        if (cleanRnc || rawRnc) {
-          try {
-            await registerTenantInPronesoft(tenant.id, initialECFConfig);
-            console.log(`[Registro] ✅ Empresa asociada registrada en Pronesoft para: ${tenant.nombre}`);
-          } catch (proneErr: any) {
-            console.warn("[Registro] Aviso en auto-registro de Pronesoft:", proneErr?.message || proneErr);
-          }
-        }
       } catch (ecfInitErr) {
         console.warn("Aviso al inicializar ecf_config:", ecfInitErr);
       }

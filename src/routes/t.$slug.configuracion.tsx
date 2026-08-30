@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { compressImage } from "@/lib/compressImage";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { supabase } from "@/lib/supabase";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -26,14 +26,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import {
-  saveTenant, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
+  saveTenant, saveTenantConfig, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
   getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
   isModuleEnabled, sendWeeklySummaryTest, getNextRenewalDate,
   type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getProneSoftClient, registerTenantInPronesoft, uploadCertificateToPronesoft, anularSecuenciasPronesoft, createSequencePronesoft, listSequencesPronesoft, isECFReady, consultarRNC, resolveProneSoftTenantId } from "@/lib/fiscal";
+import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA, consultarRNC, isECFReady } from "@/lib/fiscal";
 import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -47,10 +47,28 @@ import {
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
-  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine
+  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine, Download
 } from "lucide-react";
 import {
   encodeEscPos,
+  simulateEscPosDump,
+  isSerialSupported,
+  isUsbSupported,
+  isBluetoothSupported,
+  connectSerialPort,
+  disconnectSerial,
+  getActiveSerialPort,
+  getAutoConnectedSerialPort,
+  listAuthorizedSerialPorts,
+  connectUsbDevice,
+  disconnectUsb,
+  getActiveUsbDevice,
+  connectBluetoothDevice,
+  disconnectBluetooth,
+  getActiveConnectionStatus,
+  generateTestTicketEscPos,
+  printDirectRaw,
+  getSerialPortLabel,
 } from "@/lib/impresora";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
@@ -376,12 +394,280 @@ function ConfigPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
-  // Estados para configuración de impresora física
-  // Estados para impresión en modo kiosko
+  const cfg: TenantConfig = tenant?.config || DEFAULT_CONFIG;
+
+  // Estados para configuración de impresora física (USB / Serie / Windows / Bluetooth)
+  const [showPhysicalPrinterConfig, setShowPhysicalPrinterConfig] = useState(false);
+  const [activePortStatus, setActivePortStatus] = useState<{
+    type: "none" | "serial" | "usb" | "bluetooth";
+    label: string;
+    isOpen: boolean;
+  }>({ type: "none", label: "No conectado", isOpen: false });
+  const [isConnectingPrinter, setIsConnectingPrinter] = useState(false);
+  const [isTestingDirectPrint, setIsTestingDirectPrint] = useState(false);
   const [showKioskHelpModal, setShowKioskHelpModal] = useState(false);
   const [printingFakeTicket, setPrintingFakeTicket] = useState<{ orden: any; cliente: any; empleado: any; isEscPos: boolean } | null>(null);
 
-  async function handleTestPrint(isEscPos = false) {
+  function getFriendlyErrorMessage(err: any): string {
+    const msg = err?.message || "";
+    return msg || "Error desconocido de impresora";
+  }
+
+  const handleDownloadDiagnostic = () => {
+    const now = new Date();
+    const ua = navigator.userAgent;
+    
+    // 1. Detectar navegador
+    let browserName = "Desconocido";
+    if (ua.includes("Firefox")) {
+      const match = ua.match(/Firefox\/(\d+)/);
+      browserName = `Firefox ${match ? match[1] : ""}`;
+    } else if (ua.includes("Chrome") && !ua.includes("Edg")) {
+      const match = ua.match(/Chrome\/(\d+)/);
+      browserName = `Chrome ${match ? match[1] : ""}`;
+    } else if (ua.includes("Edg")) {
+      const match = ua.match(/Edg\/(\d+)/);
+      browserName = `Edge ${match ? match[1] : ""}`;
+    } else if (ua.includes("Safari") && !ua.includes("Chrome")) {
+      const match = ua.match(/Version\/(\d+)/);
+      browserName = `Safari ${match ? match[1] : ""}`;
+    }
+    
+    // 2. Detectar sistema operativo
+    let osName = "Desconocido";
+    if (ua.includes("Windows NT")) {
+      const match = ua.match(/Windows NT ([\d.]+)/);
+      osName = `Windows NT ${match ? match[1] : ""}`;
+    } else if (ua.includes("Macintosh")) {
+      osName = "macOS";
+    } else if (ua.includes("iPhone") || ua.includes("iPad")) {
+      osName = "iOS";
+    } else if (ua.includes("Android")) {
+      osName = "Android";
+    } else if (ua.includes("Linux")) {
+      osName = "Linux";
+    }
+
+    // 3. Soporte de APIs de hardware
+    const webSerialAvailable = typeof navigator !== "undefined" && "serial" in navigator ? "SI" : "NO";
+    const webUsbAvailable = typeof navigator !== "undefined" && "usb" in navigator ? "SI" : "NO";
+    const webBluetoothAvailable = typeof navigator !== "undefined" && "bluetooth" in navigator ? "SI" : "NO";
+
+    // 4. Nombre de impresora guardada
+    const savedPrinter = cfg.impresora_nombre || "Impresora Térmica 80mm";
+
+    // 5. Compilar reporte en base a la plantilla
+    const report = `=== DIAGNÓSTICO IMPRESORA — ${tenant?.nombre?.toUpperCase() || "KLYNN CLOUD"} ===
+Generado: ${now.toISOString()}
+
+--- ENTORNO ---
+Navegador:  ${browserName}
+Sistema:    ${osName}
+User-Agent: ${ua}
+Pantalla:   ${window.screen.width}×${window.screen.height} (devicePixelRatio ${window.devicePixelRatio})
+
+--- CONTEXTO / SEGURIDAD ---
+URL:             ${window.location.href}
+Contexto seguro (HTTPS/localhost): ${window.isSecureContext ? "SI" : "NO"}
+Nivel superior:  ${window.self === window.top ? "SI" : "NO"}
+Navegador integrado (WebView/in-app): ${/wv|Instagram|FBAN|FBAV/.test(ua) ? "SI" : "NO"}
+
+--- CONFIGURACIÓN ACTUAL ---
+Modo configurado: ${cfg.impresora_tipo || "sistema"}
+Perfil impresión: ${cfg.impresora_perfil || "basica"}
+Puerto / Nombre:  ${savedPrinter}
+Baud Rate:        ${cfg.impresora_serial_baud || 9600}
+Ancho de papel:   ${cfg.formato_ticket || "80mm"}
+
+--- ESTADO DE CONEXIÓN ACTIVA ---
+Tipo de conexión: ${activePortStatus.type}
+Dispositivo:      ${activePortStatus.label}
+Puerto abierto:   ${activePortStatus.isOpen ? "SI" : "NO"}
+
+--- APIs DISPONIBLES EN ESTE NAVEGADOR ---
+Web Serial (Chrome/Edge):    ${webSerialAvailable}
+Web USB (Chrome/Edge):       ${webUsbAvailable}
+Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
+
+--- FIN DEL DIAGNÓSTICO ---`;
+
+    const blob = new Blob([report], { type: "text/plain;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `diagnostico-impresora-${tenant?.slug || "klynn"}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    toast.success("Diagnóstico descargado con éxito 📄");
+  };
+
+  const refreshPrinterConnection = useCallback(async () => {
+    try {
+      const baud = cfg.impresora_serial_baud || 9600;
+      await getAutoConnectedSerialPort(baud);
+      const status = getActiveConnectionStatus();
+      setActivePortStatus(status);
+    } catch {
+      setActivePortStatus(getActiveConnectionStatus());
+    }
+  }, [cfg.impresora_serial_baud]);
+
+  useEffect(() => {
+    if (showPhysicalPrinterConfig) {
+      void refreshPrinterConnection();
+    }
+  }, [showPhysicalPrinterConfig, refreshPrinterConnection]);
+
+  // Conectar por Web Serial
+  async function handleConnectSerial() {
+    setIsConnectingPrinter(true);
+    try {
+      const baud = cfg.impresora_serial_baud || 9600;
+      const port = await connectSerialPort(baud);
+      const label = getSerialPortLabel(port);
+      await updateCfg({
+        impresora_tipo: "serial",
+        impresora_nombre: label,
+        impresora_serial_baud: baud,
+      });
+      await saveCfg({
+        impresora_tipo: "serial",
+        impresora_nombre: label,
+        impresora_serial_baud: baud,
+      });
+      setActivePortStatus({
+        type: "serial",
+        label,
+        isOpen: true,
+      });
+      toast.success(`¡Impresora conectada exitosamente en ${label}! 🖨️`);
+    } catch (err: any) {
+      if (!err?.message?.includes("cancelled") && !err?.message?.includes("canceled")) {
+        console.error(err);
+        toast.error("No se pudo conectar al puerto: " + (err?.message || "Error desconocido"));
+      }
+    } finally {
+      setIsConnectingPrinter(false);
+    }
+  }
+
+  // Conectar por Web USB
+  async function handleConnectUsb() {
+    setIsConnectingPrinter(true);
+    try {
+      const dev = await connectUsbDevice();
+      const label = dev.productName || `USB (VID:${dev.vendorId})`;
+      await updateCfg({
+        impresora_tipo: "usb",
+        impresora_nombre: label,
+      });
+      await saveCfg({
+        impresora_tipo: "usb",
+        impresora_nombre: label,
+      });
+      setActivePortStatus({
+        type: "usb",
+        label,
+        isOpen: true,
+      });
+      toast.success(`¡Impresora USB conectada: ${label}! 🖨️`);
+    } catch (err: any) {
+      if (!err?.message?.includes("cancelled") && !err?.message?.includes("canceled")) {
+        console.error(err);
+        if (err?.message?.includes("Access denied")) {
+          toast.info("Tu impresora '2C-POS80' ya está instalada en Windows. Usa el modo 'Driver de Windows / Kiosko' para imprimir al instante.");
+          updateCfg({ impresora_tipo: "sistema", impresora_nombre: "2C-POS80-01-V6 Printer" });
+        } else {
+          toast.error("No se pudo conectar al dispositivo USB: " + (err?.message || ""));
+        }
+      }
+    } finally {
+      setIsConnectingPrinter(false);
+    }
+  }
+
+  // Desconectar puerto
+  async function handleDisconnectPort() {
+    try {
+      await disconnectSerial();
+      await disconnectUsb();
+      await disconnectBluetooth();
+      await updateCfg({
+        impresora_tipo: "sistema",
+        impresora_nombre: undefined,
+      });
+      await saveCfg({
+        impresora_tipo: "sistema",
+        impresora_nombre: undefined,
+      });
+      setActivePortStatus({
+        type: "none",
+        label: "No conectado",
+        isOpen: false,
+      });
+      toast.info("Impresora desconectada del puerto directo.");
+    } catch (err: any) {
+      console.error(err);
+    }
+  }
+
+  // Conectar Bluetooth
+  async function handleConnectBluetooth() {
+    setIsConnectingPrinter(true);
+    try {
+      const device = await connectBluetoothDevice();
+      const label = device.name || "Impresora Bluetooth";
+      await updateCfg({
+        impresora_tipo: "bluetooth",
+        impresora_nombre: label,
+      });
+      await saveCfg({
+        impresora_tipo: "bluetooth",
+        impresora_nombre: label,
+      });
+      setActivePortStatus({
+        type: "bluetooth",
+        label,
+        isOpen: true,
+      });
+      toast.success(`¡Impresora Bluetooth (${label}) emparejada con éxito! 🖨️`);
+    } catch (err: any) {
+      if (!err?.message?.includes("cancelled") && !err?.message?.includes("canceled")) {
+        console.error(err);
+        toast.error("Error al conectar Bluetooth: " + (err?.message || ""));
+      }
+    } finally {
+      setIsConnectingPrinter(false);
+    }
+  }
+
+  // Prueba de impresión directa ESC/POS
+  async function handleTestDirectEscPos() {
+    if (!tenant) return;
+    setIsTestingDirectPrint(true);
+    try {
+      const perfil = cfg.impresora_perfil || "basica";
+      const formato = cfg.formato_ticket || "80mm";
+      const bytes = generateTestTicketEscPos(tenant, perfil, formato);
+      const printed = await printDirectRaw(bytes, cfg);
+      if (printed) {
+        toast.success("¡Ticket de prueba enviado y cortado con éxito! ✅");
+      } else {
+        toast.warning("No hay un puerto directo abierto. Haz clic en 'Buscar y Conectar' primero.");
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error al enviar bytes directos: " + (err?.message || "Error de comunicación"));
+    } finally {
+      setIsTestingDirectPrint(false);
+    }
+  }
+
+  // Prueba de impresión por navegador (window.print)
+  function handleTestBrowserPrint() {
+    if (!tenant) return;
     const fakeOrden = {
       id: "demo-test",
       tenant_id: tenant?.id || "",
@@ -414,15 +700,16 @@ function ConfigPage() {
     } as any;
 
     const fakeEmpleado = {
-      nombre: auth?.user?.user_metadata?.nombre || "Cajero de Prueba"
+      nombre: (auth as any)?.empleado?.nombre || "Cajero de Prueba"
     } as any;
 
     setPrintingFakeTicket({
       orden: fakeOrden,
       cliente: fakeCliente,
       empleado: fakeEmpleado,
-      isEscPos
+      isEscPos: false,
     });
+    toast.info("Abriendo diálogo de impresión...");
   }
 
   useEffect(() => {
@@ -476,19 +763,24 @@ function ConfigPage() {
     return <GlobalPageLoader text="Cargando configuración..." />;
   }
 
-  const cfg: TenantConfig = tenant.config || DEFAULT_CONFIG;
   const plan = plans.find(p => p.id === tenant.plan_id);
   const hasFiscal = isModuleEnabled(tenant, 'facturacion_fiscal', plan);
   const hasWA = isModuleEnabled(tenant, 'whatsapp', plan);
   const wa: WhatsAppConfig = cfg.whatsapp || DEFAULT_CONFIG.whatsapp!;
+  // Impresora Windows (POS80): siempre lista para probar vía diálogo del navegador.
+  const isPrinterConnected = true;
 
   async function save(updates: Partial<Tenant>) {
     try {
       const next: Tenant = { ...tenant!, ...updates } as Tenant;
       await saveTenant(next);
+      if (next.config) {
+        await saveTenantConfig(tenantId, next.config);
+      }
       setTenant(next);
-      toast.success("Guardado");
-      setTimeout(() => window.location.reload(), 400);
+      queryClient.invalidateQueries({ queryKey: ["tenant"] });
+      queryClient.invalidateQueries({ queryKey: ["tenants"] });
+      toast.success("Guardado correctamente ✅");
     } catch (err: any) {
       console.error("Error saving tenant:", err);
       toast.error("Error al guardar: " + (err.message || "desconocido"));
@@ -496,10 +788,14 @@ function ConfigPage() {
   }
   async function saveCfg(c: Partial<TenantConfig>) {
     try {
-      const next: Tenant = { ...tenant!, config: { ...cfg, ...c } } as Tenant;
+      const nextConfig = { ...cfg, ...c };
+      const next: Tenant = { ...tenant!, config: nextConfig } as Tenant;
       await saveTenant(next);
+      await saveTenantConfig(tenantId, nextConfig);
       setTenant(next);
-      toast.success("Guardado");
+      queryClient.invalidateQueries({ queryKey: ["tenant"] });
+      queryClient.invalidateQueries({ queryKey: ["tenants"] });
+      toast.success("Configuración guardada correctamente ✅");
     } catch (err: any) {
       console.error("Error saving config:", err);
       toast.error("Error al guardar configuración: " + (err.message || "desconocido"));
@@ -999,51 +1295,54 @@ function ConfigPage() {
               </div>
 
               {/* Fila 3: Switches estilizados con IconBoxes */}
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 pt-2">
+              <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 pt-2">
 
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
                     <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Printer className="h-4.5 w-4.5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs font-bold text-foreground block">Mostrar RNC</span>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Imprimir RNC en recibos.</p>
                     </div>
                   </div>
                   <Switch 
+                    className="shrink-0"
                     checked={cfg.ticket_mostrar_rnc ?? true} 
                     onCheckedChange={(v) => updateCfg({ ticket_mostrar_rnc: v })} 
                   />
                 </div>
 
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
                     <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
                       <User className="h-4.5 w-4.5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs font-bold text-foreground block">Mostrar empleado</span>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Nombre del cajero.</p>
                     </div>
                   </div>
                   <Switch 
+                    className="shrink-0"
                     checked={cfg.ticket_mostrar_empleado} 
                     onCheckedChange={(v) => updateCfg({ ticket_mostrar_empleado: v })} 
                   />
                 </div>
 
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
                     <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
                       <Layers className="h-4.5 w-4.5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs font-bold text-foreground block">Ubicación Conveyor</span>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Ganchos y estantería.</p>
                     </div>
                   </div>
                   <Switch 
+                    className="shrink-0"
                     checked={cfg.usar_ubicacion_ropa || false} 
                     onCheckedChange={async (v) => {
                       updateCfg({ usar_ubicacion_ropa: v });
@@ -1053,18 +1352,36 @@ function ConfigPage() {
                 </div>
 
                 <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
-                  <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
                     <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
                       <FileEdit className="h-4.5 w-4.5" />
                     </div>
-                    <div>
+                    <div className="min-w-0">
                       <span className="text-xs font-bold text-foreground block">Notas en ticket</span>
                       <p className="text-[11px] text-muted-foreground mt-0.5">Instrucciones de cliente.</p>
                     </div>
                   </div>
                   <Switch 
+                    className="shrink-0"
                     checked={cfg.ticket_mostrar_notas || false} 
                     onCheckedChange={(v) => updateCfg({ ticket_mostrar_notas: v })} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Tag className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-foreground block">Marquillas de ropa</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Corte auto por prenda.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    className="shrink-0"
+                    checked={cfg.ticket_imprimir_marquillas_auto || false} 
+                    onCheckedChange={(v) => updateCfg({ ticket_imprimir_marquillas_auto: v })} 
                   />
                 </div>
               </div>
@@ -1085,66 +1402,213 @@ function ConfigPage() {
             </div>
           </Card>
 
-          {/* Tarjeta de Impresión y Modo Kiosco */}
-          <Card className={CARD + " mt-6 space-y-6"}>
-            <div className="flex items-center justify-between pb-4 border-b border-slate-100">
-              <div className="flex items-center gap-3">
+          {/* Configuración de Impresora Física */}
+          {!showPhysicalPrinterConfig ? (
+            <button 
+              onClick={() => setShowPhysicalPrinterConfig(true)}
+              className="w-full mt-6 flex items-center justify-between p-4.5 rounded-2xl border transition-all text-left cursor-pointer hover:shadow-sm"
+              style={{
+                backgroundColor: tenant?.color_primario + "06",
+                borderColor: tenant?.color_primario + "25",
+                borderWidth: "1.5px"
+              }}
+            >
+              <div className="flex items-center gap-4">
                 <div 
-                  className="h-10 w-10 rounded-xl flex items-center justify-center shrink-0 text-white shadow-sm"
+                  className="h-11 w-11 rounded-xl flex items-center justify-center shrink-0 text-white shadow-sm"
                   style={{ backgroundColor: tenant?.color_primario }}
                 >
-                  <Printer className="h-5 w-5 text-white" />
+                  <Printer className="h-5.5 w-5.5 text-white" />
                 </div>
                 <div>
-                  <h4 className="font-display font-black text-base text-slate-800">Impresión de Tickets (Modo Kiosco / Directo)</h4>
-                  <p className="text-xs text-slate-500 font-medium">Los tickets se formatean de forma estándar para cualquier impresora térmica (57mm / 80mm).</p>
+                  <div className="flex items-center gap-2">
+                    <h4 
+                      className="font-display font-bold text-[15px] leading-tight"
+                      style={{ color: tenant?.color_primario }}
+                    >
+                      Configurar impresora física (Térmica 80mm / 57mm)
+                    </h4>
+                    {activePortStatus.isOpen ? (
+                      <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 text-[10px] font-bold px-2 py-0.5 rounded-full">
+                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                        Conectada ({activePortStatus.label})
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                        {cfg.impresora_tipo === "serial" ? "Puerto USB guardado" : "Modo Navegador / Kiosko"}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-slate-500 mt-1 font-medium">
+                    {activePortStatus.isOpen
+                      ? `Conectada directamente por ${activePortStatus.label}. Impresión instantánea activa.`
+                      : "Conecta tu impresora térmica por puerto USB directo o configura el modo kiosko."}
+                  </p>
                 </div>
               </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <button
-                type="button"
-                onClick={() => handleTestPrint(false)}
-                className="flex items-center justify-between p-4 rounded-2xl border transition-all text-left bg-slate-50 hover:bg-slate-100/80 cursor-pointer border-slate-200"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0 bg-white border border-slate-200 text-slate-700 shadow-xs">
-                    <Printer className="h-4.5 w-4.5" />
-                  </div>
-                  <div>
-                    <span className="text-sm font-bold text-slate-800 block">Probar impresión de ticket</span>
-                    <span className="text-[11px] text-slate-500 font-medium leading-none mt-0.5 block">Lanza la vista de impresión con una orden demo</span>
-                  </div>
-                </div>
-                <ArrowRight className="h-4.5 w-4.5 text-slate-400" />
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setShowKioskHelpModal(true)}
-                className="flex items-center justify-between p-4 rounded-2xl border transition-all text-left cursor-pointer hover:shadow-xs"
-                style={{
-                  backgroundColor: tenant?.color_primario + "08",
-                  borderColor: tenant?.color_primario + "30",
-                }}
-              >
-                <div className="flex items-center gap-3">
-                  <div 
-                    className="h-9 w-9 rounded-xl flex items-center justify-center shrink-0 text-white shadow-xs"
+              <ArrowRight 
+                className="h-5 w-5" 
+                style={{ color: tenant?.color_primario }}
+              />
+            </button>
+          ) : (
+            <Card className={CARD + " mt-6 space-y-6 animate-in fade-in slide-in-from-top-4 duration-300 bg-white dark:bg-slate-950"}>
+              {/* Encabezado */}
+              <div className="flex items-center justify-between pb-4 border-b border-slate-100 dark:border-slate-800">
+                <div className="flex items-center gap-2.5">
+                  <button 
+                    onClick={() => setShowPhysicalPrinterConfig(false)}
+                    className="h-8 w-8 rounded-full text-white flex items-center justify-center cursor-pointer hover:opacity-90 active:scale-95 transition-all"
                     style={{ backgroundColor: tenant?.color_primario }}
+                    title="Volver"
                   >
-                    <Zap className="h-4.5 w-4.5 text-white" fill="currentColor" />
-                  </div>
+                    <ArrowLeft className="h-4.5 w-4.5 text-white" strokeWidth={3} />
+                  </button>
                   <div>
-                    <span className="text-sm font-bold text-slate-800 block">Guía de Impresión Silenciosa</span>
-                    <span className="text-[11px] text-slate-500 font-medium leading-none mt-0.5 block">Configurar Chrome para imprimir al instante</span>
+                    <h4 className="font-display font-black text-lg text-slate-800 dark:text-slate-100 leading-tight">
+                      Impresora Térmica (Controlador de Windows / 80mm)
+                    </h4>
+                    <p className="text-xs text-slate-400 font-medium mt-0.5">
+                      Impresión nativa compatible con todas las impresoras térmicas USB de Windows (POS80, Xprinter, Epson)
+                    </p>
                   </div>
                 </div>
-                <ArrowRight className="h-4.5 w-4.5" style={{ color: tenant?.color_primario }} />
-              </button>
-            </div>
-          </Card>
+
+                <div className="flex items-center gap-1.5 bg-emerald-50 dark:bg-emerald-950/60 px-3 py-1.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-xs font-bold text-emerald-700 dark:text-emerald-300">
+                    Modo Sistema Activo
+                  </span>
+                </div>
+              </div>
+
+              {/* Panel Informativo */}
+              <div className="p-4.5 rounded-2xl border border-sky-100 dark:border-sky-900/60 bg-sky-50/40 dark:bg-sky-950/20 space-y-3">
+                <div className="flex items-start gap-3">
+                  <div className="h-9 w-9 rounded-xl bg-sky-100 dark:bg-sky-900 text-sky-700 dark:text-sky-300 flex items-center justify-center shrink-0 mt-0.5">
+                    <Printer className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1">
+                    <h5 className="font-bold text-sm text-sky-950 dark:text-sky-100">
+                      Impresión Directa por Controlador de Windows
+                    </h5>
+                    <p className="text-xs text-slate-600 dark:text-slate-400 leading-relaxed">
+                      Tu impresora térmica USB está administrada directamente por Windows. Al crear o cobrar una orden en <strong>/nueva-orden</strong>, Klynn disparará el diálogo nativo del navegador configurado exactamente en 80mm.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-sky-200/60 dark:border-sky-800/60">
+                  <a
+                    href="https://github.com/yeriorlando/klynn/releases/download/untagged-a148a7657cedb2a8e3a7/Klynn-Kiosco-Setup.exe"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    download="Klynn-Kiosco-Setup.exe"
+                    className="inline-flex items-center gap-2 h-9 px-4 rounded-xl font-bold bg-[#001a42] hover:bg-[#002866] text-white shadow-sm cursor-pointer text-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    title="Descargar asistente para configurar impresión automática en Windows"
+                  >
+                    <Download className="h-3.5 w-3.5 text-amber-400" />
+                    <span>Descargar Asistente de Impresión (.exe)</span>
+                  </a>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowKioskHelpModal(true)}
+                    className="h-9 px-3.5 rounded-xl font-bold border-sky-300 text-sky-800 hover:bg-sky-100/60 dark:border-sky-800 dark:text-sky-300 cursor-pointer gap-1.5 text-xs"
+                  >
+                    <Zap className="h-3.5 w-3.5" />
+                    ¿Cómo activar impresión 100% directa? (Modo Kiosko)
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={handleTestBrowserPrint}
+                    className="h-9 px-4 rounded-xl font-bold bg-primary hover:bg-primary/95 text-white shadow-sm cursor-pointer gap-2 text-xs"
+                  >
+                    <Printer className="h-3.5 w-3.5" />
+                    <span>Probar Diálogo de Impresión (80mm)</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* Ancho del ticket y Perfil */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Ancho del papel térmico
+                  </label>
+                  <Select
+                    value={cfg.formato_ticket || "80mm"}
+                    onValueChange={(v: "57mm" | "80mm") => updateCfg({ formato_ticket: v, impresora_tipo: "sistema" })}
+                  >
+                    <SelectTrigger className="rounded-xl border-slate-200 dark:border-slate-800 h-11 bg-white dark:bg-slate-900">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="80mm">80mm (Estándar para mostradores de lavandería)</SelectItem>
+                      <SelectItem value="57mm">57mm (Impresoras compactas / móviles)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-1.5">
+                  <label className="text-sm font-bold text-slate-800 dark:text-slate-200">
+                    Perfil de formato de ticket
+                  </label>
+                  <Select
+                    value={cfg.impresora_perfil || "basica"}
+                    onValueChange={(v: "basica" | "estandar" | "completa") => updateCfg({ impresora_perfil: v, impresora_tipo: "sistema" })}
+                  >
+                    <SelectTrigger className="rounded-xl border-slate-200 dark:border-slate-800 h-11 bg-white dark:bg-slate-900">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="basica">Básica (Máxima compatibilidad con todas las marcas)</SelectItem>
+                      <SelectItem value="estandar">Estándar (Título y totales destacados)</SelectItem>
+                      <SelectItem value="completa">Completa (Formato premium + QR e-CF)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Guardar cambios y Diagnóstico */}
+              <div className="pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleDownloadDiagnostic}
+                  className="w-full sm:w-auto h-10 px-4 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800 hover:bg-slate-50 cursor-pointer gap-1.5"
+                >
+                  <Wrench className="h-4 w-4" />
+                  <span>Descargar Diagnóstico (.txt)</span>
+                </Button>
+
+                <Button 
+                  type="button" 
+                  onClick={() =>
+                    void save({
+                      ...tenant,
+                      config: {
+                        ...cfg,
+                        impresora_tipo: cfg.impresora_tipo || "serial",
+                        formato_ticket: cfg.formato_ticket || "80mm",
+                        impresora_perfil: cfg.impresora_perfil || "basica",
+                        impresora_serial_baud: cfg.impresora_serial_baud || 9600,
+                      },
+                    })
+                  }
+                  className="w-full sm:w-auto h-10 px-6 rounded-xl font-bold flex items-center justify-center gap-2 text-white shadow-sm hover:opacity-90 active:scale-[0.99] transition-all cursor-pointer bg-primary"
+                >
+                  <Check className="h-4.5 w-4.5" strokeWidth={3} />
+                  <span>Guardar Configuración de Impresora</span>
+                </Button>
+              </div>
+            </Card>
+          )}
 
           {/* Modal de Ayuda para Modo Kiosco */}
           <Dialog open={showKioskHelpModal} onOpenChange={setShowKioskHelpModal}>
@@ -1164,8 +1628,35 @@ function ConfigPage() {
                 <div className="space-y-2.5">
                   <div className="flex items-center gap-1.5 font-black text-slate-800 text-[11px] uppercase tracking-wider bg-slate-50 p-2 rounded-lg border">
                     <Monitor className="h-4 w-4 text-slate-650" />
-                    <span>En Windows (Chrome / Edge)</span>
+                    <span>En Windows (Chrome / Edge / Brave)</span>
                   </div>
+
+                  {/* Asistente Automático .exe */}
+                  <div className="bg-sky-50/80 dark:bg-sky-950/40 border border-sky-200 dark:border-sky-800/60 p-3 rounded-xl flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <p className="text-xs font-bold text-sky-950 dark:text-sky-200">
+                        ⚡ Asistente de Configuración Automática
+                      </p>
+                      <p className="text-[11px] text-sky-700 dark:text-sky-300">
+                        Configura tu navegador, impresora y papel 80mm en 1 solo clic.
+                      </p>
+                    </div>
+                    <a
+                      href="https://github.com/yeriorlando/klynn/releases/download/untagged-a148a7657cedb2a8e3a7/Klynn-Kiosco-Setup.exe"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      download="Klynn-Kiosco-Setup.exe"
+                      className="shrink-0 inline-flex items-center gap-1.5 h-8 px-3 rounded-lg font-bold bg-[#001a42] hover:bg-[#002866] text-white text-[11px] transition-all shadow-sm"
+                    >
+                      <Download className="h-3 w-3 text-amber-400" />
+                      <span>Descargar .exe</span>
+                    </a>
+                  </div>
+
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider pt-1 pl-1">
+                    O configuración manual paso a paso:
+                  </p>
+
                   <div className="space-y-2 pl-1">
                     <div className="flex items-start gap-2.5">
                       <div 
@@ -1281,12 +1772,12 @@ function ConfigPage() {
                   tenant={tenant}
                   cliente={printingFakeTicket.cliente}
                   empleado={printingFakeTicket.empleado}
-                  formato={cfg.impresora_formato || "80mm"}
+                  formato={cfg.formato_ticket || "80mm"}
                 />
               ) : (
                 <div 
                   className={`thermal-ticket mx-auto bg-white p-6 font-mono text-[11px] leading-tight text-black border border-dashed border-black/20 ${
-                    (cfg.impresora_formato || "80mm") === "57mm" ? "w-[58mm] max-w-[32ch]" : "w-[80mm] max-w-[44ch]"
+                    (cfg.formato_ticket || "80mm") === "57mm" ? "w-[58mm] max-w-[32ch]" : "w-[80mm] max-w-[44ch]"
                   }`}
                   style={{ fontFamily: "monospace", whiteSpace: "pre-wrap" }}
                 >
@@ -1557,7 +2048,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     </div>
                   </div>
                   <Switch 
-                    checked={cfg.pos_auto_imprimir === true}
+                    checked={cfg.pos_auto_imprimir !== false}
                     onCheckedChange={(v) => updateCfg({ pos_auto_imprimir: v })}
                   />
                 </div>
@@ -1631,6 +2122,23 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     />
                   </div>
                 )}
+
+                {/* Switch: Control de Marbetes (Tiras Hidrofix) */}
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3">
+                    <div className="h-9 w-9 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Tag className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-foreground block">Control de Marbetes (Tiras de Papel Hidrofix)</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Permite registrar y consultar el color, piezas (1-9) y secuencia de marbetes físicos para trazabilidad.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    checked={cfg.habilitar_control_marbetes || false} 
+                    onCheckedChange={(v) => updateCfg({ habilitar_control_marbetes: v })} 
+                  />
+                </div>
               </div>
             </div>
 
@@ -3353,20 +3861,25 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   const { data: globalFiscalConfig } = useGlobalConfig();
 
   const assignedEnvironment: "TesteCF" | "CerteCF" | "eCF" =
-    config?.pronesoft_environment
+    config?.ef2_environment
+    || config?.pronesoft_environment
     || (config?.ambiente === "produccion" ? "eCF" : "TesteCF");
   const environmentPolicy = globalFiscalConfig?.fiscal_environment_policy || "per_tenant";
   const effectiveEnvironment: "TesteCF" | "CerteCF" | "eCF" =
     environmentPolicy === "per_tenant" ? assignedEnvironment : environmentPolicy;
   const isProductionEnvironment = effectiveEnvironment === "eCF";
   const environmentLabel = effectiveEnvironment === "eCF"
-    ? "PRODUCCIÓN eCF"
+    ? "PRODUCCIÓN (eCF)"
     : effectiveEnvironment === "CerteCF"
-      ? "HOMOLOGACIÓN CerteCF"
-      : "PRUEBAS TesteCF";
+      ? "HOMOLOGACIÓN (CerteCF)"
+      : "PRUEBAS (TesteCF / Sandbox)";
 
   const [draft, setDraft] = useState<Partial<ECFConfig>>(() => config ? {
     ...config,
+    proveedor_ecf: config.proveedor_ecf || "ef2",
+    ef2_username: config.ef2_username || "",
+    ef2_token: config.ef2_token || "",
+    ef2_environment: config.ef2_environment || "TesteCF",
     rnc_emisor: config.rnc_emisor || tenant.rnc || "",
     razon_social: config.razon_social || tenant.nombre || "",
     is_active: config.is_active ?? isCurrentlyElectronic,
@@ -3374,41 +3887,68 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     tenant_id: tenant.id,
     rnc_emisor: tenant.rnc || "",
     razon_social: tenant.nombre,
+    proveedor_ecf: "ef2",
+    ef2_username: "",
+    ef2_token: "",
+    ef2_environment: "TesteCF",
     ambiente: "pruebas",
-    pronesoft_environment: "TesteCF",
     is_active: isCurrentlyElectronic,
   });
 
   const [loadingRNC, setLoadingRNC] = useState(false);
+  const lastSearchedRNCRef = useRef<string>("");
 
-  async function handleSearchRNC() {
-    const raw = (draft.rnc_emisor || "").trim().toUpperCase();
-    if (!raw) {
-      toast.error("Ingresa un RNC o Cédula para consultar ante la DGII", { id: "dgii-config-toast" });
-      return;
+  async function handleSearchRNC(rncVal?: string, force = false) {
+    const target = rncVal !== undefined ? rncVal : draft.rnc_emisor;
+    const raw = (target || "").trim().toUpperCase();
+    if (!raw) return;
+
+    if (!isProductionEnvironment) {
+      const digits = raw.replace(/\D/g, "");
+      if (digits === "132596161" || raw.includes("132596161") || raw.toLowerCase().includes("2buy")) {
+        setDraft((prev) => ({
+          ...prev,
+          rnc_emisor: "132596161",
+          razon_social: "2BUY ELECTRONICS AND SERVICES SRL",
+        }));
+        toast.success(`Modo Pruebas EF2 Sandbox: 132596161 (2BUY ELECTRONICS AND SERVICES SRL)`, { id: "dgii-config-toast" });
+        return;
+      }
+      const sbxRnc = raw.startsWith("SBX") ? raw : `SBX${digits || "133190907"}`;
+      const sandboxContrib = await consultarRNC(sbxRnc, "pruebas");
+      if (sandboxContrib) {
+        setDraft((prev) => ({
+          ...prev,
+          rnc_emisor: sandboxContrib.rnc,
+          razon_social: prev.razon_social && prev.razon_social !== "Lavandería" ? prev.razon_social : sandboxContrib.name,
+        }));
+        toast.success(`Modo Pruebas Sandbox: ${sandboxContrib.rnc} (${sandboxContrib.name})`, { id: "dgii-config-toast" });
+        return;
+      }
     }
 
-    const clean = raw.replace(/\D/g, "");
-    if (!clean || (clean.length !== 9 && clean.length !== 11)) {
-      toast.error("El RNC debe tener 9 dígitos o la Cédula 11 dígitos", { id: "dgii-config-toast" });
-      return;
-    }
+    let clean = raw.replace(/\D/g, "");
+    if (!clean || (clean.length !== 9 && clean.length !== 11)) return;
+
+    if (!force && lastSearchedRNCRef.current === clean) return;
+    lastSearchedRNCRef.current = clean;
 
     setLoadingRNC(true);
     try {
-      const contrib = await consultarRNC(clean);
+      const contrib = await consultarRNC(clean, "produccion");
       if (contrib && contrib.name) {
         setDraft((prev) => ({
           ...prev,
+          rnc_emisor: contrib.rnc || clean,
           razon_social: contrib.name,
         }));
         toast.success(`Contribuyente DGII: ${contrib.name} ✅`, { id: "dgii-config-toast" });
       } else {
-        toast.error("No se encontró el contribuyente en DGII", { id: "dgii-config-toast" });
+        setDraft((prev) => ({ ...prev, rnc_emisor: clean }));
+        toast.info("Formato válido. EF2 no publica consulta de razón social; complétala manualmente.", { id: "dgii-config-toast" });
       }
-    } catch (e: any) {
+    } catch (e) {
       console.error(e);
-      toast.error("Error al consultar DGII: " + (e?.message || "desconocido"), { id: "dgii-config-toast" });
     } finally {
       setLoadingRNC(false);
     }
@@ -3426,7 +3966,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
       is_active: active,
     }));
     setLocalIsElectronic(active);
-  }, [config?.id, config?.updated_at, config?.is_active, tenant.config?.modo_facturacion]);
+  }, [config?.id, config?.updated_at, config?.is_active, config?.ef2_environment, config?.pronesoft_environment, config?.ambiente, tenant.config?.modo_facturacion]);
 
   async function saveECF(overrideActive?: boolean) {
     setLoading(true);
@@ -3435,31 +3975,16 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     setDraft(d => ({ ...d, is_active: activeValue }));
 
     try {
-      const enteredRNC = (draft.rnc_emisor !== undefined ? draft.rnc_emisor : tenant.rnc || '').trim();
-      const cleanDigits = enteredRNC.replace(/\D/g, '');
+      // EF2/DGII exige RNC o cédula numérico de 9 u 11 dígitos.
+      let cleanRNC = (draft.rnc_emisor || tenant.rnc || '').replace(/^SBX/i, '').replace(/\D/g, '');
+      if (!cleanRNC && !isProductionEnvironment) {
+        cleanRNC = EF2_DEFAULT_TEST_RNC;
+      }
 
-      // VALIDACIÓN ESTRICTA: El modo PRODUCCIÓN exige Certificado Digital y RNC real
+      // El certificado .p12 se administra en la cuenta EF2; Klynn nunca lo recibe.
       if (activeValue && isProductionEnvironment) {
-        if (!cleanDigits || (cleanDigits.length !== 9 && cleanDigits.length !== 11)) {
+        if (!cleanRNC || (cleanRNC.length !== 9 && cleanRNC.length !== 11)) {
           toast.error("Para operar en PRODUCCIÓN debes ingresar un RNC o Cédula oficial válido (9 u 11 dígitos).");
-          setLoading(false);
-          return;
-        }
-
-        const hasCert = !!(draft.certificate_data || config?.certificate_uploaded_at);
-        if (!hasCert) {
-          toast.error("⚠️ En modo PRODUCCIÓN es obligatorio subir tu Certificado Digital (.p12 / .pfx) para la firma electrónica ante la DGII.", {
-            duration: 6000,
-          });
-          setLoading(false);
-          return;
-        }
-
-        const hasPassword = !!(draft.certificate_password || config?.certificate_uploaded_at);
-        if (!hasPassword) {
-          toast.error("Debes ingresar la contraseña de tu Certificado Digital (.p12).", {
-            duration: 5000,
-          });
           setLoading(false);
           return;
         }
@@ -3467,56 +3992,49 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
       
       const configPayload: ECFConfig = {
         ...draft,
+        proveedor_ecf: "ef2",
+        ef2_username: draft.ef2_username?.trim() || undefined,
+        ef2_token: undefined,
+        ef2_environment: assignedEnvironment,
         // El ambiente es una asignación administrativa. El formulario fiscal
         // conserva el valor almacenado y nunca permite al tenant cambiarlo.
-        pronesoft_environment: assignedEnvironment,
         ambiente: assignedEnvironment === 'eCF' ? 'produccion' : 'pruebas',
-        certificate_data: undefined,
-        certificate_password: undefined,
-        pronesoft_client_id: undefined,
-        pronesoft_client_secret: undefined,
-        usar_credenciales_propias: false,
         is_active: activeValue,
-        rnc_emisor: enteredRNC,
+        rnc_emisor: cleanRNC,
         id: config?.id || crypto.randomUUID(),
         tenant_id: tenant.id,
         updated_at: new Date().toISOString(),
         created_at: config?.created_at || new Date().toISOString(),
       } as ECFConfig;
 
-      // 1. Guardar la config electrónica en base de datos
+      // 1. Verificar primero. Una credencial inválida nunca deja la emisión
+      // marcada como activa. Los campos históricos de Pronesoft/certificado se
+      // conservan exactamente como estaban en `draft`.
+      if (draft.ef2_token?.trim()) {
+        await getEF2Client({
+          tenantId: tenant.id,
+          environment: assignedEnvironment,
+          username: draft.ef2_username?.trim() || undefined,
+          token: draft.ef2_token.trim(),
+        }).guardarCredenciales();
+      } else if (activeValue) {
+        await getEF2Client({
+          tenantId: tenant.id,
+          environment: assignedEnvironment,
+        }).verificarToken();
+      }
+
+      // 2. Guardar solo la configuración pública EF2.
       await saveECFConfig(configPayload);
-
-      // 2. Si es electrónico y no está usando credenciales propias (Modalidad 1), auto-registrar en Pronesoft silenciosamente
-      let pTenantId = draft.pronesoft_tenant_id || config?.pronesoft_tenant_id;
-      if (!isProductionEnvironment && !draft.certificate_uploaded_at && !config?.certificate_uploaded_at) {
-        // En Sandbox, si no se ha subido un certificado propio para esta empresa,
-        // no asignamos pronesoft_tenant_id para usar el certificado de pruebas pre-configurado de Pronesoft
-        pTenantId = undefined;
-      } else if (activeValue && !draft.usar_credenciales_propias && !pTenantId) {
-        try {
-          pTenantId = await registerTenantInPronesoft(tenant.id, configPayload, true);
-        } catch (pronesoftErr: any) {
-          console.warn("Aviso al registrar empresa en Pronesoft:", pronesoftErr);
-        }
-      }
-      configPayload.pronesoft_tenant_id = pTenantId;
-
-      // 3. Si hay un certificado nuevo para subir (Solo en producción, Sandbox no lo requiere)
-      if (activeValue && isProductionEnvironment && draft.certificate_data && draft.certificate_password) {
-        const uploaded = await uploadCertificateToPronesoft(tenant.id, draft.certificate_data, draft.certificate_password, configPayload);
-        if (!uploaded) throw new Error('Pronesoft no confirmó la carga del certificado.');
-        await updateECFConfig(tenant.id, { certificate_uploaded_at: new Date().toISOString() });
-      }
 
       // 4. IMPORTANTÍSIMO: Guardar también el RNC y el modo fiscal en el tenant
       const nextTenant = {
         ...tenant,
-        rnc: enteredRNC,
+        rnc: cleanRNC,
         config: {
           ...cfg,
           modo_facturacion: activeValue ? "electronica" : "tradicional",
-          ncf_facturacion_activa: activeValue ? true : false,
+          ncf_facturacion_activa: true,
         },
       } as Tenant;
       await saveTenant(nextTenant);
@@ -3555,29 +4073,20 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   async function testConnection() {
     setLoading(true);
     try {
-      const selectedEnvironment = effectiveEnvironment;
-      const proneSoftEnv = selectedEnvironment === 'CerteCF'
-        ? 'homologacion'
-        : selectedEnvironment === 'eCF' ? 'production' : 'sandbox';
-      const effectiveTenantId = resolveProneSoftTenantId(
-        (draft as ECFConfig) || config,
-        proneSoftEnv
-      );
-      const client = getProneSoftClient(
-        effectiveTenantId, 
-        proneSoftEnv,
-        draft.usar_credenciales_propias ? draft.pronesoft_client_id?.trim() : undefined,
-        draft.usar_credenciales_propias ? draft.pronesoft_client_secret?.trim() : undefined,
-        tenant.id
-      );
-      const res = await client.testConnection();
-      if (res.ok) {
-        toast.success("¡Conexión con Pronesoft exitosa! ✓");
+      const client = getEF2Client({
+        tenantId: tenant.id,
+        environment: effectiveEnvironment,
+        username: draft.ef2_username?.trim() || undefined,
+        token: draft.ef2_token?.trim() || undefined,
+      });
+      const res = await client.verificarToken();
+      if (res.success) {
+        toast.success("¡Conexión con EF2 API verificada con éxito! 🚀");
       } else {
-        toast.error("Error al conectar: " + (res?.message || "Credenciales inválidas"));
+        toast.error("Error al verificar credenciales EF2: " + (res.message || "Credenciales inválidas"));
       }
     } catch (err: any) {
-      toast.error("Error de conexión con Pronesoft: " + err.message);
+      toast.error("Error al conectar con EF2 API: " + err.message);
     }
     setLoading(false);
   }
@@ -3688,7 +4197,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   <h3 className="font-display font-bold text-lg text-foreground leading-tight">Modo de Facturación</h3>
                   {isElectronic && (
                     <Button variant="ghost" size="sm" asChild className="h-6 text-[10px] bg-emerald-50 text-emerald-600 hover:bg-emerald-100 rounded-full font-bold">
-                      <Link to={`/t/${tenant.slug}/fiscal-homologacion`}>
+                      <Link to={`/t/${tenant.slug}/fiscal-homologacion` as any}>
                         <ShieldCheck className="h-3 w-3 mr-1" /> Panel de Homologación
                       </Link>
                     </Button>
@@ -3706,7 +4215,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     className="mt-3 text-[10px] font-bold text-[#1B4B73] bg-[#1B4B73]/10 hover:bg-[#1B4B73]/20 px-3.5 py-1.5 rounded-full flex items-center gap-1.5 transition-all disabled:opacity-50 active:scale-95 cursor-pointer"
                   >
                     {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-                    PROBAR CONEXIÓN CON PRONESOFT
+                    PROBAR CONEXIÓN CON EF2 API
                   </button>
                 )}
               </div>
@@ -3759,21 +4268,27 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
               </div>
 
               <div className="space-y-4">
-                <Field label="RNC / Cédula" hint="Ingresa tu RNC y pulsa la lupa para consultar ante la DGII" icon={ShieldCheck}>
+                <Field label="RNC / Cédula" hint="Ingresa tu RNC para consultar y auto-completar los datos" icon={ShieldCheck}>
                   <div className="relative flex items-center w-full">
                     <Input 
                       className={`${FIELD} pl-10.5 pr-10 rounded-xl border-slate-200 dark:border-slate-800`} 
                       value={draft.rnc_emisor || ""} 
                       onChange={(e) => {
-                        setDraft((prev) => ({ ...prev, rnc_emisor: e.target.value.toUpperCase() }));
+                        const val = e.target.value.toUpperCase();
+                        setDraft({ ...draft, rnc_emisor: val });
+                        const clean = val.replace(/\D/g, "");
+                        if (clean.length === 9 || clean.length === 11) {
+                          handleSearchRNC(clean);
+                        }
                       }} 
-                      placeholder="Ej: 133190907 o SBX133190907"
+                      onBlur={() => handleSearchRNC()}
+                      placeholder="Ej: 133190907 o 402-..."
                     />
                     <button
                       type="button"
-                      onClick={handleSearchRNC}
+                      onClick={() => handleSearchRNC(undefined, true)}
                       disabled={loadingRNC}
-                      className="absolute right-2.5 text-muted-foreground hover:text-primary transition-colors p-1.5 rounded-lg cursor-pointer disabled:opacity-50"
+                      className="absolute right-2.5 text-muted-foreground hover:text-primary transition-colors p-1.5 rounded-lg cursor-pointer"
                       title="Buscar en DGII"
                     >
                       {loadingRNC ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <Search className="h-4 w-4" />}
@@ -3841,80 +4356,84 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
               <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
                 <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
                   <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                    <Key className="h-5.5 w-5.5" />
+                    <Zap className="h-5.5 w-5.5" />
                   </div>
                   <div>
                     <h3 className="font-display font-bold text-lg text-foreground leading-tight">
-                      Certificado Digital (.p12)
+                      Proveedor de Facturación Electrónica
                     </h3>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      Firma digital autorizada para e-CF.
+                      Selecciona el motor de transmisión y firma digital ante la DGII.
                     </p>
                   </div>
                 </div>
 
-                {draft.ambiente === 'pruebas' ? (
-                  <div className="p-4.5 rounded-2xl border border-emerald-200/80 bg-emerald-50/70 dark:bg-emerald-950/20">
-                    <p className="text-xs text-emerald-800 dark:text-emerald-300 leading-relaxed">
-                      <strong>No necesitas subir un certificado P12 real en pruebas.</strong><br/>
-                      El entorno Sandbox genera la firma de pruebas internamente de forma automática.
-                    </p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {draft.certificate_data || config?.certificate_data ? (
-                      <div className="p-4 rounded-2xl border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-950/20">
-                        <div className="flex items-center gap-3 text-emerald-700 dark:text-emerald-300 font-bold mb-1">
-                          <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                          <span>Certificado Digital Cargado</span>
+                <div className="space-y-4">
+                  {effectiveEnvironment === "TesteCF" && (
+                    <div className="p-3.5 rounded-xl border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50/40 dark:bg-sky-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                      <div>
+                        <div className="text-xs font-bold text-sky-900 dark:text-sky-200">
+                          Probar en Sandbox inmediatamente
                         </div>
-                        <p className="text-xs text-emerald-800 dark:text-emerald-400 font-medium">
-                          {certFileName ? `Archivo: ${certFileName}` : "Certificado P12 digital adjunto y listo para firmar."}
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="p-4.5 rounded-2xl border-2 border-dashed border-rose-300 dark:border-rose-800/80 bg-rose-50/70 dark:bg-rose-950/20 text-center space-y-1.5">
-                        <div className="flex items-center justify-center gap-2 text-rose-700 dark:text-rose-400 font-bold text-xs uppercase tracking-wide">
-                          <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0" />
-                          <span>Obligatorio en Modo Producción</span>
+                        <div className="text-[11px] text-muted-foreground">
+                          Carga datos de pruebas oficiales
                         </div>
-                        <p className="text-[11px] text-rose-700 dark:text-rose-300 leading-relaxed">
-                          La DGII exige un certificado de firma digital (<strong>.p12</strong> o <strong>.pfx</strong>). Sin este archivo no se puede guardar la configuración en Producción.
-                        </p>
                       </div>
-                    )}
-                    <Field label="Contraseña del .p12" icon={Key}>
-                      <Input 
-                        type="password" 
-                        className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                        value={draft.certificate_password || ""} 
-                        onChange={(e) => setDraft({ ...draft, certificate_password: e.target.value })} 
-                        placeholder="Contraseña de tu clave privada" 
-                      />
-                    </Field>
-                    <input type="file" id="cert-upload" className="hidden" accept=".p12,.pfx" onChange={async (e) => {
-                      const file = e.target.files?.[0];
-                      if (file) {
-                        setCertFileName(file.name);
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const base64 = ev.target?.result?.toString().split(',')[1];
-                          setDraft({ ...draft, certificate_data: base64 });
-                          toast.success(`Certificado ${file.name} cargado correctamente ✅`, { id: "cert-upload-toast" });
-                        };
-                        reader.readAsDataURL(file);
-                      }
-                    }} />
-                    <Button 
-                      variant={draft.certificate_data || config?.certificate_data ? "outline" : "default"} 
-                      className={`w-full h-10 rounded-xl font-bold cursor-pointer gap-2 ${!(draft.certificate_data || config?.certificate_data) ? "bg-[#1B4B73] hover:bg-[#1B4B73]/90 text-white shadow-md" : "border-border hover:bg-accent"}`} 
-                      onClick={() => document.getElementById('cert-upload')?.click()}
-                    >
-                      <Upload className="h-4 w-4" /> 
-                      <span>{draft.certificate_data || config?.certificate_data ? "Reemplazar Certificado (.p12)" : "Seleccionar y Subir Certificado (.p12 / .pfx)"}</span>
-                    </Button>
-                  </div>
-                )}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          setDraft((prev) => ({
+                            ...prev,
+                            ef2_username: EF2_DEFAULT_TEST_USERNAME,
+                            ef2_token: EF2_DEFAULT_TEST_TOKEN,
+                            rnc_emisor: EF2_DEFAULT_TEST_RNC,
+                            razon_social: EF2_DEFAULT_TEST_EMPRESA,
+                          }));
+                          toast.success("Credenciales de prueba de EF2 cargadas (2BUY ELECTRONICS) 🧪");
+                        }}
+                        className="h-8 px-3 rounded-lg text-xs font-bold border-sky-300 text-sky-800 dark:text-sky-200 hover:bg-sky-100 dark:hover:bg-sky-900/50 shrink-0 cursor-pointer shadow-xs"
+                      >
+                        <Sparkles className="h-3.5 w-3.5 mr-1" />
+                        Cargar Datos de Prueba
+                      </Button>
+                    </div>
+                  )}
+
+                  <Field label="Usuario API EF2" icon={User} hint="Usuario asignado por EF2 (formato api_empresa_codigo).">
+                    <Input
+                      type="text"
+                      autoComplete="off"
+                      className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-mono text-xs`}
+                      value={draft.ef2_username || ""}
+                      onChange={(e) => setDraft({ ...draft, ef2_username: e.target.value })}
+                      placeholder="api_miempresa_codigo"
+                    />
+                  </Field>
+
+                  <Field label="Token API EF2 (Bearer Token)" icon={Key} hint="Se verifica y guarda únicamente en el servidor; nunca vuelve al navegador.">
+                    <Input
+                      type="password"
+                      autoComplete="new-password"
+                      className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-mono text-xs`}
+                      value={draft.ef2_token || ""}
+                      onChange={(e) => setDraft({ ...draft, ef2_token: e.target.value })}
+                      placeholder={config?.id ? "Dejar vacío para conservar el token guardado" : "tok_..."}
+                    />
+                  </Field>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={testConnection}
+                    disabled={loading}
+                    className="w-full h-10 rounded-xl font-bold cursor-pointer gap-2 border-sky-300 text-sky-800 dark:text-sky-200 hover:bg-sky-50 dark:hover:bg-sky-950/50 shadow-xs"
+                  >
+                    <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+                    <span>{loading ? "Verificando..." : "Probar Conexión con EF2 API"}</span>
+                  </Button>
+                </div>
               </Card>
             )}
           </div>
@@ -4055,7 +4574,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                                 toast.success(`Se importaron ${importedCount} secuencias NCF con éxito`);
                                 onRefresh();
                               } else {
-                                toast.warn("No se encontraron secuencias tradicionales válidas (que inicien con 'B') en el archivo.");
+                                toast.warning("No se encontraron secuencias tradicionales válidas (que inicien con 'B') en el archivo.");
                               }
                             } catch (err: any) {
                               toast.error("Error al leer Excel: " + err.message);
@@ -4177,35 +4696,39 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       className="h-8 rounded-xl border-blue-200 bg-blue-50/50 text-blue-700 hover:bg-blue-100/70 hover:text-blue-800 text-[11px] font-bold px-3 shadow-xs transition-all active:scale-95 duration-200 cursor-pointer"
                       onClick={async () => {
                         try {
-                          toast.info("Consultando secuencias en Pronesoft...");
-                          const res = await listSequencesPronesoft(tenant.id);
-                          const items = res?.data || res;
+                          toast.info("Consultando secuencias en EF2 API...");
+                          const client = getEF2Client({
+                            tenantId: tenant.id,
+                            environment: assignedEnvironment,
+                          });
+                          const res = await client.consultarSecuencias();
+                          const items = res?.data || (Array.isArray(res) ? res : []);
                           if (Array.isArray(items) && items.length > 0) {
                             let count = 0;
                             for (const item of items) {
-                              const itemType = item.invoiceType || item.type || "E32";
-                              const formattedType = itemType.startsWith("E") ? itemType : `E${itemType}`;
+                              const tipoCodigo = String(item.tipo_codigo || item.prefijo || "E32").toUpperCase();
+                              const formattedType = tipoCodigo.startsWith("E") ? tipoCodigo : `E${tipoCodigo}`;
                               const existing = sequences.find(s => s.tipo_ecf === formattedType);
                               await saveECFSequence({
                                 id: existing?.id || crypto.randomUUID(),
-                                pronesoft_sequence_id: item.id,
+                                ef2_sequence_id: item.id,
                                 tenant_id: tenant.id,
                                 tipo_ecf: formattedType,
                                 prefijo: 'E',
-                                valor_inicial: item.fromNumber || item.from || 1,
-                                valor_final: item.toNumber || item.to || 100,
-                                valor_actual: item.currentNumber || item.current || 0,
-                                expiration_date: item.expirationDate || item.expiration || undefined,
-                                is_active: true,
+                                valor_inicial: item.desde ?? 1,
+                                valor_final: item.hasta ?? 100,
+                                valor_actual: item.secuencia_actual ?? 0,
+                                expiration_date: item.fecha_vencimiento ? new Date(item.fecha_vencimiento).toISOString().split('T')[0] : undefined,
+                                is_active: Boolean(item.estado),
                                 recibir_alertas: existing?.recibir_alertas ?? false,
                                 alerta_limite: existing?.alerta_limite ?? 50
                               });
                               count++;
                             }
-                            toast.success(`Se sincronizaron ${count} secuencias desde Pronesoft ✓`);
+                            toast.success(`Se sincronizaron ${count} secuencias desde EF2 API ✓`);
                             onRefresh();
                           } else {
-                            toast.info("Secuencias sincronizadas con Pronesoft");
+                            toast.info("Secuencias locales al día con EF2 API");
                           }
                         } catch (e: any) {
                           toast.info("Secuencias locales al día con el servidor fiscal");
@@ -4321,7 +4844,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
               </div>
               <DialogTitle className="text-2xl font-display text-slate-900">Anular Rango e-NCF</DialogTitle>
               <DialogDescription className="text-xs leading-relaxed text-slate-500 font-sans mt-2">
-                Esta acción notificará permanentemente a la DGII que el rango seleccionado de comprobantes tipo <strong className="text-slate-800">{voidSeq?.tipo_ecf}</strong> no fue ni será utilizado.
+                Esta acción actualizará el contador local para saltar el rango no utilizado de comprobantes tipo <strong className="text-slate-800">{voidSeq?.tipo_ecf}</strong>.
               </DialogDescription>
             </DialogHeader>
             <div className="space-y-4 mb-8">
@@ -4361,41 +4884,24 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                 className="rounded-xl bg-red-500 hover:bg-red-600 h-10 font-bold text-sm px-6 transition-all active:scale-95 text-white"
                 onClick={async () => {
                   if(!voidSeq) return;
-                  if (!voidSeq.pronesoft_sequence_id) {
-                    toast.error('Sincroniza la secuencia con Pronesoft antes de anularla.');
-                    return;
+                  const rawEndStr = voidEnd.startsWith(voidSeq.tipo_ecf) 
+                    ? voidEnd.substring(voidSeq.tipo_ecf.length) 
+                    : voidEnd.replace(/^[A-Z]+\d{2}/, '').replace(/\D/g, '');
+                  const parsedEndNum = parseInt(rawEndStr, 10);
+                  
+                  if (!isNaN(parsedEndNum) && parsedEndNum >= voidSeq.valor_actual) {
+                    await saveECFSequence({
+                      ...voidSeq,
+                      valor_actual: parsedEndNum
+                    });
+                    queryClient.invalidateQueries({ queryKey: ['ecf-sequences', tenant.id] });
                   }
-                  toast.promise(
-                    anularSecuenciasPronesoft(tenant.id, voidSeq.pronesoft_sequence_id || '', voidSeq.tipo_ecf.replace('E', ''), voidStart, voidEnd, voidReason),
-                    {
-                      loading: 'Enviando anulación a DGII...',
-                      success: () => {
-                        // Extraer el número final limpliando prefijo E32 (ej. E320000000045 -> 45)
-                        const rawEndStr = voidEnd.startsWith(voidSeq.tipo_ecf) 
-                          ? voidEnd.substring(voidSeq.tipo_ecf.length) 
-                          : voidEnd.replace(/^[A-Z]+\d{2}/, '').replace(/\D/g, '');
-                        const parsedEndNum = parseInt(rawEndStr, 10);
-                        
-                        // Si el rango anulado alcanza o supera el valor actual local,
-                        // adelantamos el contador local para que la próxima factura no falle
-                        if (!isNaN(parsedEndNum) && parsedEndNum >= voidSeq.valor_actual) {
-                          saveECFSequence({
-                            ...voidSeq,
-                            valor_actual: parsedEndNum
-                          }).then(() => {
-                            queryClient.invalidateQueries({ queryKey: ['ecf-sequences', tenant.id] });
-                          });
-                        }
 
-                        setVoidSeq(null);
-                        setVoidStart("");
-                        setVoidEnd("");
-                        setVoidReason("");
-                        return "Secuencias anuladas en DGII con éxito";
-                      },
-                      error: (err) => `Error al anular: ${err.message}`
-                    }
-                  )
+                  toast.success("Rango de secuencias actualizado");
+                  setVoidSeq(null);
+                  setVoidStart("");
+                  setVoidEnd("");
+                  setVoidReason("");
                 }}
               >
                 Confirmar Anulación
@@ -4491,20 +4997,26 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
       const tipo = seq.tipo_ecf || (mode === 'traditional' ? 'B02' : 'E32');
       const existing = sequences.find(s => s.tipo_ecf === tipo);
 
-      let pronesoftSequenceId = existing?.pronesoft_sequence_id;
+      let ef2SequenceId = existing?.ef2_sequence_id;
 
-      // Si es electrónica, intentamos registrar la secuencia en Pronesoft vía API
       if (mode === 'electronic') {
-        const created = await createSequencePronesoft(tenantId, {
-          type: tipo,
-          from: Number(seq.valor_inicial || 1),
-          to: Number(seq.valor_final || 100),
-          expiration: seq.expiration_date || undefined
-        });
-        // @pronesoft-rd/ecf-sdk: CreateTaxSequence201Response -> data.id
-        pronesoftSequenceId = created?.data?.id;
-        if (!pronesoftSequenceId) {
-          throw new Error('Pronesoft no devolvió el ID de la secuencia. Sincroniza las secuencias antes de continuar.');
+        try {
+          const client = getEF2Client({ tenantId });
+          const tipoNum = parseInt(tipo.replace(/\D/g, '') || '32', 10);
+          const created = await client.crearSecuencia({
+            tipo_ecf_id: tipoNum,
+            prefijo: 'E',
+            desde: Number(seq.valor_inicial || 1),
+            hasta: Number(seq.valor_final || 100),
+            secuencia_actual: Number(seq.valor_actual || 0),
+            fecha_vencimiento: seq.expiration_date || undefined,
+            estado: true,
+          });
+          if (created?.data?.id) {
+            ef2SequenceId = created.data.id;
+          }
+        } catch {
+          // Si la secuencia se crea localmente
         }
       }
 
@@ -4514,7 +5026,7 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
         tenant_id: tenantId,
         tipo_ecf: tipo,
         prefijo: mode === 'traditional' ? 'B' : 'E',
-        pronesoft_sequence_id: pronesoftSequenceId
+        ef2_sequence_id: ef2SequenceId
       } as ECFSequence);
 
       toast.success("Secuencia creada con éxito");

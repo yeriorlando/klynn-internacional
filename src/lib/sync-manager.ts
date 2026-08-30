@@ -1,6 +1,6 @@
 /**
  * Klynn Background Sync Manager
- * Procesa la cola de salida (Outbox) de IndexedDB hacia Supabase y proveedores fiscales (Pronesoft/DGII).
+ * Procesa la cola de salida (Outbox) de IndexedDB hacia Supabase y EF2/DGII.
  */
 
 import { supabase } from "@/lib/supabase";
@@ -663,7 +663,7 @@ class SyncManager {
                 security_code: existingDocument.security_code,
                 document: {
                   ...existingDocument,
-                  id: existingDocument.pronesoft_id || existingDocument.id,
+                  id: existingDocument.provider_document_id || existingDocument.id,
                   track_id: existingDocument.track_id,
                   signature_date: existingDocument.signature_date,
                   legal_status: existingDocument.legal_status,
@@ -679,7 +679,7 @@ class SyncManager {
             result = await emitirECF(
               data,
               cliente ?? null,
-              ecfCfg?.pronesoft_tenant_id,
+              undefined,
               tenant?.config || ({} as any),
               tenant || ({ id: data.tenant_id, slug: "" } as any),
               data.tipo_ecf,
@@ -699,14 +699,12 @@ class SyncManager {
             const legalStatus = String(
               result.legal_status || result.document?.legal_status || "",
             ).toUpperCase();
-            const accepted =
-              legalStatus === "ACCEPTED" || legalStatus === "ACCEPTED_WITH_OBSERVATIONS";
-            const rejected = legalStatus === "REJECTED";
+            const accepted = ["ACCEPTED", "ACCEPTED_WITH_OBSERVATIONS", "ACEPTADO", "PROCESADA"].includes(legalStatus);
+            const rejected = ["REJECTED", "RECHAZADO"].includes(legalStatus);
             const fiscalUpdates = {
               ncf: result.encf,
               tipo_ecf: data.tipo_ecf || "E32",
-              ecf_id:
-                result.document?.track_id || result.document?.pronesoft_id || result.document?.id,
+              ecf_id: result.document?.id || null,
               ecf_qr: accepted
                 ? result.stamp_url || (result.document as any)?.document_stamp_url || null
                 : null,
@@ -746,7 +744,7 @@ class SyncManager {
           }
         }
       } catch (ecfErr) {
-        console.warn("[SyncManager] Aviso en emisión diferida e-CF con Pronesoft:", ecfErr);
+        console.warn("[SyncManager] Aviso en emisión diferida e-CF con EF2:", ecfErr);
         const reconciliationError: any =
           ecfErr instanceof Error
             ? ecfErr

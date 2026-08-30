@@ -43,6 +43,7 @@ import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
 import { Route as TSlugEstanteriaRouteImport } from './routes/t.$slug.estanteria'
 import { Route as TSlugCxcRouteImport } from './routes/t.$slug.cxc'
 import { Route as TSlugConversationsRouteImport } from './routes/t.$slug.conversations'
+import { Route as TSlugControlMarbetesRouteImport } from './routes/t.$slug.control-marbetes'
 import { Route as TSlugConfiguracionRouteImport } from './routes/t.$slug.configuracion'
 import { Route as TSlugClientesRouteImport } from './routes/t.$slug.clientes'
 import { Route as TSlugCatalogoRouteImport } from './routes/t.$slug.catalogo'
@@ -221,6 +222,11 @@ const TSlugConversationsRoute = TSlugConversationsRouteImport.update({
   path: '/conversations',
   getParentRoute: () => TSlugRoute,
 } as any)
+const TSlugControlMarbetesRoute = TSlugControlMarbetesRouteImport.update({
+  id: '/control-marbetes',
+  path: '/control-marbetes',
+  getParentRoute: () => TSlugRoute,
+} as any)
 const TSlugConfiguracionRoute = TSlugConfiguracionRouteImport.update({
   id: '/configuracion',
   path: '/configuracion',
@@ -266,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/catalogo': typeof TSlugCatalogoRoute
   '/t/$slug/clientes': typeof TSlugClientesRoute
   '/t/$slug/configuracion': typeof TSlugConfiguracionRoute
+  '/t/$slug/control-marbetes': typeof TSlugControlMarbetesRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
@@ -305,6 +312,7 @@ export interface FileRoutesByTo {
   '/t/$slug/catalogo': typeof TSlugCatalogoRoute
   '/t/$slug/clientes': typeof TSlugClientesRoute
   '/t/$slug/configuracion': typeof TSlugConfiguracionRoute
+  '/t/$slug/control-marbetes': typeof TSlugControlMarbetesRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
@@ -346,6 +354,7 @@ export interface FileRoutesById {
   '/t/$slug/catalogo': typeof TSlugCatalogoRoute
   '/t/$slug/clientes': typeof TSlugClientesRoute
   '/t/$slug/configuracion': typeof TSlugConfiguracionRoute
+  '/t/$slug/control-marbetes': typeof TSlugControlMarbetesRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
@@ -388,6 +397,7 @@ export interface FileRouteTypes {
     | '/t/$slug/catalogo'
     | '/t/$slug/clientes'
     | '/t/$slug/configuracion'
+    | '/t/$slug/control-marbetes'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
     | '/t/$slug/estanteria'
@@ -427,6 +437,7 @@ export interface FileRouteTypes {
     | '/t/$slug/catalogo'
     | '/t/$slug/clientes'
     | '/t/$slug/configuracion'
+    | '/t/$slug/control-marbetes'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
     | '/t/$slug/estanteria'
@@ -467,6 +478,7 @@ export interface FileRouteTypes {
     | '/t/$slug/catalogo'
     | '/t/$slug/clientes'
     | '/t/$slug/configuracion'
+    | '/t/$slug/control-marbetes'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
     | '/t/$slug/estanteria'
@@ -746,6 +758,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugConversationsRouteImport
       parentRoute: typeof TSlugRoute
     }
+    '/t/$slug/control-marbetes': {
+      id: '/t/$slug/control-marbetes'
+      path: '/control-marbetes'
+      fullPath: '/t/$slug/control-marbetes'
+      preLoaderRoute: typeof TSlugControlMarbetesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
     '/t/$slug/configuracion': {
       id: '/t/$slug/configuracion'
       path: '/configuracion'
@@ -782,6 +801,7 @@ interface TSlugRouteChildren {
   TSlugCatalogoRoute: typeof TSlugCatalogoRoute
   TSlugClientesRoute: typeof TSlugClientesRoute
   TSlugConfiguracionRoute: typeof TSlugConfiguracionRoute
+  TSlugControlMarbetesRoute: typeof TSlugControlMarbetesRoute
   TSlugConversationsRoute: typeof TSlugConversationsRoute
   TSlugCxcRoute: typeof TSlugCxcRoute
   TSlugEstanteriaRoute: typeof TSlugEstanteriaRoute
@@ -804,6 +824,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugCatalogoRoute: TSlugCatalogoRoute,
   TSlugClientesRoute: TSlugClientesRoute,
   TSlugConfiguracionRoute: TSlugConfiguracionRoute,
+  TSlugControlMarbetesRoute: TSlugControlMarbetesRoute,
   TSlugConversationsRoute: TSlugConversationsRoute,
   TSlugCxcRoute: TSlugCxcRoute,
   TSlugEstanteriaRoute: TSlugEstanteriaRoute,

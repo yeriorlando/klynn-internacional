@@ -113,7 +113,7 @@ function ComprobantesPendientesPage() {
   const pendingRemote = useMemo(
     () =>
       documents.filter(
-        (doc: any) => doc.status === "pending" && (doc.track_id || doc.pronesoft_id),
+        (doc: any) => doc.status === "pending" && (doc.track_id || doc.provider_document_id || doc.pronesoft_id),
       ),
     [documents],
   );
@@ -152,7 +152,7 @@ function ComprobantesPendientesPage() {
       await refreshAll();
       if (result.failed > 0)
         toast.error(
-          "Pronesoft no pudo procesar el comprobante. Se conservó en la cola para reintentar.",
+          "EF2 no pudo procesar el comprobante. Se conservó en la cola para reintentar.",
         );
       else toast.success("Sincronización ejecutada. Consulta el estado DGII si quedó registrado.");
     } catch (error: any) {
@@ -199,9 +199,9 @@ function ComprobantesPendientesPage() {
           : updated.status === "rejected"
             ? "rechazado"
             : "pendiente";
-      toast.info(`Pronesoft respondió: ${updated.encf} está ${label}.`);
+      toast.info(`EF2 respondió: ${updated.encf} está ${label}.`);
     } catch (error: any) {
-      toast.error(error?.message || "No se pudo consultar el estado en Pronesoft.");
+      toast.error(error?.message || "No se pudo consultar el estado en EF2.");
     } finally {
       setWorkingId(null);
     }
@@ -223,7 +223,7 @@ function ComprobantesPendientesPage() {
     <div className="space-y-6 pb-12">
       <PageHeader
         title="Comprobantes pendientes"
-        description="Control de pre-facturas offline y documentos registrados que esperan respuesta de Pronesoft/DGII."
+        description="Control de pre-facturas offline y documentos registrados que esperan respuesta de EF2/DGII."
       >
         <div className="flex flex-wrap gap-2">
           <Badge
@@ -280,7 +280,7 @@ function ComprobantesPendientesPage() {
 
       <PendingSection
         title="Pre-facturas guardadas en este dispositivo"
-        description="Todavía no poseen e-NCF, QR, firma ni código de seguridad. Reintentar utiliza la emisión oficial mediante el SDK de Pronesoft."
+        description="Todavía no poseen e-NCF, QR, firma ni código de seguridad. Reintentar utiliza la emisión oficial de EF2."
         emptyText={
           loadingQueue ? "Leyendo cola local..." : "No hay pre-facturas offline pendientes."
         }
@@ -325,8 +325,8 @@ function ComprobantesPendientesPage() {
       </PendingSection>
 
       <PendingSection
-        title="Registrados en Pronesoft"
-        description="Pronesoft ya recibió estos documentos; aquí solo se consulta su estado. Nunca se vuelven a emitir desde este botón."
+        title="Registrados en EF2"
+        description="EF2 ya recibió estos documentos; aquí solo se consulta su estado mediante auditoría. Nunca se vuelven a emitir desde este botón."
         emptyText="No hay documentos esperando respuesta DGII."
       >
         {pendingRemote.map((doc: any) => {
@@ -371,7 +371,7 @@ function ComprobantesPendientesPage() {
             subtitle={order.ncf ? `e-NCF ${order.ncf}` : "No se asignó e-NCF"}
             amount={order.total}
             status={String(order.ecf_status || "ERROR")}
-            error="Revise la configuración fiscal o el diagnóstico de Pronesoft antes de intentar una nueva emisión."
+            error="Revise la configuración fiscal o la auditoría de EF2 antes de intentar una nueva emisión."
           />
         ))}
       </PendingSection>

@@ -85,7 +85,7 @@ import {
   type ECFConfig,
   type ECFDocument,
 } from "@/lib/storage";
-import { getECFConfig, getECFDocuments, registerTenantInPronesoft, isECFReady } from "@/lib/fiscal";
+import { getECFConfig, getECFDocuments, getEF2Client, isECFReady } from "@/lib/fiscal";
 import {
   useCajaAbierta,
   useCajas,
@@ -836,13 +836,14 @@ function FiscalSummary({
   const totalEmitido = docsMes.reduce((s, d) => s + d.monto_total, 0);
   const count = docsMes.length;
 
-  // Lógica de Registro Automatizado
+  // Verificación de la integración EF2 guardada en el servidor.
   async function handleRegister() {
     if (!config) return;
     setLoading(true);
     try {
-      await registerTenantInPronesoft(config.tenant_id);
-      toast.success("¡Registro fiscal completado exitosamente! 🚀");
+      const result = await getEF2Client({ tenantId: config.tenant_id, environment: config.ef2_environment }).verificarToken();
+      if (!result.success) throw new Error(result.message || "EF2 rechazó las credenciales.");
+      toast.success("¡Conexión con EF2 verificada! 🚀");
       onRefresh();
     } catch (err: any) {
       toast.error("Error al registrar: " + (err.message || "Servicio no disponible"));
@@ -934,7 +935,7 @@ function FiscalSummary({
             <div className="rounded-2xl bg-emerald-500/5 p-4 flex items-center gap-3 border border-emerald-500/10">
               <CheckCircle className="h-5 w-5 text-emerald-600 shrink-0" />
               <div className="text-xs text-emerald-800 leading-tight">
-                Tu integración con <span className="font-bold">Pronesoft e-CF</span> está activa y
+                Tu integración con <span className="font-bold">EF2 e-CF</span> está activa y
                 enviando datos correctamente a la DGII.
               </div>
             </div>
@@ -2801,36 +2802,7 @@ function ReporteCuadreThermal({
   montoInicial?: number;
   onBack: () => void;
 }) {
-  // Hook para impresión física directa del cuadre si está configurada
-  useEffect(() => {
-    const printerType = tenant.config?.impresora_tipo || "usb";
-    if (printerType === "bluetooth" || printerType === "serial") {
-      const runPhysicalPrint = async () => {
-        try {
-          const bytes = encodeCuadreEscPos(
-            ordenes,
-            movimientos,
-            tenant,
-            empleadoName,
-            rango,
-            montoInicial,
-          );
-          const success = await printDirectRaw(bytes, tenant.config);
-          if (success) {
-            toast.success("¡Reporte de cuadre impreso en impresora física!");
-          } else {
-            toast.error("No se pudo imprimir en la impresora física.");
-          }
-        } catch (err: any) {
-          console.error(err);
-          toast.error("Error al imprimir físicamente: " + err.message);
-        } finally {
-          onBack();
-        }
-      };
-      runPhysicalPrint();
-    }
-  }, [ordenes, movimientos, tenant, empleadoName, rango, montoInicial, onBack]);
+
 
   const total = ordenes.reduce((s, o) => s + o.total, 0);
   const cashSales = ordenes

@@ -1,13 +1,14 @@
 /**
  * fiscal.ts — Punto de entrada unificado para Facturación Electrónica
  *
- * Usa la API de Pronesoft para emitir eCF sin necesidad de manejar
- * certificados .p12, firmas XML ni conexión directa con la DGII.
- *
- * Pronesoft maneja: firma XML, cola de envío, modo de contingencia.
+ * EF2 es el proveedor activo. El código legado de Pronesoft permanece
+ * exportado para compatibilidad con respaldos, pero no participa en emisión.
  */
 
 export { getProneSoftClient } from "./fiscal/pronesoft-client";
+export { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA } from "./fiscal/ef2-client";
+export type { EF2Client, EF2ProcesarFacturaResponse, EF2SecuenciaRango } from "./fiscal/ef2-client";
+export { ordenToEF2Payload } from "./fiscal/orden-to-ef2";
 export type {
   ECFPayload,
   ECFSubmitResponse,
@@ -23,6 +24,12 @@ export { ordenToECFPayload } from "./fiscal/orden-to-ecf";
 export { getECFConfig, getECFDocuments } from "./storage";
 
 import {
+  getEF2Client,
+  type EF2ProcesarFacturaResponse,
+  type EF2SecuenciaRango,
+} from "./fiscal/ef2-client";
+import { ordenToEF2Payload } from "./fiscal/orden-to-ef2";
+import {
   getProneSoftClient,
   type ECFSubmitResponse,
   type ProneSoftEnvironment,
@@ -30,37 +37,23 @@ import {
 import { ordenToECFPayload } from "./fiscal/orden-to-ecf";
 import {
   getECFConfig,
+  getGlobalConfig,
   getECFDocuments,
+  getECFSequences,
   saveECFDocument,
+  saveECFSequence,
   updateECFConfig,
   saveOrden,
 } from "./storage";
 import { supabase } from "@/lib/supabase";
-import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig } from "./storage";
+import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig, ECFSequence } from "./storage";
 import { toast } from "sonner";
 
-export function getConfiguredPronesoftEnvironment(config?: ECFConfig | null): ProneSoftEnvironment {
+function getConfiguredPronesoftEnvironment(config?: ECFConfig | null): ProneSoftEnvironment {
   if (config?.pronesoft_environment === "CerteCF") return "homologacion";
   if (config?.pronesoft_environment === "eCF" || config?.ambiente === "produccion")
     return "production";
   return "sandbox";
-}
-
-export function resolveProneSoftTenantId(
-  config?: ECFConfig | null,
-  env?: ProneSoftEnvironment,
-): string | undefined {
-  if (!config) return undefined;
-  if (config.usar_credenciales_propias) return undefined;
-
-  const targetEnv = env || getConfiguredPronesoftEnvironment(config);
-  // En Sandbox / Homologación (TesteCF / CerteCF), si la empresa asociada no tiene su propio
-  // certificado digital cargado (.p12), NO se debe enviar x-tenant-id para que Pronesoft use
-  // el certificado pre-cargado de la Empresa Principal de Sandbox (133190907).
-  if (targetEnv !== "production" && !config.certificate_uploaded_at) {
-    return undefined;
-  }
-  return config.pronesoft_tenant_id || undefined;
 }
 
 // ─── Función principal: Emitir un eCF para una orden ─────────────────────────
@@ -92,39 +85,179 @@ export async function emitirECF(
   config: TenantConfig,
   tenant: Tenant,
   tipoECF?: string,
-  reference?: { ncf: string; date: string; code: string },
+  reference?: { ncf: string; date: string; code: string; reason?: string },
 ): Promise<EmitirECFResult> {
-  // 1. Construir payload
-  const payload = ordenToECFPayload(orden, cliente, config, tipoECF, reference);
-
-  // 2. Obtener cliente Pronesoft (usa VITE_PRONESOFT_ENV del .env para determinar sandbox/production)
-  let customClientId: string | undefined = undefined;
-  let customClientSecret: string | undefined = undefined;
-  let ecfConf: any = null;
+  // 1. Obtener configuración fiscal del tenant y política global de /admin
+  let ecfConf: ECFConfig | null = null;
+  let globalConf: any = null;
+  let localSequences: ECFSequence[] = [];
   try {
-    ecfConf = await getECFConfig(tenant.id);
-    if (ecfConf?.usar_credenciales_propias) {
-      customClientId = ecfConf.pronesoft_client_id;
-      customClientSecret = ecfConf.pronesoft_client_secret;
-    }
+    // Estas lecturas son independientes. Ejecutarlas juntas evita sumar tres
+    // viajes a Supabase antes de comenzar la emisión fiscal.
+    [ecfConf, globalConf, localSequences] = await Promise.all([
+      getECFConfig(tenant.id),
+      getGlobalConfig(),
+      getECFSequences(tenant.id).catch(() => []),
+    ]);
   } catch (e) {
-    console.error("Error al buscar ECFConfig del tenant:", e);
+    console.error("Error al buscar la configuración fiscal del tenant:", e);
+  }
+
+  // EF2 es el proveedor único de esta aplicación. Los campos Pronesoft se
+  // conservan en Supabase para otros respaldos, pero nunca deciden el runtime.
+  const proveedor = "ef2" as const;
+
+  // Resolver ambiente efectivo según jerarquía:
+  // 1. Política Global de /admin tiene prioridad si es distinta de 'per_tenant'
+  // 2. Si es 'per_tenant', usa el ambiente individual del tenant
+  const globalPolicy = globalConf?.fiscal_environment_policy || "per_tenant";
+  let targetEnvironment: "TesteCF" | "CerteCF" | "eCF" = "TesteCF";
+  if (globalPolicy !== "per_tenant") {
+    targetEnvironment = globalPolicy as "TesteCF" | "CerteCF" | "eCF";
+  } else {
+    targetEnvironment =
+      ecfConf?.ef2_environment ||
+      ecfConf?.pronesoft_environment ||
+      (ecfConf?.ambiente === "produccion" ? "eCF" : "TesteCF");
+  }
+
+  // =========================================================================
+  // RUTA 1: EMISIÓN CON EF2 API (PROVEEDOR PRINCIPAL)
+  // =========================================================================
+  if (proveedor === "ef2") {
+    const normalizedType = tipoECF?.startsWith("E") ? tipoECF : `E${tipoECF || "32"}`;
+    const sequenceExpiration = localSequences.find(
+      (sequence) => sequence.tipo_ecf === normalizedType && sequence.is_active,
+    )?.expiration_date;
+    const ef2Payload = ordenToEF2Payload(
+      orden,
+      cliente,
+      config,
+      tenant,
+      tipoECF,
+      reference,
+      sequenceExpiration,
+    );
+    const client = getEF2Client({
+      environment: targetEnvironment,
+      tenantId: tenant.id,
+    });
+
+    const response: EF2ProcesarFacturaResponse = await client.procesarFactura(ef2Payload);
+
+    if (!response.success || !response.ncf) {
+      throw new Error(
+        response.message ||
+          response.error ||
+          "No se pudo emitir la factura en EF2. Verifique la secuencia registrada y los datos fiscales.",
+      );
+    }
+
+    const assignedEncf = response.ncf;
+    const tipoDoc = assignedEncf.startsWith("E")
+      ? assignedEncf.substring(0, 3)
+      : tipoECF || "E32";
+
+    const normalizedStatus = String(response.estado || "").toLowerCase();
+    const accepted = /acept|procesad|aprob/.test(normalizedStatus) && !/rechaz/.test(normalizedStatus);
+    const rejected = /rechaz|error/.test(normalizedStatus);
+    const ecfDoc: ECFDocument = {
+      id: crypto.randomUUID(),
+      tenant_id: tenant.id,
+      order_id: orden.id,
+      encf: assignedEncf,
+      tipo_ecf: tipoDoc,
+      rnc_receptor: cliente?.cedula ?? undefined,
+      track_id: response.dgii_info?.track_id || String(response.id_factura || ""),
+      status: accepted ? "accepted" : rejected ? "rejected" : "pending",
+      dgii_response: {
+        ...response.raw,
+        ...response,
+        klynnContext: { provider: "ef2", environment: targetEnvironment },
+      },
+      xml_content: response.xml_cloud_url ?? "",
+      qr_content: response.qr_link || undefined,
+      monto_total: orden.total,
+      monto_itbis: orden.itbis,
+      fecha_emision: new Date().toISOString(),
+      legal_status: accepted ? "ACCEPTED" : rejected ? "REJECTED" : "REGISTERED",
+      pdf_url: response.pdf_cloud_url || undefined,
+      xml_url: response.xml_cloud_url || undefined,
+      document_stamp_url: response.qr_link || undefined,
+      security_code: response.codigo_seguridad || undefined,
+      signature_date: response.fecha_firma || response.dgii_info?.fecha_recepcion || undefined,
+      contingency_mode: false,
+      provider: "ef2",
+      provider_document_id: response.id_factura ? String(response.id_factura) : undefined,
+    } as ECFDocument;
+
+    try {
+      await saveECFDocument(ecfDoc);
+    } catch (saveErr) {
+      console.error("Aviso: no se pudo guardar ECFDocument en Supabase:", saveErr);
+    }
+
+    // EF2 es quien asigna la secuencia autoritativa. Reflejar su contador en
+    // la copia local es mantenimiento secundario y no debe mantener al cajero
+    // esperando después de que EF2 ya devolvió el e-NCF.
+    if (assignedEncf) {
+      void (async () => {
+        const rawNumStr = assignedEncf.substring(tipoDoc.length).replace(/\D/g, "");
+        const numSol = parseInt(rawNumStr, 10);
+        if (!isNaN(numSol) && numSol > 0) {
+          const { data: seq } = await supabase
+            .from("ecf_sequences")
+            .select("*")
+            .eq("tenant_id", tenant.id)
+            .eq("tipo_ecf", tipoDoc)
+            .eq("is_active", true)
+            .maybeSingle();
+
+          if (seq && numSol > (seq.valor_actual || 0) && numSol <= seq.valor_final) {
+            await supabase.from("ecf_sequences").update({ valor_actual: numSol }).eq("id", seq.id);
+          }
+        }
+      })().catch((seqSyncErr) => {
+        console.warn("Aviso al actualizar secuencia local:", seqSyncErr);
+      });
+    }
+
+    // Si procesar_factura no incluye un estado terminal, el reconciliador de
+    // backend consultará auditoria_factura. No repetimos esa llamada durante
+    // el cobro: el e-NCF ya fue emitido y el documento quedó guardado.
+    const finalLegalStatus = String(ecfDoc.legal_status || "REGISTERED").toUpperCase();
+    return {
+      document: ecfDoc,
+      encf: assignedEncf,
+      pdf_url: ecfDoc.pdf_url || response.pdf_cloud_url || "",
+      stamp_url: ecfDoc.document_stamp_url || ecfDoc.qr_content || response.qr_link || "",
+      security_code: ecfDoc.security_code || response.codigo_seguridad || "",
+      contingency_mode: false,
+      legal_status: finalLegalStatus,
+    };
+  }
+
+  // =========================================================================
+  // RUTA 2: EMISIÓN CON PRONESOFT (PROVEEDOR SECUNDARIO / LEGACY)
+  // =========================================================================
+  const payload = ordenToECFPayload(orden, cliente, config, tipoECF, reference);
+  if (ecfConf?.usar_credenciales_propias) {
+    customClientId = ecfConf.pronesoft_client_id;
+    customClientSecret = ecfConf.pronesoft_client_secret;
   }
 
   const targetProneEnv = getConfiguredPronesoftEnvironment(ecfConf);
-  const effectiveProneTenantId = resolveProneSoftTenantId(ecfConf, targetProneEnv) || (targetProneEnv === "production" ? ecfTenantId : undefined);
   const client = getProneSoftClient(
-    effectiveProneTenantId,
+    ecfTenantId,
     targetProneEnv,
     customClientId,
     customClientSecret,
     tenant.id,
   );
 
-  // 3. Enviar a Pronesoft → DGII
   let response: ECFSubmitResponse;
+  const idempotencyKey = `ecf:${tenant.id}:${orden.id}:${tipoECF || payload.invoiceType}`;
   try {
-    const idempotencyKey = `ecf:${tenant.id}:${orden.id}:${tipoECF || payload.invoiceType}`;
     response = await client.submitDocument(payload, idempotencyKey);
   } catch (err: any) {
     const isSandboxEnv =
@@ -259,96 +392,64 @@ export async function emitirECF(
   return {
     document: ecfDoc,
     encf: assignedEncf,
-    pdf_url: response.pdf || undefined,
-    stamp_url: response.documentStampUrl || undefined,
-    security_code: response.securityCode || undefined,
-    contingency_mode: response.contingencyMode,
+    pdf_url: response.pdf || "",
+    stamp_url: response.documentStampUrl || "",
+    security_code: response.securityCode || "",
+    contingency_mode: Boolean(response.contingencyMode),
     legal_status: response.legalStatus || undefined,
   };
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
-/** Consulta Pronesoft y propaga el estado fiscal real a la orden y al documento local. */
+/** Consulta la auditoría autoritativa de EF2 y propaga el estado a Klynn. */
 export async function sincronizarEstadoECF(
   tenantId: string,
   document: ECFDocument,
 ): Promise<ECFDocument> {
   const config = await getECFConfig(tenantId);
-  // El SDK devuelve un id de registro y un trackId. El endpoint /status de
-  // Pronesoft consulta por trackId; el id inicial puede responder "no encontrado".
-  const documentId = document.track_id || document.pronesoft_id;
-  if (!config || !documentId) return document;
-  const emissionContext = (document.dgii_response as any)?.klynnContext;
-  const client = getProneSoftClient(
-    emissionContext?.companyId || config.pronesoft_tenant_id,
-    emissionContext?.environment || getConfiguredPronesoftEnvironment(config),
-    config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-    config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-    tenantId,
-  );
-  let response: any;
-  let authoritativeDocumentId = documentId;
-
-  try {
-    response = await client.getDocumentStatus(documentId);
-  } catch (statusError) {
-    // El ID devuelto por /ecf/submit identifica el registro inicial. En algunas
-    // respuestas asíncronas de Pronesoft el listado de enviados expone luego un
-    // ID definitivo distinto; lo resolvemos por e-NCF sin volver a emitir.
-    let remoteDocument: any = null;
-    for (let page = 1; page <= 10 && !remoteDocument; page += 1) {
-      const listed = await client.listSentDocuments(page, 100);
-      const items = Array.isArray(listed)
-        ? listed
-        : Array.isArray(listed?.data)
-          ? listed.data
-          : Array.isArray(listed?.items)
-            ? listed.items
-            : [];
-      remoteDocument = items.find((item: any) => {
-        const remoteEncf = item?.encf || item?.eNCF || item?.invoiceNumber || item?.documentNumber;
-        return remoteEncf === document.encf;
-      });
-      if (items.length < 100) break;
-    }
-
-    const remoteId = remoteDocument?.id || remoteDocument?.documentId;
-    if (!remoteId) throw statusError;
-    authoritativeDocumentId = remoteId;
-    response = await client.getSentDocument(remoteId);
-  }
-
-  const fiscalStatus =
-    response.legalStatus === "ACCEPTED"
-      ? "ACCEPTED"
-      : response.legalStatus === "ACCEPTED_WITH_OBSERVATIONS"
-        ? "ACCEPTED_WITH_OBSERVATIONS"
-        : response.legalStatus === "REJECTED"
-          ? "REJECTED"
-          : response.status === "ERROR"
-            ? "ERROR"
-            : response.status;
-  const isRejected = fiscalStatus === "REJECTED" || fiscalStatus === "ERROR";
+  if (!config || !document.encf) return document;
+  const client = getEF2Client({ tenantId, environment: config.ef2_environment });
+  const response = await client.consultarAuditoria({
+    encf: document.encf,
+    monto_esperado: document.monto_total,
+    incluir_notas: true,
+  });
+  const item = Array.isArray(response?.data)
+    ? response.data[0]
+    : response?.facturas?.[0] || response?.data || response;
+  const dgii = item?.dgii || {};
+  const documents = item?.documentos || {};
+  const rawStatus = String(
+    dgii.estado || item?.estado_factura || item?.estado || document.legal_status || "",
+  ).toLowerCase();
+  const isRejected = /rechaz|error/.test(rawStatus);
+  const isAccepted = /acept|aprob|procesad/.test(rawStatus) && !isRejected;
+  const fiscalStatus = isRejected ? "REJECTED" : isAccepted ? "ACCEPTED" : "REGISTERED";
+  const providerId = item?.id_factura_ef2 || item?.id_factura || document.provider_document_id;
+  const qr = documents.timbre_qr || documents.qr || documents.qr_link || document.qr_content;
+  const pdf = documents.pdf || documents.pdf_url || document.pdf_url;
+  const xml = documents.xml || documents.xml_url || document.xml_url;
+  const signatureDate =
+    item?.fecha_firma_digital || dgii.fecha_recepcion || document.signature_date;
+  const securityCode = item?.codigo_seguridad || dgii.codigo_seguridad || document.security_code;
   const updated: ECFDocument = {
     ...document,
-    encf: response.encf || document.encf,
-    status: mapStatus(response.status, response.legalStatus),
-    track_id: authoritativeDocumentId,
-    pronesoft_id: authoritativeDocumentId,
-    legal_status: response.legalStatus,
+    status: isRejected ? "rejected" : isAccepted ? "accepted" : "pending",
+    track_id: dgii.track_id || document.track_id,
+    legal_status: fiscalStatus,
+    provider: "ef2",
+    provider_document_id: providerId ? String(providerId) : undefined,
     dgii_response: {
-      ...response,
-      ...(emissionContext ? { klynnContext: emissionContext } : {}),
+      ...item,
+      klynnContext: { provider: "ef2", environment: config.ef2_environment },
     },
-    pdf_url: isRejected ? undefined : response.pdf || document.pdf_url,
-    xml_url: response.xmlUrl || document.xml_url,
-    qr_content: isRejected ? undefined : response.documentStampUrl || document.qr_content,
-    document_stamp_url: isRejected
-      ? undefined
-      : response.documentStampUrl || document.document_stamp_url,
-    security_code: isRejected ? undefined : response.securityCode || document.security_code,
-    signature_date: isRejected ? undefined : response.signatureDate || document.signature_date,
+    pdf_url: isRejected ? undefined : pdf,
+    xml_url: xml,
+    qr_content: isRejected ? undefined : qr,
+    document_stamp_url: isRejected ? undefined : qr,
+    security_code: isRejected ? undefined : securityCode,
+    signature_date: isRejected ? undefined : signatureDate,
   };
   await saveECFDocument(updated);
   if (document.order_id) {
@@ -360,11 +461,11 @@ export async function sincronizarEstadoECF(
     if (order) {
       await saveOrden({
         ...order,
-        ecf_id: authoritativeDocumentId,
+        ecf_id: updated.id,
         ecf_status: fiscalStatus,
-        ecf_qr: isRejected ? null : response.documentStampUrl || order.ecf_qr,
-        ecf_security_code: isRejected ? null : response.securityCode || order.ecf_security_code,
-        ecf_signature_date: isRejected ? null : response.signatureDate || order.ecf_signature_date,
+        ecf_qr: isRejected ? null : qr || order.ecf_qr,
+        ecf_security_code: isRejected ? null : securityCode || order.ecf_security_code,
+        ecf_signature_date: isRejected ? null : signatureDate || order.ecf_signature_date,
         ncf: updated.encf,
       } as Orden);
     }
@@ -382,76 +483,27 @@ export interface DGIIContribuyente {
 }
 
 /**
- * Consulta la información oficial de un RNC/Cédula en el servicio DGII de Pronesoft.
+ * Valida el formato de RNC/cédula. EF2 no publica un endpoint de consulta de
+ * contribuyentes, por lo que Klynn no inventa ni sustituye la razón social.
  */
 export async function consultarRNC(
   rncInput: string,
   ambiente?: "pruebas" | "produccion",
 ): Promise<DGIIContribuyente | null> {
-  const raw = (rncInput || "").trim().toUpperCase();
-  if (raw.startsWith("SBX") || ambiente === "pruebas" || raw === "987654321") {
-    if (raw.includes("987654321") || raw === "987654321" || raw === "SBX987654321") {
-      return { rnc: "SBX987654321", name: "PRONESOFT SANDBOX TEST SRL" };
-    }
-    if (raw.includes("133190907") || raw === "133190907" || raw === "SBX133190907") {
-      return { rnc: "SBX133190907", name: "EMPRESA PRINCIPAL SANDBOX" };
-    }
-    if (raw.includes("111222333") || raw === "111222333" || raw === "SBX111222333") {
-      return { rnc: "SBX111222333", name: "CLIENTE COMPRADOR SANDBOX" };
-    }
-    return { rnc: raw.startsWith("SBX") ? raw : `SBX${raw}`, name: "EMPRESA PRUEBA SANDBOX" };
+  const cleanRnc = String(rncInput || "").replace(/\D/g, "");
+  if (ambiente === "pruebas" && cleanRnc === "132596161") {
+    return { rnc: cleanRnc, name: "2BUY ELECTRONICS AND SERVICES SRL", status: "PRUEBAS EF2" };
   }
-
-  let cleanRnc = raw.replace(/\D/g, "");
-
-  if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) {
-    return null;
-  }
-
-  try {
-    // 1. Intento directo al microservicio público de Pronesoft
-    const res = await fetch(`https://dgii-rnc.pronesoft.com/get/${cleanRnc}`);
-    if (res.ok) {
-      const data = await res.json();
-      if (data && data.name) {
-        return data as DGIIContribuyente;
-      }
-    }
-  } catch {
-    // Si falla directo (ej: CORS en localhost), pasamos silenciosamente al proxy
-  }
-
-  try {
-    // 2. Fallback vía Edge function pronesoft-proxy
-    const { data, error } = await supabase.functions.invoke("pronesoft-proxy", {
-      body: { action: "get-rnc", payload: { rnc: cleanRnc } },
-    });
-    if (!error && data && data.name) {
-      return data as DGIIContribuyente;
-    }
-  } catch (proxyErr) {
-    console.warn("Aviso en consulta RNC vía proxy:", proxyErr);
-  }
-
-  return null;
+  if (cleanRnc.length !== 9 && cleanRnc.length !== 11) return null;
+  return { rnc: cleanRnc, name: "", status: "FORMATO VÁLIDO" };
 }
 
 /**
- * Evalúa si la configuración fiscal está lista para emitir o comunicarse con Pronesoft.
- *
- * - Modalidad 1 (Cuenta Maestra Klynn): En Sandbox está listo si is_active es true; en Producción requiere pronesoft_tenant_id o certificado subido.
- * - Modalidad 2 (Credenciales Propias): Requiere is_active y que existan client_id y client_secret.
+ * EF2 valida el token en la Edge Function al momento de emitir.
  */
 export function isECFReady(config: ECFConfig | null | undefined): boolean {
   if (!config || !config.is_active) return false;
-  if (config.usar_credenciales_propias) {
-    return Boolean(config.pronesoft_client_id?.trim() && config.pronesoft_client_secret?.trim());
-  }
-  const isProd = config.ambiente === "produccion" || config.pronesoft_environment === "eCF";
-  if (!isProd) {
-    return true;
-  }
-  return Boolean(config.pronesoft_tenant_id || config.certificate_uploaded_at);
+  return true;
 }
 
 function mapStatus(
@@ -463,6 +515,104 @@ function mapStatus(
   if (legalStatus === "REJECTED") return "rejected";
   if (status === "ERROR") return "rejected";
   return "pending"; // REGISTERED, TO_SEND, WAITING_RESPONSE
+}
+
+/** Sincroniza la copia de lectura local con los rangos autoritativos de EF2. */
+export async function syncSequencesEF2(tenantId: string): Promise<EF2SecuenciaRango[]> {
+  const config = await getECFConfig(tenantId);
+  const response = await getEF2Client({
+    tenantId,
+    environment: config?.ef2_environment,
+  }).consultarSecuencias();
+  const ranges = Array.isArray(response?.data) ? response.data : [];
+  const local = await getECFSequences(tenantId);
+  for (const range of ranges) {
+    const type = range.prefijo || `E${range.tipo_codigo || "32"}`;
+    const existing = local.find(
+      (sequence) => sequence.ef2_sequence_id === Number(range.id) || sequence.tipo_ecf === type,
+    );
+    await saveECFSequence({
+      id: existing?.id || crypto.randomUUID(),
+      tenant_id: tenantId,
+      tipo_ecf: type,
+      prefijo: "E",
+      valor_inicial: Number(range.desde),
+      valor_final: Number(range.hasta),
+      valor_actual: Number(range.secuencia_actual || 0),
+      expiration_date: range.fecha_vencimiento || undefined,
+      is_active: range.estado === true || range.estado === 1 || String(range.estado) === "1",
+      recibir_alertas: existing?.recibir_alertas ?? false,
+      alerta_limite: existing?.alerta_limite ?? 50,
+      pronesoft_sequence_id: existing?.pronesoft_sequence_id,
+      ef2_sequence_id: Number(range.id),
+      ef2_synced_at: new Date().toISOString(),
+    });
+  }
+  return ranges;
+}
+
+export async function createSequenceEF2(
+  tenantId: string,
+  input: { type: string; from: number; to: number; current?: number; expiration?: string },
+) {
+  const config = await getECFConfig(tenantId);
+  const client = getEF2Client({ tenantId, environment: config?.ef2_environment });
+  const prefijo = input.type.startsWith("E") ? input.type : `E${input.type}`;
+  const types = await client.consultarTiposECF();
+  const typeDefinition = types.data?.find(
+    (item) => item.prefijo === prefijo || item.codigo === prefijo.replace(/^E/, ""),
+  );
+  if (!typeDefinition) throw new Error(`EF2 no devolvió el tipo ${prefijo}.`);
+  const continuity = await client.consultarPrefijo(prefijo);
+  const expectedFrom = Number(continuity?.data?.max_hasta || 0) + 1;
+  if (Number(continuity?.data?.max_hasta || 0) > 0 && Number(input.from) !== expectedFrom) {
+    throw new Error(`El nuevo rango ${prefijo} debe comenzar en ${expectedFrom}.`);
+  }
+  const created = await client.crearSecuencia({
+    tipo_ecf_id: typeDefinition.id,
+    prefijo,
+    desde: Number(input.from),
+    hasta: Number(input.to),
+    secuencia_actual: Number(input.current || 0),
+    fecha_vencimiento: prefijo === "E32" ? undefined : input.expiration,
+    estado: true,
+  });
+  await syncSequencesEF2(tenantId);
+  return created;
+}
+
+export async function updateSequenceEF2(
+  tenantId: string,
+  id: number,
+  updates: { estado?: boolean; secuencia_actual?: number; hasta?: number },
+) {
+  const config = await getECFConfig(tenantId);
+  const result = await getEF2Client({
+    tenantId,
+    environment: config?.ef2_environment,
+  }).actualizarSecuencia({ id, ...updates });
+  await syncSequencesEF2(tenantId);
+  return result;
+}
+
+export async function deleteSequenceEF2(tenantId: string, id: number) {
+  const config = await getECFConfig(tenantId);
+  const client = getEF2Client({ tenantId, environment: config?.ef2_environment });
+  await client.actualizarSecuencia({ id, estado: false });
+  const result = await client.eliminarSecuencia(id);
+  await syncSequencesEF2(tenantId);
+  return result;
+}
+
+export async function getDocumentAuditEF2(
+  tenantId: string,
+  query: { encf?: string; id_factura?: string | number; track_id?: string; monto_esperado?: number },
+) {
+  const config = await getECFConfig(tenantId);
+  return getEF2Client({ tenantId, environment: config?.ef2_environment }).consultarAuditoria({
+    ...query,
+    incluir_notas: true,
+  });
 }
 
 /**
@@ -535,11 +685,10 @@ export async function registerTenantInPronesoft(
   // "NO envíes x-tenant-id cuando actúes como la empresa principal."
   // En Sandbox, 133190907 es la Empresa Principal por defecto de la cuenta.
   if (proneSoftEnv === "sandbox" && (rncToRegister === "133190907" || rncToRegister === "")) {
-    const preservedRncEmisor = (explicitConfig?.rnc_emisor || config.rnc_emisor || tenantData?.rnc || "133190907").trim();
     await updateECFConfig(tenantId, {
-      pronesoft_tenant_id: null,
+      pronesoft_tenant_id: undefined,
       is_active: true,
-      rnc_emisor: preservedRncEmisor,
+      rnc_emisor: "133190907",
       razon_social: companyName,
     });
     return "";
@@ -581,11 +730,10 @@ export async function registerTenantInPronesoft(
     }
 
     // 3. Actualizar configuración en Supabase
-    const preservedRncEmisor = (explicitConfig?.rnc_emisor || config.rnc_emisor || tenantData?.rnc || rncToRegister).trim();
     await updateECFConfig(tenantId, {
       pronesoft_tenant_id: pronesoftTenantId,
       is_active: true,
-      rnc_emisor: preservedRncEmisor,
+      rnc_emisor: rncToRegister,
       razon_social: companyName,
     });
 
@@ -640,7 +788,7 @@ export async function createSequencePronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config?.pronesoft_tenant_id || undefined,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -708,7 +856,7 @@ export async function listAssociatedCompaniesPronesoft(
 export async function listSequencesPronesoft(tenantId: string, params?: any): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config?.pronesoft_tenant_id || undefined,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -725,7 +873,7 @@ export async function getNextNumberPronesoft(tenantId: string, type: string): Pr
     );
   }
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config.pronesoft_tenant_id || undefined,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -748,7 +896,7 @@ export async function anularSecuenciasPronesoft(
   }
 
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config.pronesoft_tenant_id || undefined,
     getConfiguredPronesoftEnvironment(config),
     config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
     config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
@@ -772,7 +920,7 @@ export async function listSentDocumentsPronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config?.pronesoft_tenant_id,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -787,7 +935,7 @@ export async function getSentDocumentDiagnosticsPronesoft(
 ): Promise<{ detail: any; logs: any[] }> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config?.pronesoft_tenant_id,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -806,18 +954,17 @@ export async function listReceivedDocumentsPronesoft(
   pageSize: number = 50,
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
-  const resolvedTenantId = resolveProneSoftTenantId(config);
   const isUUID =
-    resolvedTenantId &&
+    config?.pronesoft_tenant_id &&
     /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-      resolvedTenantId,
+      config.pronesoft_tenant_id,
     );
-  if (!config?.is_active || (getConfiguredPronesoftEnvironment(config) === "production" && !isUUID)) {
+  if (!config?.is_active || !isUUID) {
     return { data: [], total: 0 };
   }
 
   const client = getProneSoftClient(
-    resolvedTenantId,
+    config?.pronesoft_tenant_id,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,
@@ -834,7 +981,7 @@ export async function submitCommercialApprovalPronesoft(
 ): Promise<any> {
   const config = await getECFConfig(tenantId);
   const client = getProneSoftClient(
-    resolveProneSoftTenantId(config),
+    config?.pronesoft_tenant_id,
     getConfiguredPronesoftEnvironment(config),
     config?.usar_credenciales_propias ? config?.pronesoft_client_id : undefined,
     config?.usar_credenciales_propias ? config?.pronesoft_client_secret : undefined,

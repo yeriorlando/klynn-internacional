@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -43,6 +44,8 @@ import {
   formatRD,
   isModuleEnabled,
   getECFDocumentosRecibidos,
+  saveOrden,
+  updateEstadoComercialECF,
   type ECFConfig,
   type Orden
 } from "@/lib/storage";
@@ -53,11 +56,8 @@ import {
   useECFDocuments,
 } from "@/hooks/use-queries";
 import {
-  listSentDocumentsPronesoft,
-  listReceivedDocumentsPronesoft,
-  submitCommercialApprovalPronesoft,
   sincronizarEstadoECF,
-  getSentDocumentDiagnosticsPronesoft,
+  getDocumentAuditEF2,
 } from "@/lib/fiscal";
 
 export const Route = createFileRoute("/t/$slug/fiscal")({
@@ -66,6 +66,7 @@ export const Route = createFileRoute("/t/$slug/fiscal")({
 
 function CentroFiscalPage() {
   const user = useRequireAuth();
+  const queryClient = useQueryClient();
   const tenant = user?.tenant;
   const tenantId = tenant?.id || "";
   const navigate = useNavigate();
@@ -107,145 +108,101 @@ function CentroFiscalPage() {
 
   const ITEMS_PER_PAGE = 10;
 
-  // Cargar e-CF Enviados (Fusionando datos locales de órdenes/ecf_documents con Pronesoft)
+  // Cargar e-CF emitidos por Klynn y reconciliar pendientes con EF2.
   async function loadSentDocuments() {
     if (!tenant || tenant.id === "__loading__") return;
     setLoadingSent(true);
-      try {
-        // 1. Cargar datos locales de Supabase
-        const localOrds = rawOrds;
-        let localEcf = [...rawEcfDocs];
+    try {
+      let localEcf = [...rawEcfDocs];
+      const syncResults = await Promise.allSettled(
+        localEcf
+          .filter((doc: any) => doc.encf && doc.status === 'pending')
+          .slice(0, 25)
+          .map((doc: any) => sincronizarEstadoECF(tenant.id, doc)),
+      );
+      const synchronizedById = new Map<string, any>();
+      for (const result of syncResults) {
+        if (result.status !== 'fulfilled') continue;
+        const previous = localEcf.find((doc: any) => doc.id === result.value.id);
+        if (previous?.status !== result.value.status) {
+          synchronizedById.set(result.value.id, result.value);
+        }
+      }
+      localEcf = localEcf.map((doc: any) => synchronizedById.get(doc.id) || doc);
 
-        // Pronesoft es la autoridad para documentos pendientes. Actualizamos
-        // antes de pintar el centro fiscal para no mostrar como aceptado algo
-        // que sigue en cola o fue rechazado por DGII.
-        const syncResults = await Promise.allSettled(
-          localEcf
-            .filter((doc: any) => doc.track_id && doc.status === 'pending')
-            .slice(0, 25)
-            .map((doc: any) => sincronizarEstadoECF(tenant.id, doc)),
-        );
-        const synchronizedById = new Map<string, any>();
-        syncResults.forEach((result) => {
-          if (result.status === 'fulfilled') synchronizedById.set(result.value.id, result.value);
+      // Un documento que ya fue conciliado en EF2 puede tener una orden que
+      // aún conserva REGISTERED en caché o por una sincronización anterior.
+      // Propagamos el estado autoritativo del documento sin reemitir nada.
+      const ordersById = new Map((rawOrds || []).map((order: any) => [order.id, order]));
+      let reconciledOrderCount = 0;
+      await Promise.all(localEcf.map(async (doc: any) => {
+        const fiscalStatus = doc.status === 'accepted'
+          ? 'ACCEPTED'
+          : doc.status === 'accepted_with_reservations'
+            ? 'ACCEPTED_WITH_OBSERVATIONS'
+            : doc.status === 'rejected'
+              ? 'REJECTED'
+              : null;
+        if (!fiscalStatus) return;
+        const order = (doc.order_id ? ordersById.get(doc.order_id) : undefined)
+          || (rawOrds || []).find((item: any) => item.ncf === doc.encf);
+        if (!order || order.ecf_status === fiscalStatus) return;
+        await saveOrden({
+          ...order,
+          ecf_id: doc.id,
+          ecf_status: fiscalStatus,
+          ncf: doc.encf || order.ncf,
         });
-        localEcf = localEcf.map((doc: any) => synchronizedById.get(doc.id) || doc);
+        reconciledOrderCount += 1;
+      }));
 
-      const fiscalOrds = (localOrds || []).filter((o: any) => o.ncf);
-      const ordersById = new Map<string, any>();
-      const ordersByEcfId = new Map<string, any>();
-      (localOrds || []).forEach((order: any) => {
-        ordersById.set(order.id, order);
-        if (order.ecf_id) ordersByEcfId.set(order.ecf_id, order);
+      if (synchronizedById.size > 0 || reconciledOrderCount > 0) {
+        // sincronizarEstadoECF ya persiste el cambio en ordenes. Invalidar las
+        // queries evita que /ordenes conserve el badge pendiente en memoria.
+        await Promise.all([
+          queryClient.invalidateQueries({ queryKey: ['ecf-documents', tenant.id] }),
+          queryClient.invalidateQueries({ queryKey: ['ordenes', tenant.id] }),
+        ]);
+      }
+      const seenOrders = new Set<string>();
+      const mergedList = localEcf.filter((doc: any) => doc.encf).map((doc: any) => {
+        const order: any = doc.order_id ? ordersById.get(doc.order_id) : undefined;
+        if (order?.id) seenOrders.add(order.id);
+        return {
+          id: doc.id,
+          encf: doc.encf,
+          type: doc.tipo_ecf || doc.encf.substring(0, 3),
+          buyerName: order?.cliente_nombre || 'Cliente General',
+          buyerRnc: doc.rnc_receptor || 'Consumidor Final',
+          totalAmount: doc.monto_total ?? order?.total ?? 0,
+          totalItbis: doc.monto_itbis ?? order?.itbis ?? 0,
+          status: doc.status === 'accepted' ? 'ACCEPTED'
+            : doc.status === 'accepted_with_reservations' ? 'ACCEPTED_WITH_OBSERVATIONS'
+            : doc.status === 'rejected' ? 'REJECTED' : 'REGISTERED',
+          createdAt: doc.fecha_emision || order?.creado_en || new Date().toISOString(),
+          pdfUrl: doc.pdf_url,
+          documentStampUrl: order?.ecf_qr || doc.qr_content,
+          remoteDocumentId: doc.provider_document_id || doc.track_id,
+        };
       });
-      const ecfByRemoteId = new Map<string, any>();
-      const ecfByOrderId = new Map<string, any>();
-      localEcf.forEach((doc: any) => {
-        if (doc.track_id) ecfByRemoteId.set(doc.track_id, doc);
-        if (doc.pronesoft_id) ecfByRemoteId.set(doc.pronesoft_id, doc);
-        if (doc.order_id) ecfByOrderId.set(doc.order_id, doc);
-      });
-
-      // 2. Intentar consultar Pronesoft
-      let proneDocs: any[] = [];
-      try {
-        const res = await listSentDocumentsPronesoft(tenant.id, 1, 100);
-        proneDocs = res?.data || (Array.isArray(res) ? res : []);
-      } catch (err: any) {
-        console.warn("Aviso al cargar e-CF enviados de Pronesoft (usando base local):", err.message);
+      for (const order of (rawOrds || []).filter((item: any) => item.ncf && !seenOrders.has(item.id))) {
+        const orderNcf = String(order.ncf);
+        mergedList.push({
+          id: order.id,
+          encf: orderNcf,
+          type: order.tipo_ecf || orderNcf.substring(0, 3),
+          buyerName: 'Cliente General',
+          buyerRnc: 'Consumidor Final',
+          totalAmount: order.total || 0,
+          totalItbis: order.itbis || 0,
+          status: order.ecf_status || 'REGISTERED',
+          createdAt: order.creado_en,
+          pdfUrl: undefined,
+          documentStampUrl: order.ecf_qr,
+          remoteDocumentId: order.ecf_id,
+        });
       }
-
-      // 3. Fusionar datos para rellenar montos, clientes y enlaces
-      const mergedList: any[] = [];
-      const seenOrderIds = new Set<string>();
-      const seenEcfIds = new Set<string>();
-
-      if (proneDocs.length > 0) {
-        for (const pd of proneDocs) {
-          const encf = pd.encf || pd.eNcf;
-          if (!encf) continue;
-          const remoteId = pd.id || pd.documentId;
-          const linkedEcf: any = remoteId ? ecfByRemoteId.get(remoteId) : undefined;
-          const localOrd: any = linkedEcf?.order_id
-            ? ordersById.get(linkedEcf.order_id)
-            : remoteId ? ordersByEcfId.get(remoteId) : undefined;
-          if (linkedEcf?.id) seenEcfIds.add(linkedEcf.id);
-          if (localOrd?.id) seenOrderIds.add(localOrd.id);
-
-          const localLegalStatus = linkedEcf?.legal_status
-            || (linkedEcf?.status === 'rejected' ? 'REJECTED' : undefined)
-            || (linkedEcf?.status === 'accepted' ? 'ACCEPTED' : undefined)
-            || (linkedEcf?.status === 'accepted_with_reservations' ? 'ACCEPTED_WITH_OBSERVATIONS' : undefined);
-          const remoteStatus = String(localLegalStatus || pd.legalStatus || pd.status || '').toUpperCase();
-          const normalizedStatus = remoteStatus === 'APPROVED' ? 'ACCEPTED'
-            : remoteStatus === 'CONDITIONALLY_APPROVED' ? 'ACCEPTED_WITH_OBSERVATIONS'
-            : remoteStatus || 'REGISTERED';
-          const stampUrl = localOrd?.ecf_qr || linkedEcf?.qr_content || pd.documentStampUrl;
-
-          mergedList.push({
-            id: remoteId || linkedEcf?.id || localOrd?.id,
-            encf: encf,
-            type: pd.documentType || pd.type || encf.substring(0, 3) || 'E32',
-            buyerName: localOrd?.cliente_nombre || pd.buyerName || pd.buyer?.name || 'Cliente General',
-            buyerRnc: localOrd?.cliente_rnc || linkedEcf?.rnc_receptor || pd.buyerRnc || pd.buyer?.taxId || 'Consumidor Final',
-            totalAmount: localOrd?.total ?? linkedEcf?.monto_total ?? pd.totalAmount ?? pd.totals?.totalAmount ?? 0,
-            totalItbis: localOrd?.itbis ?? linkedEcf?.monto_itbis ?? pd.totalItbis ?? pd.totals?.totalITBIS ?? 0,
-            status: normalizedStatus,
-            createdAt: pd.createdAt || pd.receivedAt || localOrd?.creado_en || linkedEcf?.fecha_emision || new Date().toISOString(),
-            pdfUrl: linkedEcf?.pdf_url || pd.fileUrl || pd.pdfUrl || pd.pdf,
-            documentStampUrl: normalizedStatus === 'ACCEPTED' || normalizedStatus === 'ACCEPTED_WITH_OBSERVATIONS' ? stampUrl : undefined,
-            remoteDocumentId: remoteId,
-          });
-        }
-      }
-
-      // 4. Agregar órdenes locales con NCF no listadas por Pronesoft
-      for (const ord of fiscalOrds) {
-        const ordNcf = (ord as any).ncf;
-        if (ordNcf && !seenOrderIds.has(ord.id)) {
-          seenOrderIds.add(ord.id);
-          const localEcf = ecfByOrderId.get(ord.id);
-          if (localEcf?.id) seenEcfIds.add(localEcf.id);
-          mergedList.push({
-            id: localEcf?.id || ord.id,
-            encf: ordNcf,
-            type: ord.tipo_ecf || ordNcf.substring(0, 3) || 'E32',
-            buyerName: (ord as any).cliente_nombre || 'Cliente General',
-            buyerRnc: (ord as any).cliente_rnc || 'Consumidor Final',
-            totalAmount: ord.total || 0,
-            totalItbis: ord.itbis || 0,
-            status: localEcf?.status === 'accepted' ? 'ACCEPTED'
-              : localEcf?.status === 'accepted_with_reservations' ? 'ACCEPTED_WITH_OBSERVATIONS'
-              : localEcf?.status === 'rejected' ? 'REJECTED' : 'REGISTERED',
-            createdAt: ord.creado_en || localEcf?.fecha_emision || new Date().toISOString(),
-            pdfUrl: localEcf?.pdf_url,
-            documentStampUrl: ord.ecf_qr || localEcf?.qr_content,
-          });
-        }
-      }
-
-      // 5. Agregar documentos de ecf_documents no listados
-      for (const doc of localEcf) {
-        if (doc.encf && !seenEcfIds.has(doc.id)) {
-          seenEcfIds.add(doc.id);
-          mergedList.push({
-            id: doc.id,
-            encf: doc.encf,
-            type: doc.tipo_ecf || doc.encf.substring(0, 3) || 'E32',
-            buyerName: 'Cliente General',
-            buyerRnc: doc.rnc_receptor || 'Consumidor Final',
-            totalAmount: doc.monto_total || 0,
-            totalItbis: doc.monto_itbis || 0,
-            status: doc.status === 'accepted' ? 'ACCEPTED' : (doc.status?.toUpperCase() || 'REGISTERED'),
-            createdAt: doc.fecha_emision,
-            pdfUrl: doc.pdf_url,
-            documentStampUrl: doc.qr_content,
-          });
-        }
-      }
-
-      // Ordenar por fecha descendente
-      mergedList.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      mergedList.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
       setSentDocs(mergedList);
     } catch (err: any) {
       console.warn("Aviso al cargar e-CF enviados:", err.message);
@@ -259,36 +216,7 @@ function CentroFiscalPage() {
     if (!tenant || tenant.id === "__loading__") return;
     setLoadingReceived(true);
     try {
-      const localRecv = await getECFDocumentosRecibidos(tenant.id).catch(() => []);
-      let proneDocs: any[] = [];
-      try {
-        const res = await listReceivedDocumentsPronesoft(tenant.id, 1, 100);
-        proneDocs = res?.data || (Array.isArray(res) ? res : []);
-      } catch (err: any) {
-        // silencioso
-      }
-
-      const combined: any[] = [...localRecv];
-      const seen = new Set(localRecv.map((d: any) => d.encf || d.id));
-      for (const pd of proneDocs) {
-        const key = pd.encf || pd.eNcf || pd.id;
-        if (key && !seen.has(key)) {
-          seen.add(key);
-          combined.push({
-            id: pd.id || pd.trackId,
-            encf: pd.encf || pd.eNcf,
-            tipo_ecf: pd.documentType || pd.type || 'E31',
-            rnc_emisor: pd.issuerRnc || pd.sellerRnc || 'N/A',
-            nombre_emisor: pd.issuerName || pd.sellerName || 'Proveedor',
-            monto_total: pd.totalAmount || pd.totals?.totalAmount || 0,
-            monto_itbis: pd.totalItbis || pd.totals?.totalITBIS || 0,
-            estado_comercial: pd.commercialStatus || 'PENDIENTE',
-            pdf_url: pd.pdfUrl || pd.fileUrl || null,
-            creado_en: pd.receivedAt || pd.createdAt || new Date().toISOString(),
-          });
-        }
-      }
-      setReceivedDocs(combined);
+      setReceivedDocs(await getECFDocumentosRecibidos(tenant.id).catch(() => []));
     } catch (err: any) {
       console.warn("Aviso al cargar e-CF recibidos:", err.message);
       setReceivedDocs([]);
@@ -298,15 +226,27 @@ function CentroFiscalPage() {
   }
 
   async function showDocumentDiagnostics(document: any) {
-    if (!tenant || !document?.remoteDocumentId) return;
+    if (!tenant || !document?.encf) return;
     setDiagnosticDoc(document);
     setDiagnosticLogs([]);
     setLoadingDiagnostic(true);
     try {
-      const result = await getSentDocumentDiagnosticsPronesoft(tenant.id, document.remoteDocumentId);
-      setDiagnosticLogs(result.logs);
+      const result = await getDocumentAuditEF2(tenant.id, {
+        encf: document.encf,
+        monto_esperado: document.totalAmount,
+      });
+      const item = Array.isArray(result?.data) ? result.data[0] : result?.facturas?.[0] || result?.data || result;
+      const dgii = item?.dgii || {};
+      setDiagnosticLogs([
+        {
+          id: item?.id_factura_ef2 || document.encf,
+          type: /rechaz|error/i.test(String(dgii.estado || item?.estado_factura || '')) ? 'ERROR' : 'INFO',
+          createdAt: dgii.fecha_recepcion || item?.fecha_emision,
+          message: dgii.mensaje || item?.mensaje_respuesta || `Estado EF2/DGII: ${dgii.estado || item?.estado_factura || 'sin detalle'}`,
+        },
+      ]);
     } catch (error: any) {
-      toast.error(error?.message || 'No se pudo consultar el motivo en Pronesoft.');
+      toast.error(error?.message || 'No se pudo consultar la auditoría en EF2.');
     } finally {
       setLoadingDiagnostic(false);
     }
@@ -317,25 +257,20 @@ function CentroFiscalPage() {
       loadSentDocuments();
       loadReceivedDocuments();
     }
-  }, [tenant?.id]);
+  // Solo repetir la carga automática cuando la colección inicial termina de
+  // llegar. Los cambios de estado se actualizan mediante la invalidación de
+  // queries anterior; depender de los arrays completos causaba un ciclo de
+  // recargas si EF2 aún devolvía un documento pendiente.
+  }, [tenant?.id, rawEcfDocs.length, rawOrds.length]);
 
-  // Enviar aprobación comercial
+  // EF2 no documenta un endpoint de aprobación comercial; se conserva local.
   async function handleSendApproval() {
     if (!tenant || !selectedDocForApproval) return;
     setIsSubmittingApproval(true);
     try {
       const docId = selectedDocForApproval.id || selectedDocForApproval.encf || selectedDocForApproval.documentId;
-      await submitCommercialApprovalPronesoft(
-        tenant.id,
-        docId,
-        approvalStatus,
-        approvalDetails
-      );
-      toast.success(
-        approvalStatus === "ACCEPTED"
-          ? "Aprobación Comercial enviada a la DGII exitosamente 🟢"
-          : "Rechazo Comercial transmitido a la DGII 🔴"
-      );
+      await updateEstadoComercialECF(docId, approvalStatus === 'ACCEPTED' ? 'APROBADO' : 'RECHAZADO', tenant.id);
+      toast.success("Estado comercial guardado localmente. EF2 no publica un endpoint para transmitirlo.");
       setSelectedDocForApproval(null);
       setApprovalDetails("");
       loadReceivedDocuments();
@@ -417,12 +352,12 @@ function CentroFiscalPage() {
             className="h-10 px-5 rounded-xl font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs flex items-center gap-2 transition-all active:scale-95 cursor-pointer text-xs sm:text-sm shrink-0"
           >
             <RefreshCw className={`h-4 w-4 text-[#F0B900] shrink-0 ${loadingSent || loadingReceived ? "animate-spin" : ""}`} />
-            <span>Sincronizar Pronesoft</span>
+            <span>Sincronizar EF2</span>
           </Button>
 
           <Button
             variant="outline"
-            onClick={() => navigate({ to: "/t/$slug/fiscal-pendientes", params: { slug: tenant.slug } })}
+            onClick={() => tenant && navigate({ to: "/t/$slug/fiscal-pendientes", params: { slug: tenant.slug } })}
             className="h-10 px-5 rounded-xl font-bold border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 flex items-center gap-2 text-xs sm:text-sm"
           >
             <Clock className="h-4 w-4" />
@@ -859,7 +794,7 @@ function CentroFiscalPage() {
           <div className="max-h-[55vh] overflow-y-auto space-y-3 py-2">
             {loadingDiagnostic ? (
               <div className="flex items-center justify-center gap-2 py-10 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" /> Consultando logs de Pronesoft...
+                <Loader2 className="h-4 w-4 animate-spin" /> Consultando auditoría de EF2...
               </div>
             ) : diagnosticLogs.length > 0 ? diagnosticLogs.map((log: any) => {
               const cleanMsg = (log.message || 'Sin detalle adicional.')
@@ -873,7 +808,7 @@ function CentroFiscalPage() {
                 </div>
               );
             }) : (
-              <div className="py-8 text-center text-sm text-muted-foreground">Pronesoft no devolvió detalles adicionales.</div>
+              <div className="py-8 text-center text-sm text-muted-foreground">EF2 no devolvió detalles adicionales.</div>
             )}
           </div>
           <DialogFooter>

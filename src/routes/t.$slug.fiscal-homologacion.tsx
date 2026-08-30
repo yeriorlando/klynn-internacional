@@ -7,14 +7,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { 
-  Play, CheckCircle2, XCircle, AlertCircle, Loader2, FileText, 
-  ChevronRight, ArrowLeft, ShieldCheck, Zap, ExternalLink
+  CheckCircle2, XCircle, AlertCircle, Loader2, FileText,
+  ArrowLeft, ShieldCheck, Zap
 } from "lucide-react";
-import { 
-  getECFConfig, getECFSequences, saveECFConfig,
-  type ECFConfig, type ECFSequence, type Tenant
-} from "@/lib/storage";
-import { getProneSoftClient, getConfiguredPronesoftEnvironment, resolveProneSoftTenantId } from "@/lib/fiscal";
+import { getECFConfig, type ECFConfig, type Tenant } from "@/lib/storage";
+import { getEF2Client, EF2_DEFAULT_TEST_EMPRESA, EF2_DEFAULT_TEST_RNC } from "@/lib/fiscal";
 
 export const Route = createFileRoute("/t/$slug/fiscal-homologacion")({ component: HomologacionPage });
 
@@ -40,12 +37,15 @@ const CASOS_INICIALES: CasoPrueba[] = [
   { id: '8', nombre: 'E45 - Gubernamental', descripcion: 'Factura para venta a instituciones del Estado.', tipo_ecf: 'E45', status: 'pending' },
 ];
 
+function fechaEF2(date = new Date()) {
+  return `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`;
+}
+
 function HomologacionPage() {
   const auth = useRequireAuth();
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [config, setConfig] = useState<ECFConfig | null>(null);
   const [casos, setCasos] = useState<CasoPrueba[]>(CASOS_INICIALES);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (auth?.tenant && auth.tenant.id !== '__loading__') {
@@ -61,82 +61,77 @@ function HomologacionPage() {
     
     try {
       const caso = casos.find(c => c.id === casoId)!;
-      const targetProneEnv = getConfiguredPronesoftEnvironment(config);
-      const effectiveProneTenantId = resolveProneSoftTenantId(config, targetProneEnv);
-      const client = getProneSoftClient(
-        effectiveProneTenantId,
-        targetProneEnv,
-        config.usar_credenciales_propias ? config.pronesoft_client_id : undefined,
-        config.usar_credenciales_propias ? config.pronesoft_client_secret : undefined,
-        tenant.id
-      );
-
-      const invoiceType = caso.tipo_ecf.replace('E', '') as any;
-      
-      // Determinar si es exento o gravado
-      const esExento = caso.id === '6' || caso.id === '7';
+      const client = getEF2Client({ tenantId: tenant.id, environment: config.ef2_environment });
+      const invoiceType = caso.tipo_ecf.replace('E', '');
+      const esExento = caso.id === '6' || caso.id === '7' || invoiceType === '33';
       const itbis = esExento ? 0 : 180;
       const total = 1000 + itbis;
+      const baseCase = casos.find(c => c.id === '1');
+      if ((invoiceType === '33' || invoiceType === '34') && !baseCase?.trackId) {
+        throw new Error('Ejecuta primero el caso E31; EF2 exige el e-NCF original para notas de débito y crédito.');
+      }
 
-      // Construir payload según el caso específico
-      let payload: any = {
-        version:      '1.0',
-        invoiceType,
-        issueDate:    new Date().toISOString(),
-        incomeType:   '01',
-        paymentForms: [{ method: '1', amount: total }],
-        items: [{
-          lineNumber:       1,
-          name:             `Prueba Homologación — ${caso.nombre}`,
-          type:             '2',
-          billingIndicator: caso.id === '7' ? '4' : (caso.id === '6' ? '2' : '1'), 
-          quantity:         1,
-          unitPrice:        1000,
-          amount:           1000,
-        }],
-        totals: {
-          taxableAmount: esExento ? 0 : 1000,
-          exemptAmount:  esExento ? 1000 : 0,
-          totalITBIS:    itbis,
-          totalAmount:   total,
+      const encabezado: any = {
+        Version: '1.0',
+        IdDoc: {
+          TipoeCF: invoiceType,
+          TipoIngresos: '01',
+          TipoPago: '1',
+          ...(invoiceType === '32' ? { FechaLimitePago: fechaEF2() } : {}),
+          ...(invoiceType === '34' ? { IndicadorNotaCredito: '0' } : {}),
         },
+        Emisor: {
+          RNCEmisor: tenant.rnc?.replace(/\D/g, '') || EF2_DEFAULT_TEST_RNC,
+          RazonSocialEmisor: tenant.nombre || EF2_DEFAULT_TEST_EMPRESA,
+          NombreComercial: tenant.nombre || EF2_DEFAULT_TEST_EMPRESA,
+          DireccionEmisor: tenant.direccion || 'Santo Domingo, República Dominicana',
+          Municipio: '010100',
+          Provincia: '010000',
+          FechaEmision: fechaEF2(),
+        },
+        Totales: esExento
+          ? { MontoExento: total.toFixed(2), MontoTotal: total.toFixed(2) }
+          : {
+              MontoGravadoTotal: '1000.00', MontoGravadoI1: '1000.00', ITBIS1: '18',
+              TotalITBIS: itbis.toFixed(2), TotalITBIS1: itbis.toFixed(2), MontoTotal: total.toFixed(2),
+            },
       };
-
-      // Datos del Comprador (Requerido para E31, E33, E34, E45)
       if (['31', '33', '34', '45'].includes(invoiceType)) {
-        payload.buyer = { 
-          name: 'Cliente Prueba Homologación S.A.',
-          taxId: '101234567'
+        encabezado.Comprador = {
+          RNCComprador: '101234567',
+          RazonSocialComprador: 'Cliente Prueba Homologación SRL',
+        };
+      }
+      if (invoiceType === '33' || invoiceType === '34') {
+        encabezado.InformacionReferencia = {
+          NCFModificado: baseCase!.trackId,
+          FechaNCFModificado: fechaEF2(),
+          CodigoModificacion: invoiceType === '34' ? '1' : '3',
+          RazonModificacion: caso.descripcion,
         };
       }
 
-      // Información de Referencia para Notas de Crédito/Débito
-      if (invoiceType === '34' || invoiceType === '33') {
-        payload.referenceInfo = {
-          modifiedInvoiceNumber: 'E310000000001',
-          modifiedInvoiceDate:   new Date(),
-          modificationCode:      (invoiceType === '34' ? '1' : '3').replace(/^0/, '')
-        };
-        if (invoiceType === '34') payload.creditNoteIndicator = '0'; // Anulación
-      }
-
-      // Caso E43: Gastos Menores no requiere buyer ni incomeType
-      if (invoiceType === '43') {
-        delete payload.incomeType;
-        payload.items[0].billingIndicator = '4'; // Exento para Gastos Menores
-      }
-
-      const idempotencyKey = `homologacion:${tenant.id}:${casoId}:${Date.now()}`;
-      const response = await client.submitDocument(payload, idempotencyKey);
+      const response = await client.procesarFactura({
+        _klynnOrderId: `homologacion:${tenant.id}:${casoId}:${Date.now()}`,
+        ECF: {
+          Encabezado: encabezado,
+          DetallesItems: { Item: [{
+            NumeroLinea: '1', IndicadorFacturacion: esExento ? '4' : '1',
+            NombreItem: `Prueba EF2 ${caso.tipo_ecf}`, IndicadorBienoServicio: '2',
+            CantidadItem: '1', UnidadMedida: '43', PrecioUnitarioItem: '1000.00', MontoItem: '1000.00',
+          }] },
+        },
+      });
+      if (!response.success || !response.ncf) throw new Error(response.message || response.error || 'EF2 no devolvió un e-NCF.');
       
       setCasos(prev => prev.map(c => c.id === casoId ? { 
         ...c, 
         status:  'success', 
-        trackId: response.encf,
-        pdfUrl:  response.pdf,
+        trackId: response.ncf,
+        pdfUrl: response.pdf_cloud_url,
       } : c));
       
-      toast.success(`Caso ${caso.id} completado — eNCF: ${response.encf}`);
+      toast.success(`Caso ${caso.id} completado — e-NCF: ${response.ncf}`);
     } catch (err: any) {
       setCasos(prev => prev.map(c => c.id === casoId ? { 
         ...c, 
@@ -154,7 +149,7 @@ function HomologacionPage() {
     <div className="max-w-5xl mx-auto pb-20">
       <div className="flex items-center gap-4 mb-6">
         <Button variant="ghost" size="icon" asChild className="rounded-full">
-          <Link to={`/t/${tenant.slug}/configuracion`}>
+          <Link to="/t/$slug/configuracion" params={{ slug: tenant.slug }}>
             <ArrowLeft className="h-5 w-5" />
           </Link>
         </Button>
@@ -169,10 +164,10 @@ function HomologacionPage() {
           <AlertCircle className="h-12 w-12 text-primary mx-auto mb-4 opacity-50" />
           <h3 className="text-xl font-display mb-2">Configuración Requerida</h3>
           <p className="text-sm text-muted-foreground mb-6 max-w-sm mx-auto">
-            Debes configurar tu certificado digital y activar el modo e-CF antes de iniciar las pruebas.
+            Debes guardar un token EF2 válido y activar el modo e-CF antes de iniciar las pruebas. El certificado se administra en tu cuenta EF2.
           </p>
           <Button asChild>
-            <Link to={`/t/${tenant.slug}/configuracion`}>Ir a Configuración</Link>
+            <Link to="/t/$slug/configuracion" params={{ slug: tenant.slug }}>Ir a Configuración</Link>
           </Button>
         </Card>
       )}
@@ -198,6 +193,10 @@ function HomologacionPage() {
               style={{ width: `${(casos.filter(c => c.status === 'success').length / casos.length) * 100}%` }}
             />
           </div>
+        </Card>
+
+        <Card className="p-4 rounded-2xl border-blue-200 bg-blue-50 text-sm text-blue-900">
+          Estas pruebas envían documentos reales al ambiente asignado a tu token EF2. EF2 no publica un ambiente distinto en la URL: la cuenta y el token determinan el proceso de homologación.
         </Card>
 
         {/* Lista de Casos */}

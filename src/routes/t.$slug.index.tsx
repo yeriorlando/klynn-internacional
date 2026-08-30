@@ -203,6 +203,26 @@ function DashboardPage() {
   const hasProcesos = isModuleEnabled(tenant, "procesos", plan);
   const diasSinRetirarConfig = tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5;
 
+  const isTallerEnabled = useMemo(() => {
+    return Boolean(
+      tenant?.config?.ticket_imprimir_taller_auto ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.ticket_imprimir_taller_auto ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.ticket_imprimir_taller_auto
+      ))
+    );
+  }, [tenant?.config?.ticket_imprimir_taller_auto, tenant?.slug, tenantId]);
+
+  const isMarquillasEnabled = useMemo(() => {
+    return Boolean(
+      tenant?.config?.ticket_imprimir_marquillas_auto ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.ticket_imprimir_marquillas_auto ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.ticket_imprimir_marquillas_auto
+      ))
+    );
+  }, [tenant?.config?.ticket_imprimir_marquillas_auto, tenant?.slug, tenantId]);
+
   const ordenesSinRetirar = useMemo(() => {
     return obtenerOrdenesSinRetirar(ordenes, diasSinRetirarConfig);
   }, [ordenes, diasSinRetirarConfig]);
@@ -954,15 +974,16 @@ function DashboardPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex justify-center">
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center">
                         <div className="action-menu-container order-actions action-menu">
                           <button
                             type="button"
                             onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)}
                             className={openMenuId === o.id ? "is-open" : ""}
+                            title="Opciones de la orden"
                           >
-                            <MoreHorizontal />
+                            <MoreVertical />
                           </button>
                           {openMenuId === o.id && (
                             <div
@@ -1067,7 +1088,8 @@ function DashboardPage() {
               cambiarEstado={cambiarEstado}
               setView={setView}
               onPrint={() => setShowPrint(view)}
-              onPrintProduccion={() => setShowPrintProduccion(view)}
+              onPrintProduccion={isTallerEnabled ? () => setShowPrintProduccion(view) : undefined}
+              onPrintMarquillas={isMarquillasEnabled ? () => setShowPrintProduccion(view) : undefined}
               setCobrarOrden={setCobrarOrden}
             />
           )}
@@ -1165,7 +1187,7 @@ function DashboardPage() {
         }}
         setCobrarOrden={setCobrarOrden}
         setShowPrint={setShowPrint}
-        setShowPrintProduccion={setShowPrintProduccion}
+        setShowPrintProduccion={isTallerEnabled ? setShowPrintProduccion : undefined}
       />
 
       {/* Modal Estantería Virtual / Conveyor Ubicación */}

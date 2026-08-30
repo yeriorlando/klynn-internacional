@@ -1,7 +1,7 @@
 import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal, flushSync } from "react-dom";
-import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag, MapPin, Layers } from "lucide-react";
+import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag, MapPin, Layers, Copy } from "lucide-react";
 import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -9,6 +9,7 @@ import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { exportToCsv } from "@/lib/export";
 import { EstadoBadge } from "@/components/klynn/TenantShell";
 import { Ticket } from "@/components/klynn/Ticket";
+import { MarquillasTicket } from "@/components/klynn/MarquillasTicket";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,7 @@ import {
 import { useOrdenes, useClientes, useCajaAbierta, useEmpleados, useServicios, useECFConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSearch, useNavigate } from "@tanstack/react-router";
-import { encodeEscPos, printDirectRaw } from "@/lib/impresora";
+import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
 
 function esParaHoy(fechaStr?: string): boolean {
@@ -113,6 +114,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [codigoCredito, setCodigoCredito] = useState("04");
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [showPrintProduccion, setShowPrintProduccion] = useState<Orden | null>(null);
+  const [showPrintMarquillas, setShowPrintMarquillas] = useState<Orden | null>(null);
   const [pagoRecibidoParaTicket, setPagoRecibidoParaTicket] = useState<number | undefined>(undefined);
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [isPrintingList, setIsPrintingList] = useState(false);
@@ -153,6 +155,26 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     );
   }, [tenant?.config?.usar_ubicacion_ropa, tenant?.slug, tenantId]);
 
+  const isTallerEnabled = useMemo(() => {
+    return Boolean(
+      tenant?.config?.ticket_imprimir_taller_auto ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.ticket_imprimir_taller_auto ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.ticket_imprimir_taller_auto
+      ))
+    );
+  }, [tenant?.config?.ticket_imprimir_taller_auto, tenant?.slug, tenantId]);
+
+  const isMarquillasEnabled = useMemo(() => {
+    return Boolean(
+      tenant?.config?.ticket_imprimir_marquillas_auto ||
+      (typeof window !== "undefined" && (
+        JSON.parse(localStorage.getItem(`klynn_tenant_id_${tenantId}`) || '{}')?.config?.ticket_imprimir_marquillas_auto ||
+        JSON.parse(localStorage.getItem(`klynn_tenant_cache_${tenant?.slug || ''}`) || '{}')?.config?.ticket_imprimir_marquillas_auto
+      ))
+    );
+  }, [tenant?.config?.ticket_imprimir_marquillas_auto, tenant?.slug, tenantId]);
+
   const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: cajaAbierta, isLoading: loadingCaja } = useCajaAbierta(tenantId);
@@ -161,6 +183,20 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: ecfConfig } = useECFConfig(tenantId);
   const { data: ecfSequences = [] } = useECFSequences(tenantId);
   const searchParams = useSearch({ strict: false }) as { view?: string; action?: string; filter?: string };
+
+  const hasPendingFiscalStatus = ordenes.some((order) =>
+    (order.ncf?.startsWith("E") || order.tipo_ecf?.startsWith("E")) &&
+    !/ACEPT|PROCESAD|APROB|RECHAZ|ERROR/i.test(String(order.ecf_status || "")),
+  );
+
+  useEffect(() => {
+    if (!tenantId || tenantId === "__loading__" || !hasPendingFiscalStatus) return;
+    const interval = window.setInterval(() => {
+      void queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+      void queryClient.invalidateQueries({ queryKey: ["ecf-documents", tenantId] });
+    }, 15_000);
+    return () => window.clearInterval(interval);
+  }, [hasPendingFiscalStatus, queryClient, tenantId]);
 
   const hasSecuenciaCredito = ecfSequences.some(
     (s) => s.is_active && (s.tipo_ecf === "E34" || s.tipo_ecf === "34" || s.tipo_ecf === "B04") && (s.valor_actual === undefined || s.valor_actual < s.valor_final)
@@ -1262,6 +1298,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <SelectItem value="sin_retirar">Sin retirar ({`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`})</SelectItem>
           </SelectContent>
         </Select>
+        <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
+          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
+            <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Prioridades</SelectItem>
+            <SelectItem value="urgente">Urgentes</SelectItem>
+            <SelectItem value="estandar">Estándar</SelectItem>
+          </SelectContent>
+        </Select>
+        <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
+          <SelectTrigger className="w-[160px] font-semibold text-xs shrink-0">
+            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todas">Formas de Pago</SelectItem>
+            <SelectItem value="EFECTIVO">Efectivo</SelectItem>
+            <SelectItem value="TARJETA">Tarjeta</SelectItem>
+            <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
+            <SelectItem value="CREDITO">Crédito</SelectItem>
+            <SelectItem value="PAGO_AL_RETIRAR">Pago al retirar</SelectItem>
+            <SelectItem value="MIXTO">Mixto</SelectItem>
+          </SelectContent>
+        </Select>
         {isConveyorEnabled && (
           <Select value={filtroUbicacion} onValueChange={(v: any) => setFiltroUbicacion(v)}>
             <SelectTrigger className="w-[170px] font-semibold text-xs shrink-0">
@@ -1270,7 +1332,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </SelectTrigger>
             <SelectContent className="min-w-[210px]">
               <SelectItem value="todas">Todas las ubicaciones</SelectItem>
-              <SelectItem value="con_ubicacion">Con ubicación asignada</SelectItem>
+              <SelectItem value="con_ubicacion">📍 Con ubicación asignada</SelectItem>
               <SelectItem value="sin_ubicacion">Sin ubicación</SelectItem>
               {zonas.length > 0 && (
                 <>
@@ -1290,32 +1352,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </SelectContent>
           </Select>
         )}
-        <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
-          <SelectTrigger className="w-[160px] font-semibold text-xs shrink-0">
-            <DollarSign className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Formas de Pago</SelectItem>
-            <SelectItem value="EFECTIVO">Efectivo</SelectItem>
-            <SelectItem value="TARJETA">Tarjeta</SelectItem>
-            <SelectItem value="TRANSFERENCIA">Transferencia</SelectItem>
-            <SelectItem value="CREDITO">Crédito</SelectItem>
-            <SelectItem value="PAGO_AL_RETIRAR">Pago al retirar</SelectItem>
-            <SelectItem value="MIXTO">Mixto</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
-          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
-            <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="todas">Prioridades</SelectItem>
-            <SelectItem value="urgente">Urgentes</SelectItem>
-            <SelectItem value="estandar">Estándar</SelectItem>
-          </SelectContent>
-        </Select>
       </Card>
 
       {/* Badge tabs de estado */}
@@ -1387,8 +1423,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <td className="px-4 py-3">
                       {(() => {
                         const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
-                        const isAcceptedECF = isECFOrder && (o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
-                        const isRejectedECF = isECFOrder && (o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
+                        const isAcceptedECF = isECFOrder && (/ACEPT|PROCESAD|APROB/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
+                        const isRejectedECF = isECFOrder && (/RECHAZ|ERROR/i.test(o.ecf_status || "") || o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
                         const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
 
                         return (
@@ -1546,14 +1582,16 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-center">
+                      <div className="flex items-center justify-center">
                         <div className="action-menu-container order-actions action-menu">
                           <button
                             type="button"
                             onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)}
                             className={openMenuId === o.id ? "is-open" : ""}
+                            title="Opciones de la orden"
                           >
-                            <MoreHorizontal />
+                            <MoreVertical />
                           </button>
                           {openMenuId === o.id && (
                             <div 
@@ -1604,12 +1642,23 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 <Printer /> Imprimir Ticket (Cliente)
                               </button>
 
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setShowPrintProduccion(o); }}
-                                className="text-amber-700 dark:text-amber-300 font-semibold"
-                              >
-                                <Tag className="text-amber-600 dark:text-amber-400" /> Imprimir Ticket de Taller
-                              </button>
+                              {isTallerEnabled && (
+                                <button 
+                                  onClick={() => { setOpenMenuId(null); setShowPrintProduccion(o); }}
+                                  className="text-amber-700 dark:text-amber-300 font-semibold"
+                                >
+                                  <Tag className="text-amber-600 dark:text-amber-400" /> Imprimir Ticket de Taller
+                                </button>
+                              )}
+
+                              {isMarquillasEnabled && (
+                                <button 
+                                  onClick={() => { setOpenMenuId(null); setShowPrintMarquillas(o); }}
+                                  className="text-blue-700 dark:text-blue-300 font-semibold"
+                                >
+                                  <Tag className="text-blue-600 dark:text-blue-400" /> Imprimir Marquillas
+                                </button>
+                              )}
 
                               {isConveyorEnabled && o.estado !== "ANULADA" && (
                                 <button
@@ -1620,7 +1669,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                   }}
                                   className="text-amber-700 dark:text-amber-300 font-semibold"
                                 >
-                                  <MapPin className="text-amber-600 dark:text-amber-400" /> {o.ubicacion_ropa ? `Ubicación: ${o.ubicacion_ropa}` : "Asignar Ubicación / Estantería"}
+                                  <MapPin className="text-amber-600 dark:text-amber-400" /> {o.ubicacion_ropa ? `Ubicación: ${o.ubicacion_ropa}` : "Asignar Ubicación"}
                                 </button>
                               )}
                               
@@ -1673,6 +1722,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                             </div>
                           )}
                         </div>
+                      </div>
                     </td>
                   </tr>
                 );
@@ -1761,7 +1811,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               cambiarEstado={cambiarEstado} 
               setView={setView} 
               onPrint={() => setShowPrint(view)}
-              onPrintProduccion={() => setShowPrintProduccion(view)}
+              onPrintProduccion={isTallerEnabled ? () => setShowPrintProduccion(view) : undefined}
+              onPrintMarquillas={isMarquillasEnabled ? () => setShowPrintMarquillas(view) : undefined}
               setCobrarOrden={setCobrarOrden}
               isConveyorEnabled={isConveyorEnabled}
               onEditUbicacion={(ord) => {
@@ -1800,6 +1851,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         />
       )}
 
+      {showPrintMarquillas && (
+        <TicketPrintPortal 
+          orden={showPrintMarquillas} 
+          tenant={tenant} 
+          clientes={clientes}
+          empleados={empleados}
+          esMarquillas={true}
+          onClose={() => {
+            setShowPrintMarquillas(null);
+          }} 
+        />
+      )}
+
       {showDownloadA4 && (
         <FacturaA4PrintPortal
           orden={showDownloadA4}
@@ -1812,34 +1876,85 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       {/* Anular */}
       <Dialog open={!!anular} onOpenChange={(o) => !o && setAnular(null)}>
-        <DialogContent>
+        <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Anular {anular?.numero}</DialogTitle>
+            <DialogTitle className="flex items-center gap-2">
+              <XCircle className="h-5 w-5 text-rose-600" />
+              <span>Anular {anular?.numero}</span>
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4">
+          <div className="space-y-4 py-1">
+            {anular?.ncf ? (
+              <>
+                <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-950 dark:text-amber-200 text-xs flex items-start gap-2.5">
+                  <FileText className="h-4.5 w-4.5 text-amber-600 shrink-0 mt-0.5" />
+                  <div className="space-y-0.5">
+                    <span className="font-bold text-[13px] block">Factura DGII: {anular.ncf}</span>
+                    <p className="text-slate-600 dark:text-slate-300 text-[11.5px] leading-relaxed">
+                      Esta orden tiene un comprobante fiscal emitido. Al anularla se transmitirá automáticamente una <b>Nota de Crédito (E34)</b> a la DGII.
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-foreground mb-1.5 block">Tipo de Modificación (DGII)</label>
+                  <Select value={codigoAnular} onValueChange={setCodigoAnular}>
+                    <SelectTrigger className="w-full h-10 rounded-xl">
+                      <SelectValue placeholder="Seleccione código DGII" />
+                    </SelectTrigger>
+                    <SelectContent align="start" sideOffset={4}>
+                      <SelectItem value="01">01 - Anulación Total</SelectItem>
+                      <SelectItem value="02">02 - Anulación Parcial</SelectItem>
+                      <SelectItem value="03">03 - Descuento o Bonificación</SelectItem>
+                      <SelectItem value="04">04 - Devolución de Mercancía</SelectItem>
+                      <SelectItem value="05">05 - Otros</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </>
+            ) : (
+              <div className="p-3.5 rounded-xl bg-slate-100 dark:bg-slate-800/80 border border-slate-200 dark:border-slate-700/80 text-xs flex items-start gap-2.5">
+                <XCircle className="h-4.5 w-4.5 text-slate-500 dark:text-slate-400 shrink-0 mt-0.5" />
+                <div className="space-y-0.5">
+                  <span className="font-bold text-foreground block text-[13px]">Anulación Interna</span>
+                  <p className="text-muted-foreground text-[11.5px] leading-relaxed">
+                    Esta orden no tiene comprobante fiscal reportado ante la DGII. Se anulará directamente en el sistema.
+                    {anular && anular.pagado > 0 && cajaAbierta && (
+                      <span className="block mt-1.5 font-bold text-amber-700 dark:text-amber-300">
+                        💸 Se registrará un egreso por reembolso de {formatRD(anular.pagado)} en la caja abierta.
+                      </span>
+                    )}
+                  </p>
+                </div>
+              </div>
+            )}
+
             <div>
-              <label className="text-sm font-bold mb-1.5 block">Tipo de Modificación (DGII)</label>
-              <Select value={codigoAnular} onValueChange={setCodigoAnular}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleccione código" />
-                </SelectTrigger>
-                <SelectContent align="start" sideOffset={4}>
-                  <SelectItem value="01">01 - Anulación Total</SelectItem>
-                  <SelectItem value="02">02 - Anulación Parcial</SelectItem>
-                  <SelectItem value="03">03 - Descuento o Bonificación</SelectItem>
-                  <SelectItem value="04">04 - Devolución de Mercancía</SelectItem>
-                  <SelectItem value="05">05 - Otros</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
-              <label className="text-sm font-bold mb-1.5 block">Motivo descriptivo</label>
-              <Input value={motivoAnular} onChange={(e) => setMotivoAnular(e.target.value)} placeholder="Ej: Error en el monto digitado" />
+              <label className="text-xs font-bold text-foreground mb-1.5 block">
+                {anular?.ncf ? "Motivo descriptivo (DGII)" : "Motivo de la anulación"}
+              </label>
+              <Input 
+                value={motivoAnular} 
+                onChange={(e) => setMotivoAnular(e.target.value)} 
+                placeholder={anular?.ncf ? "Ej: Error en el monto digitado" : "Ej: Cliente canceló el servicio"} 
+                className="h-10 rounded-xl"
+              />
+              <span className="text-[11px] text-muted-foreground mt-1 block">Mínimo 5 caracteres para confirmar.</span>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setAnular(null)}>Cancelar</Button>
-            <Button variant="destructive" onClick={anularOrden}>Anular orden</Button>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" className="rounded-xl h-10 font-bold" onClick={() => setAnular(null)}>
+              Cancelar
+            </Button>
+            <Button 
+              variant="destructive" 
+              className="rounded-xl h-10 font-bold gap-2 cursor-pointer shadow-xs active:scale-95 transition-all" 
+              onClick={anularOrden}
+              disabled={motivoAnular.trim().length < 5}
+            >
+              <XCircle className="h-4 w-4" />
+              <span>Anular orden</span>
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -1992,7 +2107,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         setAnular={setAnular}
         setCobrarOrden={setCobrarOrden}
         setShowPrint={setShowPrint}
-        setShowPrintProduccion={setShowPrintProduccion}
+        setShowPrintProduccion={isTallerEnabled ? setShowPrintProduccion : undefined}
         isConveyorEnabled={isConveyorEnabled}
       />
 
@@ -2362,6 +2477,7 @@ export function OrderDetail({
   setView, 
   onPrint, 
   onPrintProduccion,
+  onPrintMarquillas,
   setCobrarOrden,
   onEditUbicacion,
   isConveyorEnabled = false,
@@ -2374,12 +2490,22 @@ export function OrderDetail({
   setView: any; 
   onPrint: () => void; 
   onPrintProduccion?: () => void;
+  onPrintMarquillas?: () => void;
   setCobrarOrden: any;
   onEditUbicacion?: (orden: Orden) => void;
   isConveyorEnabled?: boolean;
 }) {
   const [empleadoView, setEmpleadoView] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
+  const [copied, setCopied] = useState(false);
+
+  const handleCopyOrderNumber = () => {
+    if (!view?.numero) return;
+    navigator.clipboard.writeText(view.numero);
+    setCopied(true);
+    toast.success(`Orden ${view.numero} copiada`);
+    setTimeout(() => setCopied(false), 2000);
+  };
   
   useEffect(() => {
     if (view) {
@@ -2396,9 +2522,33 @@ export function OrderDetail({
   return (
     <>
       <DialogHeader className="mb-4 flex flex-row items-center justify-between space-y-0 pr-8">
-        <DialogTitle className="flex items-center gap-2.5 text-xl font-bold text-slate-800 dark:text-slate-100">
-          <Receipt className="h-5.5 w-5.5 text-primary" />
-          Orden {view.numero}
+        <DialogTitle asChild>
+          <div className="flex items-center">
+            <button
+              type="button"
+              onClick={handleCopyOrderNumber}
+              title="Clic para copiar número de orden"
+              className="group relative inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700/90 text-slate-800 dark:text-slate-100 shadow-xs transition-all duration-150 cursor-pointer active:scale-95 select-none"
+            >
+              <Receipt className="h-4 w-4 text-primary shrink-0" />
+              <span className="font-mono text-xs sm:text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+                Orden {view.numero}
+              </span>
+              {copied ? (
+                <Check className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0 stroke-[2.5]" />
+              ) : (
+                <Copy className="h-3.5 w-3.5 text-slate-400 group-hover:text-primary shrink-0 transition-colors" />
+              )}
+
+              {/* Burbuja flotante emergente "Copiado" */}
+              {copied && (
+                <span className="absolute -top-7.5 left-1/2 -translate-x-1/2 bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 text-[10px] font-bold py-0.5 px-2 rounded-md shadow-md pointer-events-none animate-in fade-in zoom-in-95 duration-150 whitespace-nowrap z-50">
+                  Copiado
+                  <span className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 dark:bg-slate-100 rotate-45" />
+                </span>
+              )}
+            </button>
+          </div>
         </DialogTitle>
 
         <div className="flex items-center gap-2.5">
@@ -2419,6 +2569,17 @@ export function OrderDetail({
             >
               <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
               <span>Ticket Taller</span>
+            </Button>
+          )}
+          {onPrintMarquillas && (
+            <Button 
+              onClick={onPrintMarquillas}
+              variant="outline"
+              className="flex items-center gap-2 h-10 px-4 rounded-xl border border-blue-300 dark:border-blue-700/80 bg-blue-50/80 dark:bg-blue-950/40 hover:bg-blue-100 dark:hover:bg-blue-900/50 text-blue-900 dark:text-blue-200 font-bold text-xs sm:text-sm shadow-xs cursor-pointer active:scale-95 transition-all"
+              title="Imprimir marquillas de prendas con corte automático"
+            >
+              <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+              <span>Marquillas</span>
             </Button>
           )}
         </div>
@@ -2631,7 +2792,8 @@ export function TicketPrintPortal({
   hiddenPreview = false, 
   ocultarUbicacion = false,
   ocultarNotas = false,
-  esProduccion = false
+  esProduccion = false,
+  esMarquillas = false
 }: { 
   orden: Orden; 
   tenant: any; 
@@ -2643,6 +2805,7 @@ export function TicketPrintPortal({
   ocultarUbicacion?: boolean;
   ocultarNotas?: boolean;
   esProduccion?: boolean;
+  esMarquillas?: boolean;
 }) {
   const initialEmp = empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" };
   const initialCli = clientes.find(c => c.id === orden.cliente_id) || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" };
@@ -2652,6 +2815,7 @@ export function TicketPrintPortal({
   const [srvList, setSrvList] = useState<any[]>([]);
   const [ready, setReady] = useState(false);
   const hasPrintedRef = useRef(false);
+  const printRootRef = useRef<HTMLDivElement>(null);
 
   // Async data fetch for extra details
   useEffect(() => {
@@ -2670,64 +2834,116 @@ export function TicketPrintPortal({
     return () => { active = false; };
   }, [orden, tenant.id, clientes, empleados]);
 
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
+
   // Hook para impresión directa instantánea (Modo Kiosk) - SE EJECUTA EXACTAMENTE UNA SOLA VEZ
   useEffect(() => {
     if (!ready || hasPrintedRef.current) return;
     hasPrintedRef.current = true;
 
-    const printerType = tenant.config?.impresora_tipo || "usb";
-    if (printerType === "bluetooth" || printerType === "serial") {
-      const runPhysicalPrint = async () => {
-        try {
-          const bytes = encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion);
-          const success = await printDirectRaw(bytes, tenant.config);
-          if (success) {
-            toast.success("¡Ticket impreso en impresora física!");
-          } else {
-            toast.error("No se pudo imprimir en la impresora física.");
-          }
-        } catch (err: any) {
-          console.error(err);
-          toast.error("Error al imprimir físicamente: " + err.message);
-        } finally {
-          onClose();
+    let closed = false;
+    const safeClose = () => {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener("afterprint", safeClose);
+      onCloseRef.current();
+    };
+
+    const tryPrint = async () => {
+      try {
+        const bytes = esMarquillas
+          ? encodeMarquillasEscPos(orden, tenant, cli, emp)
+          : encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion);
+        const success = await printDirectRaw(bytes, tenant.config);
+        if (success) {
+          toast.success(esMarquillas
+            ? "¡Marquillas impresas con corte automático!"
+            : "¡Ticket impreso en impresora física! 🖨️");
+          safeClose();
+          return;
         }
+      } catch (err: any) {
+        console.error("Direct print failed in OrdenesPage:", err);
+      }
+
+      if (esMarquillas && printRootRef.current) {
+        try {
+          const printed = await printBrowserElementsIndividually(printRootRef.current, ".marquilla-item");
+          if (printed) {
+            safeClose();
+            return;
+          }
+        } catch (err) {
+          console.error("No se pudieron separar las marquillas en trabajos individuales:", err);
+        }
+      }
+
+      // Fallback a diálogo del navegador (window.print)
+      window.addEventListener("afterprint", safeClose, { once: true });
+      const printTimer = setTimeout(() => {
+        try {
+          window.print();
+        } catch (err) {
+          console.error("Error al disparar window.print:", err);
+          safeClose();
+        }
+      }, 200);
+
+      const fallbackTimer = setTimeout(() => {
+        safeClose();
+      }, 7000);
+
+      return () => {
+        clearTimeout(printTimer);
+        clearTimeout(fallbackTimer);
       };
-      runPhysicalPrint();
-    } else {
-      // Disparo automático e instantáneo para impresoras térmicas USB / Sistema (Modo Kiosk)
-      const timer = setTimeout(() => {
-        window.print();
-        onClose();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [ready, emp, cli, srvList, orden, tenant, pagoRecibido, ocultarUbicacion, ocultarNotas, esProduccion, onClose]);
+    };
+
+    void tryPrint();
+
+    return () => {
+      window.removeEventListener("afterprint", safeClose);
+    };
+  }, [ready]);
 
   if (!emp || !cli) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
+    <div ref={printRootRef} className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
       <div className="max-w-md mx-auto p-0 print:p-0 print:max-w-none print:m-0">
-        <Ticket 
-          orden={orden} 
-          tenant={tenant} 
-          empleado={emp} 
-          cliente={cli} 
-          formato={tenant.config?.formato_ticket || "80mm"} 
-          serviciosList={srvList}
-          pagoRecibido={pagoRecibido}
-          ocultarUbicacion={ocultarUbicacion}
-          ocultarNotas={ocultarNotas}
-          esProduccion={esProduccion}
-        />
+        {esMarquillas ? (
+          <MarquillasTicket
+            orden={orden}
+            tenant={tenant}
+            cliente={cli}
+            empleado={emp}
+            formato={tenant.config?.formato_ticket || "80mm"}
+          />
+        ) : (
+          <div className="ticket-page" data-print-job="true" data-print-kind={esProduccion ? "taller" : "cliente"}>
+            <Ticket 
+              orden={orden} 
+              tenant={tenant} 
+              empleado={emp} 
+              cliente={cli} 
+              formato={tenant.config?.formato_ticket || "80mm"} 
+              serviciosList={srvList}
+              pagoRecibido={pagoRecibido}
+              ocultarUbicacion={ocultarUbicacion}
+              ocultarNotas={ocultarNotas}
+              esProduccion={esProduccion}
+            />
+          </div>
+        )}
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
         @media print {
           @page {
-            size: ${tenant.config?.formato_ticket === "57mm" ? "57mm auto" : "80mm auto"};
-            margin: 0;
+            margin: 0 !important;
           }
 
           html,
@@ -2759,6 +2975,41 @@ export function TicketPrintPortal({
             font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};
             line-height: ${tenant.config?.formato_ticket === "57mm" ? "1.2" : "1.3"};
             box-sizing: border-box !important;
+          }
+
+          .marquillas-container {
+            display: block !important;
+            width: 100% !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+          }
+
+          .ticket-page,
+          .marquilla-item {
+            display: block !important;
+            width: 100% !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            margin: 0 !important;
+            padding: 0 !important;
+          }
+
+          .ticket-page:last-child,
+          .marquilla-item:last-child {
+            page-break-after: auto !important;
+            break-after: auto !important;
+          }
+
+          .page-break-divider {
+            display: block !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            height: 0px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            clear: both !important;
           }
 
           .no-print, nav, aside, header, footer, button {
@@ -3331,13 +3582,25 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       let finalEcfSignatureDate: string | undefined = orden.ecf_signature_date;
 
       const fiscalConfig = await getECFConfig(tenant.id);
-      const isElectronic = !!fiscalConfig?.is_active;
+      const isElectronic = !!(
+        fiscalConfig?.is_active ||
+        tenant.config?.modo_facturacion === "electronica"
+      );
 
-      if (tenant.config?.ncf_facturacion_activa && !orden.ncf && nuevoSaldo === 0) {
+      const isFiscalActive = Boolean(
+        isElectronic ||
+        tenant.config?.ncf_facturacion_activa ||
+        tenant.config?.modo_facturacion === "tradicional" ||
+        tenant.config?.modo_facturacion === "electronica"
+      );
+
+      const shouldEmitFiscal = isFiscalActive && !orden.ncf && nuevoSaldo === 0;
+
+      if (shouldEmitFiscal) {
         const isEmpresa = cli.tipo === "Empresa" || (cli.cedula && cli.cedula.length >= 9);
-        const tipoECFDefault = isElectronic 
+        const tipoECFDefault = orden.tipo_ecf || (isElectronic 
           ? (isEmpresa ? "E31" : "E32")
-          : (isEmpresa ? "B01" : "B02");
+          : (isEmpresa ? "B01" : "B02"));
 
         if (!isElectronic) {
           try {
@@ -3346,7 +3609,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             finalNcfVencimiento = expiration_date;
           } catch (seqErr) {
             console.log("No dynamic sequence for traditional NCF, falling back to legacy sequence.");
-            finalNCF = `${tenant.config.ncf_secuencia || 'B02'}${String(tenant.config.ncf_proximo || 1).padStart(8, "0")}`;
+            finalNCF = `${tenant.config?.ncf_secuencia || 'B02'}${String(tenant.config?.ncf_proximo || 1).padStart(8, "0")}`;
           }
         } else if (typeof window !== "undefined" && !navigator.onLine) {
           // ⚠️ Modo Offline: Cobro registrado, Pre-Factura y encolado para timbrado al sincronizar
@@ -3385,23 +3648,23 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               tipoECFDefault
             );
 
-            const legalStatus = String(result.legal_status || result.document.legal_status || '').toUpperCase();
-            const accepted = legalStatus === "ACCEPTED" || legalStatus === "ACCEPTED_WITH_OBSERVATIONS";
-            const rejected = legalStatus === "REJECTED";
+            const legalStatusUpper = String(result.legal_status || result.document?.legal_status || result.document?.status || '').toUpperCase();
+            const accepted = /ACEPT|PROCESAD|APROB/.test(legalStatusUpper) && !/RECHAZ/.test(legalStatusUpper);
+            const rejected = /RECHAZ|ERROR/.test(legalStatusUpper);
             finalNCF = result.encf;
             finalTipoECF = tipoECFDefault;
-            finalEcfStatus = rejected ? "REJECTED" : accepted ? legalStatus : "REGISTERED";
-            finalEcfId = result.document.track_id || result.document.pronesoft_id || result.document.id;
-            finalEcfQr = accepted ? result.stamp_url || result.document.document_stamp_url || '' : undefined;
-            finalEcfSecurityCode = accepted ? result.security_code || '' : undefined;
-            finalEcfSignatureDate = accepted ? result.document.signature_date : undefined;
+            finalEcfStatus = rejected ? "REJECTED" : accepted ? "ACCEPTED" : "REGISTERED";
+            finalEcfId = result.document.id;
+            finalEcfQr = result.stamp_url || (result.document as any)?.document_stamp_url || '';
+            finalEcfSecurityCode = result.security_code || '';
+            finalEcfSignatureDate = (result.document as any)?.signature_date || new Date().toISOString();
 
             if (accepted) {
               toast.success(`✅ Comprobante DGII ${result.encf} aceptado`);
             } else if (rejected) {
-              toast.error(`El e-CF ${result.encf} fue rechazado por DGII/Pronesoft.`);
+              toast.error(`El e-CF ${result.encf} fue rechazado por DGII.`);
             } else {
-              toast.success(`Comprobante ${result.encf} emitido con éxito`);
+              toast.info(`e-CF ${result.encf} emitido. Validación DGII pendiente.`);
             }
           } catch (fErr: any) {
             console.error("Error Fiscal al cobrar:", fErr);

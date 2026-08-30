@@ -481,7 +481,7 @@ function EstanteriaPage() {
   }
 
   return (
-    <div className="p-4 md:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto animate-in fade-in duration-300">
+    <div className="w-full space-y-6 pb-10 animate-in fade-in duration-300">
       {/* HEADER */}
       <PageHeader
         title="Estantería virtual"
@@ -755,7 +755,7 @@ function EstanteriaPage() {
           )}
         </Card>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3.5 sm:gap-4">
           {filteredSlots.map(({ zona, slotName, occupiedBy }) => {
             const isOccupied = !!occupiedBy;
             const client = isOccupied ? clientes.find((c) => c.id === occupiedBy.cliente_id) : null;

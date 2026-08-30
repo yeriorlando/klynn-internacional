@@ -53,6 +53,7 @@ import {
   Minimize2,
   Layers,
   WifiOff,
+  Tag,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -139,6 +140,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
     permission: "nueva-orden",
   },
   { to: `/t/${slug}/ordenes`, label: "Órdenes", icon: ShoppingCart, permission: "ordenes" },
+  { to: `/t/${slug}/control-marbetes`, label: "Control de marbetes", icon: Tag, permission: "control-marbetes" },
   { to: `/t/${slug}/procesos`, label: "Operaciones", icon: Wrench, permission: "procesos" },
   { to: `/t/${slug}/estanteria`, label: "Estantería virtual", icon: Layers, permission: "procesos" },
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
@@ -188,7 +190,12 @@ export function TenantShell() {
 
   const [isFullscreen, setIsFullscreen] = useState(false);
   const isFiscalFullscreen = isFullscreen
-    && (pathname.endsWith("/fiscal") || pathname.endsWith("/fiscal-pendientes"));
+    && (pathname.endsWith("/fiscal")
+        || pathname.endsWith("/fiscal-pendientes")
+        || pathname.endsWith("/control-marbetes")
+        || pathname.endsWith("/ordenes")
+        || pathname.endsWith("/estanteria")
+        || pathname.endsWith("/reportes"));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   const [isOnline, setIsOnline] = useState(true);
@@ -707,6 +714,9 @@ export function TenantShell() {
       } else if (key === "O") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/ordenes` });
+      } else if (key === "M") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/control-marbetes` });
       } else if (key === "P") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/procesos` });
@@ -717,6 +727,9 @@ export function TenantShell() {
       } else if (key === "C") {
         e.preventDefault();
         navigate({ to: `/t/${slug}/caja` });
+      } else if (key === "T") {
+        e.preventDefault();
+        navigate({ to: `/t/${slug}/cxc` });
       }
     };
 
@@ -1108,9 +1121,11 @@ export function TenantShell() {
                 { label: "Ir a POS / Ventas", key: "N" },
                 { label: "Ir a Dashboard", key: "D" },
                 { label: "Ir a Órdenes", key: "O" },
+                { label: "Ir a Marbetes", key: "M" },
                 { label: "Ir a Operaciones", key: "P" },
                 { label: "Ir a Estantería virtual", key: "E" },
                 { label: "Ver/Abrir Caja", key: "C" },
+                { label: "Ir a Cuentas x Cobrar", key: "T" },
                 { label: "Órdenes modal", key: "Z" },
                 { label: "Buscar", key: "Ctrl" },
                 { label: "Cliente", key: "F2" },
@@ -1119,8 +1134,6 @@ export function TenantShell() {
                 { label: "Deshacer", key: "Ctrl+Z" },
                 { label: "Cobrar", key: "Enter" },
                 { label: "Facturar", key: "Espacio" },
-                { label: "Menu atajos", key: "Alt+K" },
-                { label: "Cerrar modal", key: "Esc" },
               ].map(({ label, key }) => (
                 <div
                   key={key}
@@ -1266,7 +1279,11 @@ export function TenantShell() {
             {(pathname.endsWith("/nueva-orden")
               || pathname.endsWith("/procesos")
               || pathname.endsWith("/fiscal")
-              || pathname.endsWith("/fiscal-pendientes")) && (
+              || pathname.endsWith("/fiscal-pendientes")
+              || pathname.endsWith("/control-marbetes")
+              || pathname.endsWith("/ordenes")
+              || pathname.endsWith("/estanteria")
+              || pathname.endsWith("/reportes")) && (
               <button
                 type="button"
                 onClick={toggleFullscreen}
@@ -1791,6 +1808,18 @@ function SidebarContent({
             permission: "ordenes",
             shortcut: "O",
           },
+          ...(tenant?.config?.habilitar_control_marbetes
+            ? [
+                {
+                  id: "control-marbetes",
+                  to: `/t/${slug}/control-marbetes`,
+                  label: "Control de marbetes",
+                  icon: Tag,
+                  permission: "control-marbetes",
+                  shortcut: "M",
+                },
+              ]
+            : []),
           {
             id: "procesos",
             to: `/t/${slug}/procesos`,
@@ -1808,7 +1837,7 @@ function SidebarContent({
             shortcut: "E",
           },
           { id: "caja", to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
-          { id: "cxc", to: `/t/${slug}/cxc`, label: "Cuentas por cobrar", icon: CreditCard, permission: "caja" },
+          { id: "cxc", to: `/t/${slug}/cxc`, label: "Cuentas por cobrar", icon: CreditCard, permission: "caja", shortcut: "T" },
           { id: "gastos", to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
           { id: "logistica", to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
         ],

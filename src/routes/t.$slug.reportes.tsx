@@ -54,7 +54,6 @@ import {
   DialogDescription
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
-import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { Card } from "@/components/ui/card";
 import { 
   isModuleEnabled,
@@ -391,26 +390,8 @@ function ReportesPage() {
     const rncEmisor = ecfConfig?.rnc_emisor || (tenant as any).rnc || "133190907";
 
     try {
-      const pronesoft = getProneSoftClient(
-        ecfConfig?.pronesoft_tenant_id || undefined,
-        ecfConfig?.pronesoft_environment === 'CerteCF'
-          ? 'homologacion'
-          : ecfConfig?.pronesoft_environment === 'eCF' || ecfConfig?.ambiente === 'produccion'
-            ? 'production'
-            : 'sandbox',
-        ecfConfig?.usar_credenciales_propias ? ecfConfig.pronesoft_client_id : undefined,
-        ecfConfig?.usar_credenciales_propias ? ecfConfig.pronesoft_client_secret : undefined,
-        tenant.id
-      );
-
       if (exportType === "606") {
         let textContent = "";
-        try {
-          const res = await pronesoft.export606(period);
-          if (res && res.text) textContent = res.text;
-        } catch (apiErr: any) {
-          console.warn("⚠️ [Pronesoft] Generación vía API restringida por permisos, creando Formato 606 con datos de Klynn:", apiErr?.message);
-        }
 
         if (!textContent) {
           // Generar Formato 606 en TXT según especificación DGII usando datos locales de Klynn
@@ -439,34 +420,9 @@ function ReportesPage() {
         toast.success(`Reporte Formato 606 (${period}) generado correctamente 📄`);
 
       } else {
-        // Exportar Facturas Enviadas (Excel / CSV)
-        let downloadSuccess = false;
-        try {
-          const { base64, type } = await pronesoft.exportSentDocuments(period);
-          if (base64) {
-            const byteCharacters = atob(base64);
-            const byteNumbers = new Array(byteCharacters.length);
-            for (let i = 0; i < byteCharacters.length; i++) {
-              byteNumbers[i] = byteCharacters.charCodeAt(i);
-            }
-            const byteArray = new Uint8Array(byteNumbers);
-            const blob = new Blob([byteArray], { type: type || "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            a.href = url;
-            a.download = `Facturas_Enviadas_${rncEmisor}_${period}.xlsx`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            URL.revokeObjectURL(url);
-            downloadSuccess = true;
-            toast.success(`Reporte de facturas de ${period} generado exitosamente`);
-          }
-        } catch (apiErr: any) {
-          console.warn("⚠️ [Pronesoft] Exportación vía API restringida por permisos, exportando facturas emitidas desde Klynn:", apiErr?.message);
-        }
-
-        if (!downloadSuccess) {
+        // EF2 no documenta endpoints de exportación 606/emitidos. Generamos el
+        // archivo desde los documentos persistidos por Klynn.
+        {
           // Generar reporte de Facturas Enviadas en Excel (CSV) con los datos de Klynn
           const targetPrefix = `${exportYear}-${exportMonth}`;
           const periodOrdenes = ordenes.filter(o => o.creado_en && o.creado_en.startsWith(targetPrefix));
@@ -475,7 +431,7 @@ function ReportesPage() {
             ["Nº Orden", "Comprobante (e-NCF / NCF)", "Fecha Emisión", "RNC/Cédula Cliente", "Nombre Cliente", "Subtotal (RD$)", "ITBIS (RD$)", "Total (RD$)", "Método de Pago", "Estado DGII"],
             ...periodOrdenes.map(o => [
               o.numero,
-              o.ncf || 'E320000000001',
+              o.ncf || '',
               o.creado_en ? o.creado_en.substring(0, 10) : '',
               (o as any).cliente_rnc || 'Consumidor Final',
               (o as any).cliente_nombre || 'Cliente General',

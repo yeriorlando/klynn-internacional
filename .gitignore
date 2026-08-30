@@ -44,3 +44,12 @@ dist-ssr
 *.sln
 *.sw?
 node_modules
+
+# Downloads & Binaries
+public/downloads/
+*.exe
+*.dll
+bin/
+obj/
+tools/**/bin/
+tools/**/obj/

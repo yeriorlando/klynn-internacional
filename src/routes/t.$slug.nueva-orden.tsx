@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
-import { encodeEscPos, printDirectRaw } from "@/lib/impresora";
+import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
 import { supabase } from "@/lib/supabase";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -60,6 +60,7 @@ import {
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { Ticket } from "@/components/klynn/Ticket";
+import { MarquillasTicket } from "@/components/klynn/MarquillasTicket";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +92,7 @@ import {
   getClientes,
   getOrdenes,
   saveCliente,
+  getEmpleadoById,
   getCatalogo,
   getServicios,
   getCajaAbierta,
@@ -529,6 +531,13 @@ function NuevaOrdenPage() {
   const [itemEditColorHex, setItemEditColorHex] = useState("");
   const [itemEditNota, setItemEditNota] = useState("");
 
+  // Control de Marbetes Hidrofix
+  const [showMarbeteModal, setShowMarbeteModal] = useState(false);
+  const [activeStripId, setActiveStripId] = useState<string>("");
+  const [marbetesList, setMarbetesList] = useState<
+    Array<{ id: string; color: string; piezas: number; secuencia: string }>
+  >([]);
+
   function updateItemColor(index: number, colorName: string, colorHex?: string) {
     setItems((prev) =>
       prev.map((item, idx) =>
@@ -558,6 +567,26 @@ function NuevaOrdenPage() {
 
   function handleAbrirCobro() {
     if (!cliente || (items.length === 0 && serviciosSel.length === 0)) return;
+
+    const validMarbetes = marbetesList.filter(
+      (m) => m.color && m.secuencia && String(m.secuencia).trim() !== ""
+    );
+    if (cfg.habilitar_control_marbetes && validMarbetes.length === 0) {
+      toast.error("Debes asignar el Color y Secuencia del Marbete antes de proceder al cobro.");
+      if (marbetesList.length === 0) {
+        setMarbetesList([
+          {
+            id: uid(),
+            color: "",
+            piezas: totalPiezasCalculadas || 1,
+            secuencia: "",
+          },
+        ]);
+      }
+      setShowMarbeteModal(true);
+      return;
+    }
+
     if (condicionCobro === "COBRAR_AHORA") {
       setRecibido(total);
     } else if (condicionCobro === "ANTICIPO") {
@@ -656,6 +685,16 @@ function NuevaOrdenPage() {
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
   const { data: fiscalConfigData } = useECFConfig(tenantId);
   const { data: ecfSequences } = useECFSequences(tenantId);
+
+  const totalPiezasCalculadas = useMemo(() => {
+    return items.reduce((acc, it) => acc + (it.es_libra ? 1 : it.cantidad), 0);
+  }, [items]);
+
+  const ultimosMarbetes = useMemo(() => {
+    return (ordenes || [])
+      .filter((o) => o.marbete_secuencia)
+      .slice(0, 5);
+  }, [ordenes]);
 
   const isElectronic = Boolean(
     fiscalConfigData?.is_active || 
@@ -874,6 +913,110 @@ function NuevaOrdenPage() {
     }
   }, [tenantId]);
 
+
+
+function getPhysicalMarbeteStyles(colorName?: string) {
+  switch (colorName?.toLowerCase()) {
+    case "naranja":
+      return {
+        bg: "bg-[#FB923C] border-[#ea580c] text-[#331206]",
+        centerBox: "bg-slate-950 text-[#FB923C] border-black/40",
+        inkText: "text-[#331206]",
+        name: "NARANJA",
+      };
+    case "verde":
+      return {
+        bg: "bg-[#34D399] border-[#059669] text-[#062d1f]",
+        centerBox: "bg-slate-950 text-[#34D399] border-black/40",
+        inkText: "text-[#062d1f]",
+        name: "VERDE",
+      };
+    case "azul":
+      return {
+        bg: "bg-[#60A5FA] border-[#2563eb] text-[#11244d]",
+        centerBox: "bg-slate-950 text-[#60A5FA] border-black/40",
+        inkText: "text-[#11244d]",
+        name: "AZUL",
+      };
+    case "amarillo":
+      return {
+        bg: "bg-[#FDE047] border-[#ca8a04] text-[#3d1803]",
+        centerBox: "bg-slate-950 text-[#FDE047] border-black/40",
+        inkText: "text-[#3d1803]",
+        name: "AMARILLO",
+      };
+    case "rosa":
+      return {
+        bg: "bg-[#F472B6] border-[#db2777] text-[#420921]",
+        centerBox: "bg-slate-950 text-[#F472B6] border-black/40",
+        inkText: "text-[#420921]",
+        name: "ROSA",
+      };
+    case "blanco":
+      return {
+        bg: "bg-[#F8FAFC] border-[#cbd5e1] text-[#0f172a]",
+        centerBox: "bg-slate-950 text-[#F8FAFC] border-black/40",
+        inkText: "text-[#0f172a]",
+        name: "BLANCO",
+      };
+    case "rojo":
+      return {
+        bg: "bg-[#F87171] border-[#dc2626] text-[#380606]",
+        centerBox: "bg-slate-950 text-[#F87171] border-black/40",
+        inkText: "text-[#380606]",
+        name: "ROJO",
+      };
+    case "morado":
+      return {
+        bg: "bg-[#A78BFA] border-[#7c3aed] text-[#240b4e]",
+        centerBox: "bg-slate-950 text-[#A78BFA] border-black/40",
+        inkText: "text-[#240b4e]",
+        name: "MORADO",
+      };
+    case "marron":
+    case "marrón":
+      return {
+        bg: "bg-[#B45309] border-[#78350F] text-[#241003]",
+        centerBox: "bg-slate-950 text-[#FDE047] border-black/40",
+        inkText: "text-[#241003]",
+        name: "MARRÓN",
+      };
+    default:
+      return {
+        bg: "bg-[#94A3B8] border-[#64748b] text-[#0f172a]",
+        centerBox: "bg-slate-950 text-[#94A3B8] border-black/40",
+        inkText: "text-[#0f172a]",
+        name: "GRIS",
+      };
+  }
+}
+
+function getMarbeteColorStyle(colorName?: string) {
+  switch (colorName?.toLowerCase()) {
+    case "naranja":
+      return "bg-orange-500 text-white border-orange-600";
+    case "verde":
+      return "bg-emerald-600 text-white border-emerald-700";
+    case "azul":
+      return "bg-blue-600 text-white border-blue-700";
+    case "amarillo":
+      return "bg-amber-400 text-slate-950 border-amber-500";
+    case "rosa":
+      return "bg-pink-500 text-white border-pink-600";
+    case "blanco":
+      return "bg-white text-slate-900 border-slate-300";
+    case "rojo":
+      return "bg-red-600 text-white border-red-700";
+    case "morado":
+      return "bg-purple-600 text-white border-purple-700";
+    case "marron":
+    case "marrón":
+      return "bg-[#78350F] text-white border-[#5a270b]";
+    default:
+      return "bg-slate-500 text-white border-slate-600";
+  }
+}
+
   function resetPosOrder() {
     setItems([]);
     setServiciosSel([]);
@@ -890,79 +1033,16 @@ function NuevaOrdenPage() {
     setServicioDomicilio(false);
     setDireccionData({ direccion: "" });
     setCostoDomicilio(0);
-    setCreada(null);
     setShowTicket(false);
-    setShowPrintPortal(null);
+    setMarbetesList([]);
     setStep(1);
     handleSelectGeneric("Persona");
   }
 
-  const handleImprimirTicket = async (ordenToPrint: Orden | null) => {
+  const handleImprimirTicket = (ordenToPrint: Orden | null) => {
     if (!ordenToPrint) return;
     setShowTicket(false);
-
-    const imprimirCopiaCaja = !!tenant.config?.ticket_imprimir_copia_caja;
-    const imprimirTaller = !!(
-      tenant.config?.ticket_imprimir_taller_auto &&
-      (!tenant.config?.ticket_taller_solo_con_ubicacion || !!ordenToPrint.ubicacion_ropa)
-    );
-
-    const printerType = tenant.config?.impresora_tipo || "usb";
-    if (printerType === "bluetooth" || printerType === "serial") {
-      try {
-        const activeClient: Cliente = cliente ||
-          clientes.find((c) => c.id === ordenToPrint.cliente_id) || {
-            id: ordenToPrint.cliente_id,
-            tenant_id: tenantId,
-            nombre: "Consumidor",
-            apellido: "Final",
-            cedula: "",
-            telefono: "---",
-            email: "",
-            direccion: "",
-            tipo: "Consumidor Final",
-            limite_credito: 0,
-            creado_en: new Date().toISOString(),
-          };
-
-        const ticketListBytes: Uint8Array[] = [];
-
-        // 1. Ticket Cliente (Original)
-        ticketListBytes.push(encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios, undefined, false, false, false, false));
-
-        // 2. Copia de Caja / Duplicado
-        if (imprimirCopiaCaja) {
-          ticketListBytes.push(encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios, undefined, false, false, false, true));
-        }
-
-        // 3. Copia de Taller
-        if (imprimirTaller) {
-          ticketListBytes.push(encodeEscPos(ordenToPrint, tenant, activeClient, empleado, servicios, undefined, false, false, true, false));
-        }
-
-        const totalLength = ticketListBytes.reduce((acc, b) => acc + b.length, 0);
-        const allBytes = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const b of ticketListBytes) {
-          allBytes.set(b, offset);
-          offset += b.length;
-        }
-
-        const success = await printDirectRaw(allBytes, tenant.config);
-        if (success) {
-          toast.success("¡Tickets impresos correctamente en impresora física!");
-        } else {
-          toast.error("No se pudo imprimir en la impresora física.");
-        }
-      } catch (err: any) {
-        console.error(err);
-        toast.error("Error al imprimir físicamente: " + err.message);
-      } finally {
-        resetPosOrder();
-      }
-    } else {
-      setShowPrintPortal(ordenToPrint);
-    }
+    setShowPrintPortal(ordenToPrint);
   };
 
   const [empresaDialogOpen, setEmpresaDialogOpen] = useState(false);
@@ -1296,6 +1376,24 @@ function NuevaOrdenPage() {
           if (!state.isCobroModalOpen) {
             if (state.items.length > 0 || state.serviciosSel.length > 0) {
               e.preventDefault();
+              const valid = (state.marbetesList || []).filter(
+                (m: any) => m.color && m.secuencia && String(m.secuencia).trim() !== ""
+              );
+              if (state.cfg?.habilitar_control_marbetes && valid.length === 0) {
+                toast.error("Debes asignar el Color y Secuencia del Marbete antes de proceder al cobro.");
+                if (!state.marbetesList || state.marbetesList.length === 0) {
+                  state.setMarbetesList([
+                    {
+                      id: uid(),
+                      color: "",
+                      piezas: state.totalPiezasCalculadas || 1,
+                      secuencia: "",
+                    },
+                  ]);
+                }
+                state.setShowMarbeteModal(true);
+                return;
+              }
               state.setIsCobroModalOpen(true);
             }
           } else {
@@ -1515,7 +1613,7 @@ function NuevaOrdenPage() {
   const subtotalBruto = subtotalGravableBase + subtotalExentoBase + costoServicios;
   const recargo = recargoTotal;
 
-  if (cfg.ncf_facturacion_activa && aplicarItbis && itbisRate > 0) {
+  if ((cfg.ncf_facturacion_activa || cfg.modo_facturacion === "tradicional" || cfg.modo_facturacion === "electronica" || isElectronic) && aplicarItbis && itbisRate > 0) {
     if (cfg.itbis_incluido) {
       // ITBIS ya está en los precios.
       // Calculamos cuánto de la base gravable es ITBIS
@@ -1635,7 +1733,26 @@ function NuevaOrdenPage() {
   async function onCrearOrden(forceCreditAuth = false) {
     // React state is asynchronous; the ref closes the double-click window
     // immediately and prevents duplicate orders.
-    if (creatingOrderRef.current || isCreatingOrden) return;
+    const validMarbetes = marbetesList.filter(
+      (m) => m.color && m.secuencia && String(m.secuencia).trim() !== ""
+    );
+    if (cfg.habilitar_control_marbetes && validMarbetes.length === 0) {
+      toast.error("Debes asignar el Color y Secuencia del Marbete antes de procesar la orden.");
+      if (marbetesList.length === 0) {
+        setMarbetesList([
+          {
+            id: uid(),
+            color: "",
+            piezas: totalPiezasCalculadas || 1,
+            secuencia: "",
+          },
+        ]);
+      }
+      setIsCobroModalOpen(false);
+      setShowMarbeteModal(true);
+      return;
+    }
+
     creatingOrderRef.current = true;
     setIsCreatingOrden(true);
 
@@ -1841,7 +1958,7 @@ function NuevaOrdenPage() {
       now.setHours(now.getHours() + horasAdd);
       deliveryDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
 
-      const freshFiscalConfig = await getECFConfig(tenant.id);
+      const freshFiscalConfig = fiscalConfigData || (await getECFConfig(tenant.id).catch(() => null));
       const isElectronic = Boolean(
         freshFiscalConfig?.is_active ||
         tenant.config?.modo_facturacion === "electronica" ||
@@ -1862,11 +1979,17 @@ function NuevaOrdenPage() {
       let ncfVencimiento: string | undefined = undefined;
       let finalNCF: string | undefined = undefined;
 
+      const isFiscalActive = Boolean(
+        cfg.ncf_facturacion_activa ||
+        cfg.modo_facturacion === "tradicional" ||
+        cfg.modo_facturacion === "electronica" ||
+        isElectronic
+      );
+
       if (
-        cfg.ncf_facturacion_activa &&
+        isFiscalActive &&
         !isElectronic &&
-        condicionCobro !== "AL_RETIRAR" &&
-        condicionCobro !== "CREDITO"
+        condicionCobro !== "AL_RETIRAR"
       ) {
         try {
           const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
@@ -1941,6 +2064,21 @@ function NuevaOrdenPage() {
           (instrumentoPago === "TARJETA" || instrumentoPago === "TRANSFERENCIA") && referencia
             ? referencia
             : undefined,
+        marbetes: cfg.habilitar_control_marbetes && validMarbetes.length > 0
+          ? validMarbetes.map((m) => ({
+              id: m.id || uid(),
+              color: m.color,
+              piezas: Number(m.piezas) || 1,
+              secuencia: String(m.secuencia).trim(),
+            }))
+          : undefined,
+        marbete_color: cfg.habilitar_control_marbetes && validMarbetes.length > 0 ? validMarbetes[0].color : undefined,
+        marbete_piezas: cfg.habilitar_control_marbetes && validMarbetes.length > 0
+          ? validMarbetes.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0)
+          : undefined,
+        marbete_secuencia: cfg.habilitar_control_marbetes && validMarbetes.length > 0
+          ? parseInt(String(validMarbetes[0].secuencia), 10) || undefined
+          : undefined,
       };
 
       let ordenActualizada = { ...orden };
@@ -1963,16 +2101,8 @@ function NuevaOrdenPage() {
         } else {
           try {
             await saveOrden(orden);
-            let nextNCF: string | undefined = undefined;
-            if (freshFiscalConfig?.ambiente === "produccion") {
-              const nextResult = await getNextNumberPronesoft(tenant.id, activeTipo);
-              const nextData = nextResult?.data || nextResult;
-              nextNCF = nextData?.nextNumber;
-              if (!nextNCF) throw new Error(`Pronesoft no devolvió un e-NCF disponible para ${activeTipo}.`);
-            }
-
             const result = await emitirECF(
-              { ...orden, ncf: nextNCF },
+              orden,
               targetCliente,
               freshFiscalConfig?.pronesoft_tenant_id || fiscalConfig?.pronesoft_tenant_id,
               cfg,
@@ -1980,13 +2110,21 @@ function NuevaOrdenPage() {
               activeTipo
             );
 
+            // EF2 puede expresar el resultado como estado legal o como estado
+            // del documento. Consideramos ambas variantes antes de persistir
+            // la orden para no sobrescribir un ACCEPTED ya conciliado.
+            const legalStatusUpper = String(
+              result.legal_status || result.document?.legal_status || result.document?.status || ""
+            ).toUpperCase();
+            const isAccepted = /ACEPT|PROCESAD|APROB/.test(legalStatusUpper) && !/RECHAZ/.test(legalStatusUpper);
+            const isRejected = /RECHAZ|ERROR/.test(legalStatusUpper);
+            const finalStatus = isAccepted ? "ACCEPTED" : isRejected ? "REJECTED" : "REGISTERED";
+
             const fiscalFields = {
               ncf: result.encf,
               tipo_ecf: activeTipo,
-              ecf_status: result.legal_status === "ACCEPTED" ? "ACCEPTED"
-                : result.legal_status === "ACCEPTED_WITH_OBSERVATIONS" ? "ACCEPTED_WITH_OBSERVATIONS"
-                : "REGISTERED",
-              ecf_id: result.document.track_id || result.document.pronesoft_id || result.document.id,
+              ecf_status: finalStatus,
+              ecf_id: result.document.id,
               ecf_qr: result.stamp_url || (result.document as any).document_stamp_url || "",
               ecf_security_code: result.security_code || "",
               ecf_signature_date: (result.document as any).signature_date || new Date().toISOString(),
@@ -1995,10 +2133,12 @@ function NuevaOrdenPage() {
 
             ordenActualizada = { ...orden, ...fiscalFields };
             await saveOrden(ordenActualizada);
-            if (result.legal_status === "ACCEPTED" || result.legal_status === "ACCEPTED_WITH_OBSERVATIONS") {
+            if (isAccepted) {
               toast.success(`Comprobante ${result.encf} aceptado por DGII`);
+            } else if (isRejected) {
+              toast.error(`Comprobante ${result.encf} rechazado por DGII`);
             } else {
-              toast.success(`Comprobante ${result.encf} emitido con éxito`);
+              toast.info(`e-CF ${result.encf} emitido. Validación DGII pendiente.`);
             }
           } catch (fErr: any) {
             console.error("Error Fiscal:", fErr);
@@ -2031,28 +2171,30 @@ function NuevaOrdenPage() {
         await saveOrden(orden);
       }
 
-      // Registrar movimiento(s) de caja desglosados
+      // Registrar movimiento(s) de caja desglosados en paralelo
       if (pagado > 0 && caja) {
         if (pagosDetalle.length > 0) {
-          for (const pd of pagosDetalle) {
-            await saveMovimiento({
-              id: uid("mov"),
-              tenant_id: tenant.id,
-              caja_id: caja.id,
-              empleado_id: empleado.id,
-              tipo: condicionCobro === "CREDITO" ? "ABONO" : condicionCobro === "ANTICIPO" ? "ABONO" : "VENTA",
-              concepto:
-                condicionCobro === "CREDITO"
-                  ? `Abono inicial orden a crédito #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`
-                  : condicionCobro === "ANTICIPO"
-                  ? `Anticipo orden #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`
-                  : `Venta orden #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`,
-              monto: pd.monto,
-              metodo: pd.metodo,
-              orden_id: ordenActualizada.id,
-              creado_en: new Date().toISOString(),
-            });
-          }
+          await Promise.all(
+            pagosDetalle.map((pd) =>
+              saveMovimiento({
+                id: uid("mov"),
+                tenant_id: tenant.id,
+                caja_id: caja.id,
+                empleado_id: empleado.id,
+                tipo: condicionCobro === "CREDITO" ? "ABONO" : condicionCobro === "ANTICIPO" ? "ABONO" : "VENTA",
+                concepto:
+                  condicionCobro === "CREDITO"
+                    ? `Abono inicial orden a crédito #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`
+                    : condicionCobro === "ANTICIPO"
+                    ? `Anticipo orden #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`
+                    : `Venta orden #${ordenActualizada.numero} [${pd.metodo}]${pd.referencia ? ` (Ref: ${pd.referencia})` : ""}`,
+                monto: pd.monto,
+                metodo: pd.metodo,
+                orden_id: ordenActualizada.id,
+                creado_en: new Date().toISOString(),
+              })
+            )
+          );
         } else {
           await saveMovimiento({
             id: uid("mov"),
@@ -2072,56 +2214,6 @@ function NuevaOrdenPage() {
             creado_en: new Date().toISOString(),
           });
         }
-      }
-
-      setCreada({ ...ordenActualizada });
-      setIsCobroModalOpen(false);
-      // The critical transaction is complete. Release the UI before any
-      // notification, printing or client-profile follow-up.
-      releaseOrderCreation();
-      toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
-
-      // El ticket de recepción debe salir por el proveedor activo de /admin.
-      // It must never keep the payment panel in a processing state.
-      const whatsappPhoneDigits = targetCliente?.telefono?.replace(/\D/g, "") || "";
-      const hasValidWhatsAppPhone = whatsappPhoneDigits.length >= 10;
-
-      if (targetCliente && hasValidWhatsAppPhone) {
-        void (async () => {
-          let lastReason = "Error desconocido";
-
-          for (let attempt = 1; attempt <= 3; attempt += 1) {
-            try {
-              const whatsappResult = await notificarWhatsApp(
-                tenant,
-                targetCliente,
-                ordenActualizada,
-                "creada",
-              );
-              if (whatsappResult.ok) {
-                toast.success("Ticket enviado por WhatsApp al cliente ✅");
-                return;
-              }
-              lastReason = whatsappResult.reason || lastReason;
-            } catch (whatsappError) {
-              lastReason = whatsappError instanceof Error ? whatsappError.message : "Error desconocido";
-              console.error(`Error enviando WhatsApp de orden creada (intento ${attempt}/3):`, whatsappError);
-            }
-
-            if (attempt < 3) {
-              await new Promise((resolve) => window.setTimeout(resolve, attempt * 1500));
-            }
-          }
-
-          toast.warning(`Orden guardada, pero WhatsApp falló después de 3 intentos: ${lastReason}`);
-        })();
-      }
-
-      if (cfg.pos_auto_imprimir) {
-        setShowTicket(false);
-        handleImprimirTicket({ ...ordenActualizada });
-      } else {
-        setShowTicket(true);
       }
 
       if (
@@ -2146,6 +2238,32 @@ function NuevaOrdenPage() {
       if (targetCliente) {
         queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
         queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+      }
+
+      if (cfg.habilitar_control_marbetes && validMarbetes.length > 0) {
+        const lastStrip = validMarbetes[validMarbetes.length - 1];
+        const nextSec = parseInt(String(lastStrip.secuencia), 10);
+        void saveTenant({
+          ...tenant,
+          config: {
+            ...cfg,
+            ultimo_marbete_color: lastStrip.color,
+            ultimo_marbete_secuencia: isNaN(nextSec) ? undefined : nextSec,
+          },
+        }).catch(() => {});
+      }
+
+      setCreada({ ...ordenActualizada });
+      setIsCobroModalOpen(false);
+      resetPosOrder();
+      releaseOrderCreation();
+      toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
+
+      // Auto-impresión al cobrar: dispara el diálogo nativo del navegador al instante
+      if (cfg.pos_auto_imprimir !== false) {
+        setShowPrintPortal({ ...ordenActualizada });
+      } else {
+        setShowTicket(true);
       }
     } catch (e: any) {
       console.error(e);
@@ -2226,6 +2344,11 @@ function NuevaOrdenPage() {
     addItem,
     isCobroModalOpen,
     setIsCobroModalOpen,
+    cfg,
+    marbetesList,
+    setMarbetesList,
+    totalPiezasCalculadas,
+    setShowMarbeteModal,
   };
 
   const getComprobanteInfo = (tipo: string) => {
@@ -2362,6 +2485,43 @@ function NuevaOrdenPage() {
                       className={`h-4 w-4 transition-colors text-white ${ubicacionRopa ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
                     />
                     <span>{ubicacionRopa ? `📍 ${ubicacionRopa}` : "Ubicación"}</span>
+                  </button>
+                )}
+
+                {cfg.habilitar_control_marbetes && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (marbetesList.length === 0) {
+                        setMarbetesList([
+                          {
+                            id: uid(),
+                            color: "",
+                            piezas: totalPiezasCalculadas || 1,
+                            secuencia: "",
+                          },
+                        ]);
+                      }
+                      setShowMarbeteModal(true);
+                    }}
+                    className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                      marbetesList.some((m) => m.secuencia)
+                        ? "bg-amber-600 hover:bg-amber-700 text-white shadow-inner ring-2 ring-amber-400 ring-offset-1 dark:ring-offset-background"
+                        : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm"
+                    }`}
+                  >
+                    <Tag className="h-4 w-4 transition-colors text-white" />
+                    <span>
+                      {(() => {
+                        const valid = marbetesList.filter((m) => m.secuencia);
+                        if (valid.length === 0) return "Marbete";
+                        if (valid.length === 1) {
+                          return `${valid[0].color || "Tira"} ${valid[0].piezas}p #${valid[0].secuencia}`;
+                        }
+                        const totalP = valid.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0);
+                        return `${valid.length} Tiras (${totalP} pzs)`;
+                      })()}
+                    </span>
                   </button>
                 )}
 
@@ -4388,7 +4548,7 @@ function NuevaOrdenPage() {
                         </div>
 
                         {/* Divider if ITBIS is active */}
-                        {cfg.ncf_facturacion_activa && (
+                        {(cfg.ncf_facturacion_activa || cfg.modo_facturacion === "tradicional" || cfg.modo_facturacion === "electronica") && (
                           <>
                             <div className="h-px bg-border/60" />
                             {/* Option 3: ITBIS */}
@@ -5024,11 +5184,11 @@ function NuevaOrdenPage() {
         <TicketPrintPortal
           orden={showPrintPortal}
           tenant={tenant}
-          cliente={cliente}
-          empleado={empleado}
+          clientes={clientes}
+          empleados={empleado ? [empleado] : []}
           serviciosList={servicios}
           onClose={() => {
-            resetPosOrder();
+            setShowPrintPortal(null);
           }}
         />
       )}
@@ -5738,7 +5898,409 @@ function NuevaOrdenPage() {
       </Dialog>
 
                               
-      {/* ================= MODAL DE COLOR Y DETALLES DE PRENDA ================= */}
+      {/* ================= MODAL DE CONTROL DE MARBETE (HIDROFIX) ================= */}
+      <Dialog open={showMarbeteModal} onOpenChange={setShowMarbeteModal}>
+        <DialogContent className="max-w-2xl sm:max-w-[750px] p-3.5 sm:p-4 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl font-sans max-h-[94vh] flex flex-col gap-2">
+          {/* Cabecera Limpia y Compacta */}
+          <DialogHeader className="space-y-0 pb-1.5 border-b border-slate-100 dark:border-slate-800 shrink-0">
+            <div className="flex items-center justify-between gap-3 pr-8 sm:pr-10">
+              <div className="flex items-center gap-1.5">
+                <div className="p-1 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 shrink-0">
+                  <Tag className="h-3.5 w-3.5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-sm font-display font-black text-foreground leading-tight">
+                    Control de Marbetes Hidrofix
+                  </DialogTitle>
+                  <DialogDescription className="text-[10px] text-muted-foreground leading-none mt-0.5">
+                    Configura los talonarios físicos, prendas por tira y secuencias de la orden.
+                  </DialogDescription>
+                </div>
+              </div>
+
+              {/* Último usado en caja (Formato correcto, legible y con separación de la X) */}
+              {ultimosMarbetes.length > 0 && (() => {
+                const ultimo = ultimosMarbetes[0];
+                const uStyle = getPhysicalMarbeteStyles(ultimo.marbete_color);
+                return (
+                  <div className="hidden sm:flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 px-2.5 py-0.5 rounded-xl shadow-xs mr-2">
+                    <span className="text-[9px] uppercase font-bold text-muted-foreground tracking-wider">
+                      Último usado:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (ultimo.marbete_color) {
+                          setMarbetesList((prev) =>
+                            prev.map((it) => (it.id === activeStrip.id ? { ...it, color: ultimo.marbete_color! } : it))
+                          );
+                        }
+                      }}
+                      className={`flex items-center gap-1.5 px-2 py-0.5 rounded-lg border text-[10px] font-black cursor-pointer shadow-xs ${uStyle.bg} ${uStyle.inkText} hover:opacity-90 active:scale-95 transition-all`}
+                      title="Haz clic para copiar este color a la tira activa"
+                    >
+                      <span>{uStyle.name}</span>
+                      <span className="opacity-40">•</span>
+                      <span>{ultimo.marbete_piezas || 1} pzs</span>
+                      <span className="opacity-40">•</span>
+                      <span className="font-mono font-black text-[10.5px]">#{ultimo.marbete_secuencia}</span>
+                    </button>
+                  </div>
+                );
+              })()}
+            </div>
+          </DialogHeader>
+
+          {(() => {
+            const totalPiezasOrden = totalPiezasCalculadas || 1;
+            const currentSum = marbetesList.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0);
+            const remainingPiezas = Math.max(1, totalPiezasOrden - currentSum);
+
+            // Tira actualmente seleccionada para edición
+            const activeStrip =
+              marbetesList.find((m) => m.id === activeStripId) ||
+              marbetesList[0] || { id: "temp", color: "", piezas: totalPiezasOrden, secuencia: "" };
+            const activeIndex = Math.max(0, marbetesList.findIndex((m) => m.id === activeStrip.id));
+
+            return (
+              <div className="flex-1 overflow-y-auto space-y-2 pr-0.5 custom-scrollbar">
+                {/* 1. Selector de Pestañas de Tiras */}
+                <div className="flex items-center justify-between gap-1.5 overflow-x-auto pb-0.5">
+                  <div className="flex items-center gap-1 flex-wrap">
+                    {marbetesList.map((m, idx) => {
+                      const isActive = m.id === activeStrip.id;
+                      const hasData = m.color || m.secuencia;
+                      return (
+                        <div
+                          key={m.id || idx}
+                          onClick={() => setActiveStripId(m.id)}
+                          className={`group flex items-center gap-1.5 px-3 py-1 rounded-xl border text-xs font-bold transition-all cursor-pointer select-none ${
+                            isActive
+                              ? "bg-primary text-white border-primary shadow-xs ring-1.5 ring-primary/20"
+                              : "bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-foreground border-slate-200 dark:border-slate-700"
+                          }`}
+                        >
+                          <span
+                            className={`w-2 h-2 rounded-full shrink-0 ${
+                              m.color ? getMarbeteColorStyle(m.color).split(" ")[0] : "bg-slate-300 dark:bg-slate-600"
+                            }`}
+                          />
+                          <span>Tira #{idx + 1}</span>
+                          {marbetesList.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const filtered = marbetesList.filter((item) => item.id !== m.id);
+                                setMarbetesList(filtered);
+                                if (isActive && filtered.length > 0) {
+                                  setActiveStripId(filtered[0].id);
+                                }
+                              }}
+                              className="ml-1 rounded-full p-0.5 bg-rose-500 hover:bg-rose-600 text-white shadow-xs transition-all cursor-pointer flex items-center justify-center shrink-0"
+                              title="Eliminar tira"
+                            >
+                              <X className="h-2.5 w-2.5 stroke-[3]" />
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Botón Añadir Tira con Fondo Verde Destacado */}
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => {
+                      const newId = uid();
+                      const newStrip = {
+                        id: newId,
+                        color: "",
+                        piezas: remainingPiezas,
+                        secuencia: "",
+                      };
+                      setMarbetesList((prev) => [...prev, newStrip]);
+                      setActiveStripId(newId);
+                    }}
+                    className="h-7 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs gap-1.5 shrink-0 cursor-pointer px-3 shadow-xs active:scale-95 transition-all"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    <span>Añadir Tira</span>
+                  </Button>
+                </div>
+
+                {/* 2. BLOQUE SUPERIOR: CONFIGURAR TIRA ACTIVA (Color a la izquierda, Prendas arriba y Secuencia abajo a la derecha) */}
+                <div className="p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                  <div className="flex items-center justify-between pb-0.5 border-b border-slate-200/60 dark:border-slate-700/60">
+                    <span className="text-[11px] font-black uppercase tracking-wider text-foreground flex items-center gap-1">
+                      <span className="w-4 h-4 rounded-full bg-primary/10 text-primary flex items-center justify-center text-[9px]">
+                        {activeIndex + 1}
+                      </span>
+                      Configurar Tira #{activeIndex + 1}
+                    </span>
+                    <span className="text-[10px] font-bold text-muted-foreground">
+                      {activeStrip.piezas || 0} prendas asignadas
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-12 gap-2.5 items-center">
+                    {/* Columna Izquierda (6 cols): Color del Talonario */}
+                    <div className="md:col-span-6 space-y-0.5">
+                      <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground block">
+                        1. Color del Talonario
+                      </Label>
+                      <div className="grid grid-cols-5 gap-1">
+                        {[
+                          { nombre: "Gris", bg: "bg-slate-500" },
+                          { nombre: "Naranja", bg: "bg-orange-500" },
+                          { nombre: "Verde", bg: "bg-emerald-600" },
+                          { nombre: "Azul", bg: "bg-blue-600" },
+                          { nombre: "Amarillo", bg: "bg-amber-400 text-slate-950" },
+                          { nombre: "Rosa", bg: "bg-pink-500" },
+                          { nombre: "Blanco", bg: "bg-white border border-slate-300 text-slate-900" },
+                          { nombre: "Rojo", bg: "bg-red-600" },
+                          { nombre: "Morado", bg: "bg-purple-600" },
+                          { nombre: "Marrón", bg: "bg-[#78350F]" },
+                        ].map((c) => {
+                          const isSelected = activeStrip.color?.toLowerCase() === c.nombre.toLowerCase();
+                          return (
+                            <button
+                              key={c.nombre}
+                              type="button"
+                              onClick={() => {
+                                setMarbetesList((prev) =>
+                                  prev.map((it) => (it.id === activeStrip.id ? { ...it, color: c.nombre } : it))
+                                );
+                              }}
+                              className={`flex items-center justify-center gap-1 h-6.5 px-1 rounded-lg text-[9.5px] font-bold transition-all border cursor-pointer ${
+                                isSelected
+                                  ? "ring-1.5 ring-primary border-primary font-black shadow-xs bg-primary/10 text-primary"
+                                  : "border-slate-200 dark:border-slate-700 hover:border-slate-300 text-slate-700 dark:text-slate-300 bg-white dark:bg-slate-800"
+                              }`}
+                            >
+                              <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${c.bg}`} />
+                              <span className="truncate">{c.nombre}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Columna Derecha (6 cols): 2. Prendas ARRIBA y 3. Secuencia DEBAJO */}
+                    <div className="md:col-span-6 space-y-1.5 p-2 rounded-xl bg-white/70 dark:bg-slate-900/50 border border-slate-200/70 dark:border-slate-700/70">
+                      {/* 2. Prendas Arriba */}
+                      <div>
+                        <div className="flex justify-between items-center mb-0.5">
+                          <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">
+                            2. Prendas en esta Tira
+                          </Label>
+                          <span className="text-[10px] font-black text-primary">
+                            {activeStrip.piezas || 1} {Number(activeStrip.piezas) === 1 ? "prenda" : "prendas"}
+                          </span>
+                        </div>
+                        <div className="grid grid-cols-10 gap-0.5">
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => {
+                            const isSelected = Number(activeStrip.piezas) === num;
+                            return (
+                              <button
+                                key={num}
+                                type="button"
+                                onClick={() => {
+                                  setMarbetesList((prev) =>
+                                    prev.map((it) => (it.id === activeStrip.id ? { ...it, piezas: num } : it))
+                                  );
+                                }}
+                                className={`h-6 rounded-md font-display font-black text-xs flex items-center justify-center transition-all border cursor-pointer ${
+                                  isSelected
+                                    ? "bg-primary text-white border-primary shadow-xs"
+                                    : "bg-slate-50 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100 dark:hover:bg-slate-700"
+                                }`}
+                              >
+                                {num}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+
+                      {/* 3. Secuencia Debajo */}
+                      <div>
+                        <Label className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block mb-0.5">
+                          3. No. Secuencia del Talonario
+                        </Label>
+                        <Input
+                          type="number"
+                          placeholder="Ej: 648"
+                          value={activeStrip.secuencia}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            setMarbetesList((prev) =>
+                              prev.map((it) => (it.id === activeStrip.id ? { ...it, secuencia: val } : it))
+                            );
+                          }}
+                          className="h-7.5 text-base font-display font-black tracking-widest text-center rounded-lg border-primary/40 focus-visible:ring-primary/40 bg-slate-50 dark:bg-slate-800 shadow-xs"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3. BLOQUE INFERIOR: TIRAS FÍSICAS GRAPADAS EN FILA HORIZONTAL */}
+                <div className="p-3 rounded-2xl bg-slate-50/80 dark:bg-slate-800/40 border border-slate-200/80 dark:border-slate-700/80 space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10.5px] font-black uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                      <span>Tiras Físicas Grapadas ({marbetesList.length})</span>
+                      <span className="text-muted-foreground font-normal text-[10px]">
+                        — Total: {currentSum} prendas
+                      </span>
+                    </span>
+                    <span className="text-[9.5px] font-bold text-muted-foreground">
+                      Haz clic en una tira para editarla
+                    </span>
+                  </div>
+
+                  {/* Fila Horizontal de Tiras Físicas */}
+                  <div className="flex items-stretch gap-2.5 overflow-x-auto pb-1 pt-0.5 custom-scrollbar min-h-[145px]">
+                    {marbetesList.map((m, idx) => {
+                      const isCur = m.id === activeStrip.id;
+                      const tStyle = getPhysicalMarbeteStyles(m.color);
+                      const secStr = m.secuencia ? String(m.secuencia) : "---";
+                      const pCount = m.piezas || 1;
+
+                      return (
+                        <div
+                          key={m.id || idx}
+                          onClick={() => setActiveStripId(m.id)}
+                          className={`relative overflow-hidden rounded-2xl border-2 transition-all cursor-pointer font-sans select-none p-2 flex flex-col items-center justify-between text-center w-[135px] sm:w-[150px] min-w-[135px] h-[148px] shrink-0 ${tStyle.bg} ${tStyle.inkText} ${
+                            isCur
+                              ? "border-slate-950 dark:border-white ring-2 ring-primary/80 shadow-lg"
+                              : "border-black/15 dark:border-white/15 opacity-85 hover:opacity-100 shadow-xs"
+                          }`}
+                        >
+                          {/* Micro Header */}
+                          <div className="w-full flex items-center justify-between text-[7.5px] uppercase font-black tracking-wider opacity-85 pb-0.5 border-b border-current/20 mb-0.5 leading-tight">
+                            <span>TIRA #{idx + 1}</span>
+                            <div className="flex items-center gap-1">
+                              {isCur && (
+                                <span className="bg-black/25 dark:bg-white/25 px-1 py-0.2 rounded text-[6.5px] font-black tracking-normal">
+                                  ACTIVA
+                                </span>
+                              )}
+                              <span>{tStyle.name}</span>
+                            </div>
+                          </div>
+
+                          {/* Cuadrícula / Cuadro Negro Centrado con Cantidad de Piezas */}
+                          <div className="my-0.5 flex flex-col items-center justify-center">
+                            <div
+                              className={`w-12 h-12 rounded-lg flex items-center justify-center font-display font-black text-2xl sm:text-3xl shadow-inner border-2 border-black/30 ${tStyle.centerBox}`}
+                            >
+                              {pCount}
+                            </div>
+                            <span className="text-[7px] uppercase font-black tracking-widest text-center block mt-0.5 opacity-85">
+                              {pCount === 1 ? "1 Prenda" : `${pCount} Prendas`}
+                            </span>
+                          </div>
+
+                          {/* Número de Secuencia DEBAJO en Tipografía Grande */}
+                          <div className="w-full text-center pt-0.5 border-t border-current/20">
+                            <span className="font-mono font-black text-xl sm:text-2xl tracking-tight leading-none block">
+                              {secStr}
+                            </span>
+                            <span className="text-[6.5px] uppercase font-bold tracking-wider opacity-65 block mt-0.5">
+                              No. Secuencia
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {/* Botón rápido "+ Añadir Tira" al final de la fila con altura fija alineada */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newId = uid();
+                        const newStrip = {
+                          id: newId,
+                          color: "",
+                          piezas: remainingPiezas,
+                          secuencia: "",
+                        };
+                        setMarbetesList((prev) => [...prev, newStrip]);
+                        setActiveStripId(newId);
+                      }}
+                      className="w-[115px] min-w-[115px] h-[148px] rounded-2xl border-2 border-dashed border-primary/40 hover:border-primary bg-primary/5 hover:bg-primary/10 flex flex-col items-center justify-center gap-1 text-primary font-black text-xs transition-all cursor-pointer shrink-0 py-2.5"
+                    >
+                      <div className="w-7 h-7 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Plus className="h-3.5 w-3.5" />
+                      </div>
+                      <span className="text-[11px]">Añadir Tira</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Footer de Acciones con Balance a la Izquierda */}
+          {(() => {
+            const totalPiezasOrden = totalPiezasCalculadas || 1;
+            const currentSum = marbetesList.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0);
+            const isExact = currentSum === totalPiezasOrden;
+            const isUnder = currentSum < totalPiezasOrden;
+
+            return (
+              <DialogFooter className="w-full flex flex-row items-center justify-between gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 shrink-0">
+                {/* Total de Prendas en Extremo Izquierdo */}
+                <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700/80 mr-auto shadow-xs">
+                  <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">
+                    Total de Prendas:
+                  </span>
+                  <span className="text-sm font-black text-foreground font-display">
+                    {currentSum}
+                  </span>
+                </div>
+
+                {/* Botones de Acción a la Derecha */}
+                <div className="flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl text-xs font-bold h-8 px-3.5 cursor-pointer"
+                    onClick={() => {
+                      setMarbetesList([]);
+                      setShowMarbeteModal(false);
+                    }}
+                  >
+                    Sin Marbete
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    className="rounded-xl text-xs font-black bg-primary text-white hover:bg-primary/90 h-8 px-5 cursor-pointer shadow-md"
+                    onClick={() => {
+                      const valid = marbetesList.filter(
+                        (m) => m.color && m.secuencia && String(m.secuencia).trim() !== ""
+                      );
+                      if (marbetesList.length > 0 && valid.length < marbetesList.length) {
+                        toast.error("Por favor completa el color y secuencia de todas las tiras agregadas.");
+                        return;
+                      }
+                      setShowMarbeteModal(false);
+                    }}
+                  >
+                    Guardar Marbete
+                  </Button>
+                </div>
+              </DialogFooter>
+            );
+          })()}
+        </DialogContent>
+      </Dialog>
+      
+{/* ================= MODAL DE COLOR Y DETALLES DE PRENDA ================= */}
       <Dialog open={showItemDetailModal} onOpenChange={setShowItemDetailModal}>
         <DialogContent className="max-w-md p-5 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
           <DialogHeader>
@@ -7080,130 +7642,264 @@ function DiscountPOSDialog({
 function TicketPrintPortal({
   orden,
   tenant,
-  cliente,
-  empleado,
-  serviciosList,
+  clientes,
+  empleados,
+  serviciosList = [],
+  pagoRecibido,
+  ocultarUbicacion,
+  ocultarNotas,
+  esProduccion,
+  esMarquillas,
   onClose,
 }: {
   orden: Orden;
   tenant: any;
-  cliente: any;
-  empleado: any;
-  serviciosList: any[];
+  clientes: any[];
+  empleados: any[];
+  serviciosList?: any[];
+  pagoRecibido?: number;
+  ocultarUbicacion?: boolean;
+  ocultarNotas?: boolean;
+  esProduccion?: boolean;
+  esMarquillas?: boolean;
   onClose: () => void;
 }) {
-  const imprimirCopiaCaja = !!tenant.config?.ticket_imprimir_copia_caja;
-  const imprimirTaller = !!(
-    tenant.config?.ticket_imprimir_taller_auto &&
-    (!tenant.config?.ticket_taller_solo_con_ubicacion || !!orden.ubicacion_ropa)
-  );
+  const initialEmp = (empleados || []).find((x) => x.id === orden.empleado_id) || { nombre: "Personal" };
+  const initialCli = (clientes || []).find((c) => c.id === orden.cliente_id) || {
+    nombre: "Consumidor",
+    apellido: "Final",
+    cedula: "",
+    telefono: "",
+  };
+
+  const [emp, setEmp] = useState<any>(initialEmp);
+  const [cli, setCli] = useState<any>(initialCli);
+  const [srvList, setSrvList] = useState<any[]>(serviciosList || []);
+  const [ready, setReady] = useState(false);
   const hasPrintedRef = useRef(false);
+  const printRootRef = useRef<HTMLDivElement>(null);
 
+  // Async data fetch for extra details
   useEffect(() => {
-    if (hasPrintedRef.current) return;
+    let active = true;
+    Promise.all([
+      getEmpleadoById(orden.empleado_id).catch(() => null),
+      Promise.resolve((clientes || []).find((c) => c.id === orden.cliente_id)),
+      serviciosList && serviciosList.length > 0 ? Promise.resolve(serviciosList) : getServicios(tenant.id).catch(() => []),
+    ]).then(([e, c, s]) => {
+      if (!active) return;
+      if (e) setEmp(e);
+      if (c) setCli(c);
+      if (s && s.length > 0) setSrvList(s);
+      setReady(true);
+    });
+    return () => {
+      active = false;
+    };
+  }, [orden, tenant.id, clientes, empleados, serviciosList]);
 
-    const printerType = tenant.config?.impresora_tipo || "usb";
-    if (printerType === "bluetooth" || printerType === "serial") {
-      // La impresión física comienza inmediatamente y no debe duplicarse si
-      // alguna consulta provoca un nuevo render mientras la promesa sigue activa.
-      hasPrintedRef.current = true;
-      const runPhysicalPrint = async () => {
-        try {
-          const ticketListBytes: Uint8Array[] = [];
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  });
 
-          // 1. Ticket Cliente (Original)
-          ticketListBytes.push(encodeEscPos(orden, tenant, cliente, empleado, serviciosList, undefined, false, false, false, false));
+  const cfg = tenant.config || {};
+  const imprimirCopiaCaja = Boolean(cfg.ticket_imprimir_copia_caja);
+  const imprimirTaller = Boolean(
+    cfg.ticket_imprimir_taller_auto &&
+    (!cfg.ticket_taller_solo_con_ubicacion || orden.ubicacion_ropa)
+  );
+  const imprimirMarquillas = Boolean(cfg.ticket_imprimir_marquillas_auto && (orden.items && orden.items.length > 0));
 
-          // 2. Copia de Caja / Duplicado
+  // Intenta primero ESC/POS para que cada marquilla incluya su comando físico
+  // de corte. Si la impresora está configurada como "sistema" (o no existe
+  // una conexión directa), conserva el diálogo de impresión del navegador.
+  useEffect(() => {
+    if (!ready || hasPrintedRef.current) return;
+    hasPrintedRef.current = true;
+
+    let closed = false;
+    const safeClose = () => {
+      if (closed) return;
+      closed = true;
+      window.removeEventListener("afterprint", safeClose);
+      onCloseRef.current();
+    };
+
+    const print = async () => {
+      try {
+        const jobs: Uint8Array[] = [];
+
+        if (esMarquillas) {
+          jobs.push(encodeMarquillasEscPos(orden, tenant, cli, emp));
+        } else if (esProduccion) {
+          jobs.push(encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, true));
+        } else {
+          jobs.push(encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas));
+
           if (imprimirCopiaCaja) {
-            ticketListBytes.push(encodeEscPos(orden, tenant, cliente, empleado, serviciosList, undefined, false, false, false, true));
+            jobs.push(encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, false, true));
           }
-
-          // 3. Copia de Taller
           if (imprimirTaller) {
-            ticketListBytes.push(encodeEscPos(orden, tenant, cliente, empleado, serviciosList, undefined, false, false, true, false));
+            jobs.push(encodeEscPos(orden, tenant, cli, emp, srvList, pagoRecibido, ocultarUbicacion, ocultarNotas, true));
           }
-
-          const totalLength = ticketListBytes.reduce((acc, b) => acc + b.length, 0);
-          const allBytes = new Uint8Array(totalLength);
-          let offset = 0;
-          for (const b of ticketListBytes) {
-            allBytes.set(b, offset);
-            offset += b.length;
+          if (imprimirMarquillas) {
+            jobs.push(encodeMarquillasEscPos(orden, tenant, cli, emp));
           }
-
-          const success = await printDirectRaw(allBytes, tenant.config);
-          if (success) {
-            toast.success("¡Tickets impresos físicamente!");
-          } else {
-            toast.error("No se pudo imprimir en la impresora física.");
-          }
-        } catch (err: any) {
-          console.error(err);
-          toast.error("Error al imprimir físicamente: " + err.message);
-        } finally {
-          onClose();
         }
-      };
-      runPhysicalPrint();
-    } else {
-      const timer = setTimeout(() => {
-        // Marcar como impreso solamente cuando el temporizador realmente se
-        // ejecuta. Si un re-render cancela el timer antes de estos 100 ms, el
-        // siguiente efecto podrá programarlo otra vez en vez de perderlo.
-        if (hasPrintedRef.current) return;
-        hasPrintedRef.current = true;
+
+        const totalBytes = jobs.reduce((total, job) => total + job.length, 0);
+        const payload = new Uint8Array(totalBytes);
+        let offset = 0;
+        jobs.forEach((job) => {
+          payload.set(job, offset);
+          offset += job.length;
+        });
+
+        const printedDirectly = await printDirectRaw(payload, cfg);
+        if (printedDirectly) {
+          const incluyeCopias = !esMarquillas && !esProduccion && (imprimirCopiaCaja || imprimirTaller);
+          toast.success(imprimirMarquillas || esMarquillas
+            ? "¡Tickets y marquillas impresos con cortes individuales!"
+            : incluyeCopias
+              ? "¡Ticket y copias impresos con cortes individuales!"
+              : "¡Ticket impreso en impresora física!");
+          safeClose();
+          return;
+        }
+
+        if (printRootRef.current) {
+          const printedSeparately = await printBrowserElementsIndividually(
+            printRootRef.current,
+            '[data-print-job="true"], .marquilla-item'
+          );
+          if (printedSeparately) {
+            safeClose();
+            return;
+          }
+        }
+
+        window.addEventListener("afterprint", safeClose, { once: true });
         window.print();
-        onClose();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [onClose, orden, tenant, cliente, empleado, serviciosList, imprimirCopiaCaja, imprimirTaller]);
+      } catch (err) {
+        console.error("Error en impresión directa; usando diálogo del navegador:", err);
+        try {
+          window.addEventListener("afterprint", safeClose, { once: true });
+          window.print();
+        } catch (printErr) {
+          console.error("Error al disparar window.print:", printErr);
+          safeClose();
+        }
+      }
+    };
+
+    const printTimer = setTimeout(() => void print(), 200);
+
+    return () => {
+      clearTimeout(printTimer);
+      window.removeEventListener("afterprint", safeClose);
+    };
+  }, [ready, esMarquillas, esProduccion, imprimirCopiaCaja, imprimirTaller, imprimirMarquillas]);
+
+  if (!emp || !cli) return null;
 
   return createPortal(
-    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
+    <div ref={printRootRef} className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target opacity-0 pointer-events-none print:opacity-100">
       <div className="max-w-md mx-auto p-0 print:p-0 print:max-w-none print:m-0">
-
-        {/* 1. TICKET CLIENTE (ORIGINAL) */}
-        <div className="ticket-page">
+        {esMarquillas ? (
+          <MarquillasTicket
+            orden={orden}
+            tenant={tenant}
+            cliente={cli}
+            empleado={emp}
+            formato={cfg.formato_ticket || "80mm"}
+          />
+        ) : esProduccion ? (
           <Ticket
             orden={orden}
             tenant={tenant}
-            empleado={empleado}
-            cliente={cliente}
-            formato={tenant.config?.formato_ticket || "80mm"}
-            serviciosList={serviciosList}
+            empleado={emp}
+            cliente={cli}
+            formato={cfg.formato_ticket || "80mm"}
+            serviciosList={srvList}
+            pagoRecibido={pagoRecibido}
+            ocultarUbicacion={ocultarUbicacion}
+            ocultarNotas={ocultarNotas}
+            esProduccion={true}
           />
-        </div>
+        ) : (
+          <>
+            {/* 1. TICKET PRINCIPAL / CLIENTE */}
+            <div className="ticket-page" data-print-job="true" data-print-kind="cliente">
+              <Ticket
+                orden={orden}
+                tenant={tenant}
+                empleado={emp}
+                cliente={cli}
+                formato={cfg.formato_ticket || "80mm"}
+                serviciosList={srvList}
+                pagoRecibido={pagoRecibido}
+                ocultarUbicacion={ocultarUbicacion}
+                ocultarNotas={ocultarNotas}
+              />
+            </div>
 
-        {/* 2. TICKET COPIA DE CAJA / NEGOCIO */}
-        {imprimirCopiaCaja && (
-          <div className="ticket-page pt-6 print:pt-0">
-            <Ticket
-              orden={orden}
-              tenant={tenant}
-              empleado={empleado}
-              cliente={cliente}
-              formato={tenant.config?.formato_ticket || "80mm"}
-              serviciosList={serviciosList}
-              esCopiaCaja={true}
-            />
-          </div>
-        )}
+            {/* 2. DUPLICADO / COPIA DE CAJA */}
+            {imprimirCopiaCaja && (
+              <>
+                <div className="page-break-divider" />
+                <div className="ticket-page" data-print-job="true" data-print-kind="caja">
+                  <Ticket
+                    orden={orden}
+                    tenant={tenant}
+                    empleado={emp}
+                    cliente={cli}
+                    formato={cfg.formato_ticket || "80mm"}
+                    serviciosList={srvList}
+                    pagoRecibido={pagoRecibido}
+                    ocultarUbicacion={ocultarUbicacion}
+                    ocultarNotas={ocultarNotas}
+                    esCopiaCaja={true}
+                  />
+                </div>
+              </>
+            )}
 
-        {/* 3. TICKET TALLER / USO INTERNO */}
-        {imprimirTaller && (
-          <div className="ticket-page pt-6 print:pt-0">
-            <Ticket
-              orden={orden}
-              tenant={tenant}
-              empleado={empleado}
-              cliente={cliente}
-              formato={tenant.config?.formato_ticket || "80mm"}
-              serviciosList={serviciosList}
-              esProduccion={true}
-            />
-          </div>
+            {/* 3. COPIA DE TALLER / PRODUCCIÓN */}
+            {imprimirTaller && (
+              <>
+                <div className="page-break-divider" />
+                <div className="ticket-page" data-print-job="true" data-print-kind="taller">
+                  <Ticket
+                    orden={orden}
+                    tenant={tenant}
+                    empleado={emp}
+                    cliente={cli}
+                    formato={cfg.formato_ticket || "80mm"}
+                    serviciosList={srvList}
+                    pagoRecibido={pagoRecibido}
+                    ocultarUbicacion={ocultarUbicacion}
+                    ocultarNotas={ocultarNotas}
+                    esProduccion={true}
+                  />
+                </div>
+              </>
+            )}
+
+            {/* 4. MARQUILLAS DE ROPA AUTOMÁTICAS */}
+            {imprimirMarquillas && (
+              <>
+                <div className="page-break-divider" />
+                <MarquillasTicket
+                  orden={orden}
+                  tenant={tenant}
+                  cliente={cli}
+                  empleado={emp}
+                  formato={cfg.formato_ticket || "80mm"}
+                />
+              </>
+            )}
+          </>
         )}
       </div>
 
@@ -7212,8 +7908,7 @@ function TicketPrintPortal({
           __html: `
         @media print {
           @page {
-            size: ${tenant.config?.formato_ticket === "57mm" ? "57mm auto" : "80mm auto"};
-            margin: 0;
+            margin: 0 !important;
           }
 
           html,
@@ -7247,7 +7942,15 @@ function TicketPrintPortal({
             box-sizing: border-box !important;
           }
 
-          .ticket-page {
+          .marquillas-container {
+            display: block !important;
+            width: 100% !important;
+            page-break-inside: auto !important;
+            break-inside: auto !important;
+          }
+
+          .ticket-page,
+          .marquilla-item {
             display: block !important;
             width: 100% !important;
             page-break-after: always !important;
@@ -7258,9 +7961,20 @@ function TicketPrintPortal({
             padding: 0 !important;
           }
 
-          .ticket-page:last-child {
+          .ticket-page:last-child,
+          .marquilla-item:last-child {
             page-break-after: auto !important;
             break-after: auto !important;
+          }
+
+          .page-break-divider {
+            display: block !important;
+            page-break-after: always !important;
+            break-after: page !important;
+            height: 0px !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            clear: both !important;
           }
 
           .no-print, nav, aside, header, footer, button {
@@ -7271,7 +7985,7 @@ function TicketPrintPortal({
         }}
       />
     </div>,
-    document.body,
+    document.body
   );
 }
 

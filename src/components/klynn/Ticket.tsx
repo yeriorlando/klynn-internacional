@@ -20,6 +20,10 @@ import {
   Truck,
   List,
   Landmark,
+  Wallet,
+  Coins,
+  Hourglass,
+  ArrowRightLeft,
 } from "lucide-react";
 
 interface Props {
@@ -99,14 +103,19 @@ export function Ticket({
     ecfStatus === 'REGISTERED' || 
     ecfStatus === 'SIGNED' || 
     ecfStatus === 'DELIVERED' ||
-    (!!orden.ecf_qr && orden.ecf_qr !== "null" && orden.ecf_qr.length > 5)
+    !!orden.ecf_security_code ||
+    (!!orden.ecf_qr && orden.ecf_qr !== "null" && orden.ecf_qr.length > 5) ||
+    orden.ncf?.startsWith("E")
   );
   const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
 
   const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
-  const qrData = isAcceptedECF ? actualQR : "";
+  const fallbackQR = isAcceptedECF && orden.ncf && tenant?.rnc ? (
+    `https://fc.dgii.gov.do/ecf/consulta?rncemisor=${tenant.rnc.replace(/\D/g, '')}&encf=${orden.ncf}&codigoSeguridad=${orden.ecf_security_code || ''}&montoTotal=${orden.total}`
+  ) : "";
+  const qrData = actualQR || fallbackQR;
 
-  let tipoDocumento = "FACTURA DE CONSUMO";
+  let tipoDocumento = "RECIBO DE ORDEN";
   if (!esProduccion) {
     if (orden.nota_credito_ncf) {
       tipoDocumento = isECF ? "NOTA DE CRÉDITO ELECTRÓNICA" : "NOTA DE CRÉDITO";
@@ -166,7 +175,7 @@ export function Ticket({
           </div>
         )}
 
-        <div className="my-1.5 rounded-md border border-black py-1 px-2.5 flex items-center">
+        <div className="my-1.5 rounded-md border border-black py-1 pl-2.5 pr-4 flex items-center">
           <div className="flex-1 flex items-center justify-center gap-2 font-bold text-[10.5px] uppercase tracking-wide">
             <Package className="h-4 w-4 shrink-0 text-black" />
             <span>TOTAL DE PRENDAS:</span>
@@ -192,13 +201,13 @@ export function Ticket({
           )}
         </div>
 
-        <div className="space-y-0.5 text-[10.5px]">
+        <div className="space-y-0.5 text-[10.5px] pr-2">
           <div className="flex items-start justify-between gap-1 py-1 border-b border-dotted border-black/40">
             <div className="flex items-center gap-1 font-bold uppercase shrink-0 text-black">
               <User className="h-3 w-3 text-black" />
               <span>CLIENTE:</span>
             </div>
-            <span className="font-semibold text-right text-black">
+            <span className="font-semibold text-right text-black break-words max-w-[65%]">
               {cliente.nombre} {cliente.apellido || ""}
             </span>
           </div>
@@ -219,7 +228,7 @@ export function Ticket({
                 <MapPin className="h-3 w-3 text-black" />
                 <span>DIRECCIÓN:</span>
               </div>
-              <span className="font-normal text-right text-[9.5px] leading-tight text-black max-w-[60%]">
+              <span className="font-normal text-right text-[9.5px] leading-tight text-black max-w-[60%] break-words">
                 {cliente.direccion || orden.direccion_entrega}
               </span>
             </div>
@@ -344,9 +353,9 @@ export function Ticket({
 
       <Sep />
 
-      {/* 2. ESTADO PRINCIPAL DE FACTURA */}
-      <div className="text-center font-extrabold uppercase text-[12px] py-0.5 tracking-wider">
-        {orden.saldo === 0 ? "★ FACTURA PAGADA ★" : `⚠️ PENDIENTE: ${formatRD(orden.saldo)}`}
+      {/* 2. ENCABEZADO PRINCIPAL DE DOCUMENTO */}
+      <div className="text-center font-extrabold uppercase text-[12.5px] py-0.5 tracking-wider">
+        {tipoDocumento}
       </div>
       {esCopiaCaja && (
         <div className="text-center font-extrabold uppercase text-[10px] py-0.5 bg-black text-white my-1 rounded-xs tracking-wider">
@@ -456,7 +465,7 @@ export function Ticket({
           const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
                                 (orden.servicios?.map(s => orden.servicios_precios?.[s] !== undefined ? orden.servicios_precios[s] : (srvListSafe.find(x => x.nombre === s)?.precio || 0)).reduce((a,b) => a+b, 0) || 0);
           
-          const isItbisIncluidoEnEstaOrden = cfg?.ncf_facturacion_activa && orden.itbis > 0 
+          const isItbisIncluidoEnEstaOrden = orden.itbis > 0 
                                             ? (subtotalBruto - orden.subtotal > 1) 
                                             : !!cfg?.itbis_incluido;
 
@@ -480,14 +489,14 @@ export function Ticket({
 
                 return (
                   <div key={'s'+i} className="mb-2.5">
-                    {/* Caja de Servicio con Esquinas Suaves (rounded-md) */}
-                    <div className="my-1.5 rounded-md bg-black text-white pl-2.5 pr-4 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
-                      <div className="flex items-center gap-1.5 font-bold shrink-0">
+                    {/* Caja de Servicio con Fondo Gris Suave, Altura Compacta y Tipografía Negrita */}
+                    <div className="my-1.5 rounded-md border border-black bg-black/[0.08] pl-2.5 pr-4 py-1 flex items-center justify-between text-[10.5px] uppercase tracking-wide">
+                      <div className="flex items-center gap-1.5 font-extrabold shrink-0 text-black">
                         <WashingMachine className="h-3.5 w-3.5" />
-                        <span className="text-[9.5px] tracking-wider">SERVICIO</span>
+                        <span className="text-[9.5px] tracking-wider font-black">SERVICIO</span>
                       </div>
-                      <div className="h-3.5 w-px bg-white/40 mx-2" />
-                      <span className="font-bold truncate text-[10.5px] tracking-wide text-right">{sName}</span>
+                      <div className="h-3.5 w-px bg-black/50 mx-2" />
+                      <span className="font-black truncate text-[11px] tracking-wide text-right text-black">{sName}</span>
                     </div>
 
                     {/* Tabla de encabezados */}
@@ -514,7 +523,7 @@ export function Ticket({
                           <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(p)}</div>
                         </div>
                         <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
-                          {cfg?.ncf_facturacion_activa && orden.itbis > 0 ? formatNumber(p * ((cfg.itbis_porcentaje || 18) / 100)) : "0.00"}
+                          {orden.itbis > 0 ? formatNumber(p * ((cfg?.itbis_porcentaje || 18) / 100)) : "0.00"}
                         </div>
                         <div className="w-[28%] text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
                           {formatNumber(p)}
@@ -528,7 +537,7 @@ export function Ticket({
                         let baseTotal = it.cantidad * (it.precio_unitario || 0);
                         let itemItbis = 0;
                         let valor = baseTotal;
-                        if (cfg?.ncf_facturacion_activa && orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
+                        if (orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
                           if (isItbisIncluidoEnEstaOrden) {
                             itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
                           } else {
@@ -586,7 +595,7 @@ export function Ticket({
                       let baseTotal = it.cantidad * it.precio_unitario;
                       let itemItbis = 0;
                       let valor = baseTotal;
-                      if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
+                      if (orden.itbis > 0) {
                         if (isItbisIncluidoEnEstaOrden) {
                           itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
                         } else {
@@ -642,7 +651,7 @@ export function Ticket({
           <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
         </div>
 
-        {cfg?.ncf_facturacion_activa && orden.itbis > 0 && (
+        {orden.itbis > 0 && (
           <div className="flex justify-between items-center gap-2">
             <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Landmark className="h-3.5 w-3.5 shrink-0 text-black" />
@@ -721,28 +730,37 @@ export function Ticket({
             <FileText className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Estado de factura:</span>
           </div>
-          <span className="font-black uppercase tracking-wide shrink-0">{orden.saldo === 0 ? "PAGADA" : "PENDIENTE"}</span>
+          <span className="font-black uppercase tracking-wide shrink-0">
+            {orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"}
+          </span>
         </div>
 
-        {pagoRecibido !== undefined && (
+        {pagoRecibido !== undefined ? (
           <>
             {orden.saldo === 0 && (pagoRecibido < orden.total || orden.pagado > pagoRecibido) ? (
               <>
-                <Row k="Saldo pendiente" v="RD$0.00" bold />
-                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} boldValue />}
+                <Row k="Saldo pendiente" v="RD$0.00" icon={Hourglass} bold />
+                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} icon={ArrowRightLeft} boldValue />}
               </>
             ) : pagoRecibido < (orden.saldo + pagoRecibido) && pagoRecibido > 0 ? (
               <>
-                <Row k="Abonado" v={formatRD(pagoRecibido).replace("DOP", "RD$")} bold />
-                <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} bold />
+                <Row k="Abonado" v={formatRD(pagoRecibido).replace("DOP", "RD$")} icon={Wallet} bold />
+                <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} icon={Hourglass} bold />
               </>
             ) : (
               <>
-                <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} />
-                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} boldValue />}
+                <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} icon={Coins} />
+                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} icon={ArrowRightLeft} boldValue />}
               </>
             )}
           </>
+        ) : (
+          orden.saldo > 0 && orden.pagado > 0 && (
+            <>
+              <Row k="Abonado" v={formatRD(orden.pagado).replace("DOP", "RD$")} icon={Wallet} bold />
+              <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} icon={Hourglass} bold />
+            </>
+          )
         )}
 
         <div className="flex justify-between items-center gap-2">
@@ -762,6 +780,39 @@ export function Ticket({
         </div>
       </div>
 
+      {/* CONTROL DE MARBETE (Solo visible en Copia de Caja o Copia de Taller) */}
+      {(esCopiaCaja || esProduccion) && ((orden.marbetes && orden.marbetes.length > 0) || orden.marbete_secuencia) && (
+        <>
+          <Sep />
+          <div className="border border-black p-1.5 my-1 text-center bg-black/5 rounded-xs">
+            <div className="text-[9.5px] font-extrabold uppercase tracking-wider text-black flex items-center justify-center gap-1">
+              <span>CONTROL DE MARBETE</span>
+            </div>
+            {orden.marbetes && orden.marbetes.length > 0 ? (
+              <div className="space-y-0.5 mt-1">
+                {orden.marbetes.map((m, idx) => (
+                  <div key={idx} className="text-[11px] font-bold text-black flex items-center justify-between px-1">
+                    <span>[{idx + 1}] {m.color.toUpperCase()}</span>
+                    <span>{m.piezas} PZAS</span>
+                    <span>#{m.secuencia}</span>
+                  </div>
+                ))}
+                {orden.marbetes.length > 1 && (
+                  <div className="text-[9.5px] font-black text-black pt-1 border-t border-black/30 mt-1">
+                    TOTAL PRENDAS MARBETES: {orden.marbetes.reduce((sum, it) => sum + (Number(it.piezas) || 0), 0)} PZAS
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-[11px] font-bold text-black mt-0.5">
+                {orden.marbete_color ? `${orden.marbete_color.toUpperCase()} • ` : ""}
+                {orden.marbete_piezas || totalPrendas} PZAS • #{orden.marbete_secuencia}
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
       <Sep />
 
       {/* 8. ATENDIDO POR & PIE DE PÁGINA */}
@@ -770,17 +821,35 @@ export function Ticket({
         <div className="text-[14px] font-black text-black mt-0.5">{empleado.nombre}</div>
       </div>
 
-      <Sep />
+      {cfg?.ticket_pie !== undefined ? (
+        cfg.ticket_pie.trim() !== "" && (
+          <div className="text-center py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-black">
+            {cfg.ticket_pie}
+          </div>
+        )
+      ) : (
+        <div className="text-center py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-black">
+          ¡GRACIAS POR SU PREFERENCIA!
+        </div>
+      )}
 
-      <div className="text-center py-0.5 text-[10.5px] font-bold uppercase tracking-wider text-black">
-        {cfg?.ticket_pie ?? "¡Gracias por su preferencia!"}
-      </div>
-
-      <Sep />
-
-      <div className="text-center text-[9.5px] leading-snug text-black font-bold tracking-tight">
-        {cfg?.ticket_nota || "Ropa con más de 30 días será vendida por importe de trabajo."}
-      </div>
+      {cfg?.ticket_nota !== undefined ? (
+        cfg.ticket_nota.trim() !== "" && (
+          <>
+            <Sep />
+            <div className="text-center text-[9.5px] leading-snug text-black font-bold tracking-tight">
+              {cfg.ticket_nota}
+            </div>
+          </>
+        )
+      ) : (
+        <>
+          <Sep />
+          <div className="text-center text-[9.5px] leading-snug text-black font-bold tracking-tight">
+            Ropa con más de 30 días será vendida por importe de trabajo.
+          </div>
+        </>
+      )}
 
       {/* 9. SECCIÓN FISCAL E-CF / QR DGII */}
       {isPendingECF && (
@@ -795,14 +864,16 @@ export function Ticket({
         </div>
       )}
 
-      {isAcceptedECF && qrData && (
+      {isAcceptedECF && (
         <div className="mt-2 flex flex-col items-center gap-1">
           <div className="text-[9.5px] font-black uppercase text-center tracking-wide">
-            {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : ""}
+            {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : "Factura Electrónica"}
           </div>
-          <div className="p-1 bg-white">
-            <QRCodeSVG value={qrData} size={100} level="M" />
-          </div>
+          {qrData ? (
+            <div className="p-1 bg-white">
+              <QRCodeSVG value={qrData} size={100} level="M" />
+            </div>
+          ) : null}
           <div className="text-[9px] text-center leading-snug font-bold text-black">
             {orden.ecf_security_code && orden.ecf_security_code !== "null" && (
               <div>Código de Seguridad: <span className="font-black">{orden.ecf_security_code}</span></div>
@@ -822,11 +893,26 @@ export function Ticket({
 }
 
 function Sep() { return <div className="my-1.5 border-t-[1.5px] border-dashed border-black" />; }
-function Row({ k, v, bold, boldValue }: { k: string; v: string; bold?: boolean; boldValue?: boolean }) {
+function Row({
+  k,
+  v,
+  bold,
+  boldValue,
+  icon: Icon
+}: {
+  k: string;
+  v: string;
+  bold?: boolean;
+  boldValue?: boolean;
+  icon?: any;
+}) {
   return (
-    <div className={`flex justify-between text-[11px] ${bold ? "font-bold text-[12px]" : "font-semibold"}`}>
-      <span className="font-semibold">{k}:</span>
-      <span className={boldValue || bold ? "font-bold" : "font-semibold"}>{v}</span>
+    <div className={`flex justify-between items-center gap-2 text-[11px] ${bold ? "font-bold" : "font-semibold"}`}>
+      <div className="flex items-center gap-1.5 font-semibold shrink-0">
+        {Icon && <Icon className="h-3.5 w-3.5 shrink-0 text-black" />}
+        <span>{k}:</span>
+      </div>
+      <span className={boldValue || bold ? "font-bold tabular-nums" : "font-semibold tabular-nums"}>{v}</span>
     </div>
   );
 }
