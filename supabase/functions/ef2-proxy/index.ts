@@ -56,19 +56,22 @@ async function authenticatedUser(req: Request) {
   return response.json();
 }
 
-async function authorizeTenant(user: any, tenantId?: string) {
+async function authorizeTenant(user: any, tenantId?: string, action?: string) {
   const email = String(user?.email || "").trim().toLowerCase();
   if (ADMIN_EMAILS.has(email)) return;
   if (!tenantId) throw new Error("tenantId es obligatorio.");
   const { url, headers } = serviceConfig();
   const employee = await fetch(
-    `${url}/rest/v1/empleados?id=eq.${encodeURIComponent(user.id)}&tenant_id=eq.${encodeURIComponent(tenantId)}&select=id&limit=1`,
+    `${url}/rest/v1/empleados?id=eq.${encodeURIComponent(user.id)}&tenant_id=eq.${encodeURIComponent(tenantId)}&select=id,rol&limit=1`,
     { headers },
   );
   if (!employee.ok) throw new Error("No se pudo validar el acceso al tenant.");
   const rows = await employee.json();
   if (!Array.isArray(rows) || rows.length === 0) {
     throw new Error("No tienes permiso para operar la configuración fiscal de este tenant.");
+  }
+  if (["guardar_credenciales", "verificar_token"].includes(String(action || "")) && rows[0]?.rol !== "ADMIN") {
+    throw new Error("Solo el administrador de la lavandería puede gestionar las credenciales EF2.");
   }
 }
 
@@ -77,7 +80,7 @@ async function getTenantConfig(tenantId?: string) {
   const { url, headers } = serviceConfig();
   const [response, credentialsResponse] = await Promise.all([
     fetch(
-      `${url}/rest/v1/ecf_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=tenant_id,rnc_emisor,razon_social,ef2_username,ef2_environment,ambiente,is_active&limit=1`,
+      `${url}/rest/v1/ecf_config?tenant_id=eq.${encodeURIComponent(tenantId)}&select=tenant_id,rnc_emisor,razon_social,ef2_username,ef2_environment,ef2_credentials_owner,ambiente,is_active&limit=1`,
       { headers },
     ),
     fetch(
@@ -270,7 +273,7 @@ serve(async (req) => {
   try {
     const request = (await req.json()) as RequestBody;
     const user = await authenticatedUser(req);
-    await authorizeTenant(user, request.tenantId);
+    await authorizeTenant(user, request.tenantId, request.action);
     const tenantConfig = await getTenantConfig(request.tenantId);
     const environment = await effectiveEnvironment(request.environment, tenantConfig, request.action);
     const { token } = resolveCredentials(request, tenantConfig, environment);
@@ -291,6 +294,10 @@ serve(async (req) => {
 
       case "guardar_credenciales": {
         if (!request.tenantId) throw new Error("tenantId es obligatorio.");
+        const email = String(user?.email || "").trim().toLowerCase();
+        if (!ADMIN_EMAILS.has(email) && tenantConfig?.ef2_credentials_owner === "platform") {
+          throw new Error("Las credenciales EF2 de esta lavandería son administradas por Klynn.");
+        }
         const candidateToken = String(payload.token || "").trim();
         const candidateUsername = String(payload.username || "").trim();
         if (!candidateToken.startsWith("tok_")) {

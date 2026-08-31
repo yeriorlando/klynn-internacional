@@ -137,12 +137,24 @@ function CajaPage() {
   const fiscalConfig = fiscalConfigData || null;
   const loading = loadingCaja || loadingTodas || (!!caja && loadingMovs);
 
-  const reversedMovs = useMemo(() => [...movs].reverse(), [movs]);
-  const totalMovsPages = Math.ceil(reversedMovs.length / 10);
-  const currentMovs = useMemo(
-    () => reversedMovs.slice((movsPage - 1) * 10, movsPage * 10),
-    [reversedMovs, movsPage],
+  // getMovimientos ya entrega los registros del más reciente al más antiguo.
+  // La primera página debe mostrar inmediatamente egresos y reembolsos nuevos.
+  const orderedMovs = useMemo(
+    () => [...movs].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en)),
+    [movs],
   );
+  const totalMovsPages = Math.ceil(orderedMovs.length / 10);
+  const currentMovs = useMemo(
+    () => orderedMovs.slice((movsPage - 1) * 10, movsPage * 10),
+    [orderedMovs, movsPage],
+  );
+  const newestMovId = orderedMovs[0]?.id;
+
+  // Si entra un movimiento nuevo mientras el usuario está en otra página,
+  // regresar al inicio para hacerlo visible de inmediato.
+  useEffect(() => {
+    if (newestMovId) setMovsPage(1);
+  }, [newestMovId]);
 
   const ventasEf = movs
     .filter((m) => m.tipo === "VENTA" && m.metodo === "EFECTIVO")
@@ -565,10 +577,29 @@ function CajaPage() {
                             );
                           })()
                         ) : m.concepto.startsWith("Reembolso:") ? (
-                          <>
-                            <span className="font-bold">Reembolso:</span>
-                            {m.concepto.substring("Reembolso:".length)}
-                          </>
+                          (() => {
+                            const relatedOrder = ordenesList.find((orden) => orden.id === m.orden_id);
+                            const e34 = relatedOrder?.nota_credito_ncf ||
+                              (m.referencia?.startsWith("DGII:E34:")
+                                ? m.referencia.substring("DGII:E34:".length)
+                                : "");
+                            return (
+                              <div className="flex flex-wrap items-center gap-1.5 py-0.5">
+                                <span className="font-bold">Reembolso:</span>
+                                <span>{m.concepto.substring("Reembolso:".length)}</span>
+                                {e34 ? (
+                                  <Badge className="gap-1 border-none bg-blue-600 px-2 py-0.5 text-[10px] font-extrabold text-white hover:bg-blue-600">
+                                    <ShieldCheck className="h-3 w-3" /> DGII · E34
+                                    <span className="font-mono">{e34}</span>
+                                  </Badge>
+                                ) : (
+                                  <Badge variant="outline" className="gap-1 border-slate-300 px-2 py-0.5 text-[10px] font-bold text-slate-600 dark:border-slate-600 dark:text-slate-300">
+                                    <FileText className="h-3 w-3" /> Anulación interna
+                                  </Badge>
+                                )}
+                              </div>
+                            );
+                          })()
                         ) : (
                           m.concepto
                         )}
@@ -597,7 +628,7 @@ function CajaPage() {
               <div className="flex items-center justify-between px-4 py-3 border-t border-border bg-surface-elevated">
                 <span className="text-xs text-muted-foreground">
                   Mostrando {(movsPage - 1) * 10 + 1} al{" "}
-                  {Math.min(movsPage * 10, reversedMovs.length)} de {reversedMovs.length}
+                  {Math.min(movsPage * 10, orderedMovs.length)} de {orderedMovs.length}
                 </span>
                 <div className="flex gap-1">
                   <Button

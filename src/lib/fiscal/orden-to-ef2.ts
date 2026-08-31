@@ -41,6 +41,17 @@ function dateDO(value: string | Date = new Date()) {
   return `${String(date.getDate()).padStart(2, "0")}-${String(date.getMonth() + 1).padStart(2, "0")}-${date.getFullYear()}`;
 }
 
+/** DGII: 0 hasta 30 días calendario; 1 cuando la factura supera 30 días. */
+function creditNoteAgeIndicator(value: string | Date | undefined, issueDate = new Date()) {
+  const original = value instanceof Date ? value : new Date(value || "");
+  if (Number.isNaN(original.getTime())) return "0";
+
+  const originalDay = Date.UTC(original.getFullYear(), original.getMonth(), original.getDate());
+  const issueDay = Date.UTC(issueDate.getFullYear(), issueDate.getMonth(), issueDate.getDate());
+  const elapsedCalendarDays = Math.floor((issueDay - originalDay) / 86_400_000);
+  return elapsedCalendarDays > 30 ? "1" : "0";
+}
+
 function normalizeTaxId(value?: string) {
   return String(value || "").replace(/\D/g, "");
 }
@@ -140,7 +151,10 @@ export function ordenToEF2Payload(
   sequenceExpiration?: string,
 ) {
   const typeCode = NCF_TO_EF2_TYPE[type || order.tipo_ecf || config.ncf_secuencia || "E32"] || "32";
-  const issueDate = dateDO(order.creado_en || new Date());
+  // Las notas E33/E34 son comprobantes nuevos: su fecha de emisión es hoy.
+  // La fecha histórica de la factura original viaja por separado en
+  // InformacionReferencia.FechaNCFModificado.
+  const issueDate = dateDO(["33", "34"].includes(typeCode) ? new Date() : order.creado_en || new Date());
   const issuerRnc = normalizeTaxId(tenant.rnc);
   const isTestIssuer = !validTaxId(issuerRnc) || tenant.rnc?.toUpperCase().startsWith("SBX");
   const rncEmisor = isTestIssuer ? EF2_DEFAULT_TEST_RNC : issuerRnc;
@@ -185,7 +199,11 @@ export function ordenToEF2Payload(
   } else if (sequenceExpiration && typeCode !== "34") {
     idDoc.FechaVencimientoSecuencia = dateDO(sequenceExpiration);
   }
-  if (typeCode === "34") idDoc.IndicadorNotaCredito = "0";
+  if (typeCode === "34") {
+    // Este indicador depende de la antigüedad del e-CF afectado, no del tipo
+    // de modificación seleccionado para la nota.
+    idDoc.IndicadorNotaCredito = creditNoteAgeIndicator(reference?.date || order.creado_en);
+  }
 
   const header: Record<string, any> = {
     Version: "1.0",

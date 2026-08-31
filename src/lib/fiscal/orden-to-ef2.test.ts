@@ -45,29 +45,34 @@ test("E31 incluye comprador y totales gravados", () => {
 });
 
 test("E34 coloca la referencia dentro del encabezado", () => {
+  const recentDate = new Date();
+  recentDate.setDate(recentDate.getDate() - 30);
   const note = { ...baseOrder, id: "orden-1:nc", itbis: 0, subtotal: 100, total: 100,
     items: [{ descripcion: "Anulación", cantidad: 1, precio_unitario: 100, is_exento: true }] };
   const payload: any = ordenToEF2Payload(
     note as any, buyer as any, config as any, tenant as any, "E34",
-    { ncf: "E310000000001", date: baseOrder.creado_en, code: "01", reason: "Anulación total" },
+    { ncf: "E310000000001", date: recentDate.toISOString(), code: "03", reason: "Corrección de montos" },
   );
   assert.deepEqual(payload.ECF.Encabezado.InformacionReferencia, {
     NCFModificado: "E310000000001",
-    FechaNCFModificado: "28-08-2026",
-    CodigoModificacion: "1",
-    RazonModificacion: "Anulación total",
+    FechaNCFModificado: `${String(recentDate.getDate()).padStart(2, "0")}-${String(recentDate.getMonth() + 1).padStart(2, "0")}-${recentDate.getFullYear()}`,
+    CodigoModificacion: "3",
+    RazonModificacion: "Corrección de montos",
   });
   assert.equal(payload.ECF.Encabezado.IdDoc.IndicadorNotaCredito, "0");
 });
 
 test("E34 de una E32 menor de RD$250,000 no inventa comprador", () => {
+  const oldDate = new Date();
+  oldDate.setDate(oldDate.getDate() - 31);
   const note = { ...baseOrder, id: "orden-1:nc-e32", itbis: 0, subtotal: 100, total: 100,
     items: [{ descripcion: "Devolución", cantidad: 1, precio_unitario: 100, is_exento: true }] };
   const payload: any = ordenToEF2Payload(
     note as any, null, config as any, tenant as any, "E34",
-    { ncf: "E320000000001", date: baseOrder.creado_en, code: "04", reason: "Devolución" },
+    { ncf: "E320000000001", date: oldDate.toISOString(), code: "03", reason: "Devolución" },
   );
   assert.equal(payload.ECF.Encabezado.Comprador, undefined);
+  assert.equal(payload.ECF.Encabezado.IdDoc.IndicadorNotaCredito, "1");
 });
 
 test("E33 exige una referencia original", () => {

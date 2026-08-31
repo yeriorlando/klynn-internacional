@@ -1500,7 +1500,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
 
                 <div className="flex flex-wrap items-center gap-2.5 pt-2.5 border-t border-sky-200/60 dark:border-sky-800/60">
                   <a
-                    href="https://github.com/yeriorlando/klynn/releases/download/untagged-a148a7657cedb2a8e3a7/Klynn-Kiosco-Setup.exe"
+                    href="https://www.mediafire.com/file/zmgt9swtya2n4fy/Klynn-Kiosco-Setup.exe/file"
                     target="_blank"
                     rel="noopener noreferrer"
                     download="Klynn-Kiosco-Setup.exe"
@@ -3873,6 +3873,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
     : effectiveEnvironment === "CerteCF"
       ? "HOMOLOGACIÓN (CerteCF)"
       : "PRUEBAS (TesteCF / Sandbox)";
+  const credentialsManagedByTenant = (config?.ef2_credentials_owner || "tenant") === "tenant";
 
   const [draft, setDraft] = useState<Partial<ECFConfig>>(() => config ? {
     ...config,
@@ -4368,6 +4369,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   </div>
                 </div>
 
+                {credentialsManagedByTenant ? (
                 <div className="space-y-4">
                   {effectiveEnvironment === "TesteCF" && (
                     <div className="p-3.5 rounded-xl border border-dashed border-sky-300 dark:border-sky-800 bg-sky-50/40 dark:bg-sky-950/10 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
@@ -4434,6 +4436,20 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     <span>{loading ? "Verificando..." : "Probar Conexión con EF2 API"}</span>
                   </Button>
                 </div>
+                ) : (
+                  <div className="rounded-2xl border border-blue-200 bg-blue-50 p-5 text-sm text-blue-950 dark:border-blue-900 dark:bg-blue-950/30 dark:text-blue-100">
+                    <div className="flex items-start gap-3">
+                      <ShieldCheck className="mt-0.5 h-5 w-5 shrink-0 text-blue-600 dark:text-blue-300" />
+                      <div>
+                        <div className="font-bold">Credenciales administradas por Klynn</div>
+                        <p className="mt-1 text-xs leading-relaxed text-blue-800 dark:text-blue-200">
+                          El ambiente y la conexión EF2 de esta lavandería se gestionan desde el panel central. Por seguridad, el usuario y el token no se muestran ni pueden modificarse desde esta cuenta.
+                        </p>
+                        <p className="mt-2 text-[11px] font-semibold">Si deseas administrar directamente tu cuenta EF2, solicita a soporte cambiar la modalidad a “La lavandería”.</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </Card>
             )}
           </div>

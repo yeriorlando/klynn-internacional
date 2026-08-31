@@ -16,6 +16,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
@@ -58,6 +68,18 @@ function esAtrasada(fechaStr?: string, estado?: EstadoOrden): boolean {
 function formatMetodoPagoLabel(metodo?: string): string {
   if (!metodo) return "—";
   return metodo.replace(/_/g, " ");
+}
+
+function getNotaCreditoMonto(orden: Orden): number {
+  return Math.max(0, Number(orden.nota_credito_monto || 0));
+}
+
+function getNotaDebitoMonto(orden: Orden): number {
+  return Math.max(0, Number(orden.nota_debito_monto || 0));
+}
+
+function getTotalNetoOrden(orden: Orden): number {
+  return Math.max(0, Number((orden.total - getNotaCreditoMonto(orden) + getNotaDebitoMonto(orden)).toFixed(2)));
 }
 
 export function isMetodoCredito(metodo?: string): boolean {
@@ -105,13 +127,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [anular, setAnular] = useState<Orden | null>(null);
   const [motivoAnular, setMotivoAnular] = useState("");
   const [codigoAnular, setCodigoAnular] = useState("01");
+  const [confirmarAnulacion, setConfirmarAnulacion] = useState(false);
+  const [isAnulando, setIsAnulando] = useState(false);
   const [debito, setDebito] = useState<Orden | null>(null);
   const [montoDebito, setMontoDebito] = useState(0);
   const [motivoDebito, setMotivoDebito] = useState("");
+  const [confirmarNotaDebito, setConfirmarNotaDebito] = useState(false);
+  const [isGenerandoDebito, setIsGenerandoDebito] = useState(false);
   const [credito, setCredito] = useState<Orden | null>(null);
   const [montoCredito, setMontoCredito] = useState(0);
   const [motivoCredito, setMotivoCredito] = useState("");
-  const [codigoCredito, setCodigoCredito] = useState("04");
+  const [codigoCredito, setCodigoCredito] = useState("");
+  const [confirmarNotaCredito, setConfirmarNotaCredito] = useState(false);
+  const [isGenerandoCredito, setIsGenerandoCredito] = useState(false);
   const [showPrint, setShowPrint] = useState<Orden | null>(null);
   const [showPrintProduccion, setShowPrintProduccion] = useState<Orden | null>(null);
   const [showPrintMarquillas, setShowPrintMarquillas] = useState<Orden | null>(null);
@@ -229,7 +257,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           setCredito(orderToView);
           setMontoCredito(0);
           setMotivoCredito("");
-          setCodigoCredito("04");
+          setCodigoCredito("");
         } else if (searchParams.action === "debito") {
           setDebito(orderToView);
         } else if (searchParams.action === "condonar") {
@@ -433,8 +461,8 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     return {
       filename: "Ordenes",
       columns: isConveyorEnabled
-        ? ["Número", "Cliente", "Estado", "Ubicación", "Total", "Saldo", "Pago", "Fecha"]
-        : ["Número", "Cliente", "Estado", "Total", "Saldo", "Pago", "Fecha"],
+        ? ["Número", "Cliente", "Estado", "Ubicación", "Total original", "Nota crédito", "Nota débito", "Total neto", "Saldo", "Pago", "Fecha"]
+        : ["Número", "Cliente", "Estado", "Total original", "Nota crédito", "Nota débito", "Total neto", "Saldo", "Pago", "Fecha"],
       data: filt.map(o => {
         const row = [
           o.numero, 
@@ -444,7 +472,15 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         if (isConveyorEnabled) {
           row.push(o.ubicacion_ropa || "Sin asignar");
         }
-        row.push(formatRD(o.total), formatRD(o.saldo), o.metodo_pago, formatDateTimeRD(o.creado_en));
+        row.push(
+          formatRD(o.total),
+          formatRD(getNotaCreditoMonto(o)),
+          formatRD(getNotaDebitoMonto(o)),
+          formatRD(getTotalNetoOrden(o)),
+          formatRD(o.saldo),
+          o.metodo_pago,
+          formatDateTimeRD(o.creado_en),
+        );
         return row;
       })
     };
@@ -564,52 +600,63 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   async function anularOrden() {
     if (!anular || motivoAnular.length < 5) { toast.error("Indica el motivo (mín 5 caracteres)"); return; }
-    
+    if (isAnulando) return;
+
+    setIsAnulando(true);
     try {
       let notaCreditoNCF = "";
+      let notaCreditoMetadata: Partial<Orden> = {};
       
       // 1. Generar Nota de Crédito (E34) si la orden tenía NCF electrónico
       if (anular.tipo_ecf && anular.ncf) {
         try {
           const cfg = await getECFConfig(tenant.id);
-          if (isECFReady(cfg)) {
-            const cliente = clientes.find(c => c.id === anular.cliente_id) || null;
-            const res = await emitirECF(
-              anular,
-              cliente,
-              cfg?.pronesoft_tenant_id || undefined,
-              cfg,
-              tenant,
-              "E34", // Tipo: Nota de Crédito
-              {
-                ncf: anular.ncf,
-                date: anular.creado_en,
-                code: codigoAnular // 01=Anulación total, etc.
-              }
+          if (!isECFReady(cfg)) {
+            throw new Error(
+              "La facturación electrónica no está configurada. No se puede anular localmente una factura ya emitida ante la DGII.",
             );
-            notaCreditoNCF = res.encf;
-            toast.info(`Nota de Crédito emitida: ${notaCreditoNCF} 📄`);
-          } else {
-            // Modo offline/local
-            notaCreditoNCF = await nextECFNumero(tenant.id, "E34");
-            await saveECFDocument({
-              id: uid("ecf"),
-              tenant_id: tenant.id,
-              order_id: anular.id,
-              encf: notaCreditoNCF,
-              tipo_ecf: "E34",
-              rnc_receptor: clientes.find(c => c.id === anular.cliente_id)?.cedula,
-              status: "accepted",
-              monto_total: anular.total,
-              monto_itbis: anular.itbis,
-              fecha_emision: new Date().toISOString(),
-              xml_content: "ANULACION_LOCAL",
-            });
-            toast.info(`Nota de Crédito local: ${notaCreditoNCF} 📄`);
           }
+
+          const cliente = clientes.find(c => c.id === anular.cliente_id) || null;
+          const res = await emitirECF(
+            anular,
+            cliente,
+            cfg?.pronesoft_tenant_id || undefined,
+            cfg,
+            tenant,
+            "E34", // Tipo: Nota de Crédito
+            {
+              ncf: anular.ncf,
+              date: anular.creado_en,
+              code: codigoAnular, // 01=Anulación total, etc.
+              reason: motivoAnular,
+            }
+          );
+
+          const legalStatus = String(res.legal_status || "").toUpperCase();
+          if (legalStatus !== "ACCEPTED") {
+            throw new Error(
+              `EF2 generó ${res.encf || "la Nota de Crédito"}, pero la DGII todavía no la ha aceptado (estado: ${legalStatus || "PENDIENTE"}). La orden no fue anulada.`,
+            );
+          }
+
+          notaCreditoNCF = res.encf;
+          notaCreditoMetadata = {
+            nota_credito_id: res.document.id,
+            nota_credito_qr: res.document.qr_content || res.document.document_stamp_url,
+            nota_credito_codigo_seguridad: res.document.security_code,
+            nota_credito_fecha_firma: res.document.signature_date,
+            nota_credito_fecha_emision: res.document.fecha_emision,
+            nota_credito_estado: legalStatus,
+            nota_credito_pdf_url: res.document.pdf_url,
+            nota_credito_xml_url: res.document.xml_url,
+          };
+          toast.info(`Nota de Crédito aceptada: ${notaCreditoNCF} 📄`);
         } catch (e: any) {
           console.error("Error fiscal:", e);
-          toast.warning("No se pudo emitir la Nota de Crédito. Se anulará localmente.");
+          throw new Error(
+            e?.message || "EF2/DGII no aceptó la Nota de Crédito. La orden no fue anulada.",
+          );
         }
       }
 
@@ -619,7 +666,9 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         estado: "ANULADA", 
         motivo_anulacion: motivoAnular,
         motivo_anulacion_codigo: codigoAnular,
-        nota_credito_ncf: notaCreditoNCF || undefined
+        nota_credito_ncf: notaCreditoNCF || undefined,
+        nota_credito_anula_totalmente: Boolean(notaCreditoNCF),
+        ...notaCreditoMetadata,
       };
       
       await saveOrden(ordenAnulada);
@@ -635,6 +684,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           concepto: `Reembolso: Anulación ${anular.numero}`,
           monto: anular.pagado,
           metodo: anular.metodo_pago,
+          referencia: notaCreditoNCF ? `DGII:E34:${notaCreditoNCF}` : "ANULACION_INTERNA",
           orden_id: anular.id,
           creado_en: new Date().toISOString(),
         });
@@ -642,6 +692,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       }
 
       setAnular(null); 
+      setConfirmarAnulacion(false);
       setMotivoAnular(""); 
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
@@ -652,16 +703,23 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       toast.success("Orden anulada correctamente ✓");
     } catch (err: any) {
       console.error("DEBUG: Error en anularOrden:", err);
-      toast.error("Error al anular orden. Asegúrate de haber ejecutado el script SQL para añadir las nuevas columnas.");
+      toast.error(err?.message || "No se pudo anular la orden.");
+    } finally {
+      setIsAnulando(false);
     }
   }
 
   async function generarNotaDebito() {
     if (!debito) return;
+    if (montoDebito <= 0) { toast.error("Indica un monto mayor que cero."); return; }
+    if (motivoDebito.trim().length < 5) { toast.error("Indica un motivo de al menos 5 caracteres."); return; }
+    if (isGenerandoDebito) return;
+    setIsGenerandoDebito(true);
     try {
       const isECF = debito.ncf?.startsWith("E");
       let notaDebitoNCF = "";
       let notaDebitoID = "";
+      let notaDebitoMetadata: Partial<Orden> = {};
 
       if (isECF) {
         try {
@@ -680,33 +738,31 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               {
                 ncf: debito.ncf!,
                 date: debito.creado_en,
-                code: "03" // 03 = Ajuste de precio
+                code: "03",
+                reason: motivoDebito,
               }
             );
+            const legalStatus = String(res.legal_status || "").toUpperCase();
+            if (legalStatus !== "ACCEPTED") {
+              throw new Error(`La DGII no aceptó la E33 (estado: ${legalStatus || "PENDIENTE"}).`);
+            }
             notaDebitoNCF = res.encf;
             notaDebitoID = res.document.id;
+            notaDebitoMetadata = {
+              nota_debito_qr: res.document.qr_content || res.document.document_stamp_url,
+              nota_debito_codigo_seguridad: res.document.security_code,
+              nota_debito_fecha_firma: res.document.signature_date,
+              nota_debito_fecha_emision: res.document.fecha_emision,
+              nota_debito_estado: legalStatus,
+              nota_debito_pdf_url: res.document.pdf_url,
+              nota_debito_xml_url: res.document.xml_url,
+            };
           } else {
-            const next = await nextECFNumero(tenant.id, "33"); // E33
-            if (next) {
-              notaDebitoNCF = next.ncf;
-              notaDebitoID = uid("ecf");
-              await saveECFDocument({
-                id: notaDebitoID,
-                tenant_id: tenant.id,
-                tipo: "33",
-                ncf: notaDebitoNCF,
-                monto_total: montoDebito,
-                rnc_receptor: clientes.find(c => c.id === debito.cliente_id)?.cedula || "",
-                fecha_emision: new Date().toISOString(),
-                estado: "ACEPTADO",
-                ncf_modificado: debito.ncf
-              });
-            }
+            throw new Error("La facturación electrónica no está configurada; no se puede crear una E33 local para una factura DGII.");
           }
         } catch (e: any) {
           console.error("Error ND Fiscal:", e);
-          toast.error("Error al emitir Nota de Débito fiscal.");
-          return;
+          throw new Error(e?.message || "Error al emitir la Nota de Débito fiscal.");
         }
       }
 
@@ -716,38 +772,64 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         saldo: debito.saldo + montoDebito,
         nota_debito_ncf: notaDebitoNCF || undefined,
         nota_debito_id: notaDebitoID || undefined,
-        nota_debito_monto: montoDebito
+        nota_debito_monto: Number(((debito.nota_debito_monto || 0) + montoDebito).toFixed(2)),
+        ...notaDebitoMetadata,
       };
 
       await saveOrden(ordenActualizada);
       
       setDebito(null);
+      setConfirmarNotaDebito(false);
       setMontoDebito(0);
       setMotivoDebito("");
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       setShowPrint(ordenActualizada);
       
       toast.success("Nota de Débito generada correctamente ✓");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error ND:", err);
-      toast.error("Error al generar Nota de Débito");
+      toast.error(err?.message || "Error al generar la Nota de Débito");
+    } finally {
+      setIsGenerandoDebito(false);
     }
   }
 
   async function generarNotaCredito() {
     if (!credito) return;
+    if (!codigoCredito) { toast.error("Selecciona el tipo de modificación DGII."); return; }
+    if (motivoCredito.trim().length < 5) { toast.error("Indica un motivo descriptivo de al menos 5 caracteres."); return; }
+    const anulaTotalmente = codigoCredito === "01";
+    const corrigeMontos = codigoCredito === "03";
+    if (corrigeMontos && (montoCredito <= 0 || montoCredito > credito.total)) {
+      toast.error(`El monto debe ser mayor que cero y no superar ${formatRD(credito.total)}.`);
+      return;
+    }
+    if (isGenerandoCredito) return;
+
+    setIsGenerandoCredito(true);
     try {
       const isECF = credito.ncf?.startsWith("E");
       let notaCreditoNCF = "";
       let notaCreditoID = "";
+      let notaCreditoMetadata: Partial<Orden> = {};
+      const montoAcreditado = anulaTotalmente ? credito.total : corrigeMontos ? montoCredito : 0;
+      const montoDocumento = montoAcreditado > 0 ? montoAcreditado : credito.total;
 
       if (isECF) {
         try {
           const cfg = await getECFConfig(tenant.id);
           if (isECFReady(cfg)) {
             const cliente = clientes.find(c => c.id === credito.cliente_id) || null;
-            // Clonamos la orden para ajustar el total de la NC
-            const ordenNC = { ...credito, total: montoCredito, subtotal: montoCredito, itbis: 0 };
+            // Para corrección de montos conservamos la proporción base/ITBIS
+            // del comprobante original. Texto y contingencia no afectan montos.
+            const factor = credito.total > 0 ? montoDocumento / credito.total : 1;
+            const ordenNC = {
+              ...credito,
+              total: montoDocumento,
+              subtotal: Number((credito.subtotal * factor).toFixed(2)),
+              itbis: Number((credito.itbis * factor).toFixed(2)),
+              descuento: Number((credito.descuento * factor).toFixed(2)),
+            };
             const res = await emitirECF(
               ordenNC,
               cliente,
@@ -758,49 +840,51 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               {
                 ncf: credito.ncf!,
                 date: credito.creado_en,
-                code: codigoCredito // 02=Anulación Parcial, 03=Descuento, 04=Devolución, etc.
+                code: codigoCredito,
+                reason: motivoCredito,
               }
             );
+            const legalStatus = String(res.legal_status || "").toUpperCase();
+            if (legalStatus !== "ACCEPTED") {
+              throw new Error(`La DGII no aceptó la E34 (estado: ${legalStatus || "PENDIENTE"}).`);
+            }
             notaCreditoNCF = res.encf;
             notaCreditoID = res.document.id;
+            notaCreditoMetadata = {
+              nota_credito_qr: res.document.qr_content || res.document.document_stamp_url,
+              nota_credito_codigo_seguridad: res.document.security_code,
+              nota_credito_fecha_firma: res.document.signature_date,
+              nota_credito_fecha_emision: res.document.fecha_emision,
+              nota_credito_estado: legalStatus,
+              nota_credito_pdf_url: res.document.pdf_url,
+              nota_credito_xml_url: res.document.xml_url,
+            };
           } else {
-            const next = await nextECFNumero(tenant.id, "34"); // E34
-            if (next) {
-              notaCreditoNCF = next.ncf;
-              notaCreditoID = uid("ecf");
-              await saveECFDocument({
-                id: notaCreditoID,
-                tenant_id: tenant.id,
-                tipo: "34",
-                ncf: notaCreditoNCF,
-                monto_total: montoCredito,
-                rnc_receptor: clientes.find(c => c.id === credito.cliente_id)?.cedula || "",
-                fecha_emision: new Date().toISOString(),
-                estado: "ACEPTADO",
-                ncf_modificado: credito.ncf
-              });
-            }
+            throw new Error("La facturación electrónica no está configurada; no se puede crear una E34 local para una factura DGII.");
           }
         } catch (e: any) {
           console.error("Error NC Fiscal:", e);
-          toast.error("Error al emitir Nota de Crédito fiscal.");
-          return;
+          throw new Error(e?.message || "Error al emitir la Nota de Crédito fiscal.");
         }
       }
 
       const ordenActualizada: Orden = {
         ...credito,
-        total: Math.max(0, credito.total - montoCredito),
-        saldo: Math.max(0, credito.saldo - montoCredito),
+        // El total original se conserva como historial; el efecto fiscal neto
+        // queda representado por nota_credito_monto y la E34 aceptada.
+        saldo: Math.max(0, credito.saldo - montoAcreditado),
+        estado: anulaTotalmente ? "ANULADA" : credito.estado,
         nota_credito_ncf: notaCreditoNCF || undefined,
         nota_credito_id: notaCreditoID || undefined,
-        nota_credito_monto: montoCredito
+        nota_credito_monto: Number(((credito.nota_credito_monto || 0) + montoAcreditado).toFixed(2)),
+        nota_credito_anula_totalmente: Boolean(credito.nota_credito_anula_totalmente || anulaTotalmente),
+        ...notaCreditoMetadata,
       };
 
       await saveOrden(ordenActualizada);
       
-      // Registrar egreso en caja si hay caja abierta y se indicó motivo (opcional)
-      if (cajaAbierta && montoCredito > 0) {
+      const montoReembolso = Math.min(credito.pagado, montoAcreditado);
+      if (cajaAbierta && montoReembolso > 0) {
         await saveMovimiento({
           id: uid("mov"),
           tenant_id: tenant.id,
@@ -808,25 +892,29 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           empleado_id: user.empleado.id,
           tipo: "EGRESO",
           concepto: `Reembolso NC: ${motivoCredito || "Nota de Crédito"} - ${credito.numero}`,
-          monto: montoCredito,
+          monto: montoReembolso,
           metodo: credito.metodo_pago,
+          referencia: notaCreditoNCF ? `DGII:E34:${notaCreditoNCF}` : "NOTA_CREDITO_INTERNA",
           orden_id: credito.id,
           creado_en: new Date().toISOString(),
         });
       }
       
       setCredito(null);
+      setConfirmarNotaCredito(false);
       setMontoCredito(0);
       setMotivoCredito("");
-      setCodigoCredito("04");
+      setCodigoCredito("");
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
       setShowPrint(ordenActualizada);
       
       toast.success("Nota de Crédito generada correctamente ✓");
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error NC:", err);
-      toast.error("Error al generar Nota de Crédito");
+      toast.error(err?.message || "Error al generar la Nota de Crédito");
+    } finally {
+      setIsGenerandoCredito(false);
     }
   }
 
@@ -1508,7 +1596,28 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         </span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-center font-medium">{formatRD(o.total)}</td>
+                    <td className="px-4 py-3 text-center">
+                      {getNotaCreditoMonto(o) > 0 || getNotaDebitoMonto(o) > 0 ? (
+                        <div className="flex flex-col items-center gap-1">
+                          <span className="font-bold text-slate-900 dark:text-white">{formatRD(getTotalNetoOrden(o))}</span>
+                          <span className="text-[10px] text-muted-foreground line-through" title="Total original de la factura">
+                            Original {formatRD(o.total)}
+                          </span>
+                          {getNotaCreditoMonto(o) > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[9px] font-bold text-amber-700 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300" title={o.nota_credito_ncf || "Nota de Crédito"}>
+                              <ArrowDownCircle className="h-3 w-3" /> E34 −{formatRD(getNotaCreditoMonto(o))}
+                            </span>
+                          )}
+                          {getNotaDebitoMonto(o) > 0 && (
+                            <span className="inline-flex items-center gap-1 rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[9px] font-bold text-blue-700 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-300" title={o.nota_debito_ncf || "Nota de Débito"}>
+                              <ArrowUpCircle className="h-3 w-3" /> E33 +{formatRD(getNotaDebitoMonto(o))}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="font-medium">{formatRD(o.total)}</span>
+                      )}
+                    </td>
                     <td className="px-4 py-3 text-center">
                       <div className="flex flex-col items-center justify-center gap-1.5">
                         {o.saldo > 0 ? (
@@ -1687,7 +1796,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                       setCredito(o);
                                       setMontoCredito(0);
                                       setMotivoCredito("");
-                                      setCodigoCredito("04");
+                                      setCodigoCredito("");
                                     }}
                                     className="text-amber-600 dark:text-amber-400"
                                   >
@@ -1875,7 +1984,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       )}
 
       {/* Anular */}
-      <Dialog open={!!anular} onOpenChange={(o) => !o && setAnular(null)}>
+      <Dialog open={!!anular} onOpenChange={(o) => {
+        if (!o && !isAnulando) {
+          setAnular(null);
+          setConfirmarAnulacion(false);
+        }
+      }}>
         <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -1898,16 +2012,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
                 <div>
                   <label className="text-xs font-bold text-foreground mb-1.5 block">Tipo de Modificación (DGII)</label>
-                  <Select value={codigoAnular} onValueChange={setCodigoAnular}>
-                    <SelectTrigger className="w-full h-10 rounded-xl">
+                  <Select value="01" onValueChange={setCodigoAnular} disabled>
+                    <SelectTrigger className="w-full h-10 rounded-xl bg-white text-slate-900 dark:bg-white dark:text-slate-900 disabled:opacity-100">
                       <SelectValue placeholder="Seleccione código DGII" />
                     </SelectTrigger>
-                    <SelectContent align="start" sideOffset={4}>
-                      <SelectItem value="01">01 - Anulación Total</SelectItem>
-                      <SelectItem value="02">02 - Anulación Parcial</SelectItem>
-                      <SelectItem value="03">03 - Descuento o Bonificación</SelectItem>
-                      <SelectItem value="04">04 - Devolución de Mercancía</SelectItem>
-                      <SelectItem value="05">05 - Otros</SelectItem>
+                    <SelectContent align="start" sideOffset={4} className="bg-white text-slate-900 dark:bg-white dark:text-slate-900">
+                      <SelectItem value="01">01 - Anulación total del comprobante</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -1937,119 +2047,279 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                 value={motivoAnular} 
                 onChange={(e) => setMotivoAnular(e.target.value)} 
                 placeholder={anular?.ncf ? "Ej: Error en el monto digitado" : "Ej: Cliente canceló el servicio"} 
-                className="h-10 rounded-xl"
+                className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
+                disabled={isAnulando}
               />
               <span className="text-[11px] text-muted-foreground mt-1 block">Mínimo 5 caracteres para confirmar.</span>
             </div>
           </div>
           <DialogFooter className="gap-2 sm:gap-0">
-            <Button variant="outline" className="rounded-xl h-10 font-bold" onClick={() => setAnular(null)}>
+            <Button variant="outline" className="rounded-xl h-10 font-bold" onClick={() => setAnular(null)} disabled={isAnulando}>
               Cancelar
             </Button>
             <Button 
               variant="destructive" 
               className="rounded-xl h-10 font-bold gap-2 cursor-pointer shadow-xs active:scale-95 transition-all" 
-              onClick={anularOrden}
-              disabled={motivoAnular.trim().length < 5}
+              onClick={() => setConfirmarAnulacion(true)}
+              disabled={motivoAnular.trim().length < 5 || isAnulando}
             >
-              <XCircle className="h-4 w-4" />
-              <span>Anular orden</span>
+              {isAnulando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              <span>{isAnulando ? "Procesando con DGII…" : "Anular orden"}</span>
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={confirmarAnulacion} onOpenChange={(open) => !isAnulando && setConfirmarAnulacion(open)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-rose-700 dark:text-rose-300">
+              <AlertTriangle className="h-5 w-5" />
+              Confirmar anulación definitiva
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <span className="block">
+                ¿Confirmas que deseas anular la orden <b>{anular?.numero}</b>?
+              </span>
+              {anular?.ncf && (
+                <span className="block rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                  Se emitirá una Nota de Crédito electrónica E34 contra <b>{anular.ncf}</b>. Klynn solo marcará la orden como anulada cuando EF2/DGII acepte el comprobante.
+                </span>
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isAnulando}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => {
+                event.preventDefault();
+                void anularOrden();
+              }}
+              disabled={isAnulando}
+              className="bg-rose-600 text-white hover:bg-rose-700 gap-2"
+            >
+              {isAnulando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
+              {isAnulando ? "Enviando a EF2/DGII…" : "Sí, anular y emitir E34"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Nota de Débito */}
-      <Dialog open={!!debito} onOpenChange={(o) => !o && setDebito(null)}>
-        <DialogContent>
+      <Dialog open={!!debito} onOpenChange={(open) => {
+        if (!open && !isGenerandoDebito) {
+          setDebito(null);
+          setConfirmarNotaDebito(false);
+        }
+      }}>
+        <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowUpCircle className="h-5 w-5 text-blue-600" />
               Generar Nota de Débito
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="bg-blue-50 p-3 rounded-lg text-xs text-blue-700 border border-blue-100">
-              Esta acción generará un <b>e-NCF E33</b> y aumentará el total de la orden #{debito?.numero}.
+          <div className="space-y-4 py-1">
+            <div className="flex items-start gap-2.5 rounded-xl border border-blue-500/30 bg-blue-500/10 p-3.5 text-xs text-blue-950 dark:text-blue-200">
+              <FileText className="mt-0.5 h-4.5 w-4.5 shrink-0 text-blue-600" />
+              <div className="space-y-0.5">
+                <span className="block text-[13px] font-bold">Factura DGII: {debito?.ncf}</span>
+                <p className="text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-300">
+                  Se transmitirá una <b>Nota de Débito electrónica E33</b> por un cargo adicional. Klynn solo aumentará la deuda cuando EF2/DGII la acepte.
+                </p>
+              </div>
             </div>
             <div>
-              <label className="text-sm font-bold mb-1.5 block">Monto a adicionar (RD$)</label>
-              <Input 
-                type="number" 
-                value={montoDebito} 
-                onChange={(e) => setMontoDebito(Number(e.target.value))} 
-                placeholder="0.00" 
-                className="text-lg font-bold"
+              <label className="mb-1.5 block text-xs font-bold">Monto adicional (RD$)</label>
+              <Input
+                type="number"
+                min={0.01}
+                step="0.01"
+                value={montoDebito || ""}
+                onChange={(e) => setMontoDebito(Number(e.target.value))}
+                placeholder="0.00"
+                className="h-10 rounded-xl bg-white text-base font-bold text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
+                disabled={isGenerandoDebito}
               />
             </div>
             <div>
-              <label className="text-sm font-bold mb-1.5 block">Concepto / Motivo</label>
-              <Input 
-                value={motivoDebito} 
-                onChange={(e) => setMotivoDebito(e.target.value)} 
-                placeholder="Ej: Ajuste por servicio adicional" 
+              <label className="mb-1.5 block text-xs font-bold">Razón de modificación (DGII)</label>
+              <Input
+                value={motivoDebito}
+                onChange={(e) => setMotivoDebito(e.target.value)}
+                placeholder="Ej: Cargo adicional por servicio express"
+                className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
+                disabled={isGenerandoDebito}
               />
+              <span className="mt-1 block text-[11px] text-muted-foreground">Mínimo 5 caracteres para confirmar.</span>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDebito(null)}>Cancelar</Button>
-            <Button onClick={generarNotaDebito} disabled={montoDebito <= 0}>Generar Nota de Débito</Button>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => setDebito(null)} disabled={isGenerandoDebito}>Cancelar</Button>
+            <Button
+              onClick={() => setConfirmarNotaDebito(true)}
+              disabled={isGenerandoDebito || montoDebito <= 0 || motivoDebito.trim().length < 5}
+              className="h-10 rounded-xl bg-blue-600 font-bold text-white hover:bg-blue-700 gap-2"
+            >
+              {isGenerandoDebito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpCircle className="h-4 w-4" />}
+              {isGenerandoDebito ? "Procesando con DGII…" : "Generar Nota de Débito"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
+      <AlertDialog open={confirmarNotaDebito} onOpenChange={(open) => !isGenerandoDebito && setConfirmarNotaDebito(open)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-blue-700 dark:text-blue-300">
+              <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Débito E33
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <span className="block">¿Confirmas el cargo adicional de <b>{formatRD(montoDebito)}</b> para la orden <b>{debito?.numero}</b>?</span>
+              <span className="block rounded-lg border border-blue-300 bg-blue-50 p-3 text-blue-900 dark:border-blue-700 dark:bg-blue-950/40 dark:text-blue-200">
+                La E33 referenciará el comprobante <b>{debito?.ncf}</b>. La orden solo se actualizará después de la aceptación de EF2/DGII.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isGenerandoDebito}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => { event.preventDefault(); void generarNotaDebito(); }}
+              disabled={isGenerandoDebito}
+              className="gap-2 bg-blue-600 text-white hover:bg-blue-700"
+            >
+              {isGenerandoDebito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowUpCircle className="h-4 w-4" />}
+              {isGenerandoDebito ? "Enviando a EF2/DGII…" : "Sí, emitir E33"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
       {/* Nota de Crédito */}
-      <Dialog open={!!credito} onOpenChange={(o) => !o && setCredito(null)}>
-        <DialogContent>
+      <Dialog open={!!credito} onOpenChange={(open) => {
+        if (!open && !isGenerandoCredito) {
+          setCredito(null);
+          setConfirmarNotaCredito(false);
+        }
+      }}>
+        <DialogContent className="max-w-md rounded-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <ArrowDownCircle className="h-5 w-5 text-amber-600" />
               Generar Nota de Crédito
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 py-4">
-            <div className="bg-amber-50 p-3 rounded-lg text-xs text-amber-700 border border-amber-100">
-              Esta acción generará un <b>e-NCF E34</b>, deducirá el monto de la orden #{credito?.numero} y registrará un egreso de caja.
+          <div className="space-y-4 py-1">
+            <div className="flex items-start gap-2.5 rounded-xl border border-amber-500/30 bg-amber-500/10 p-3.5 text-xs text-amber-950 dark:text-amber-200">
+              <FileText className="mt-0.5 h-4.5 w-4.5 shrink-0 text-amber-600" />
+              <div className="space-y-0.5">
+                <span className="block text-[13px] font-bold">Factura DGII: {credito?.ncf}</span>
+                <p className="text-[11.5px] leading-relaxed text-slate-600 dark:text-slate-300">
+                  Se transmitirá una <b>Nota de Crédito electrónica E34</b>. Klynn solo aplicará el ajuste cuando EF2/DGII la acepte.
+                </p>
+              </div>
             </div>
             <div>
-              <label className="text-sm font-bold mb-1.5 block">Tipo de Modificación (DGII)</label>
-              <Select value={codigoCredito} onValueChange={setCodigoCredito}>
-                <SelectTrigger className="w-full">
-                  <SelectValue placeholder="Seleccione código" />
+              <label className="mb-1.5 block text-xs font-bold">Tipo de Modificación (DGII)</label>
+              <Select value={codigoCredito} onValueChange={(value) => {
+                setCodigoCredito(value);
+                if (value !== "03") setMontoCredito(0);
+              }} disabled={isGenerandoCredito}>
+                <SelectTrigger className="h-10 w-full rounded-xl bg-white text-slate-900 dark:bg-white dark:text-slate-900 disabled:opacity-100">
+                  <SelectValue placeholder="-- Seleccione --" />
                 </SelectTrigger>
-                <SelectContent align="start" sideOffset={4}>
-                  <SelectItem value="02">02 - Anulación Parcial</SelectItem>
-                  <SelectItem value="03">03 - Descuento o Bonificación</SelectItem>
-                  <SelectItem value="04">04 - Devolución de Mercancía</SelectItem>
-                  <SelectItem value="05">05 - Otros</SelectItem>
+                <SelectContent align="start" sideOffset={4} className="bg-white text-slate-900 dark:bg-white dark:text-slate-900">
+                  <SelectItem value="01">1 - Anulación Total</SelectItem>
+                  <SelectItem value="02">2 - Corrección de Texto</SelectItem>
+                  <SelectItem value="03">3 - Corrección de Montos</SelectItem>
+                  <SelectItem value="04">4 - Reemplazo por Contingencia</SelectItem>
                 </SelectContent>
               </Select>
             </div>
+            {codigoCredito === "03" && (
+              <div>
+                <label className="mb-1.5 block text-xs font-bold">Monto a corregir (RD$)</label>
+                <Input
+                  type="number"
+                  min={0.01}
+                  max={credito?.total || 0}
+                  step="0.01"
+                  value={montoCredito || ""}
+                  onChange={(e) => setMontoCredito(Number(e.target.value))}
+                  placeholder="0.00"
+                  className="h-10 rounded-xl bg-white text-base font-bold text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
+                  disabled={isGenerandoCredito}
+                />
+                <span className="mt-1 block text-[11px] text-muted-foreground">Máximo: {formatRD(credito?.total || 0)}</span>
+              </div>
+            )}
+            {codigoCredito === "01" && (
+              <div className="rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800 dark:border-rose-800 dark:bg-rose-950/40 dark:text-rose-200">
+                La E34 acreditará el total de <b>{formatRD(credito?.total || 0)}</b> y la orden quedará anulada.
+              </div>
+            )}
+            {(codigoCredito === "02" || codigoCredito === "04") && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 dark:border-blue-800 dark:bg-blue-950/40 dark:text-blue-200">
+                Este tipo de modificación no rebaja el monto ni genera un reembolso de caja.
+              </div>
+            )}
             <div>
-              <label className="text-sm font-bold mb-1.5 block">Monto a deducir (RD$)</label>
-              <Input 
-                type="number" 
-                value={montoCredito} 
-                onChange={(e) => setMontoCredito(Number(e.target.value))} 
-                placeholder="0.00" 
-                className="text-lg font-bold"
+              <label className="mb-1.5 block text-xs font-bold">Motivo descriptivo (DGII)</label>
+              <Input
+                value={motivoCredito}
+                onChange={(e) => setMotivoCredito(e.target.value)}
+                placeholder="Ej: Corrección del monto facturado"
+                className="h-10 rounded-xl bg-white text-slate-900 placeholder:text-slate-400 dark:bg-white dark:text-slate-900 disabled:opacity-100"
+                disabled={isGenerandoCredito}
               />
-            </div>
-            <div>
-              <label className="text-sm font-bold mb-1.5 block">Motivo descriptivo</label>
-              <Input 
-                value={motivoCredito} 
-                onChange={(e) => setMotivoCredito(e.target.value)} 
-                placeholder="Ej: Devolución de prenda dañada" 
-              />
+              <span className="mt-1 block text-[11px] text-muted-foreground">Mínimo 5 caracteres para confirmar.</span>
             </div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCredito(null)}>Cancelar</Button>
-            <Button onClick={generarNotaCredito} disabled={montoCredito <= 0} className="bg-amber-600 hover:bg-amber-700">Generar Nota de Crédito</Button>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" className="h-10 rounded-xl font-bold" onClick={() => setCredito(null)} disabled={isGenerandoCredito}>Cancelar</Button>
+            <Button
+              onClick={() => setConfirmarNotaCredito(true)}
+              disabled={
+                isGenerandoCredito ||
+                !codigoCredito ||
+                motivoCredito.trim().length < 5 ||
+                (codigoCredito === "03" && (montoCredito <= 0 || montoCredito > (credito?.total || 0)))
+              }
+              className="h-10 rounded-xl bg-amber-600 font-bold text-white hover:bg-amber-700 gap-2"
+            >
+              {isGenerandoCredito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownCircle className="h-4 w-4" />}
+              {isGenerandoCredito ? "Procesando con DGII…" : "Generar Nota de Crédito"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={confirmarNotaCredito} onOpenChange={(open) => !isGenerandoCredito && setConfirmarNotaCredito(open)}>
+        <AlertDialogContent className="max-w-md">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-700 dark:text-amber-300">
+              <AlertTriangle className="h-5 w-5" /> Confirmar Nota de Crédito E34
+            </AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2 text-left">
+              <span className="block">¿Confirmas la emisión de la E34 para la orden <b>{credito?.numero}</b>?</span>
+              <span className="block rounded-lg border border-amber-300 bg-amber-50 p-3 text-amber-900 dark:border-amber-700 dark:bg-amber-950/40 dark:text-amber-200">
+                Tipo {codigoCredito || "—"} · {codigoCredito === "01" ? "Anulación Total" : codigoCredito === "02" ? "Corrección de Texto" : codigoCredito === "03" ? `Corrección de Montos (${formatRD(montoCredito)})` : "Reemplazo por Contingencia"}. Esta acción se enviará a EF2/DGII.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={isGenerandoCredito}>Volver</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={(event) => { event.preventDefault(); void generarNotaCredito(); }}
+              disabled={isGenerandoCredito}
+              className="gap-2 bg-amber-600 text-white hover:bg-amber-700"
+            >
+              {isGenerandoCredito ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownCircle className="h-4 w-4" />}
+              {isGenerandoCredito ? "Enviando a EF2/DGII…" : "Sí, emitir E34"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {isPrintingList && (
         <OrdenesPrintPortal
@@ -2359,7 +2629,7 @@ export function EstadoOrdenDialog({
                     setCredito(target);
                     setMontoCredito(0);
                     setMotivoCredito("");
-                    setCodigoCredito("04");
+                    setCodigoCredito("");
                   }}
                   className="flex items-center gap-1.5 text-xs font-bold text-slate-800 dark:text-slate-200 bg-slate-100/90 dark:bg-slate-800 hover:bg-slate-200/80 dark:hover:bg-slate-700 px-3 py-1.5 rounded-xl transition-all cursor-pointer border border-slate-200/80 dark:border-slate-700 active:scale-95"
                 >
@@ -2639,10 +2909,38 @@ export function OrderDetail({
               </div>
             )}
 
+            {(getNotaCreditoMonto(view) > 0 || getNotaDebitoMonto(view) > 0) && (
+              <div className="my-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+                <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
+                  <span>Total original</span>
+                  <span className="font-semibold line-through">{formatRD(view.total)}</span>
+                </div>
+                {getNotaCreditoMonto(view) > 0 && (
+                  <div className="mt-1.5 flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
+                    <span className="inline-flex items-center gap-1"><ArrowDownCircle className="h-3.5 w-3.5" /> Nota de Crédito E34</span>
+                    <span>−{formatRD(getNotaCreditoMonto(view))}</span>
+                  </div>
+                )}
+                {getNotaDebitoMonto(view) > 0 && (
+                  <div className="mt-1.5 flex items-center justify-between text-xs font-bold text-blue-700 dark:text-blue-300">
+                    <span className="inline-flex items-center gap-1"><ArrowUpCircle className="h-3.5 w-3.5" /> Nota de Débito E33</span>
+                    <span>+{formatRD(getNotaDebitoMonto(view))}</span>
+                  </div>
+                )}
+                <div className="mt-2 flex items-center justify-between border-t border-amber-200 pt-2 font-extrabold text-slate-950 dark:border-amber-800 dark:text-white">
+                  <span>Total neto</span>
+                  <span>{formatRD(getTotalNetoOrden(view))}</span>
+                </div>
+                {view.nota_credito_ncf && (
+                  <div className="mt-1 text-right font-mono text-[10px] text-muted-foreground">{view.nota_credito_ncf}</div>
+                )}
+              </div>
+            )}
+
             <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
               <div className="flex items-center gap-3 text-slate-600">
                 <Wallet className="h-5 w-5 text-primary" />
-                <span className="font-semibold text-sm">Pagado</span>
+                <span className="font-semibold text-sm">{getNotaCreditoMonto(view) > 0 ? "Pagado originalmente" : "Pagado"}</span>
               </div>
               <div className="font-extrabold text-slate-900 text-[15px]">{formatRD(view.pagado)}</div>
             </div>
@@ -3042,7 +3340,13 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
   if (!emp || !cli) return null;
 
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
-  const ecfStatus = String((orden as any).ecf_status || '').toUpperCase();
+  const isCreditNote = Boolean(orden.nota_credito_ncf);
+  const isDebitNote = !isCreditNote && Boolean(orden.nota_debito_ncf);
+  const fiscalQR = isCreditNote ? orden.nota_credito_qr : isDebitNote ? orden.nota_debito_qr : orden.ecf_qr;
+  const fiscalSecurityCode = isCreditNote ? orden.nota_credito_codigo_seguridad : isDebitNote ? orden.nota_debito_codigo_seguridad : orden.ecf_security_code;
+  const fiscalSignatureDate = isCreditNote ? orden.nota_credito_fecha_firma : isDebitNote ? orden.nota_debito_fecha_firma : orden.ecf_signature_date;
+  const fiscalIssueDate = isCreditNote ? orden.nota_credito_fecha_emision : isDebitNote ? orden.nota_debito_fecha_emision : orden.creado_en;
+  const ecfStatus = String(isCreditNote ? orden.nota_credito_estado : isDebitNote ? orden.nota_debito_estado : orden.ecf_status || '').toUpperCase();
   const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
   const isAcceptedECF = isECF && !isRejectedECF && (
     ecfStatus === 'ACCEPTED' || 
@@ -3050,17 +3354,19 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
     ecfStatus === 'REGISTERED' || 
     ecfStatus === 'SIGNED' || 
     ecfStatus === 'DELIVERED' ||
-    (!!orden.ecf_qr && orden.ecf_qr !== "null" && orden.ecf_qr.length > 5)
+    (!!fiscalQR && fiscalQR !== "null" && fiscalQR.length > 5)
   );
   const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
   const isCréditoFiscal = orden.tipo_ecf === "E31" || orden.ncf?.startsWith("E31") || orden.ncf?.startsWith("B01");
-  const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
+  const actualQR = fiscalQR === "null" ? "" : (fiscalQR || "");
   const qrData = isAcceptedECF ? actualQR : "";
   const cfg = tenant.config;
 
   let docTitle = "Factura de Consumo";
   if (orden.nota_credito_ncf) {
     docTitle = isECF ? "Nota de Crédito Electrónica" : "Nota de Crédito";
+  } else if (orden.nota_debito_ncf) {
+    docTitle = isECF ? "Nota de Débito Electrónica" : "Nota de Débito";
   } else if (isRejectedECF) {
     docTitle = "Comprobante e-CF rechazado - No válido";
   } else if (isPendingECF) {
@@ -3108,11 +3414,16 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
               
               <table className="text-xs text-slate-600 ml-auto" style={{ borderSpacing: 0, borderCollapse: 'collapse' }}>
                 <tbody>
-                  <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha:</td><td className="text-left">{new Date(orden.creado_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</td></tr>
+                  <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha:</td><td className="text-left">{new Date(fiscalIssueDate || orden.creado_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true })}</td></tr>
                 {orden.nota_credito_ncf ? (
                   <>
                     <tr><td className="font-bold pr-1.5 text-right text-destructive whitespace-nowrap">{isECF ? "e-NCF:" : "NCF:"}</td><td className="font-mono font-bold text-destructive text-left">{orden.nota_credito_ncf}</td></tr>
                     {orden.ncf_vencimiento && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Vencimiento:</td><td className="text-left font-bold">{formatDateRD(orden.ncf_vencimiento)}</td></tr>}
+                    <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Doc. Modificado:</td><td className="font-mono text-left">{orden.ncf}</td></tr>
+                  </>
+                ) : orden.nota_debito_ncf ? (
+                  <>
+                    <tr><td className="font-bold pr-1.5 text-right text-blue-700 whitespace-nowrap">{isECF ? "e-NCF:" : "NCF:"}</td><td className="font-mono font-bold text-blue-700 text-left">{orden.nota_debito_ncf}</td></tr>
                     <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Doc. Modificado:</td><td className="font-mono text-left">{orden.ncf}</td></tr>
                   </>
                 ) : isPendingECF ? (
@@ -3127,8 +3438,8 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
                     </>
                   )
                 )}
-                {orden.ecf_security_code && orden.ecf_security_code !== "null" && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Cod. Seguridad:</td><td className="font-mono text-left">{orden.ecf_security_code}</td></tr>}
-                {orden.ecf_signature_date && orden.ecf_signature_date !== "null" && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Firma:</td><td className="text-left">{formatDateTimeRD(orden.ecf_signature_date)}</td></tr>}
+                {fiscalSecurityCode && fiscalSecurityCode !== "null" && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Cod. Seguridad:</td><td className="font-mono text-left">{fiscalSecurityCode}</td></tr>}
+                {fiscalSignatureDate && fiscalSignatureDate !== "null" && <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Fecha Firma:</td><td className="text-left">{formatDateTimeRD(fiscalSignatureDate)}</td></tr>}
                 <tr><td className="font-bold pr-1.5 text-right whitespace-nowrap">Atendido por:</td><td className="text-left">{emp.nombre}</td></tr>
                 </tbody>
               </table>
@@ -3279,12 +3590,13 @@ function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: {
               <div className="flex flex-col items-center gap-1.5">
                 <QRCodeSVG value={qrData} size={100} level="M" />
                 <div className="text-[10px] text-center leading-tight text-slate-600 font-medium">
-                  {orden.ecf_security_code && orden.ecf_security_code !== "null" && (
-                    <div>Código de Seguridad: <span className="font-mono font-bold">{orden.ecf_security_code}</span></div>
+                  {fiscalSecurityCode && fiscalSecurityCode !== "null" && (
+                    <div>Código de Seguridad: <span className="font-mono font-bold">{fiscalSecurityCode}</span></div>
                   )}
-                  {orden.ecf_signature_date && orden.ecf_signature_date !== "null" && (
-                    <div>Fecha Firma: {formatDateTimeRD(orden.ecf_signature_date)}</div>
+                  {fiscalSignatureDate && fiscalSignatureDate !== "null" && (
+                    <div>Fecha Firma: {formatDateTimeRD(fiscalSignatureDate)}</div>
                   )}
+                  {ecfStatus && <div>Estado DGII: <span className="font-bold">{ecfStatus}</span></div>}
                 </div>
                 <div className="text-[10px] text-center font-bold text-slate-500">
                   Consulte su factura en:<br/>dgii.gov.do
@@ -3332,7 +3644,7 @@ function OrdenesPrintPortal({
   onClose: () => void;
 }) {
   const [printing, setPrinting] = useState(false);
-  const totalMontoGlobal = ordenes.reduce((acc, curr) => acc + curr.total, 0);
+  const totalMontoGlobal = ordenes.reduce((acc, curr) => acc + getTotalNetoOrden(curr), 0);
   const totalSaldoGlobal = ordenes.reduce((acc, curr) => acc + curr.saldo, 0);
 
   const handlePrint = () => {
@@ -3411,9 +3723,9 @@ function OrdenesPrintPortal({
             </div>
 
             <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
-              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Monto Total Facturado</div>
+              <div className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Monto Neto Facturado</div>
               <div className="text-xl font-bold text-emerald-600">{formatRD(totalMontoGlobal)}</div>
-              <div className="text-[8px] text-slate-400 mt-0.5">Suma de todas las órdenes</div>
+              <div className="text-[8px] text-slate-400 mt-0.5">Después de notas de crédito y débito</div>
             </div>
 
             <div className="p-4 border border-slate-200 rounded-xl bg-slate-50">
@@ -3455,7 +3767,19 @@ function OrdenesPrintPortal({
                           {o.estado.replace('_', ' ')}
                         </span>
                       </td>
-                      <td className="py-2.5 px-4 text-right font-semibold text-slate-700">{formatRD(o.total)}</td>
+                      <td className="py-2.5 px-4 text-right">
+                        <div className="font-semibold text-slate-700">{formatRD(getTotalNetoOrden(o))}</div>
+                        {getNotaCreditoMonto(o) > 0 && (
+                          <div className="mt-0.5 text-[8px] font-bold text-amber-700">
+                            E34 −{formatRD(getNotaCreditoMonto(o))} · original {formatRD(o.total)}
+                          </div>
+                        )}
+                        {getNotaDebitoMonto(o) > 0 && (
+                          <div className="mt-0.5 text-[8px] font-bold text-blue-700">
+                            E33 +{formatRD(getNotaDebitoMonto(o))} · original {formatRD(o.total)}
+                          </div>
+                        )}
+                      </td>
                       <td className={`py-2.5 px-4 text-right font-bold ${o.saldo > 0 ? "text-rose-600" : "text-slate-500"}`}>{o.saldo > 0 ? formatRD(o.saldo) : "—"}</td>
                       <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatMetodoPagoLabel(o.metodo_pago)}</td>
                       <td className="py-2.5 px-4 text-center text-slate-500 whitespace-nowrap">{formatDateTimeRD(o.creado_en)}</td>
@@ -4380,9 +4704,24 @@ function cleanOrden(o: any): Orden {
     motivo_anulacion_codigo: o.motivo_anulacion_codigo,
     nota_credito_ncf: o.nota_credito_ncf,
     nota_credito_id: o.nota_credito_id,
+    nota_credito_anula_totalmente: o.nota_credito_anula_totalmente,
+    nota_credito_qr: o.nota_credito_qr,
+    nota_credito_codigo_seguridad: o.nota_credito_codigo_seguridad,
+    nota_credito_fecha_firma: o.nota_credito_fecha_firma,
+    nota_credito_fecha_emision: o.nota_credito_fecha_emision,
+    nota_credito_estado: o.nota_credito_estado,
+    nota_credito_pdf_url: o.nota_credito_pdf_url,
+    nota_credito_xml_url: o.nota_credito_xml_url,
     nota_debito_ncf: o.nota_debito_ncf,
     nota_debito_id: o.nota_debito_id,
     nota_debito_monto: o.nota_debito_monto,
+    nota_debito_qr: o.nota_debito_qr,
+    nota_debito_codigo_seguridad: o.nota_debito_codigo_seguridad,
+    nota_debito_fecha_firma: o.nota_debito_fecha_firma,
+    nota_debito_fecha_emision: o.nota_debito_fecha_emision,
+    nota_debito_estado: o.nota_debito_estado,
+    nota_debito_pdf_url: o.nota_debito_pdf_url,
+    nota_debito_xml_url: o.nota_debito_xml_url,
     entrega_domicilio: o.entrega_domicilio,
     costo_envio: o.costo_envio,
     repartidor_id: o.repartidor_id,

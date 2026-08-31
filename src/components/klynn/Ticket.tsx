@@ -95,7 +95,22 @@ export function Ticket({
 
   // Detección de comprobante electrónico (e-CF)
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
-  const ecfStatus = String((orden as any).ecf_status || '').toUpperCase();
+  const isCreditNote = Boolean(orden.nota_credito_ncf);
+  const isDebitNote = !isCreditNote && Boolean(orden.nota_debito_ncf);
+  const fiscalNCF = isCreditNote ? orden.nota_credito_ncf : isDebitNote ? orden.nota_debito_ncf : orden.ncf;
+  const fiscalQR = isCreditNote ? orden.nota_credito_qr : isDebitNote ? orden.nota_debito_qr : orden.ecf_qr;
+  const fiscalSecurityCode = isCreditNote
+    ? orden.nota_credito_codigo_seguridad
+    : isDebitNote ? orden.nota_debito_codigo_seguridad : orden.ecf_security_code;
+  const fiscalSignatureDate = isCreditNote
+    ? orden.nota_credito_fecha_firma
+    : isDebitNote ? orden.nota_debito_fecha_firma : orden.ecf_signature_date;
+  const fiscalIssueDate = isCreditNote
+    ? orden.nota_credito_fecha_emision
+    : isDebitNote ? orden.nota_debito_fecha_emision : orden.creado_en;
+  const ecfStatus = String(
+    (isCreditNote ? orden.nota_credito_estado : isDebitNote ? orden.nota_debito_estado : orden.ecf_status) || '',
+  ).toUpperCase();
   const isRejectedECF = isECF && (ecfStatus === 'REJECTED' || ecfStatus === 'ERROR');
   const isAcceptedECF = isECF && !isRejectedECF && (
     ecfStatus === 'ACCEPTED' || 
@@ -103,15 +118,15 @@ export function Ticket({
     ecfStatus === 'REGISTERED' || 
     ecfStatus === 'SIGNED' || 
     ecfStatus === 'DELIVERED' ||
-    !!orden.ecf_security_code ||
-    (!!orden.ecf_qr && orden.ecf_qr !== "null" && orden.ecf_qr.length > 5) ||
-    orden.ncf?.startsWith("E")
+    !!fiscalSecurityCode ||
+    (!!fiscalQR && fiscalQR !== "null" && fiscalQR.length > 5) ||
+    fiscalNCF?.startsWith("E")
   );
   const isPendingECF = isECF && !isRejectedECF && !isAcceptedECF;
 
-  const actualQR = orden.ecf_qr === "null" ? "" : (orden.ecf_qr || "");
-  const fallbackQR = isAcceptedECF && orden.ncf && tenant?.rnc ? (
-    `https://fc.dgii.gov.do/ecf/consulta?rncemisor=${tenant.rnc.replace(/\D/g, '')}&encf=${orden.ncf}&codigoSeguridad=${orden.ecf_security_code || ''}&montoTotal=${orden.total}`
+  const actualQR = fiscalQR === "null" ? "" : (fiscalQR || "");
+  const fallbackQR = isAcceptedECF && fiscalNCF && tenant?.rnc ? (
+    `https://fc.dgii.gov.do/ecf/consulta?rncemisor=${tenant.rnc.replace(/\D/g, '')}&encf=${fiscalNCF}&codigoSeguridad=${fiscalSecurityCode || ''}&montoTotal=${orden.total}`
   ) : "";
   const qrData = actualQR || fallbackQR;
 
@@ -119,6 +134,8 @@ export function Ticket({
   if (!esProduccion) {
     if (orden.nota_credito_ncf) {
       tipoDocumento = isECF ? "NOTA DE CRÉDITO ELECTRÓNICA" : "NOTA DE CRÉDITO";
+    } else if (orden.nota_debito_ncf) {
+      tipoDocumento = isECF ? "NOTA DE DÉBITO ELECTRÓNICA" : "NOTA DE DÉBITO";
     } else if (isRejectedECF) {
       tipoDocumento = "COMPROBANTE RECHAZADO - NO VÁLIDO";
     } else if (isPendingECF) {
@@ -379,15 +396,15 @@ export function Ticket({
           )}
         </div>
 
-        {orden.nota_credito_ncf ? (
+        {orden.nota_credito_ncf || orden.nota_debito_ncf ? (
           <>
-            <div className="flex items-center gap-1.5 text-destructive font-bold">
+            <div className={`flex items-center gap-1.5 font-bold ${isCreditNote ? "text-destructive" : "text-blue-700"}`}>
               <FileText className="h-3.5 w-3.5 shrink-0" />
-              <span><b>{isECF ? 'e-NCF Mod.:' : 'NCF Mod.:'}</b> <span className="tabular-nums ml-0.5">{orden.nota_credito_ncf}</span></span>
+              <span><b>{isECF ? 'e-NCF:' : 'NCF:'}</b> <span className="tabular-nums ml-0.5">{fiscalNCF}</span></span>
             </div>
             <div className="flex items-center gap-1.5 text-[10px]">
               <FileText className="h-3.5 w-3.5 shrink-0" />
-              <span><b>Doc. Mod.:</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span></span>
+              <span><b>{isECF ? 'e-NCF modificado:' : 'NCF modificado:'}</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span></span>
             </div>
           </>
         ) : (
@@ -401,7 +418,7 @@ export function Ticket({
 
         <div className="flex items-center gap-1.5">
           <Calendar className="h-3.5 w-3.5 shrink-0 text-black" />
-          <span><b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(orden.creado_en)}</span></span>
+          <span><b>Fecha Emisión:</b> <span className="font-semibold tabular-nums ml-0.5">{formatDateTimeRD(fiscalIssueDate || orden.creado_en)}</span></span>
         </div>
 
         {orden.notas && ((cfg?.ticket_mostrar_notas || esCopiaCaja) && !ocultarNotas) && (
@@ -728,10 +745,18 @@ export function Ticket({
         <div className="flex justify-between items-center gap-2">
           <div className="flex items-center gap-1.5 font-semibold shrink-0">
             <FileText className="h-3.5 w-3.5 shrink-0 text-black" />
-            <span>Estado de factura:</span>
+            <span>{isCreditNote || isDebitNote ? "Estado de orden:" : "Estado de factura:"}</span>
           </div>
           <span className="font-black uppercase tracking-wide shrink-0">
-            {orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO"}
+            {isCreditNote
+              ? orden.nota_credito_anula_totalmente
+                ? "ANULADA"
+                : "AJUSTADA POR NOTA DE CRÉDITO"
+              : isDebitNote
+                ? "AJUSTADA POR NOTA DE DÉBITO"
+                : orden.saldo === 0
+                ? "PAGADA"
+                : "PENDIENTE DE PAGO"}
           </span>
         </div>
 
@@ -867,7 +892,13 @@ export function Ticket({
       {isAcceptedECF && (
         <div className="mt-2 flex flex-col items-center gap-1">
           <div className="text-[9.5px] font-black uppercase text-center tracking-wide">
-            {orden.ncf ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica") : "Factura Electrónica"}
+            {isCreditNote
+              ? "Nota de Crédito Electrónica"
+              : isDebitNote
+                ? "Nota de Débito Electrónica"
+              : orden.ncf
+                ? (NCF_NOMBRES[orden.ncf.substring(0, 3)] ? `Factura de ${NCF_NOMBRES[orden.ncf.substring(0, 3)]} Electrónica` : "Factura Electrónica")
+                : "Factura Electrónica"}
           </div>
           {qrData ? (
             <div className="p-1 bg-white">
@@ -875,12 +906,13 @@ export function Ticket({
             </div>
           ) : null}
           <div className="text-[9px] text-center leading-snug font-bold text-black">
-            {orden.ecf_security_code && orden.ecf_security_code !== "null" && (
-              <div>Código de Seguridad: <span className="font-black">{orden.ecf_security_code}</span></div>
+            {fiscalSecurityCode && fiscalSecurityCode !== "null" && (
+              <div>Código de Seguridad: <span className="font-black">{fiscalSecurityCode}</span></div>
             )}
-            {orden.ecf_signature_date && orden.ecf_signature_date !== "null" && (
-              <div>Fecha Firma: <span className="font-semibold">{formatDateTimeRD(orden.ecf_signature_date)}</span></div>
+            {fiscalSignatureDate && fiscalSignatureDate !== "null" && (
+              <div>Fecha Firma: <span className="font-semibold">{formatDateTimeRD(fiscalSignatureDate)}</span></div>
             )}
+            {ecfStatus && <div>Estado DGII: <span className="font-black">{ecfStatus}</span></div>}
           </div>
           <div className="text-[9px] text-center leading-tight font-bold text-black mt-1">
             Consulte su factura en:<br/>

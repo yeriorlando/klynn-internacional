@@ -45,8 +45,6 @@ import {
   getNextRenewalDate,
   parseDateSafe,
   getBillingCycleStart,
-  updateECFConfig,
-  saveECFConfig,
   getGlobalConfig,
   saveGlobalConfig,
   triggerStandbySync,
@@ -184,6 +182,7 @@ function AdminPage() {
   const [tenantFiscalActive, setTenantFiscalActive] = useState(false);
   const [tenantEf2Token, setTenantEf2Token] = useState<string>("");
   const [tenantEf2Username, setTenantEf2Username] = useState<string>("");
+  const [tenantEf2CredentialsOwner, setTenantEf2CredentialsOwner] = useState<"platform" | "tenant">("tenant");
 
   const [licencias, setLicencias] = useState<LicenciaLocal[]>([]);
   const [openLicenciaModal, setOpenLicenciaModal] = useState(false);
@@ -352,7 +351,7 @@ function AdminPage() {
       // tenants y ecf_config en Supabase.
       const { data: ecfList, error } = await supabase
         .from('ecf_config')
-        .select('id,tenant_id,rnc_emisor,razon_social,is_active,proveedor_ecf,ef2_username,ef2_environment,ambiente,updated_at');
+        .select('id,tenant_id,rnc_emisor,razon_social,is_active,proveedor_ecf,ef2_username,ef2_environment,ef2_credentials_owner,ambiente,updated_at');
       if (error) throw error;
       if (ecfList) {
         const map: Record<string, any> = {};
@@ -401,7 +400,7 @@ function AdminPage() {
         getGlobalConfig(),
         getLicenciasLocales(),
         getInvitaciones(),
-        supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at'),
+        supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,ef2_credentials_owner,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at'),
       ]);
       setTenants(t);
       setPlans(p);
@@ -556,7 +555,7 @@ function AdminPage() {
     let fiscalConfig = ecfConfigsMap[t.id];
     if (!fiscalConfig) {
       try {
-        const { data } = await supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at').eq('tenant_id', t.id).maybeSingle();
+        const { data } = await supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,ef2_credentials_owner,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at').eq('tenant_id', t.id).maybeSingle();
         if (data) {
           fiscalConfig = data;
           setEcfConfigsMap(prev => ({
@@ -577,6 +576,7 @@ function AdminPage() {
     setTenantFiscalActive(Boolean(fiscalConfig?.is_active));
     setTenantEf2Username(fiscalConfig?.ef2_username || "");
     setTenantEf2Token("");
+    setTenantEf2CredentialsOwner(fiscalConfig?.ef2_credentials_owner === "platform" ? "platform" : "tenant");
 
     const daysRemaining = t.trial_hasta
       ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -644,44 +644,44 @@ function AdminPage() {
         const fiscalUpdates = {
           ef2_environment: tenantFiscalEnvironment,
           proveedor_ecf: "ef2",
-          ef2_username: tenantEf2Username.trim() || undefined,
+          ef2_username: tenantEf2CredentialsOwner === "platform" ? tenantEf2Username.trim() || undefined : existingFiscal?.ef2_username,
+          ef2_credentials_owner: tenantEf2CredentialsOwner,
           ambiente: tenantFiscalEnvironment === "eCF" ? "produccion" : "pruebas",
           is_active: tenantFiscalActive,
         } as const;
-        if (tenantEf2Token.trim()) {
+        if (tenantEf2CredentialsOwner === "platform" && tenantEf2Token.trim()) {
           await getEF2Client({
             tenantId: editingTenant.id,
             environment: tenantFiscalEnvironment,
             username: tenantEf2Username.trim() || undefined,
             token: tenantEf2Token.trim(),
           }).guardarCredenciales();
-        } else if (tenantFiscalActive) {
+        } else if (tenantEf2CredentialsOwner === "platform" && tenantFiscalActive) {
           await getEF2Client({
             tenantId: editingTenant.id,
             environment: tenantFiscalEnvironment,
           }).verificarToken();
         }
-        if (existingFiscal) {
-          await updateECFConfig(editingTenant.id, fiscalUpdates);
-        } else {
-          await saveECFConfig({
-            id: crypto.randomUUID(),
-            tenant_id: editingTenant.id,
-            rnc_emisor: editingTenant.rnc || "",
-            razon_social: editingTenant.nombre,
-            nombre_comercial: editingTenant.nombre,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-            ...fiscalUpdates,
-          });
-        }
+        const { data: savedFiscal, error: fiscalSaveError } = await supabase.rpc("admin_save_ef2_config", {
+          p_tenant_id: editingTenant.id,
+          p_environment: tenantFiscalEnvironment,
+          p_is_active: tenantFiscalActive,
+          p_credentials_owner: tenantEf2CredentialsOwner,
+          p_username: tenantEf2CredentialsOwner === "platform" ? tenantEf2Username.trim() : "",
+          p_rnc_emisor: editingTenant.rnc || existingFiscal?.rnc_emisor || "",
+          p_razon_social: editingTenant.nombre || existingFiscal?.razon_social || "Lavandería",
+        });
+        if (fiscalSaveError) throw fiscalSaveError;
+        const persistedFiscal = Array.isArray(savedFiscal) ? savedFiscal[0] : savedFiscal;
         setEcfConfigsMap(prev => ({
           ...prev,
           [editingTenant.id]: {
             ...prev[editingTenant.id],
+            ...(persistedFiscal || {}),
             ef2_environment: tenantFiscalEnvironment,
             proveedor_ecf: "ef2",
-            ef2_username: tenantEf2Username.trim() || undefined,
+            ef2_username: tenantEf2CredentialsOwner === "platform" ? tenantEf2Username.trim() || undefined : prev[editingTenant.id]?.ef2_username,
+            ef2_credentials_owner: tenantEf2CredentialsOwner,
             ambiente: tenantFiscalEnvironment === "eCF" ? "produccion" : "pruebas",
             is_active: tenantFiscalActive,
           }
@@ -709,9 +709,10 @@ function AdminPage() {
       toast.success("Información de lavandería actualizada");
       setOpenEditModal(false);
       setTick(t => t + 1);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating tenant:", error);
-      toast.error("Error al actualizar la lavandería");
+      const msg = error?.message || error?.error_description || "Error al actualizar la lavandería";
+      toast.error(`Error al actualizar: ${msg}`);
     }
   }
 
@@ -3533,35 +3534,40 @@ function AdminPage() {
                     </div>
                   </div>
 
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
-                        Usuario API EF2
-                      </label>
-                      <Input
-                        placeholder="api_empresa_codigo"
-                        value={tenantEf2Username}
-                        onChange={(e) => setTenantEf2Username(e.target.value)}
-                        className="h-9 rounded-xl bg-background text-xs font-mono"
-                      />
-                    </div>
-                    <div>
-                      <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">
-                        Token API EF2 (Bearer Token)
-                      </label>
-                      <Input
-                        type="password"
-                        autoComplete="new-password"
-                        placeholder="Vacío conserva el token guardado"
-                        value={tenantEf2Token}
-                        onChange={(e) => setTenantEf2Token(e.target.value)}
-                        className="h-9 rounded-xl bg-background text-xs font-mono"
-                      />
-                      <span className="text-[10px] text-muted-foreground mt-0.5 block">
-                        Se verifica y guarda solo en el servidor.
-                      </span>
-                    </div>
+                  <div>
+                    <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">¿Quién configura las credenciales?</label>
+                    <Select value={tenantEf2CredentialsOwner} onValueChange={(value: "platform" | "tenant") => {
+                      setTenantEf2CredentialsOwner(value);
+                      setTenantEf2Token("");
+                    }}>
+                      <SelectTrigger className="h-10 rounded-xl bg-background text-xs font-bold">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="tenant">La lavandería — desde Configuración › Fiscal</SelectItem>
+                        <SelectItem value="platform">Klynn — desde este panel administrativo</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
+
+                  {tenantEf2CredentialsOwner === "platform" ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 rounded-xl border border-blue-200 bg-white/70 p-3 dark:border-blue-900 dark:bg-slate-950/40">
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Usuario API EF2</label>
+                        <Input placeholder="api_empresa_codigo" value={tenantEf2Username} onChange={(e) => setTenantEf2Username(e.target.value)} className="h-9 rounded-xl bg-white text-xs font-mono dark:bg-white dark:text-slate-900" />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-muted-foreground uppercase block mb-1">Token API EF2 (Bearer Token)</label>
+                        <Input type="password" autoComplete="new-password" placeholder="Vacío conserva el token guardado" value={tenantEf2Token} onChange={(e) => setTenantEf2Token(e.target.value)} className="h-9 rounded-xl bg-white text-xs font-mono dark:bg-white dark:text-slate-900" />
+                        <span className="text-[10px] text-muted-foreground mt-0.5 block">Se verifica y guarda solo en el servidor.</span>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-[11px] text-emerald-900 dark:border-emerald-900 dark:bg-emerald-950/30 dark:text-emerald-200">
+                      <div className="font-bold">Configuración delegada a la lavandería</div>
+                      <p className="mt-1">Puedes habilitar el módulo y asignar el ambiente. El administrador de esta lavandería ingresará y verificará su usuario y token en <b>Configuración › Fiscal</b>.</p>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/60">

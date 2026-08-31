@@ -381,9 +381,24 @@ export interface Orden {
   nota_credito_ncf?: string; // NCF de la nota de crédito (E34)
   nota_credito_id?: string; // ID del documento ECF E34
   nota_credito_monto?: number; // Monto descontado/devuelto
+  nota_credito_anula_totalmente?: boolean;
+  nota_credito_qr?: string; // Timbre/URL QR propio de la E34
+  nota_credito_codigo_seguridad?: string; // Código de seguridad propio de la E34
+  nota_credito_fecha_firma?: string; // Fecha de firma digital propia de la E34
+  nota_credito_fecha_emision?: string; // Fecha de emisión propia de la E34
+  nota_credito_estado?: string; // Estado fiscal de la E34 devuelto por EF2/DGII
+  nota_credito_pdf_url?: string;
+  nota_credito_xml_url?: string;
   nota_debito_ncf?: string; // NCF de la nota de débito (E33)
   nota_debito_id?: string; // ID del documento ECF E33
   nota_debito_monto?: number; // Monto adicionado
+  nota_debito_qr?: string;
+  nota_debito_codigo_seguridad?: string;
+  nota_debito_fecha_firma?: string;
+  nota_debito_fecha_emision?: string;
+  nota_debito_estado?: string;
+  nota_debito_pdf_url?: string;
+  nota_debito_xml_url?: string;
   ultimo_recordatorio_en?: string; // Fecha ISO del último recordatorio por WhatsApp enviada para prendas almacenadas
   entrega_domicilio?: boolean;
   costo_envio?: number;
@@ -441,6 +456,7 @@ export interface ECFConfig {
   ef2_username?: string;
   ef2_token?: string;
   ef2_environment?: "TesteCF" | "CerteCF" | "eCF";
+  ef2_credentials_owner?: "platform" | "tenant";
   api_auth_token?: string;
   api_token_expires_at?: string;
   // Pronesoft multi-empresa
@@ -3461,20 +3477,36 @@ export async function getMovimientos(
 
     if (!error && data) {
       const local = read<MovimientoCaja[]>(KEY.movimientos, []);
+      // Los movimientos son inmutables. Conservamos los que todavía existen
+      // solo localmente (por ejemplo, un reembolso en la cola offline) y los
+      // combinamos con la respuesta del servidor para que /caja no los oculte.
+      const serverIds = new Set(data.map((m: MovimientoCaja) => m.id));
+      const pendingLocal = local.filter(
+        (m) =>
+          (m.tenant_id === realId || m.tenant_id === tenant_id) &&
+          (!caja_id || m.caja_id === caja_id) &&
+          !serverIds.has(m.id),
+      );
+      const merged = [...data, ...pendingLocal].sort(
+        (a, b) => +new Date(b.creado_en) - +new Date(a.creado_en),
+      );
       const otherMovs = local.filter((m) => m.tenant_id !== realId && m.tenant_id !== tenant_id);
-      write(KEY.movimientos, [...data, ...otherMovs]);
+      write(KEY.movimientos, [...merged, ...otherMovs]);
       try {
         offlineDB.putMany("movimientos_caja", data);
       } catch {}
-      return data;
+      return merged;
     }
   } catch (e) {}
 
   const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-  return local.filter(
-    (m) =>
-      (m.tenant_id === realId || m.tenant_id === tenant_id) && (!caja_id || m.caja_id === caja_id),
-  );
+  return local
+    .filter(
+      (m) =>
+        (m.tenant_id === realId || m.tenant_id === tenant_id) &&
+        (!caja_id || m.caja_id === caja_id),
+    )
+    .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
 }
 
 export async function saveMovimiento(m: MovimientoCaja) {
