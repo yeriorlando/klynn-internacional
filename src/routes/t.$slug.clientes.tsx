@@ -9,6 +9,7 @@ import {
   Trash2, 
   Users, 
   Download, 
+  Upload,
   Printer, 
   FileSpreadsheet,
   Building2,
@@ -29,13 +30,8 @@ import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { createPortal } from "react-dom";
-import { exportToCsv } from "@/lib/export";
-import { 
-  DropdownMenu, 
-  DropdownMenuContent, 
-  DropdownMenuItem, 
-  DropdownMenuTrigger 
-} from "@/components/ui/dropdown-menu";
+import { exportClientsToExcel } from "@/lib/excel-clients";
+import { ExcelClientsImportModal } from "@/components/klynn/ExcelClientsImportModal";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -74,6 +70,7 @@ function ClientesPage() {
   const [edit, setEdit] = useState<Cliente | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
+  const [openExcelImport, setOpenExcelImport] = useState(false);
 
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: ordenes = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
@@ -121,24 +118,6 @@ function ClientesPage() {
     });
   }, [clientes, q, filterType, ordenes]);
 
-  const exportData = useMemo(() => {
-    return {
-      filename: "Clientes_Klynn",
-      columns: ["Nombre Completo", "Teléfono", "RNC / Cédula", "Email", "Dirección / Sector", "Tipo", "Límite Crédito", "Total Facturado", "Deuda Pendiente"],
-      data: filteredList.map(c => [
-        `${c.nombre} ${c.apellido || ""}`.trim(),
-        c.telefono,
-        c.cedula || "—",
-        c.email || "—",
-        c.sector ? `${c.direccion || ''} (${c.sector})` : (c.direccion || "—"),
-        c.tipo,
-        formatRD(c.limite_credito || 0),
-        formatRD(totalGastado(c.id)),
-        formatRD(deudaCliente(c.id))
-      ])
-    };
-  }, [filteredList, ordenes]);
-
   if (!user || user.tenant.id === '__loading__' || (loading && clientes.length === 0)) {
     return <GlobalPageLoader text="Cargando directorio de clientes..." />;
   }
@@ -155,35 +134,24 @@ function ClientesPage() {
         </div>
 
         <div className="flex items-center gap-2.5 flex-wrap shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0">
-                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Exportar</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
-              <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => exportToCsv(exportData.filename, exportData.columns, exportData.data)}
-              >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (CSV)
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => setIsPrinting(true)}
-              >
-                <Printer className="h-4 w-4 text-rose-600" /> Imprimir / PDF
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          <Button
+            type="button"
+            onClick={() => exportClientsToExcel(clientes, user.tenant?.nombre)}
+            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+            title="Descargar clientes actuales en Excel"
+          >
+            <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Exportar Excel</span>
+          </Button>
 
           <Button 
+            type="button"
+            onClick={() => setOpenExcelImport(true)}
             className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
-            onClick={() => setIsPrinting(true)}
+            title="Importar o actualizar clientes desde archivo Excel"
           >
-            <Printer className="h-4 w-4 text-white shrink-0" />
-            <span>Imprimir</span>
+            <Upload className="h-4 w-4 text-white shrink-0" />
+            <span>Importar Excel</span>
           </Button>
 
           <Button 
@@ -576,6 +544,15 @@ function ClientesPage() {
         cliente={edit} 
         tenant={tenant} 
         onDone={() => { setEdit(null); setShowNew(false); }} 
+      />
+
+      {/* MODAL DE IMPORTAR CLIENTES */}
+      <ExcelClientsImportModal
+        open={openExcelImport}
+        onOpenChange={setOpenExcelImport}
+        tenantId={tenantId}
+        currentClientes={clientes}
+        tenantName={user?.tenant?.nombre}
       />
 
       {/* PORTAL DE IMPRESIÓN */}

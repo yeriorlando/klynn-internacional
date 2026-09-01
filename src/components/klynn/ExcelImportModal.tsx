@@ -2,7 +2,6 @@ import { useState } from "react";
 import {
   Dialog,
   DialogContent,
-  DialogHeader,
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
@@ -22,7 +21,8 @@ import {
 } from "lucide-react";
 import {
   parseCatalogExcelFile,
-  exportCatalogToExcel,
+  downloadPrendasTemplate,
+  downloadServiciosTemplate,
   type ExcelParseResult,
 } from "@/lib/excel-catalog";
 import {
@@ -43,6 +43,7 @@ interface ExcelImportModalProps {
   currentPrendas: CatalogoItem[];
   currentServicios: Servicio[];
   tenantName?: string;
+  mode?: "prendas" | "servicios" | "all";
 }
 
 export function ExcelImportModal({
@@ -51,13 +52,16 @@ export function ExcelImportModal({
   tenantId,
   currentPrendas,
   currentServicios,
-  tenantName = "Lavanderia",
+  mode = "prendas",
 }: ExcelImportModalProps) {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState(false);
   const [parseResult, setParseResult] = useState<ExcelParseResult | null>(null);
+
+  const isPrendasMode = mode === "prendas";
+  const isServiciosMode = mode === "servicios";
 
   const resetState = () => {
     setFile(null);
@@ -105,64 +109,69 @@ export function ExcelImportModal({
     try {
       setImporting(true);
 
-      // 1. Guardar prendas (1. Busca por ID | 2. Busca por Nombre + Categoría)
-      for (const p of parseResult.prendas) {
-        let existing = p.id ? currentPrendas.find((x) => x.id === p.id) : undefined;
-        if (!existing) {
-          existing = currentPrendas.find(
-            (x) =>
-              x.nombre.toLowerCase().trim() === p.nombre.toLowerCase().trim() &&
-              x.categoria.toLowerCase().trim() === p.categoria.toLowerCase().trim(),
-          );
-        }
+      // 1. Guardar prendas si aplica
+      if (!isServiciosMode && parseResult.prendas.length > 0) {
+        for (const p of parseResult.prendas) {
+          let existing = p.id ? currentPrendas.find((x) => x.id === p.id) : undefined;
+          if (!existing) {
+            existing = currentPrendas.find(
+              (x) =>
+                x.nombre.toLowerCase().trim() === p.nombre.toLowerCase().trim() &&
+                x.categoria.toLowerCase().trim() === p.categoria.toLowerCase().trim(),
+            );
+          }
 
-        const item: CatalogoItem = {
-          id: existing?.id || p.id || uid("cat"),
-          tenant_id: tenantId,
-          categoria: p.categoria || "General",
-          nombre: p.nombre,
-          descripcion: p.descripcion || existing?.descripcion,
-          precio: p.precio,
-          precios_servicios: p.precios_servicios || existing?.precios_servicios,
-          por_libra: p.por_libra,
-          is_exento: p.is_exento,
-          activo: p.activo,
-          icono: existing?.icono || "👕",
-          imagen_url: existing?.imagen_url,
-        };
-        await saveCatalogoItem(item);
+          const item: CatalogoItem = {
+            id: existing?.id || p.id || uid("cat"),
+            tenant_id: tenantId,
+            categoria: p.categoria || "General",
+            nombre: p.nombre,
+            descripcion: p.descripcion || existing?.descripcion,
+            precio: p.precio,
+            por_libra: p.por_libra,
+            is_exento: p.is_exento,
+            activo: p.activo,
+            icono: existing?.icono || "👕",
+            imagen_url: existing?.imagen_url,
+          };
+          await saveCatalogoItem(item);
+        }
+        queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
       }
 
-      // 2. Guardar servicios (1. Busca por ID | 2. Busca por Nombre)
-      for (const s of parseResult.servicios) {
-        let existing = s.id ? currentServicios.find((x) => x.id === s.id) : undefined;
-        if (!existing) {
-          existing = currentServicios.find(
-            (x) => x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
-          );
-        }
+      // 2. Guardar servicios si aplica
+      if (!isPrendasMode && parseResult.servicios.length > 0) {
+        for (const s of parseResult.servicios) {
+          let existing = s.id ? currentServicios.find((x) => x.id === s.id) : undefined;
+          if (!existing) {
+            existing = currentServicios.find(
+              (x) => x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
+            );
+          }
 
-        const serv: Servicio = {
-          id: existing?.id || s.id || uid("srv"),
-          tenant_id: tenantId,
-          nombre: s.nombre,
-          descripcion: s.descripcion || existing?.descripcion,
-          precio: s.precio,
-          por_libra: s.por_libra,
-          is_exento: s.is_exento,
-          activo: s.activo,
-          icono: existing?.icono || "🧺",
-          imagen_url: existing?.imagen_url,
-        };
-        await saveServicio(serv);
+          const serv: Servicio = {
+            id: existing?.id || s.id || uid("srv"),
+            tenant_id: tenantId,
+            nombre: s.nombre,
+            descripcion: s.descripcion || existing?.descripcion,
+            precio: s.precio,
+            por_libra: s.por_libra,
+            is_exento: s.is_exento,
+            activo: s.activo,
+            icono: existing?.icono || "🧺",
+            imagen_url: existing?.imagen_url,
+          };
+          await saveServicio(serv);
+        }
+        queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
       }
 
-      // Invalidar cachés de React Query
-      queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
-      queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
+      const totalItems =
+        (!isServiciosMode ? parseResult.prendas.length : 0) +
+        (!isPrendasMode ? parseResult.servicios.length : 0);
 
-      toast.success("¡Catálogo actualizado desde Excel con éxito! 🎉", {
-        description: `Se procesaron ${parseResult.prendas.length} prendas y ${parseResult.servicios.length} servicios.`,
+      toast.success("¡Importación completada con éxito! 🎉", {
+        description: `Se procesaron e importaron ${totalItems} registros.`,
         duration: 4000,
       });
 
@@ -204,6 +213,12 @@ export function ExcelImportModal({
     }).length || 0;
   const serviciosActualizados = (parseResult?.servicios.length || 0) - serviciosNuevos;
 
+  const itemsToShow = isServiciosMode
+    ? parseResult?.servicios.length || 0
+    : isPrendasMode
+    ? parseResult?.prendas.length || 0
+    : (parseResult?.prendas.length || 0) + (parseResult?.servicios.length || 0);
+
   return (
     <Dialog
       open={open}
@@ -221,10 +236,18 @@ export function ExcelImportModal({
             </div>
             <div>
               <DialogTitle className="text-base font-display font-black text-white leading-tight">
-                Importar Catálogo desde Excel
+                {isServiciosMode
+                  ? "Importar Servicios desde Excel"
+                  : isPrendasMode
+                  ? "Importar Prendas desde Excel"
+                  : "Importar Catálogo desde Excel"}
               </DialogTitle>
               <DialogDescription className="text-[11px] text-white/80 mt-0.5">
-                Carga o actualiza tus prendas, precios y servicios de forma masiva en segundos.
+                {isServiciosMode
+                  ? "Carga o actualiza tus servicios y tarifas de forma masiva en segundos."
+                  : isPrendasMode
+                  ? "Carga o actualiza tus prendas, categorías y precios de forma masiva en segundos."
+                  : "Carga o actualiza tus prendas y servicios de forma masiva en segundos."}
               </DialogDescription>
             </div>
           </div>
@@ -235,16 +258,18 @@ export function ExcelImportModal({
           {/* SI AUN NO HAY ARCHIVO */}
           {!parseResult && (
             <div className="space-y-2.5">
-              {/* Botón rápido para descargar plantilla actual */}
+              {/* Botón rápido para descargar plantilla en blanco */}
               <div className="p-2.5 rounded-xl bg-primary/5 border border-primary/15 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-2 min-w-0">
                   <FileText className="h-4 w-4 text-primary shrink-0" />
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-foreground leading-tight">
-                      ¿No tienes la plantilla actualizada?
+                      {isServiciosMode
+                        ? "¿No tienes la plantilla de servicios?"
+                        : "¿No tienes la plantilla de prendas?"}
                     </div>
                     <div className="text-[10px] text-muted-foreground truncate">
-                      Descarga tu catálogo actual en Excel, modifícalo y vuelve a subirlo.
+                      Descarga la plantilla vacía con formato Klynn, complétala y súbela.
                     </div>
                   </div>
                 </div>
@@ -252,8 +277,14 @@ export function ExcelImportModal({
                   type="button"
                   variant="outline"
                   size="sm"
-                  onClick={() => exportCatalogToExcel(currentPrendas, currentServicios, tenantName)}
-                  className="rounded-lg h-6.5 px-2.5 text-[11px] font-bold border-primary/30 text-primary hover:bg-primary/10 shrink-0"
+                  onClick={() => {
+                    if (isServiciosMode) {
+                      downloadServiciosTemplate();
+                    } else {
+                      downloadPrendasTemplate();
+                    }
+                  }}
+                  className="rounded-lg h-6.5 px-2.5 text-[11px] font-bold border-primary/30 text-primary hover:bg-primary/10 shrink-0 cursor-pointer"
                 >
                   Descargar Plantilla
                 </Button>
@@ -324,40 +355,42 @@ export function ExcelImportModal({
               </div>
 
               {/* Tarjetas de Resumen */}
-              <div className="grid grid-cols-2 gap-2.5">
-                <div className="p-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1">
-                      <Shirt className="h-3.5 w-3.5 text-primary" /> Prendas (
-                      {parseResult.prendas.length})
-                    </span>
+              <div className={`grid ${isPrendasMode || isServiciosMode ? "grid-cols-1" : "grid-cols-2"} gap-2.5`}>
+                {!isServiciosMode && (
+                  <div className="p-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-foreground flex items-center gap-1">
+                        <Shirt className="h-3.5 w-3.5 text-primary" /> Prendas ({parseResult.prendas.length})
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground pt-0.5 flex flex-col gap-0.5">
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <PlusCircle className="h-3 w-3" /> {prendasNuevas} nuevas
+                      </span>
+                      <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                        <RefreshCw className="h-3 w-3" /> {prendasActualizadas} a actualizar
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-muted-foreground pt-0.5 flex flex-col gap-0.5">
-                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
-                      <PlusCircle className="h-3 w-3" /> {prendasNuevas} nuevas
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                      <RefreshCw className="h-3 w-3" /> {prendasActualizadas} a actualizar
-                    </span>
-                  </div>
-                </div>
+                )}
 
-                <div className="p-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border space-y-0.5">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-foreground flex items-center gap-1">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" /> Servicios (
-                      {parseResult.servicios.length})
-                    </span>
+                {!isPrendasMode && (
+                  <div className="p-2.5 px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-foreground flex items-center gap-1">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" /> Servicios ({parseResult.servicios.length})
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-muted-foreground pt-0.5 flex flex-col gap-0.5">
+                      <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
+                        <PlusCircle className="h-3 w-3" /> {serviciosNuevos} nuevos
+                      </span>
+                      <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
+                        <RefreshCw className="h-3 w-3" /> {serviciosActualizados} a actualizar
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-[11px] text-muted-foreground pt-0.5 flex flex-col gap-0.5">
-                    <span className="flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold">
-                      <PlusCircle className="h-3 w-3" /> {serviciosNuevos} nuevos
-                    </span>
-                    <span className="flex items-center gap-1 text-slate-600 dark:text-slate-400">
-                      <RefreshCw className="h-3 w-3" /> {serviciosActualizados} a actualizar
-                    </span>
-                  </div>
-                </div>
+                )}
               </div>
 
               {/* Alertas de Error */}
@@ -378,93 +411,94 @@ export function ExcelImportModal({
               {/* Tabla de muestra de ítems */}
               <div className="space-y-1.5">
                 <div className="text-xs font-bold text-foreground">
-                  Previsualización de todos los artículos (
-                  {parseResult.prendas.length + parseResult.servicios.length}):
+                  Previsualización ({itemsToShow}):
                 </div>
                 <div className="max-h-52 overflow-y-auto rounded-xl border border-border divide-y divide-border">
-                  {parseResult.prendas.map((p, idx) => {
-                    const isNew =
-                      (p.id ? !currentPrendas.some((x) => x.id === p.id) : true) &&
-                      !currentPrendas.some(
-                        (x) =>
-                          x.nombre.toLowerCase().trim() === p.nombre.toLowerCase().trim() &&
-                          x.categoria.toLowerCase().trim() === p.categoria.toLowerCase().trim(),
-                      );
-                    return (
-                      <div
-                        key={`p-${idx}`}
-                        className="p-2 px-3 flex items-center justify-between text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm">{p.icono || "👕"}</span>
-                          <div className="truncate">
-                            <span className="font-bold">{p.nombre}</span>
-                            <span className="text-muted-foreground ml-1.5 text-[10px]">
-                              ({p.categoria})
+                  {!isServiciosMode &&
+                    parseResult.prendas.map((p, idx) => {
+                      const isNew =
+                        (p.id ? !currentPrendas.some((x) => x.id === p.id) : true) &&
+                        !currentPrendas.some(
+                          (x) =>
+                            x.nombre.toLowerCase().trim() === p.nombre.toLowerCase().trim() &&
+                            x.categoria.toLowerCase().trim() === p.categoria.toLowerCase().trim(),
+                        );
+                      return (
+                        <div
+                          key={`p-${idx}`}
+                          className="p-2 px-3 flex items-center justify-between text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm">{p.icono || "👕"}</span>
+                            <div className="truncate">
+                              <span className="font-bold">{p.nombre}</span>
+                              <span className="text-muted-foreground ml-1.5 text-[10px]">
+                                ({p.categoria})
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black text-primary text-xs">
+                              {formatRD(p.precio)}
                             </span>
+                            {isNew ? (
+                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold">
+                                NUEVA
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 font-semibold"
+                              >
+                                EDITAR
+                              </Badge>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-black text-primary text-xs">
-                            {formatRD(p.precio)}
-                          </span>
-                          {isNew ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold">
-                              NUEVA
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-[9px] px-1.5 py-0 font-semibold"
-                            >
-                              EDITAR
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
 
-                  {parseResult.servicios.map((s, idx) => {
-                    const isNew =
-                      (s.id ? !currentServicios.some((x) => x.id === s.id) : true) &&
-                      !currentServicios.some(
-                        (x) => x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
-                      );
-                    return (
-                      <div
-                        key={`s-${idx}`}
-                        className="p-2 px-3 flex items-center justify-between text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
-                      >
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm">{s.icono || "🧺"}</span>
-                          <div className="truncate">
-                            <span className="font-bold">{s.nombre}</span>
-                            <span className="text-muted-foreground ml-1.5 text-[10px]">
-                              (Servicio)
+                  {!isPrendasMode &&
+                    parseResult.servicios.map((s, idx) => {
+                      const isNew =
+                        (s.id ? !currentServicios.some((x) => x.id === s.id) : true) &&
+                        !currentServicios.some(
+                          (x) => x.nombre.toLowerCase().trim() === s.nombre.toLowerCase().trim(),
+                        );
+                      return (
+                        <div
+                          key={`s-${idx}`}
+                          className="p-2 px-3 flex items-center justify-between text-xs bg-card hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors"
+                        >
+                          <div className="flex items-center gap-2 min-w-0">
+                            <span className="text-sm">{s.icono || "🧺"}</span>
+                            <div className="truncate">
+                              <span className="font-bold">{s.nombre}</span>
+                              <span className="text-muted-foreground ml-1.5 text-[10px]">
+                                (Servicio)
+                              </span>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="font-black text-primary text-xs">
+                              {formatRD(s.precio)}
                             </span>
+                            {isNew ? (
+                              <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold">
+                                NUEVO
+                              </Badge>
+                            ) : (
+                              <Badge
+                                variant="outline"
+                                className="text-[9px] px-1.5 py-0 font-semibold"
+                              >
+                                EDITAR
+                              </Badge>
+                            )}
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 shrink-0">
-                          <span className="font-black text-primary text-xs">
-                            {formatRD(s.precio)}
-                          </span>
-                          {isNew ? (
-                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 border-none text-[9px] px-1.5 py-0 font-bold">
-                              NUEVO
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="text-[9px] px-1.5 py-0 font-semibold"
-                            >
-                              EDITAR
-                            </Badge>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
                 </div>
               </div>
             </div>
@@ -480,7 +514,7 @@ export function ExcelImportModal({
               onOpenChange(false);
               resetState();
             }}
-            className="rounded-xl h-8 px-3.5 text-xs font-bold"
+            className="rounded-xl h-8 px-3.5 text-xs font-bold cursor-pointer"
           >
             Cancelar
           </Button>
@@ -489,11 +523,8 @@ export function ExcelImportModal({
             <Button
               type="button"
               onClick={handleConfirmImport}
-              disabled={
-                importing ||
-                (parseResult.prendas.length === 0 && parseResult.servicios.length === 0)
-              }
-              className="rounded-xl h-8 px-4 text-xs font-bold bg-primary text-white gap-1.5 shadow-md hover:bg-primary/90"
+              disabled={importing || itemsToShow === 0}
+              className="rounded-xl h-8 px-4 text-xs font-bold bg-primary text-white gap-1.5 shadow-md hover:bg-primary/90 cursor-pointer"
             >
               {importing ? (
                 <>

@@ -71,7 +71,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { useCatalogo, useServicios } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
-import { exportCatalogToExcel } from "@/lib/excel-catalog";
+import { exportPrendasToExcel, exportServiciosToExcel } from "@/lib/excel-catalog";
 import { ExcelImportModal } from "@/components/klynn/ExcelImportModal";
 
 const LAUNDRY_ICONS = [
@@ -225,9 +225,9 @@ function CatalogoPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <Button
                 type="button"
-                onClick={() => exportCatalogToExcel(items, servicios, user.tenant.nombre)}
+                onClick={() => exportPrendasToExcel(items, user.tenant.nombre)}
                 className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                title="Descargar catálogo actual en Excel"
+                title="Descargar catálogo de prendas en Excel"
               >
                 <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
                 <span>Exportar Excel</span>
@@ -452,9 +452,9 @@ function CatalogoPage() {
             <div className="flex items-center gap-2.5 flex-wrap">
               <Button
                 type="button"
-                onClick={() => exportCatalogToExcel(items, servicios, user.tenant.nombre)}
+                onClick={() => exportServiciosToExcel(servicios, user.tenant.nombre)}
                 className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                title="Descargar catálogo actual en Excel"
+                title="Descargar servicios en Excel"
               >
                 <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
                 <span>Exportar Excel</span>
@@ -649,6 +649,7 @@ function CatalogoPage() {
         currentPrendas={items}
         currentServicios={servicios}
         tenantName={user?.tenant?.nombre}
+        mode={tab as "prendas" | "servicios"}
       />
     </div>
   );
