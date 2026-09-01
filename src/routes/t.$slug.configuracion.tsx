@@ -3319,7 +3319,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
 
           {/* Plantillas de Textos */}
           <div className="space-y-4 pt-2">
-            <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {ncf} {entrega} {detalle}">
+            <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {ncf} {ncf_label} {entrega} {detalle}">
               <ExpandingTextarea 
                 value={draft.plantilla_creada} 
                 onChange={(e: any) => setDraft({ ...draft, plantilla_creada: e.target.value })} 

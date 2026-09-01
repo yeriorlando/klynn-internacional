@@ -848,7 +848,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
 📍 {lavanderia_dir}
 -----------------------------------
 📄 *ORDEN:* {numero}
-🧾 *NCF:* {ncf}
+🧾 *{ncf_label}:* {ncf}
 📅 *Vencimiento:* {ncf_vencimiento}
 📅 *Fecha:* {fecha}
 -----------------------------------

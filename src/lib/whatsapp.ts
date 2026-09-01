@@ -266,18 +266,53 @@ export async function notificarWhatsApp(
     return sName;
   }).join("\n\n") || "Ninguno";
 
+  const isElectronic = Boolean(
+    (orden.ncf && orden.ncf.toUpperCase().startsWith("E")) ||
+    orden.tipo_ecf ||
+    orden.track_id ||
+    orden.security_code
+  );
+
   let tipoDoc = "RECIBO DE SERVICIO";
   if (orden.ncf) {
-    if (orden.ncf.startsWith('E31') || orden.ncf.startsWith('B01')) tipoDoc = "FACTURA PARA CRÉDITO FISCAL";
-    else if (orden.ncf.startsWith('E32') || orden.ncf.startsWith('B02')) tipoDoc = "FACTURA PARA CONSUMIDOR FINAL";
-    else if (orden.ncf.startsWith('E33') || orden.ncf.startsWith('B03')) tipoDoc = "NOTA DE DÉBITO";
-    else if (orden.ncf.startsWith('E34') || orden.ncf.startsWith('B04')) tipoDoc = "NOTA DE CRÉDITO";
-    else tipoDoc = "COMPROBANTE FISCAL";
+    if (isElectronic) {
+      if (orden.ncf.startsWith("E31")) tipoDoc = "FACTURA ELECTRÓNICA PARA CRÉDITO FISCAL (e-CF)";
+      else if (orden.ncf.startsWith("E32")) tipoDoc = "FACTURA ELECTRÓNICA DE CONSUMO (e-CF)";
+      else if (orden.ncf.startsWith("E33")) tipoDoc = "NOTA DE DÉBITO ELECTRÓNICA (e-CF)";
+      else if (orden.ncf.startsWith("E34")) tipoDoc = "NOTA DE CRÉDITO ELECTRÓNICA (e-CF)";
+      else tipoDoc = "COMPROBANTE FISCAL ELECTRÓNICO (e-CF)";
+    } else {
+      if (orden.ncf.startsWith("B01")) tipoDoc = "FACTURA PARA CRÉDITO FISCAL";
+      else if (orden.ncf.startsWith("B02")) tipoDoc = "FACTURA PARA CONSUMIDOR FINAL";
+      else if (orden.ncf.startsWith("B03")) tipoDoc = "NOTA DE DÉBITO";
+      else if (orden.ncf.startsWith("B04")) tipoDoc = "NOTA DE CRÉDITO";
+      else tipoDoc = "COMPROBANTE FISCAL";
+    }
+  }
+
+  const ncfLabel = isElectronic ? "e-NCF" : "NCF";
+
+  let templatePrepared = tpl;
+  if (isElectronic) {
+    // Reemplaza automáticamente NCF por e-NCF si la lavandería tiene facturación electrónica
+    templatePrepared = templatePrepared
+      .replace(/\*NCF:\*/g, "*e-NCF:*")
+      .replace(/\bNCF:/g, "e-NCF:");
+  }
+
+  if (!orden.ncf) {
+    // Si la orden no tiene NCF, omite las líneas de NCF y vencimiento para no dejar campos vacíos
+    templatePrepared = templatePrepared
+      .replace(/^[^\n]*\b(NCF|e-NCF):[^\n]*\n?/gim, "")
+      .replace(/^[^\n]*\bVencimiento:[^\n]*\n?/gim, "");
+  } else if (!orden.ncf_vencimiento) {
+    // Si no hay vencimiento (como en e-CF de consumo), omite la línea de vencimiento vacía
+    templatePrepared = templatePrepared.replace(/^[^\n]*\bVencimiento:[^\n]*\n?/gim, "");
   }
 
   const diasAlmacenado = calcularDiasEnAlmacen(orden.creado_en);
 
-  const mensaje = render(tpl, {
+  const mensaje = render(templatePrepared, {
     lavanderia: tenant.nombre,
     lavanderia_tel: tenant.telefono || "",
     lavanderia_dir: tenant.direccion || "",
@@ -289,6 +324,7 @@ export async function notificarWhatsApp(
     cliente_cedula: cliente.cedula || "",
     cliente_tipo_doc: cliente.tipo === "Empresa" ? "RNC" : "Cédula",
     dias: String(diasAlmacenado),
+    ncf_label: ncfLabel,
     ncf: orden.ncf || "",
     ncf_vencimiento: orden.ncf_vencimiento ? new Date(orden.ncf_vencimiento).toLocaleDateString("es-DO") : "",
     rnc: tenant.rnc || "",
