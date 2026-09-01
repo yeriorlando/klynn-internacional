@@ -2256,6 +2256,33 @@ function getMarbeteColorStyle(colorName?: string) {
       releaseOrderCreation();
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
 
+      // Notificación automática de WhatsApp al cliente (Recibo / Ticket digital)
+      // Se difiere unos segundos para permitir que el modal de cobro se cierre fluidamente y e-CF/DGII finalice sin colisiones
+      if (targetCliente && targetCliente.telefono && targetCliente.telefono.trim() !== "" && targetCliente.telefono !== "---") {
+        const montoRecibido = recibido > 0 ? recibido : pagado;
+        const tenantSnapshot = { ...tenant };
+        const clienteSnapshot = { ...targetCliente };
+        const ordenSnapshot = { ...ordenActualizada };
+
+        setTimeout(() => {
+          notificarWhatsApp(
+            tenantSnapshot,
+            clienteSnapshot,
+            ordenSnapshot,
+            "creada",
+            montoRecibido
+          ).then((res) => {
+            if (res.ok) {
+              toast.success("Recibo digital enviado por WhatsApp al cliente 📱");
+            } else if (res.reason && !res.reason.includes("desactivad") && !res.reason.includes("deshabilitad")) {
+              console.warn("WhatsApp no enviado:", res.reason);
+            }
+          }).catch((err) => {
+            console.error("Error al notificar por WhatsApp al crear orden:", err);
+          });
+        }, 2500);
+      }
+
       // Auto-impresión al cobrar: dispara el diálogo nativo del navegador al instante
       if (cfg.pos_auto_imprimir !== false) {
         setShowPrintPortal({ ...ordenActualizada });
@@ -2269,7 +2296,6 @@ function getMarbeteColorStyle(colorName?: string) {
       releaseOrderCreation();
     }
   }
-
 
   async function next() {
     if (limits?.ordersReached) {

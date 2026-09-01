@@ -54,8 +54,9 @@ export async function sendWhatsAppMessage(
     if (provider === "klynn_connect") {
       const action = request.mediaUrl ? "send_media" : "send_message";
       const instanceName = wa.instance || getKlynnConnectInstanceName(tenant);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
       const res = await fetch(
-        `https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=${action}`,
+        `${supabaseUrl}/functions/v1/klynn-connect-proxy?action=${action}`,
         {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -169,8 +170,10 @@ function render(tpl: string, vars: Record<string, string>) {
   return tpl.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 }
 
-function humanizeDate(dateStr: string, showTime = true): string {
+function humanizeDate(dateStr?: string, showTime = true): string {
+  if (!dateStr) return "Por coordinar";
   const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return "Por coordinar";
   const now = new Date();
   
   // Normalizar a inicio del día para comparar días
@@ -217,41 +220,47 @@ export async function notificarWhatsApp(
   const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
   if (!wa?.enabled) return { ok: false, reason: "WhatsApp deshabilitado" };
   
-  if (!cliente.telefono) return { ok: false, reason: "Cliente sin teléfono" };
+  if (!cliente.telefono || cliente.telefono.trim() === "" || cliente.telefono === "---") {
+    return { ok: false, reason: "Cliente sin teléfono registrado" };
+  }
 
   const flag =
-    evento === "creada" ? wa.notif_orden_creada :
-    evento === "lista" ? wa.notif_orden_lista :
+    evento === "creada" ? (wa.notif_orden_creada !== false) :
+    evento === "lista" ? (wa.notif_orden_lista !== false) :
     evento === "en_camino" ? true : // Activado por defecto para logística
     evento === "sin_retirar" ? (wa.notif_orden_sin_retirar !== false) :
-    wa.notif_orden_entregada;
-  // El ticket de recepción es obligatorio para clientes con teléfono cuando
-  // WhatsApp está habilitado. Los demás eventos conservan su interruptor.
-  if (!flag && evento !== "creada") return { ok: false, reason: "Notificación desactivada" };
+    (wa.notif_orden_entregada === true);
+
+  if (!flag) return { ok: false, reason: "Notificación desactivada en configuración" };
 
   const tpl =
-    evento === "creada" ? wa.plantilla_creada :
-    evento === "lista" ? wa.plantilla_lista :
+    evento === "creada" ? (wa.plantilla_creada || DEFAULT_CONFIG.whatsapp?.plantilla_creada || "") :
+    evento === "lista" ? (wa.plantilla_lista || DEFAULT_CONFIG.whatsapp?.plantilla_lista || "") :
     evento === "en_camino" ? "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de {lavanderia} y va de camino a tu dirección:\n\n{cliente_dir}\n\n¡Nos vemos pronto!" :
     evento === "sin_retirar" ? (wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp?.plantilla_sin_retirar || "") :
-    wa.plantilla_entregada;
+    (wa.plantilla_entregada || DEFAULT_CONFIG.whatsapp?.plantilla_entregada || "");
 
   const cleanItemDesc = (desc: string) => (desc || "").replace(/^[↳\s•\-–—>]+/g, "").trim();
 
   const detalleStr = (evento === "creada")
-    ? orden.items.map(it => {
+    ? (orden.items || []).map(it => {
         const desc = cleanItemDesc(it.descripcion);
-        return `${desc} x${it.cantidad}\n${it.cantidad} × ${formatRD(it.precio_unitario).replace("DOP", "RD$")} = ${formatRD(it.precio_unitario * it.cantidad).replace("DOP", "RD$")}`;
+        const qty = it.cantidad || 1;
+        const pu = it.precio_unitario || 0;
+        return `${desc} x${qty}\n${qty} × ${formatRD(pu).replace("DOP", "RD$")} = ${formatRD(pu * qty).replace("DOP", "RD$")}`;
       }).join("\n\n")
     : (evento === "lista" || evento === "sin_retirar")
-    ? orden.items.map(it => `↳ ${cleanItemDesc(it.descripcion)} x${it.cantidad}`).join("\n")
-    : orden.items.map(it => `${cleanItemDesc(it.descripcion)} x${it.cantidad}`).join(", ");
+    ? (orden.items || []).map(it => `↳ ${cleanItemDesc(it.descripcion)} x${it.cantidad || 1}`).join("\n")
+    : (orden.items || []).map(it => `${cleanItemDesc(it.descripcion)} x${it.cantidad || 1}`).join(", ");
 
-  const serviciosList = await getServicios(tenant.id);
+  const serviciosList = await getServicios(tenant.id).catch(() => []);
   const serviciosStr = (orden.servicios || []).map(sName => {
-    const srv = serviciosList.find(s => s.nombre === sName);
-    if (srv && srv.precio > 0) {
-      const pStr = formatRD(srv.precio).replace("DOP", "RD$");
+    const srv = (serviciosList || []).find(s => s.nombre === sName);
+    const customPrice = (orden.servicios_precios && orden.servicios_precios[sName] !== undefined)
+      ? orden.servicios_precios[sName]
+      : (srv && srv.precio > 0 ? srv.precio : 0);
+    if (customPrice > 0) {
+      const pStr = formatRD(customPrice).replace("DOP", "RD$");
       return `${sName}\n1 × ${pStr} = ${pStr}`;
     }
     return sName;
@@ -273,7 +282,7 @@ export async function notificarWhatsApp(
     lavanderia_tel: tenant.telefono || "",
     lavanderia_dir: tenant.direccion || "",
     numero: orden.numero,
-    fecha: new Date(orden.creado_en).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }),
+    fecha: new Date(orden.creado_en || Date.now()).toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true }),
     cliente: cliente.nombre,
     cliente_tel: cliente.telefono || "",
     cliente_dir: cliente.direccion || "",
@@ -285,20 +294,20 @@ export async function notificarWhatsApp(
     rnc: tenant.rnc || "",
     tipo_documento: tipoDoc,
     servicios: serviciosStr,
-    detalle: detalleStr,
-    subtotal: formatRD(orden.subtotal).replace("DOP", "RD$"),
+    detalle: detalleStr || "Ninguno",
+    subtotal: formatRD(orden.subtotal || 0).replace("DOP", "RD$"),
     itbis: formatRD(orden.itbis || 0).replace("DOP", "RD$"),
-    total: formatRD(orden.total).replace("DOP", "RD$"),
-    metodo_pago: orden.metodo_pago,
-    pagado: formatRD(orden.pagado).replace("DOP", "RD$"),
-    saldo: formatRD(orden.saldo).replace("DOP", "RD$"),
-    vuelto: (pagoRecibido && pagoRecibido > orden.total) 
-      ? formatRD(pagoRecibido - orden.total).replace("DOP", "RD$") 
+    total: formatRD(orden.total || 0).replace("DOP", "RD$"),
+    metodo_pago: orden.metodo_pago || "EFECTIVO",
+    pagado: formatRD(orden.pagado || 0).replace("DOP", "RD$"),
+    saldo: formatRD(orden.saldo || 0).replace("DOP", "RD$"),
+    vuelto: (pagoRecibido && pagoRecibido > (orden.total || 0)) 
+      ? formatRD(pagoRecibido - (orden.total || 0)).replace("DOP", "RD$") 
       : "RD$0.00",
     entrega: orden.es_urgente 
       ? `${humanizeDate(orden.fecha_entrega, true)} (${tenant.config?.tiempo_entrega_urgente || 3} HORAS)`
       : humanizeDate(orden.fecha_entrega, false),
-    estado: orden.estado,
+    estado: orden.estado || "RECIBIDA",
     ticket_pie: tenant.config?.ticket_pie || "¡Gracias por su preferencia!",
     ticket_nota: tenant.config?.ticket_nota || "",
   });

@@ -127,28 +127,49 @@ function WeeklySummaryTab({
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
-    setDraft({
-      enabled: value.enabled === true,
-      frequency: value.frequency || "weekly",
-      channel: value.channel || "email",
-      email: value.email || tenant.email || "",
-      whatsapp_phone: value.whatsapp_phone || tenant.config?.alerta_ncf_telefono || tenant.telefono || "",
-    });
-  }, [tenant.email, tenant.telefono, tenant.config?.alerta_ncf_telefono, value]);
+    if (value) {
+      setDraft((prev) => ({
+        enabled: value.enabled === true,
+        frequency: value.frequency || prev.frequency || "weekly",
+        channel: value.channel || prev.channel || "email",
+        email: value.email || prev.email || tenant.email || "",
+        whatsapp_phone: value.whatsapp_phone || prev.whatsapp_phone || tenant.config?.alerta_ncf_telefono || tenant.telefono || "",
+      }));
+    }
+  }, [value?.enabled, value?.frequency, value?.channel, value?.email, value?.whatsapp_phone]);
 
   const usesEmail = draft.channel === "email" || draft.channel === "both";
   const usesWhatsApp = draft.channel === "whatsapp" || draft.channel === "both";
 
   function validate() {
     if (usesEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) {
-      toast.error("Introduce un correo v\u00e1lido para recibir el resumen.");
+      toast.error("Introduce un correo válido para recibir el resumen.");
       return false;
     }
     if (usesWhatsApp && draft.whatsapp_phone.replace(/\D/g, "").length < 10) {
-      toast.error("Introduce un n\u00famero de WhatsApp v\u00e1lido con c\u00f3digo de pa\u00eds.");
+      toast.error("Introduce un número de WhatsApp válido con código de país.");
       return false;
     }
     return true;
+  }
+
+  async function handleToggleEnabled(enabled: boolean) {
+    const nextDraft = { ...draft, enabled };
+    setDraft(nextDraft);
+    if (enabled && !validate()) return;
+    setSaving(true);
+    try {
+      await onSave({
+        ...nextDraft,
+        email: nextDraft.email.trim().toLowerCase(),
+        whatsapp_phone: nextDraft.whatsapp_phone.trim(),
+      });
+      toast.success(enabled
+        ? `${nextDraft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} activado ✓`
+        : "Resumen desactivado");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleSave() {
@@ -161,7 +182,7 @@ function WeeklySummaryTab({
         whatsapp_phone: draft.whatsapp_phone.trim(),
       });
       toast.success(draft.enabled
-        ? `${draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} activado`
+        ? `${draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} guardado y activado ✓`
         : "Preferencias del resumen guardadas");
     } finally {
       setSaving(false);
@@ -217,7 +238,7 @@ function WeeklySummaryTab({
               {draft.frequency === "monthly" ? "El día 1.º de cada mes, a las 7:00 a. m." : "Cada lunes, a las 7:00 a. m."}
             </p>
           </div>
-          <Switch checked={draft.enabled} onCheckedChange={(enabled) => setDraft((current) => ({ ...current, enabled }))} />
+          <Switch checked={draft.enabled} onCheckedChange={handleToggleEnabled} />
         </div>
       </div>
 

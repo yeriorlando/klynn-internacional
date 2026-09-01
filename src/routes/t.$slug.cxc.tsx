@@ -74,6 +74,7 @@ function estadoMora(dias: number, limite: number): CXCOrden["estado_mora"] {
 function CuentasPorCobrarPage() {
   const user = useRequireAuth();
   const tenantId = user?.tenant?.id || "";
+  const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const queryClient = useQueryClient();
   const { data: cajaAbierta } = useCajaAbierta(tenantId);
   const { data: ordenesRaw = [], isLoading: loadingOrdenes } = useOrdenes(tenantId);
@@ -425,19 +426,6 @@ function CuentasPorCobrarPage() {
 
   return (
     <>
-      <style>{`
-        @media print {
-          body * { visibility: hidden !important; }
-          #cxc-print-area, #cxc-print-area * { visibility: visible !important; }
-          #cxc-print-area { position: fixed; top: 0; left: 0; width: 100%; padding: 20px; background: white; }
-          .no-print { display: none !important; }
-          table { border-collapse: collapse; width: 100%; font-size: 11px; }
-          th, td { border: 1px solid #ddd; padding: 6px 8px; text-align: left; }
-          thead { background: #f3f4f6 !important; -webkit-print-color-adjust: exact; }
-          .mora-badge { border-radius: 4px; padding: 2px 6px; font-size: 10px; font-weight: bold; }
-        }
-      `}</style>
-
       <div>
         <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 no-print pb-4 border-b border-border/30">
           <div>
@@ -844,111 +832,7 @@ function CuentasPorCobrarPage() {
           )}
         </div>
 
-        {/* El área de impresión se genera dinámicamente en handlePrint() */}
-        <div style={{ display: "none" }}>
-          <div style={{ fontFamily: "Arial, sans-serif", maxWidth: "210mm", margin: "0 auto" }}>
-            {/* Encabezado */}
-            <div style={{ borderBottom: "2px solid #1e293b", paddingBottom: 12, marginBottom: 16 }}>
-              <h1 style={{ fontSize: 20, fontWeight: "bold", margin: 0, color: "#1e293b" }}>
-                {user.tenant.nombre}
-              </h1>
-              <h2 style={{ fontSize: 14, fontWeight: "bold", margin: "4px 0 0", color: "#64748b" }}>
-                ESTADO DE CUENTAS POR COBRAR
-              </h2>
-              <div style={{ fontSize: 11, color: "#64748b", marginTop: 4 }}>
-                Fecha de emisión: {new Date().toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" })} —{" "}
-                {new Date().toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" })}
-              </div>
-            </div>
-
-            {/* Resumen */}
-            <table style={{ width: "100%", marginBottom: 20, borderCollapse: "collapse" }}>
-              <tbody>
-                <tr>
-                  <td style={{ padding: "4px 8px", fontWeight: "bold", fontSize: 12 }}>Total por Cobrar:</td>
-                  <td style={{ padding: "4px 8px", fontSize: 12, color: "#dc2626", fontWeight: "bold" }}>{formatRD(totalGeneral)}</td>
-                  <td style={{ padding: "4px 8px", fontWeight: "bold", fontSize: 12 }}>Clientes:</td>
-                  <td style={{ padding: "4px 8px", fontSize: 12 }}>{totalClientes}</td>
-                  <td style={{ padding: "4px 8px", fontWeight: "bold", fontSize: 12 }}>Órdenes:</td>
-                  <td style={{ padding: "4px 8px", fontSize: 12 }}>{totalOrdenes}</td>
-                </tr>
-              </tbody>
-            </table>
-
-            {/* Detalle por cliente */}
-            {clientes.map(cli => (
-              <div key={cli.cliente_id} style={{ marginBottom: 20 }}>
-                <div style={{ background: "#f1f5f9", padding: "6px 10px", borderRadius: 4, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <span style={{ fontWeight: "bold", fontSize: 13 }}>{cli.cliente_nombre} {cli.cliente_apellido || ""}</span>
-                    {cli.cliente_telefono && <span style={{ fontSize: 11, color: "#64748b", marginLeft: 10 }}>Tel: {cli.cliente_telefono}</span>}
-                  </div>
-                  <div>
-                    <span className="mora-badge" style={{
-                      background: cli.estado_mora === "CRITICA" ? "#fee2e2" : cli.estado_mora === "VENCIDA" ? "#ffedd5" : cli.estado_mora === "POR_VENCER" ? "#fef9c3" : "#d1fae5",
-                      color: cli.estado_mora === "CRITICA" ? "#dc2626" : cli.estado_mora === "VENCIDA" ? "#ea580c" : cli.estado_mora === "POR_VENCER" ? "#ca8a04" : "#059669",
-                      padding: "2px 8px", borderRadius: 4, fontSize: 10, fontWeight: "bold", marginRight: 8
-                    }}>
-                      {MORA_CONFIG[cli.estado_mora].label}
-                    </span>
-                    <span style={{ fontWeight: "bold", color: "#dc2626", fontSize: 13 }}>{formatRD(cli.total_deuda)}</span>
-                  </div>
-                </div>
-                <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11 }}>
-                  <thead>
-                    <tr style={{ background: "#f8fafc" }}>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "left" }}>Orden</th>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "left" }}>Fecha</th>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "center" }}>Días</th>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right" }}>Total</th>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right" }}>Abonado</th>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right" }}>Saldo</th>
-                      <th style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "left" }}>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {cli.ordenes.map(o => (
-                      <tr key={o.id}>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px", fontFamily: "monospace", fontWeight: "bold" }}>{o.numero}</td>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px" }}>{new Date(o.creado_en).toLocaleDateString("es-DO")}</td>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "center" }}>{o.dias_antiguedad}</td>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right" }}>{formatRD(o.total)}</td>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right" }}>{formatRD(o.pagado)}</td>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right", fontWeight: "bold", color: "#dc2626" }}>{formatRD(o.saldo)}</td>
-                        <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px" }}>{o.estado}</td>
-                      </tr>
-                    ))}
-                    <tr style={{ background: "#f8fafc" }}>
-                      <td colSpan={5} style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right", fontWeight: "bold" }}>
-                        Subtotal {cli.cliente_nombre}:
-                      </td>
-                      <td style={{ border: "1px solid #e2e8f0", padding: "5px 8px", textAlign: "right", fontWeight: "bold", color: "#dc2626" }}>
-                        {formatRD(cli.total_deuda)}
-                      </td>
-                      <td style={{ border: "1px solid #e2e8f0" }} />
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            ))}
-
-            {/* Total final */}
-            <div style={{ borderTop: "2px solid #1e293b", paddingTop: 10, marginTop: 10, display: "flex", justifyContent: "flex-end" }}>
-              <div style={{ textAlign: "right" }}>
-                <div style={{ fontSize: 11, color: "#64748b", fontWeight: "bold", textTransform: "uppercase" }}>TOTAL GENERAL POR COBRAR</div>
-                <div style={{ fontSize: 22, fontWeight: "bold", color: "#dc2626" }}>{formatRD(totalGeneral)}</div>
-              </div>
-            </div>
-
-            <div style={{ marginTop: 30, paddingTop: 12, borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "space-between" }}>
-              <div style={{ fontSize: 10, color: "#94a3b8" }}>Generado por Klynn · klynn.com.do</div>
-              <div style={{ fontSize: 10, color: "#94a3b8" }}>{new Date().toISOString()}</div>
-            </div>
-          </div>
-        </div>
       </div>
-
-
 
       {cobrarOrden && (
         <CobrarOrdenDialog
@@ -956,7 +840,7 @@ function CuentasPorCobrarPage() {
           onClose={() => setCobrarOrden(null)}
           tenant={user.tenant}
           cajaAbierta={cajaAbierta}
-          clientes={dbClientes}
+          clientes={dbClients}
           queryClient={queryClient}
           showPrintPortal={(upd, rec) => {
             setShowPrint(upd);
@@ -986,7 +870,7 @@ function CuentasPorCobrarPage() {
         <TicketPrintPortal 
           orden={showPrint} 
           tenant={user.tenant} 
-          clientes={dbClientes}
+          clientes={dbClients}
           empleados={[]}
           pagoRecibido={pagoRecibidoParaTicket}
           ocultarUbicacion={true}

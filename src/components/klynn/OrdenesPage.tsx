@@ -3261,6 +3261,7 @@ export function TicketPrintPortal({
           .atomic-print-target {
             display: block !important;
             visibility: visible !important;
+            opacity: 1 !important;
             position: relative !important;
             left: -2mm !important;
             width: 100% !important;
