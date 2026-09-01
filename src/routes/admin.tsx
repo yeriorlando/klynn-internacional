@@ -9,6 +9,8 @@ import {
   Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
+import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
+import { Receipt } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
@@ -157,6 +159,7 @@ function AdminPage() {
   const [openBank, setOpenBank] = useState(false);
 
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [tenantForInvoices, setTenantForInvoices] = useState<Tenant | null>(null);
   const [openEditModal, setOpenEditModal] = useState(false);
   const [editStep, setEditStep] = useState<1 | 2>(1);
   const [newEmail, setNewEmail] = useState("");
@@ -476,7 +479,7 @@ function AdminPage() {
     const monthlyPrice = plan?.precio_mensual || 0;
     const isDemo = isDemoTenant(t);
 
-    if (t.estado !== "ACTIVO" || isDemo) {
+    if (t.estado !== 'ACTIVO' || isDemo) {
       return {
         mrr: 0,
         months: 0,
@@ -486,22 +489,40 @@ function AdminPage() {
       };
     }
 
+    const isMrLavanderia =
+      t.nombre.toLowerCase().includes("mr lavanderia") ||
+      t.email?.toLowerCase().includes("mrgroup");
+
+    if (isMrLavanderia) {
+      return {
+        mrr: 2500,
+        months: 3,
+        totalEarned: 6500, // 2 meses a RD$2,000 + 1 mes a RD$2,500
+        planPrice: 2500,
+        isDemo: false
+      };
+    }
+
     const mrr = monthlyPrice;
-    const startDateStr = t.plan_fecha_inicio || t.creado_en;
     let months = 1;
 
-    // Cálculo automático de mensualidades cobradas
-    if (t.nombre.toLowerCase().includes("mr lavanderia") || t.email?.toLowerCase().includes("mrgroup")) {
-      const now = new Date();
-      const isCyclePassed = now.getDate() >= 25;
-      months = isCyclePassed ? 3 : 2;
-    } else if (startDateStr) {
-      const start = new Date(startDateStr);
-      const now = new Date();
-      const diffYears = now.getFullYear() - start.getFullYear();
-      const diffMonths = now.getMonth() - start.getMonth();
-      const totalMonthDiff = (diffYears * 12) + diffMonths;
-      months = Math.max(1, 1 + totalMonthDiff);
+    // Si tiene un número de meses explícito en configuración
+    if (typeof t.config?.meses_pagados === 'number' && t.config.meses_pagados >= 0) {
+      months = t.config.meses_pagados;
+    } else {
+      const startDateStr = t.plan_fecha_inicio || t.creado_en;
+      if (startDateStr) {
+        const start = new Date(startDateStr);
+        if (!isNaN(start.getTime())) {
+          const now = new Date();
+          let monthDiff = (now.getFullYear() - start.getFullYear()) * 12 + (now.getMonth() - start.getMonth());
+          // Si el día actual aún no alcanza el día de corte mensual, aún estamos en el ciclo anterior
+          if (now.getDate() < start.getDate()) {
+            monthDiff--;
+          }
+          months = Math.max(1, 1 + Math.max(0, monthDiff));
+        }
+      }
     }
 
     return {
@@ -513,8 +534,8 @@ function AdminPage() {
     };
   }
 
-  const activeTenants = tenants.filter((t) => t.estado === "ACTIVO" && !isDemoTenant(t));
-  const trialTenants = tenants.filter((t) => t.estado === "TRIAL");
+  const activeTenants = tenants.filter((t) => t.estado === 'ACTIVO' && !isDemoTenant(t));
+  const trialTenants = tenants.filter((t) => t.estado === 'TRIAL');
 
   // MRR Estimado: Solo lavanderías con suscripción ACTIVA reales (excluye demos)
   const mrrEstimado = activeTenants.reduce((s, t) => {
@@ -1140,6 +1161,14 @@ function AdminPage() {
                                         <span className="italic text-muted-foreground/60 text-[10px]">Sin RNC</span>
                                       )}
                                     </div>
+                                    {t.creado_en && (
+                                      <div className="text-[10px] text-muted-foreground/80 flex items-center gap-1 pt-0.5">
+                                        <span className="font-medium text-foreground/75">Registrado:</span>
+                                        <span className="font-semibold text-foreground/90">
+                                          {new Date(t.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                        </span>
+                                      </div>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -1338,6 +1367,16 @@ function AdminPage() {
                                     </div>
                                     <div className="p-1.5 space-y-1">
                                       <DropdownMenuItem
+                                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-foreground hover:bg-emerald-500/10 hover:text-emerald-700 dark:hover:text-emerald-400 transition-all cursor-pointer"
+                                        onClick={() => setTenantForInvoices(t)}
+                                      >
+                                        <div className="h-6 w-6 rounded-lg bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-2xs">
+                                          <Receipt className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span>Gestionar facturas</span>
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuItem
                                         className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-foreground hover:bg-primary/10 hover:text-primary transition-all cursor-pointer"
                                         onClick={() => openEditTenant(t)}
                                       >
@@ -1472,10 +1511,20 @@ function AdminPage() {
                           <div className="text-[11px] text-muted-foreground mt-0.5 space-y-0.5">
                             <div className="truncate"><span className="font-medium text-foreground/80">Correo:</span> {t.email || "Sin correo"}</div>
                             <div className="truncate"><span className="font-medium text-foreground/80">Teléfono:</span> {t.telefono || "Sin teléfono"}</div>
-                            {t.rnc && (
-                              <div className="flex items-center gap-1 pt-0.5">
-                                <span className="font-medium text-foreground/80">RNC:</span>
+                            <div className="flex items-center gap-1 pt-0.5">
+                              <span className="font-medium text-foreground/80">RNC:</span>
+                              {t.rnc ? (
                                 <Badge className="bg-primary text-primary-foreground text-[9.5px] font-bold px-1.5 py-0 rounded-md border-none">{t.rnc}</Badge>
+                              ) : (
+                                <span className="italic text-muted-foreground/60 text-[10px]">Sin RNC</span>
+                              )}
+                            </div>
+                            {t.creado_en && (
+                              <div className="text-[10.5px] text-muted-foreground/80 flex items-center gap-1 pt-0.5">
+                                <span className="font-medium text-foreground/75">Registrado:</span>
+                                <span className="font-semibold text-foreground/90">
+                                  {new Date(t.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" })}
+                                </span>
                               </div>
                             )}
                           </div>
@@ -1542,6 +1591,20 @@ function AdminPage() {
                           variant="outline"
                           onClick={(e) => {
                             e.stopPropagation();
+                            setTenantForInvoices(t);
+                          }}
+                          className="h-8 px-2.5 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50/70 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 font-bold text-xs gap-1 cursor-pointer shadow-2xs"
+                          title="Ver y generar facturas SaaS"
+                        >
+                          <Receipt className="h-3.5 w-3.5" />
+                          <span>Facturas</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
                             openEditTenant(t);
                           }}
                           className="h-8 px-3 rounded-xl border border-blue-200 dark:border-blue-800 bg-blue-50/70 dark:bg-blue-950/50 text-blue-700 dark:text-blue-300 font-bold text-xs gap-1 cursor-pointer shadow-2xs"
@@ -1567,6 +1630,16 @@ function AdminPage() {
                 })
               )}
             </div>
+
+            {tenantForInvoices && (
+              <HistorialPagosModal
+                open={!!tenantForInvoices}
+                onOpenChange={(open) => !open && setTenantForInvoices(null)}
+                tenant={tenantForInvoices}
+                plans={plans}
+                isAdmin={true}
+              />
+            )}
 
             <AlertDialog open={!!tenantToDelete} onOpenChange={(open) => !open && setTenantToDelete(null)}>
               <AlertDialogContent className="rounded-2xl border border-border/80 shadow-2xl max-w-md">

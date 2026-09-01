@@ -40,6 +40,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Ticket } from "@/components/klynn/Ticket";
+import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
@@ -413,6 +414,7 @@ function ConfigPage() {
 
   const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null);
   const [showCheckout, setShowCheckout] = useState(false);
+  const [showHistorialPagos, setShowHistorialPagos] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
 
   const cfg: TenantConfig = tenant?.config || DEFAULT_CONFIG;
@@ -2219,7 +2221,25 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
               <h3 className="font-display font-bold text-2xl text-foreground">Planes de Suscripción</h3>
               <p className="text-xs text-muted-foreground mt-0.5">Elige el plan que mejor se adapte al crecimiento de tu lavandería.</p>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+              {/* Botón Historial de Pagos con diseño y estilo de Gastos Manuales */}
+              <button
+                type="button"
+                onClick={() => setShowHistorialPagos(true)}
+                className="flex items-center gap-2 px-3.5 sm:px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs hover:bg-muted/60 hover:text-foreground cursor-pointer shrink-0 whitespace-nowrap transition-all hover:scale-[1.02] active:scale-[0.98]"
+              >
+                <Receipt className="h-4 w-4 shrink-0 text-[#1B4B73] dark:text-sky-400" />
+                <span>Historial de Pagos</span>
+                <span className="ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300">
+                  {(() => {
+                    if (tenant.estado !== "ACTIVO") return 0;
+                    if (tenant.nombre.toLowerCase().includes("mr lavanderia")) return 3;
+                    if (typeof tenant.config?.meses_pagados === "number") return tenant.config.meses_pagados;
+                    return 1;
+                  })()}
+                </span>
+              </button>
+
               <div className="flex items-center bg-slate-100 dark:bg-slate-800/80 p-1 rounded-xl border border-slate-200 dark:border-slate-700/80 shadow-xs">
                 <button 
                   type="button"
@@ -2274,30 +2294,32 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
               </div>
             </div>
 
-            {/* Renewal status info chip */}
-            <div className="flex items-center gap-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl px-4.5 py-3 shrink-0 shadow-2xs">
-              <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                <Calendar className="h-4.5 w-4.5" />
-              </div>
-              <div>
-                <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
-                  {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expiró el" : "Vence el") : "Próxima renovación"}
+            <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+              {/* Renewal status info chip */}
+              <div className="flex items-center gap-3.5 bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 rounded-2xl px-4.5 py-3 shrink-0 shadow-2xs">
+                <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Calendar className="h-4.5 w-4.5" />
                 </div>
-                <div className="text-sm font-black tracking-wide text-foreground">
-                  {(() => {
-                    const isAuto = tenant.auto_renovacion !== undefined
-                      ? tenant.auto_renovacion
-                      : (tenant.config?.auto_renovacion !== undefined ? tenant.config.auto_renovacion : true);
-                    if (tenant.estado === "ACTIVO" && isAuto) {
-                      const nextDate = getNextRenewalDate(tenant.plan_fecha_inicio || tenant.config?.plan_fecha_inicio || tenant.creado_en);
-                      return <span>{nextDate.toLocaleDateString("es-DO")}</span>;
-                    }
-                    return tenant.trial_hasta ? (
-                      <span>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</span>
-                    ) : (
-                      <span className="text-muted-foreground font-semibold">Sin fecha</span>
-                    );
-                  })()}
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {tenant.estado === "TRIAL" ? (isTrialExpired ? "Expiró el" : "Vence el") : "Próxima renovación"}
+                  </div>
+                  <div className="text-sm font-black tracking-wide text-foreground">
+                    {(() => {
+                      const isAuto = tenant.auto_renovacion !== undefined
+                        ? tenant.auto_renovacion
+                        : (tenant.config?.auto_renovacion !== undefined ? tenant.config.auto_renovacion : true);
+                      if (tenant.estado === "ACTIVO" && isAuto) {
+                        const nextDate = getNextRenewalDate(tenant.plan_fecha_inicio || tenant.config?.plan_fecha_inicio || tenant.creado_en);
+                        return <span>{nextDate.toLocaleDateString("es-DO")}</span>;
+                      }
+                      return tenant.trial_hasta ? (
+                        <span>{new Date(tenant.trial_hasta).toLocaleDateString("es-DO")}</span>
+                      ) : (
+                        <span className="text-muted-foreground font-semibold">Sin fecha</span>
+                      );
+                    })()}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2743,6 +2765,16 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             onOpenChange={setShowSuccess} 
             planName={selectedPlan?.nombre || ""} 
           />
+
+          {tenant && (
+            <HistorialPagosModal
+              open={showHistorialPagos}
+              onOpenChange={setShowHistorialPagos}
+              tenant={tenant}
+              plans={plans}
+              isAdmin={false}
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>
