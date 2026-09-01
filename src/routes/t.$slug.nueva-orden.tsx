@@ -2110,14 +2110,11 @@ function getMarbeteColorStyle(colorName?: string) {
               activeTipo
             );
 
-            // EF2 puede expresar el resultado como estado legal o como estado
-            // del documento. Consideramos ambas variantes antes de persistir
-            // la orden para no sobrescribir un ACCEPTED ya conciliado.
             const legalStatusUpper = String(
               result.legal_status || result.document?.legal_status || result.document?.status || ""
             ).toUpperCase();
-            const isAccepted = /ACEPT|PROCESAD|APROB/.test(legalStatusUpper) && !/RECHAZ/.test(legalStatusUpper);
-            const isRejected = /RECHAZ|ERROR/.test(legalStatusUpper);
+            const isRejected = /RECHAZ|ERROR|INVALID/.test(legalStatusUpper);
+            const isAccepted = !isRejected && (Boolean(result.encf) || /ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID|SUCCESS/.test(legalStatusUpper));
             const finalStatus = isAccepted ? "ACCEPTED" : isRejected ? "REJECTED" : "REGISTERED";
 
             const fiscalFields = {
@@ -2134,7 +2131,7 @@ function getMarbeteColorStyle(colorName?: string) {
             ordenActualizada = { ...orden, ...fiscalFields };
             await saveOrden(ordenActualizada);
             if (isAccepted) {
-              toast.success(`Comprobante ${result.encf} aceptado por DGII`);
+              toast.success(`Comprobante ${result.encf} emitido y aceptado por DGII ✓`);
             } else if (isRejected) {
               toast.error(`Comprobante ${result.encf} rechazado por DGII`);
             } else {
@@ -3333,12 +3330,12 @@ function getMarbeteColorStyle(colorName?: string) {
                               </div>
                               {srv.permitir_editar_precio ? (
                                 <div className="flex flex-col items-end gap-1">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-[10px] font-bold text-muted-foreground">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
                                       RD$
                                     </span>
                                     <PriceInput
-                                      className="w-16 h-7 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                      className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
                                       value={unitPrice}
                                       onChange={(val) => {
                                         setCustomServicePrices((prev) => ({
@@ -3349,7 +3346,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                     />
                                   </div>
                                   {count > 1 && (
-                                    <span className="text-[9px] text-muted-foreground font-semibold">
+                                    <span className="text-[10px] text-muted-foreground font-semibold">
                                       Tot: {formatRD(count * unitPrice)}
                                     </span>
                                   )}
@@ -3586,12 +3583,12 @@ function getMarbeteColorStyle(colorName?: string) {
                             )}
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
                               {!isDetail && catalogMatch?.permitir_editar_precio ? (
-                                <div className="flex items-center gap-1">
-                                  <span className="text-[10px] font-bold text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
                                     RD$
                                   </span>
                                   <PriceInput
-                                    className="w-16 h-6 px-1 text-center text-xs font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-xs"
+                                    className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
                                     value={it.precio_unitario || 0}
                                     onChange={(val) => {
                                       setItems((prev) =>
@@ -4163,12 +4160,12 @@ function getMarbeteColorStyle(colorName?: string) {
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
                               {srv.permitir_editar_precio ? (
                                 <div className="flex flex-col items-end gap-1">
-                                  <div className="flex items-center gap-1">
-                                    <span className="text-xs font-bold text-muted-foreground">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs font-bold text-muted-foreground select-none">
                                       RD$
                                     </span>
                                     <PriceInput
-                                      className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                      className="w-24 sm:w-28 h-8.5 px-2 text-center text-sm font-black font-display border border-primary/40 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
                                       value={unitPrice}
                                       onChange={(val) => {
                                         setCustomServicePrices((prev) => ({
@@ -4295,12 +4292,12 @@ function getMarbeteColorStyle(colorName?: string) {
                           <div className="flex flex-col items-end gap-1">
                             {!isDetail && catalogMatch?.permitir_editar_precio ? (
                               <div className="flex flex-col items-end gap-1">
-                                <div className="flex items-center gap-1">
-                                  <span className="text-xs font-bold text-muted-foreground">
+                                <div className="flex items-center gap-1.5">
+                                  <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
                                     RD$
                                   </span>
                                   <PriceInput
-                                    className="w-20 h-8 px-1 text-center text-sm font-black border-primary/30 bg-background focus:border-primary focus-visible:ring-0 rounded-md shadow-sm"
+                                    className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
                                     value={it.precio_unitario || 0}
                                     onChange={(val) => {
                                       setItems((prev) =>

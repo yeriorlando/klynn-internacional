@@ -68,7 +68,8 @@ import {
   useECFConfig, 
   usePlans,
   useServicios,
-  useCatalogo
+  useCatalogo,
+  useECFDocuments
 } from "@/hooks/use-queries";
 
 export const Route = createFileRoute("/t/$slug/reportes")({ component: ReportesPage });
@@ -88,12 +89,13 @@ function ReportesPage() {
   const { data: plans = [] } = usePlans();
   const { data: serviciosData = [] } = useServicios(tenantId);
   const { data: catalogoData = [] } = useCatalogo(tenantId);
+  const { data: rawEcfDocs = [] } = useECFDocuments(tenantId);
 
   const [isPrinting, setIsPrinting] = useState(false);
   
-  // Estados para exportación DGII
+  // Estados para exportación DGII (607, 606, 608)
   const [showDgiiModal, setShowDgiiModal] = useState(false);
-  const [exportType, setExportType] = useState<"606" | "ENVIADOS">("606");
+  const [exportType, setExportType] = useState<"607" | "606" | "608" | "ENVIADOS">("607");
   const [exportYear, setExportYear] = useState(new Date().getFullYear().toString());
   const [exportMonth, setExportMonth] = useState((new Date().getMonth() + 1).toString().padStart(2, '0'));
   const [isExporting, setIsExporting] = useState(false);
@@ -387,65 +389,130 @@ function ReportesPage() {
     if (!tenant) return;
     setIsExporting(true);
     const period = `${exportYear}${exportMonth}`;
-    const rncEmisor = ecfConfig?.rnc_emisor || (tenant as any).rnc || "133190907";
+    const rncEmisor = (ecfConfig?.rnc_emisor || (tenant as any).rnc || "131703836").replace(/\D/g, "");
 
     try {
-      if (exportType === "606") {
-        let textContent = "";
+      if (exportType === "607") {
+        // Formato 607: Ventas Fiscales con e-NCF emitidos y aceptados en EF2/DGII
+        const targetPrefix = `${exportYear}-${exportMonth}`;
+        const periodDocs = rawEcfDocs.filter((d) => {
+          const docDate = d.fecha_emision || d.created_at || "";
+          return docDate.startsWith(targetPrefix) && ["E31", "E32", "E44", "E45"].includes(d.tipo_ecf || d.encf?.substring(0, 3));
+        });
 
-        if (!textContent) {
-          // Generar Formato 606 en TXT según especificación DGII usando datos locales de Klynn
-          const targetPrefix = `${exportYear}-${exportMonth}`;
-          const periodGastos = gastos.filter(g => g.fecha && g.fecha.startsWith(targetPrefix));
+        // Si no hay en rawEcfDocs, buscar en ordenes con NCF
+        const seenNcf = new Set(periodDocs.map((d) => d.encf));
+        const periodOrds = ordenes.filter((o) => {
+          const ordDate = o.creado_en || "";
+          return ordDate.startsWith(targetPrefix) && o.ncf && !seenNcf.has(o.ncf);
+        });
 
-          // Cabecera DGII 606: 606|RNC_EMISOR|PERIODO|CANTIDAD_REGISTROS
-          const header = `606|${rncEmisor.replace(/\D/g, "")}|${period}|${periodGastos.length}`;
-          
-          const rows = periodGastos.map(g => {
-            const rncProv = ((g as any).rnc_proveedor || '101010101').replace(/\D/g, "");
-            const tipoId = rncProv.length === 9 ? '1' : '2';
-            const tipoGasto = '02'; // Gastos de Trabajos, Suministros y Servicios
-            const ncf = (g as any).ncf || 'B0100000001';
-            const fechaComp = (g.fecha || new Date().toISOString().substring(0, 10)).replace(/\D/g, "").substring(0, 8);
-            const monto = (g.monto || 0).toFixed(2);
-            const itbis = ((g as any).itbis || 0).toFixed(2);
-            
-            return `${rncProv}|${tipoId}|${tipoGasto}|${ncf}||${fechaComp}|${fechaComp}|${monto}|${itbis}|0.00|0.00|0.00|0.00|0.00|0.00|0.00|01`;
-          });
+        const totalCount = periodDocs.length + periodOrds.length;
+        const header = `607|${rncEmisor}|${period}|${totalCount}`;
 
-          textContent = [header, ...rows].join("\n");
-        }
+        const rowsDocs = periodDocs.map((d) => {
+          const rncClient = (d.rnc_receptor === "Consumidor Final" || !d.rnc_receptor) ? "" : d.rnc_receptor.replace(/\D/g, "");
+          const tipoId = rncClient.length === 9 ? "1" : rncClient.length === 11 ? "2" : "3";
+          const date = new Date(d.fecha_emision || d.created_at || Date.now());
+          const fechaComp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+          const monto = Number(d.monto_total || 0).toFixed(2);
+          const itbis = Number(d.monto_itbis || 0).toFixed(2);
+          return `${rncClient}|${tipoId}|${d.encf}||${fechaComp}||${monto}|${itbis}|||||||1`;
+        });
 
-        downloadTxtFile(textContent, `606_${rncEmisor}_${period}.txt`);
+        const rowsOrds = periodOrds.map((o) => {
+          const rncClient = ((o as any).cliente_rnc || "").replace(/\D/g, "");
+          const tipoId = rncClient.length === 9 ? "1" : rncClient.length === 11 ? "2" : "3";
+          const date = new Date(o.creado_en || Date.now());
+          const fechaComp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+          const monto = Number(o.total || 0).toFixed(2);
+          const itbis = Number(o.itbis || 0).toFixed(2);
+          return `${rncClient}|${tipoId}|${o.ncf}||${fechaComp}||${monto}|${itbis}|||||||1`;
+        });
+
+        const textContent = [header, ...rowsDocs, ...rowsOrds].join("\n");
+        downloadTxtFile(textContent, `DGII_607_${rncEmisor}_${period}.txt`);
+        toast.success(`Reporte Formato 607 (${period}) generado correctamente 📄`);
+
+      } else if (exportType === "606") {
+        // Formato 606: Compras, Servicios y Gastos Menores (E41, E43 y gastos)
+        const targetPrefix = `${exportYear}-${exportMonth}`;
+        const periodGastos = gastos.filter(g => g.fecha && g.fecha.startsWith(targetPrefix));
+        const periodEcfGastos = rawEcfDocs.filter((d) => {
+          const docDate = d.fecha_emision || d.created_at || "";
+          return docDate.startsWith(targetPrefix) && ["E41", "E43"].includes(d.tipo_ecf || d.encf?.substring(0, 3));
+        });
+
+        const totalCount = periodGastos.length + periodEcfGastos.length;
+        const header = `606|${rncEmisor}|${period}|${totalCount}`;
+        
+        const rowsGastos = periodGastos.map(g => {
+          const rncProv = ((g as any).rnc_proveedor || rncEmisor).replace(/\D/g, "");
+          const tipoId = rncProv.length === 9 ? '1' : '2';
+          const tipoGasto = '02'; // Gastos de Trabajos, Suministros y Servicios
+          const ncf = (g as any).ncf || 'B0100000001';
+          const fechaComp = (g.fecha || new Date().toISOString().substring(0, 10)).replace(/\D/g, "").substring(0, 8);
+          const monto = (g.monto || 0).toFixed(2);
+          const itbis = ((g as any).itbis || 0).toFixed(2);
+          return `${rncProv}|${tipoId}|${tipoGasto}|${ncf}||${fechaComp}|${fechaComp}|${monto}|${monto}||${itbis}|0.00|0.00|0.00|01|1`;
+        });
+
+        const rowsEcf = periodEcfGastos.map(d => {
+          const rncProv = (d.rnc_receptor || rncEmisor).replace(/\D/g, "");
+          const tipoId = rncProv.length === 9 ? '1' : '2';
+          const tipoGasto = '02';
+          const date = new Date(d.fecha_emision || d.created_at || Date.now());
+          const fechaComp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+          const monto = Number(d.monto_total || 0).toFixed(2);
+          return `${rncProv}|${tipoId}|${tipoGasto}|${d.encf}||${fechaComp}|${fechaComp}|${monto}|${monto}||0.00|0.00|0.00|0.00|01|1`;
+        });
+
+        const textContent = [header, ...rowsGastos, ...rowsEcf].join("\n");
+        downloadTxtFile(textContent, `DGII_606_${rncEmisor}_${period}.txt`);
         toast.success(`Reporte Formato 606 (${period}) generado correctamente 📄`);
 
+      } else if (exportType === "608") {
+        // Formato 608: Comprobantes Anulados y Notas de Crédito (E34)
+        const targetPrefix = `${exportYear}-${exportMonth}`;
+        const periodNC = rawEcfDocs.filter((d) => {
+          const docDate = d.fecha_emision || d.created_at || "";
+          return docDate.startsWith(targetPrefix) && (d.tipo_ecf === "E34" || d.encf?.startsWith("E34") || d.status === "rejected");
+        });
+
+        const header = `608|${rncEmisor}|${period}|${periodNC.length}`;
+        const rows = periodNC.map((d) => {
+          const date = new Date(d.fecha_emision || d.created_at || Date.now());
+          const fechaComp = `${date.getFullYear()}${String(date.getMonth() + 1).padStart(2, "0")}${String(date.getDate()).padStart(2, "0")}`;
+          return `${d.encf}|${fechaComp}|01`;
+        });
+
+        const textContent = [header, ...rows].join("\n");
+        downloadTxtFile(textContent, `DGII_608_${rncEmisor}_${period}.txt`);
+        toast.success(`Reporte Formato 608 (${period}) generado correctamente 📄`);
+
       } else {
-        // EF2 no documenta endpoints de exportación 606/emitidos. Generamos el
-        // archivo desde los documentos persistidos por Klynn.
-        {
-          // Generar reporte de Facturas Enviadas en Excel (CSV) con los datos de Klynn
-          const targetPrefix = `${exportYear}-${exportMonth}`;
-          const periodOrdenes = ordenes.filter(o => o.creado_en && o.creado_en.startsWith(targetPrefix));
+        // Generar reporte de Facturas Enviadas en Excel (CSV)
+        const targetPrefix = `${exportYear}-${exportMonth}`;
+        const periodOrdenes = ordenes.filter(o => o.creado_en && o.creado_en.startsWith(targetPrefix));
 
-          const csvData = [
-            ["Nº Orden", "Comprobante (e-NCF / NCF)", "Fecha Emisión", "RNC/Cédula Cliente", "Nombre Cliente", "Subtotal (RD$)", "ITBIS (RD$)", "Total (RD$)", "Método de Pago", "Estado DGII"],
-            ...periodOrdenes.map(o => [
-              o.numero,
-              o.ncf || '',
-              o.creado_en ? o.creado_en.substring(0, 10) : '',
-              (o as any).cliente_rnc || 'Consumidor Final',
-              (o as any).cliente_nombre || 'Cliente General',
-              (o.subtotal || 0).toFixed(2),
-              (o.itbis || 0).toFixed(2),
-              (o.total || 0).toFixed(2),
-              o.metodo_pago,
-              o.ncf ? 'ACEPTADO_DGII' : 'REGISTRADO'
-            ])
-          ];
+        const csvData = [
+          ["Nº Orden", "Comprobante (e-NCF / NCF)", "Fecha Emisión", "RNC/Cédula Cliente", "Nombre Cliente", "Subtotal (RD$)", "ITBIS (RD$)", "Total (RD$)", "Método de Pago", "Estado DGII"],
+          ...periodOrdenes.map(o => [
+            o.numero,
+            o.ncf || '',
+            o.creado_en ? o.creado_en.substring(0, 10) : '',
+            (o as any).cliente_rnc || 'Consumidor Final',
+            (o as any).cliente_nombre || 'Cliente General',
+            (o.subtotal || 0).toFixed(2),
+            (o.itbis || 0).toFixed(2),
+            (o.total || 0).toFixed(2),
+            o.metodo_pago,
+            o.ncf ? 'ACEPTADO_DGII' : 'REGISTRADO'
+          ])
+        ];
 
-          exportToCsv(`Facturas_Enviadas_${rncEmisor}_${period}`, csvData[0], csvData.slice(1));
-          toast.success(`Facturas Enviadas de ${period} exportadas en Excel (CSV) 📊`);
-        }
+        exportToCsv(`Facturas_Enviadas_${rncEmisor}_${period}`, csvData[0], csvData.slice(1));
+        toast.success(`Facturas Enviadas de ${period} exportadas en Excel (CSV) 📊`);
       }
       setShowDgiiModal(false);
     } catch (e: any) {
@@ -505,10 +572,10 @@ function ReportesPage() {
             <>
               <Button 
                 className="gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                onClick={() => { setExportType("606"); setShowDgiiModal(true); }}
+                onClick={() => { setExportType("607"); setShowDgiiModal(true); }}
               >
                 <FileText className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>606 (TXT)</span>
+                <span>Reportes DGII (TXT)</span>
               </Button>
               <Button 
                 className="gap-2 rounded-xl h-10 px-4 font-black bg-[#F0B900] hover:bg-[#dfac00] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
@@ -523,60 +590,114 @@ function ReportesPage() {
       </PageHeader>
 
       <Dialog open={showDgiiModal} onOpenChange={setShowDgiiModal}>
-        <DialogContent className="sm:max-w-md">
+        <DialogContent className="sm:max-w-md rounded-2xl bg-white dark:bg-slate-900">
           <DialogHeader>
-            <DialogTitle>Exportar Reporte {exportType === "606" ? "606" : "de e-CF Enviados"}</DialogTitle>
+            <DialogTitle className="font-display">Exportar Reportes Tributarios DGII (e-CF)</DialogTitle>
             <DialogDescription>
-              Selecciona el mes y año (periodo) para generar el archivo directamente desde los servidores de facturación electrónica.
+              Genera los archivos oficiales TXT para la Oficina Virtual DGII según los comprobantes reconciliados con EF2.
             </DialogDescription>
           </DialogHeader>
           
-          <div className="flex gap-4 py-4">
-            <div className="flex-1 space-y-2">
-              <Label>Mes</Label>
-              <select 
-                className="w-full flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={exportMonth}
-                onChange={(e) => setExportMonth(e.target.value)}
-              >
-                <option value="01">01 - Enero</option>
-                <option value="02">02 - Febrero</option>
-                <option value="03">03 - Marzo</option>
-                <option value="04">04 - Abril</option>
-                <option value="05">05 - Mayo</option>
-                <option value="06">06 - Junio</option>
-                <option value="07">07 - Julio</option>
-                <option value="08">08 - Agosto</option>
-                <option value="09">09 - Septiembre</option>
-                <option value="10">10 - Octubre</option>
-                <option value="11">11 - Noviembre</option>
-                <option value="12">12 - Diciembre</option>
-              </select>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-xs font-bold text-muted-foreground">Formato a Exportar *</Label>
+              <div className="grid grid-cols-2 gap-2 mt-1.5">
+                <button
+                  type="button"
+                  onClick={() => setExportType("607")}
+                  className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                    exportType === "607"
+                      ? "border-[#1B4B73] bg-[#1B4B73] text-white shadow-xs"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  607 · Ventas e-CF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportType("606")}
+                  className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                    exportType === "606"
+                      ? "border-emerald-600 bg-emerald-600 text-white shadow-xs"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  606 · Compras / Gastos
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportType("608")}
+                  className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                    exportType === "608"
+                      ? "border-rose-600 bg-rose-600 text-white shadow-xs"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  608 · Anulados / E34
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setExportType("ENVIADOS")}
+                  className={`p-2.5 rounded-xl border text-xs font-bold text-center transition-all cursor-pointer ${
+                    exportType === "ENVIADOS"
+                      ? "border-[#F0B900] bg-[#F0B900] text-[#1B4B73] shadow-xs"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  Facturas (Excel)
+                </button>
+              </div>
             </div>
-            <div className="flex-1 space-y-2">
-              <Label>Año</Label>
-              <select 
-                className="w-full flex h-10 w-full items-center justify-between rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                value={exportYear}
-                onChange={(e) => setExportYear(e.target.value)}
-              >
-                {[...Array(5)].map((_, i) => {
-                  const y = new Date().getFullYear() - i;
-                  return <option key={y} value={y}>{y}</option>;
-                })}
-              </select>
+
+            <div className="flex gap-3">
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs font-bold">Mes *</Label>
+                <select 
+                  className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 font-medium"
+                  value={exportMonth}
+                  onChange={(e) => setExportMonth(e.target.value)}
+                >
+                  <option value="01">01 - Enero</option>
+                  <option value="02">02 - Febrero</option>
+                  <option value="03">03 - Marzo</option>
+                  <option value="04">04 - Abril</option>
+                  <option value="05">05 - Mayo</option>
+                  <option value="06">06 - Junio</option>
+                  <option value="07">07 - Julio</option>
+                  <option value="08">08 - Agosto</option>
+                  <option value="09">09 - Septiembre</option>
+                  <option value="10">10 - Octubre</option>
+                  <option value="11">11 - Noviembre</option>
+                  <option value="12">12 - Diciembre</option>
+                </select>
+              </div>
+              <div className="flex-1 space-y-1.5">
+                <Label className="text-xs font-bold">Año *</Label>
+                <select 
+                  className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 bg-white dark:bg-slate-900 font-mono font-medium"
+                  value={exportYear}
+                  onChange={(e) => setExportYear(e.target.value)}
+                >
+                  {[...Array(5)].map((_, i) => {
+                    const y = new Date().getFullYear() - i;
+                    return <option key={y} value={y}>{y}</option>;
+                  })}
+                </select>
+              </div>
             </div>
           </div>
 
-          <DialogFooter className="sm:justify-end gap-2">
-            <Button variant="outline" onClick={() => setShowDgiiModal(false)} disabled={isExporting}>Cancelar</Button>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="ghost" onClick={() => setShowDgiiModal(false)} disabled={isExporting} className="rounded-xl text-xs">
+              Cancelar
+            </Button>
             <Button 
-              style={{ backgroundColor: primaryColor }} 
-              className="text-white"
+              className="rounded-xl text-xs font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white gap-1.5"
               onClick={handleExportDGII} 
               disabled={isExporting}
             >
-              {isExporting ? "Generando..." : "Descargar Archivo"}
+              {isExporting ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />}
+              <span>{isExporting ? "Generando..." : `Descargar ${exportType === "ENVIADOS" ? "Excel" : `TXT ${exportType}`}`}</span>
             </Button>
           </DialogFooter>
         </DialogContent>

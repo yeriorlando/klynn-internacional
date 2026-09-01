@@ -28,12 +28,25 @@ import {
   Truck,
   Tag,
   Sparkles,
+  ShoppingBag,
   ArrowRight,
   TrendingDown,
   Info,
   Filter,
   LayoutGrid,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Coffee,
+  Droplets,
+  Utensils,
+  UtensilsCrossed,
+  Cookie,
+  Bus,
+  Car,
+  Fuel,
+  Milestone,
+  Pencil,
+  Banknote,
+  Send
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -60,6 +73,10 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar as CalendarComponent } from "@/components/ui/calendar";
+import { es } from "date-fns/locale";
+import { cn } from "@/lib/utils";
+import { Switch } from "@/components/ui/switch";
 
 const MESES_NOMBRES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -84,10 +101,14 @@ import {
   getCajaAbierta, 
   saveMovimiento, 
   type MetodoPago,
+  type Tenant,
+  type TenantConfig,
+  type Orden,
   isModuleEnabled,
   formatAmountInput,
   parseAmount
 } from "@/lib/storage";
+import { emitirECF } from "@/lib/fiscal";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { usePlans, useGastos, useECFConfig } from "@/hooks/use-queries";
@@ -285,7 +306,8 @@ function GastosPage() {
   const { data: ecfConfig } = useECFConfig(tenantId);
   const { data: plans = [] } = usePlans();
 
-  const [show, setShow] = useState(false);
+  const [showGastoModal, setShowGastoModal] = useState(false);
+  const [showCompraModal, setShowCompraModal] = useState(false);
   const [recibidos, setRecibidos] = useState<ECFDocumentRecibido[]>([]);
   const [activeTab, setActiveTab] = useState("manual");
   const [isPrinting, setIsPrinting] = useState(false);
@@ -324,6 +346,9 @@ function GastosPage() {
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["gastos", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["ecf-documents", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["ecf-sequences", tenantId] });
+    queryClient.invalidateQueries({ queryKey: ["caja", tenantId] });
   };
 
   // Segmentación de Gastos
@@ -459,57 +484,59 @@ function GastosPage() {
       className="space-y-6 pb-12 animate-in fade-in-50 duration-300 w-full"
     >
       {/* HEADER DE PÁGINA CON PESTAÑAS /ADMIN INTEGRADAS */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-        {/* Título & Contador */}
-        <div>
-          <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">Gastos</h1>
-          <p className="text-xs text-muted-foreground mt-0.5 font-medium">
-            {activeTab === "manual" ? manualGastos.length : cajaChicaGastos.length} egresos registrados
-          </p>
+      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 sm:gap-4">
+        {/* Título, Contador & Tabs */}
+        <div className="flex flex-wrap items-center gap-3.5 sm:gap-5">
+          <div>
+            <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">Gastos</h1>
+            <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+              {activeTab === "manual" ? manualGastos.length : cajaChicaGastos.length} egresos registrados
+            </p>
+          </div>
+
+          {/* PESTAÑAS ESTILO /ADMIN (STANDALONE BUTTONS CON COLORES DIFERENCIADOS) */}
+          <TabsList className="flex items-center gap-2 bg-transparent p-0 border-none h-auto justify-start overflow-x-auto scrollbar-none">
+            {/* Gastos Manuales (Azul Añil / Primary) */}
+            <TabsTrigger 
+              value="manual"
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <Receipt className={`h-4 w-4 shrink-0 transition-colors ${
+                activeTab === "manual" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
+              }`} />
+              <span>Gastos Manuales</span>
+              <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
+                activeTab === "manual" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
+              }`}>
+                {manualGastos.length}
+              </span>
+            </TabsTrigger>
+
+            {/* Caja Chica (Ámbar / Oro) */}
+            <TabsTrigger 
+              value="caja-chica"
+              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:border-amber-600 data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+            >
+              <PiggyBank className={`h-4 w-4 shrink-0 transition-colors ${
+                activeTab === "caja-chica" ? "text-white" : "text-amber-600 dark:text-amber-400"
+              }`} />
+              <span>Caja Chica</span>
+              <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
+                activeTab === "caja-chica" ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+              }`}>
+                {cajaChicaGastos.length}
+              </span>
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        {/* PESTAÑAS ESTILO /ADMIN (STANDALONE BUTTONS CON COLORES DIFERENCIADOS) */}
-        <TabsList className="flex items-center gap-2 sm:gap-2.5 bg-transparent p-0 border-none h-auto justify-start overflow-x-auto scrollbar-none">
-          {/* Gastos Manuales (Azul Añil / Primary) */}
-          <TabsTrigger 
-            value="manual"
-            className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
-          >
-            <Receipt className={`h-4 w-4 shrink-0 transition-colors ${
-              activeTab === "manual" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
-            }`} />
-            <span>Gastos Manuales</span>
-            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
-              activeTab === "manual" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
-            }`}>
-              {manualGastos.length}
-            </span>
-          </TabsTrigger>
-
-          {/* Caja Chica (Ámbar / Oro) */}
-          <TabsTrigger 
-            value="caja-chica"
-            className="flex items-center gap-2 sm:gap-2.5 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:border-amber-600 data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
-          >
-            <PiggyBank className={`h-4 w-4 shrink-0 transition-colors ${
-              activeTab === "caja-chica" ? "text-white" : "text-amber-600 dark:text-amber-400"
-            }`} />
-            <span>Caja Chica</span>
-            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
-              activeTab === "caja-chica" ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-            }`}>
-              {cajaChicaGastos.length}
-            </span>
-          </TabsTrigger>
-        </TabsList>
-
         {/* Acciones Rápidas */}
-        <div className="flex items-center gap-2.5 flex-wrap">
+        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
                 type="button"
-                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
               >
                 <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
                 <span>Exportar</span>
@@ -533,20 +560,31 @@ function GastosPage() {
 
           <Button 
             type="button"
-            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
             onClick={() => setIsPrinting(true)}
           >
             <Printer className="h-4 w-4 text-white shrink-0" />
             <span>Imprimir</span>
           </Button>
 
+          {/* Botón 1: NUEVA COMPRA (E41 - Proveedores Informales con Retención) */}
           <Button 
             type="button"
-            onClick={() => setShow(true)} 
-            className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+            onClick={() => setShowCompraModal(true)} 
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-600 cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+          >
+            <ShoppingBag className="h-4 w-4 text-white shrink-0" />
+            <span>Nueva Compra</span>
+          </Button>
+
+          {/* Botón 2: NUEVO GASTO (E43 - Gastos Menores / Control Interno) */}
+          <Button 
+            type="button"
+            onClick={() => setShowGastoModal(true)} 
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
           >
             <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
-            <span>Nuevo gasto</span>
+            <span>Nuevo Gasto</span>
           </Button>
         </div>
       </div>
@@ -887,9 +925,16 @@ function GastosPage() {
 
                         {/* Concepto / Descripción */}
                         <td className="px-5 py-3.5">
-                          <span className="font-bold text-foreground text-xs block">
-                            {g.descripcion}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-bold text-foreground text-xs block">
+                              {g.descripcion}
+                            </span>
+                            {g.ncf && (
+                              <Badge variant="outline" className="font-mono text-[10px] font-bold bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs">
+                                {g.ncf}
+                              </Badge>
+                            )}
+                          </div>
                         </td>
 
                         {/* Proveedor */}
@@ -1039,9 +1084,16 @@ function GastosPage() {
                         </td>
 
                         <td className="px-5 py-3.5">
-                          <span className="font-bold text-foreground text-xs block">
-                            {g.descripcion}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="font-bold text-foreground text-xs block">
+                              {g.descripcion}
+                            </span>
+                            {g.ncf && (
+                              <Badge variant="outline" className="font-mono text-[10px] font-bold bg-emerald-50 text-emerald-700 border-emerald-200 shadow-2xs">
+                                {g.ncf}
+                              </Badge>
+                            )}
+                          </div>
                         </td>
 
                         <td className="px-5 py-3.5 whitespace-nowrap">
@@ -1084,13 +1136,28 @@ function GastosPage() {
         </TabsContent>
       </div>
 
-      {/* MODAL REDISEÑADO DE NUEVO GASTO */}
+      {/* MODAL 1: REGISTRAR NUEVO GASTO (E43 / INTERNO) */}
       <NewGasto 
-        open={show} 
-        onOpenChange={setShow} 
+        open={showGastoModal} 
+        onOpenChange={setShowGastoModal} 
+        tenant={user.tenant}
+        tenantConfig={user.tenantConfig}
+        ecfConfig={ecfConfig}
         tenantId={user.tenant.id} 
         empleadoId={user.empleado.id} 
-        onDone={() => { refresh(); setShow(false); }} 
+        onDone={() => { refresh(); setShowGastoModal(false); }} 
+      />
+
+      {/* MODAL 2: REGISTRAR NUEVA COMPRA FISCAL (E41 · PROVEEDORES INFORMALES) */}
+      <NewCompraModal
+        open={showCompraModal}
+        onOpenChange={setShowCompraModal}
+        tenant={user.tenant}
+        tenantConfig={user.tenantConfig}
+        ecfConfig={ecfConfig}
+        tenantId={user.tenant.id}
+        empleadoId={user.empleado.id}
+        onDone={() => { refresh(); setShowCompraModal(false); }}
       />
 
       {/* PORTAL DE IMPRESIÓN */}
@@ -1107,110 +1174,330 @@ function GastosPage() {
   );
 }
 
-// Modal Rediseñado de Registro de Nuevo Gasto (Wizard de 2 Pasos Compacto)
+// ==========================================
+// MODAL 1: NUEVO GASTO MENOR (CON PLANTILLAS DE CONCEPTOS Y FECHAS DINÁMICAS)
+// ==========================================
+const SUGERENCIAS_GASTOS_MENORES = [
+  { label: "Café", icon: Coffee },
+  { label: "Agua", icon: Droplets },
+  { label: "Desayuno", icon: Utensils },
+  { label: "Almuerzo", icon: UtensilsCrossed },
+  { label: "Merienda", icon: Cookie },
+  { label: "Transporte", icon: Bus },
+  { label: "Taxi", icon: Car },
+  { label: "Combustible", icon: Fuel },
+  { label: "Parqueo", icon: Car },
+  { label: "Peaje", icon: Milestone },
+  { label: "Papelería", icon: Pencil },
+  { label: "Fotocopias", icon: Printer },
+  { label: "Limpieza", icon: Sparkles },
+  { label: "Mensajería", icon: Package },
+  { label: "Ferretería", icon: Wrench },
+  { label: "Propina", icon: Banknote },
+];
+
+interface GastoConceptoItem {
+  id: string;
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  rawMonto: string;
+}
+
+function formatToDMY(isoDate: string): string {
+  if (!isoDate) return "";
+  const parts = isoDate.split("-");
+  if (parts.length === 3) {
+    return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+  }
+  return isoDate;
+}
+
+// Componente de Selección de Fecha formato Día/Mes/Año (DD/MM/AAAA) con Popover Calendario
+function DMYDatePicker({
+  value,
+  onChange,
+  className,
+}: {
+  value: string; // YYYY-MM-DD
+  onChange: (val: string) => void;
+  className?: string;
+}) {
+  const [open, setOpen] = useState(false);
+  const dateObj = useMemo(() => {
+    if (!value) return new Date();
+    const parts = value.split("-").map(Number);
+    if (parts.length === 3 && parts[0] && parts[1] && parts[2]) {
+      return new Date(parts[0], parts[1] - 1, parts[2]);
+    }
+    return new Date();
+  }, [value]);
+
+  const displayStr = useMemo(() => {
+    if (!value) return "";
+    const parts = value.split("-");
+    if (parts.length === 3) {
+      return `${parts[2].padStart(2, "0")}/${parts[1].padStart(2, "0")}/${parts[0]}`;
+    }
+    return value;
+  }, [value]);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className={cn(
+            "flex items-center justify-between text-left font-mono font-medium rounded-xl bg-surface border border-border/80 text-xs px-2.5 transition-all hover:bg-muted/40 hover:border-blue-400 cursor-pointer shadow-2xs select-none",
+            className
+          )}
+        >
+          <span className="truncate">{displayStr || "DD/MM/AAAA"}</span>
+          <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1.5" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-0 z-50 rounded-2xl shadow-xl border border-border bg-background" align="start">
+        <CalendarComponent
+          mode="single"
+          selected={dateObj}
+          onSelect={(d) => {
+            if (d) {
+              const yyyy = d.getFullYear();
+              const mm = String(d.getMonth() + 1).padStart(2, "0");
+              const dd = String(d.getDate()).padStart(2, "0");
+              onChange(`${yyyy}-${mm}-${dd}`);
+              setOpen(false);
+            }
+          }}
+          initialFocus
+          locale={es}
+        />
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 function NewGasto({ 
   open, 
   onOpenChange, 
+  tenant,
+  tenantConfig,
+  ecfConfig,
   tenantId, 
   empleadoId, 
   onDone 
 }: { 
   open: boolean; 
   onOpenChange: (o: boolean) => void; 
+  tenant?: Tenant;
+  tenantConfig?: TenantConfig;
+  ecfConfig?: any;
   tenantId: string; 
   empleadoId: string; 
   onDone: () => void;
 }) {
+  const isElectronic = !!ecfConfig?.is_active || !!ecfConfig?.ef2_environment || !!tenant?.rnc;
+
+  const todayStr = new Date().toISOString().split("T")[0];
   const [step, setStep] = useState<1 | 2>(1);
-  const [rawMonto, setRawMonto] = useState("");
-  const [otraCategoria, setOtraCategoria] = useState("");
-  const [f, setF] = useState({ 
-    categoria: CATEGORIAS_GASTOS[0], 
-    descripcion: "", 
-    monto: 0, 
-    metodo_pago: "Efectivo", 
-    proveedor: "" 
-  });
+  const [fechaDocumento, setFechaDocumento] = useState(todayStr);
+  const [items, setItems] = useState<GastoConceptoItem[]>([
+    { id: uid("it"), fecha: todayStr, descripcion: "", monto: 0, rawMonto: "" }
+  ]);
+  const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [showBeneficiario, setShowBeneficiario] = useState(false);
+  const [proveedor, setProveedor] = useState("");
+  const [emitirFiscal, setEmitirFiscal] = useState(isElectronic);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   useEffect(() => {
     if (open) {
+      const today = new Date().toISOString().split("T")[0];
       setStep(1);
-      setRawMonto("");
-      setOtraCategoria("");
-      setF({ categoria: CATEGORIAS_GASTOS[0], descripcion: "", monto: 0, metodo_pago: "Efectivo", proveedor: "" });
+      setFechaDocumento(today);
+      setItems([{ id: uid("it"), fecha: today, descripcion: "", monto: 0, rawMonto: "" }]);
+      setMetodoPago("Efectivo");
+      setShowBeneficiario(false);
+      setProveedor("");
+      setEmitirFiscal(isElectronic);
     }
-  }, [open]);
+  }, [open, isElectronic]);
 
-  const catVisual = getGastoCategoriaVisual(f.categoria);
-  const CatIcon = catVisual.icon;
-  const displayCatName = (f.categoria === "Otros" && otraCategoria.trim()) ? otraCategoria.trim() : catVisual.label;
+  const totalMonto = useMemo(() => {
+    return items.reduce((acc, it) => acc + (it.monto || 0), 0);
+  }, [items]);
+
+  const validItems = useMemo(() => {
+    return items.filter(it => it.descripcion.trim() && it.monto > 0);
+  }, [items]);
+
+  function handleAddSuggestion(label: string) {
+    if (items.length === 1 && !items[0].descripcion.trim() && items[0].monto === 0) {
+      setItems([{ ...items[0], descripcion: label, fecha: fechaDocumento }]);
+    } else {
+      setItems(prev => [
+        ...prev,
+        { id: uid("it"), fecha: fechaDocumento, descripcion: label, monto: 0, rawMonto: "" }
+      ]);
+    }
+  }
+
+  function handleAddBlankItem() {
+    setItems(prev => [
+      ...prev,
+      { id: uid("it"), fecha: fechaDocumento, descripcion: "", monto: 0, rawMonto: "" }
+    ]);
+  }
+
+  function handleUpdateItem(id: string, field: keyof GastoConceptoItem, value: any) {
+    setItems(prev => prev.map(it => {
+      if (it.id !== id) return it;
+      if (field === "rawMonto") {
+        const formatted = formatAmountInput(value);
+        return { ...it, rawMonto: formatted, monto: parseAmount(formatted) };
+      }
+      return { ...it, [field]: value };
+    }));
+  }
+
+  function handleRemoveItem(id: string) {
+    setItems(prev => {
+      const next = prev.filter(it => it.id !== id);
+      if (next.length === 0) {
+        return [{ id: uid("it"), fecha: fechaDocumento, descripcion: "", monto: 0, rawMonto: "" }];
+      }
+      return next;
+    });
+  }
 
   function handleNextStep() {
-    if (f.categoria === "Otros" && !otraCategoria.trim()) {
-      toast.error("Por favor especifica el nombre de la categoría");
+    if (validItems.length === 0) {
+      toast.error("Ingresa al menos un concepto con monto mayor a RD$0.00");
       return;
     }
-    if (f.monto <= 0) {
-      toast.error("Por favor ingresa un monto válido mayor a RD$0.00");
+    if (totalMonto <= 0) {
+      toast.error("El monto total a registrar debe ser mayor a RD$0.00");
       return;
     }
     setStep(2);
   }
 
   async function submit() {
-    if (!f.descripcion.trim()) { 
-      toast.error("Ingresa una descripción o concepto del gasto"); 
-      return; 
-    }
-    if (f.monto <= 0) { 
-      toast.error("El monto debe ser mayor a RD$0.00"); 
-      return; 
+    if (validItems.length === 0) {
+      toast.error("Ingresa al menos un concepto con monto mayor a RD$0.00");
+      setStep(1);
+      return;
     }
 
-    const categoriaFinal = (f.categoria === "Otros" && otraCategoria.trim()) ? otraCategoria.trim() : f.categoria;
+    if (totalMonto <= 0) {
+      toast.error("El monto total a registrar debe ser mayor a RD$0.00");
+      setStep(1);
+      return;
+    }
 
     setIsSubmitting(true);
     try {
       const gastoId = uid("gas");
+      let emittedNcf: string | undefined = undefined;
+      let emittedType: string | undefined = undefined;
+      let emittedStatus: string | undefined = undefined;
+      let emittedTrackId: string | undefined = undefined;
+      let emittedQr: string | undefined = undefined;
+
+      const conceptoResumen = validItems.map(it => it.descripcion.trim()).join(", ");
+
+      // Emisión Fiscal automática E43 ante la DGII si está activada
+      if (isElectronic && emitirFiscal && tenant) {
+        try {
+          toast.info("Emitiendo Comprobante de Gastos Menores (E43) ante la DGII...");
+
+          const dummyOrder: Orden = {
+            id: gastoId,
+            tenant_id: tenant.id,
+            numero: `EXP-${Date.now().toString().slice(-6)}`,
+            cliente_nombre: conceptoResumen,
+            total: totalMonto,
+            subtotal: totalMonto,
+            itbis: 0,
+            descuento: 0,
+            estado: "ENTREGADO",
+            metodo_pago: metodoPago === "Cheque" ? "EFECTIVO" : (metodoPago.toUpperCase() as MetodoPago),
+            tipo_ecf: "E43",
+            saldo: 0,
+            creado_en: `${fechaDocumento}T12:00:00.000Z`,
+            items: validItems.map(it => ({
+              descripcion: it.descripcion,
+              cantidad: 1,
+              precio_unitario: it.monto,
+              is_exento: true,
+            })),
+          } as any;
+
+          const res = await emitirECF(
+            dummyOrder,
+            { id: "expense", nombre: conceptoResumen, cedula: "" } as any,
+            undefined,
+            (tenantConfig || { ncf_secuencia: "E43", itbis_incluido: false }) as any,
+            tenant,
+            "E43"
+          );
+
+          emittedNcf = res.encf;
+          emittedType = "E43";
+          emittedStatus = res.legal_status || "ACCEPTED";
+          emittedTrackId = res.track_id;
+          emittedQr = res.qr_content;
+        } catch (fiscalErr: any) {
+          console.error("Error al emitir e-CF de gasto menor:", fiscalErr);
+          toast.error(`Aviso DGII: ${fiscalErr.message || "No se pudo emitir el e-CF"}`);
+        }
+      }
+
       await saveGasto({ 
         id: gastoId, 
         tenant_id: tenantId, 
         empleado_id: empleadoId, 
-        ...f, 
-        categoria: categoriaFinal,
-        proveedor: f.proveedor || undefined, 
-        fecha: new Date().toISOString(), 
+        categoria: "Suministros",
+        descripcion: conceptoResumen,
+        monto: totalMonto, 
+        metodo_pago: metodoPago, 
+        proveedor: (showBeneficiario && proveedor.trim()) ? proveedor.trim() : undefined, 
+        ncf: emittedNcf,
+        tipo_ecf: emittedType,
+        ecf_status: emittedStatus,
+        ecf_track_id: emittedTrackId,
+        ecf_qr: emittedQr,
+        fecha: `${fechaDocumento}T12:00:00.000Z`, 
         aprobado: true 
       });
       
       try {
         const caja = await getCajaAbierta(tenantId);
         if (caja) {
-          const metodo = f.metodo_pago === "Cheque" ? "EFECTIVO" : (f.metodo_pago.toUpperCase() as MetodoPago);
+          const metodo = metodoPago === "Cheque" ? "EFECTIVO" : (metodoPago.toUpperCase() as MetodoPago);
           await saveMovimiento({
             id: uid("mov"),
             tenant_id: tenantId,
             caja_id: caja.id,
             empleado_id: empleadoId,
             tipo: "EGRESO",
-            concepto: `Gasto: ${categoriaFinal} - ${f.descripcion}`,
-            monto: f.monto,
+            concepto: `Gasto Menor: ${conceptoResumen}${emittedNcf ? ` (${emittedNcf})` : ""}`,
+            monto: totalMonto,
             metodo,
             referencia: gastoId,
-            creado_en: new Date().toISOString(),
+            creado_en: `${fechaDocumento}T12:00:00.000Z`,
           });
         }
       } catch (cajaErr) {
         console.error("Error al registrar movimiento en caja:", cajaErr);
       }
 
-      toast.success("Gasto registrado correctamente ✅"); 
+      if (emittedNcf) {
+        toast.success(`Gasto registrado y comprobante ${emittedNcf} emitido ante la DGII ✓`); 
+      } else {
+        toast.success("Gasto registrado correctamente ✅"); 
+      }
       onDone();
-      setF({ categoria: CATEGORIAS_GASTOS[0], descripcion: "", monto: 0, metodo_pago: "Efectivo", proveedor: "" });
-      setRawMonto("");
-      setOtraCategoria("");
-      setStep(1);
     } catch (err: any) {
       console.error("Error al registrar gasto:", err);
       toast.error(err?.message || "Error al registrar gasto");
@@ -1221,267 +1508,702 @@ function NewGasto({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-3xl max-w-lg p-0 gap-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
-        {/* Cabecera del Diálogo */}
-        <div className="bg-slate-50/80 dark:bg-slate-900/70 p-5 pb-3 border-b border-border/50">
-          <div className="flex items-center gap-3 pr-8">
-            <div className="h-10 w-10 rounded-2xl bg-rose-100 dark:bg-rose-950/80 text-rose-600 dark:text-rose-400 flex items-center justify-center border border-rose-200/80 dark:border-rose-800 shadow-xs shrink-0">
-              <Receipt className="h-5 w-5" />
+      <DialogContent className="rounded-3xl max-w-lg sm:max-w-xl p-0 gap-0 overflow-hidden border-none shadow-2xl bg-background text-foreground max-h-[88vh] flex flex-col">
+        {/* Cabecera Azul con Stepper Wizard Compacto */}
+        <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-indigo-700 text-white p-3.5 sm:p-4 pb-2.5 shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2.5 pr-3">
+              <div className="h-9 w-9 rounded-xl bg-white/20 text-white flex items-center justify-center border border-white/25 shadow-2xs shrink-0">
+                <Coffee className="h-4.5 w-4.5" />
+              </div>
+              <div>
+                <DialogTitle className="text-sm sm:text-base font-display font-black text-white leading-tight">
+                  Registrar gasto menor
+                </DialogTitle>
+                <p className="text-[10.5px] sm:text-[11px] text-blue-100/90 mt-0.5">
+                  {step === 1
+                    ? "Paso 1: Agrega la fecha y conceptos con sus montos"
+                    : "Paso 2: Selecciona el canal de pago y opciones fiscales"}
+                </p>
+              </div>
             </div>
-            <div>
-              <DialogTitle className="text-base font-display font-black text-foreground">
-                Registrar Nuevo Gasto
-              </DialogTitle>
-              <p className="text-xs text-muted-foreground">
-                {step === 1 ? "Paso 1: Selecciona categoría y monto a egresar" : "Paso 2: Completa concepto y canal de pago"}
-              </p>
+
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded-lg bg-white/20 text-white text-[11px] font-bold font-mono border border-white/25 shadow-2xs">
+                E43
+              </span>
             </div>
           </div>
 
-          {/* Stepper Wizard Indicator */}
-          <div className="flex items-center justify-center gap-2 mt-4">
+          {/* Stepper Buttons (Centered Compact Pills) */}
+          <div className="grid grid-cols-2 gap-1 p-0.5 rounded-xl bg-black/20 backdrop-blur-xs mt-2.5 border border-white/10">
             <button
               type="button"
               onClick={() => setStep(1)}
-              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer ${
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 step === 1
-                  ? "bg-primary text-white border-primary shadow-xs"
-                  : "bg-surface text-muted-foreground border-border/60 hover:text-foreground"
+                  ? "bg-white text-blue-800 shadow-sm font-black"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
-              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-black ${
-                step === 1 ? "bg-white text-primary" : "bg-muted text-foreground"
-              }`}>1</span>
-              <span>Categoría & Monto</span>
+              <span
+                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10.5px] font-black ${
+                  step === 1
+                    ? "bg-blue-800 text-white"
+                    : "bg-white/20 text-white"
+                }`}
+              >
+                1
+              </span>
+              <span>Conceptos & Montos</span>
             </button>
 
             <button
               type="button"
-              onClick={() => { if (f.monto > 0) handleNextStep(); }}
-              className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 border cursor-pointer ${
+              onClick={handleNextStep}
+              className={`flex items-center justify-center gap-1.5 py-1.5 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 step === 2
-                  ? "bg-primary text-white border-primary shadow-xs"
-                  : "bg-surface text-muted-foreground border-border/60 hover:text-foreground"
+                  ? "bg-white text-blue-800 shadow-sm font-black"
+                  : "text-white/80 hover:text-white hover:bg-white/10"
               }`}
             >
-              <span className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10px] font-black ${
-                step === 2 ? "bg-white text-primary" : "bg-muted text-foreground"
-              }`}>2</span>
-              <span>Detalle & Pago</span>
+              <span
+                className={`h-4.5 w-4.5 rounded-full flex items-center justify-center text-[10.5px] font-black ${
+                  step === 2
+                    ? "bg-blue-800 text-white"
+                    : "bg-white/20 text-white"
+                }`}
+              >
+                2
+              </span>
+              <span>Pago & Fiscal</span>
             </button>
           </div>
         </div>
 
-        {/* PASO 1: Categoría & Monto */}
-        {step === 1 && (
-          <div className="p-5 space-y-3.5 animate-in fade-in-50 duration-200">
-            {/* Selector de Categoría Visual */}
-            <div className="space-y-2">
-              <Label className="text-xs font-bold text-foreground">Selecciona la Categoría</Label>
-              <div className="grid grid-cols-3 gap-2">
-                {CATEGORIAS_GASTOS.map((c) => {
-                  const vis = getGastoCategoriaVisual(c);
-                  const Icon = vis.icon;
-                  const isSelected = f.categoria === c;
-                  return (
-                    <button
-                      key={c}
-                      type="button"
-                      onClick={() => setF({ ...f, categoria: c })}
-                      className={`p-2.5 rounded-2xl text-left text-xs font-bold transition-all flex items-center gap-2.5 cursor-pointer border-2 shadow-2xs ${
-                        isSelected
-                          ? "bg-primary text-white border-primary shadow-sm font-black scale-[1.02]"
-                          : "bg-white dark:bg-slate-950 border-border/80 text-muted-foreground hover:text-foreground hover:border-primary/40 hover:bg-slate-50 dark:hover:bg-slate-900"
-                      }`}
-                    >
-                      <span className={`p-1.5 rounded-xl shrink-0 transition-transform ${isSelected ? "bg-white/20 text-white" : `${vis.bgLight} ${vis.text}`}`}>
-                        <Icon className="h-4 w-4" />
-                      </span>
-                      <span className="truncate capitalize">{vis.label}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* Campo desplegable para especificar cuando se elige OTROS */}
-            {f.categoria === "Otros" && (
-              <div className="space-y-1.5 animate-in fade-in-50 slide-in-from-top-2 duration-200">
-                <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                  <Tag className="h-3.5 w-3.5 text-primary" />
-                  <span>Especificar Categoría</span>
-                </Label>
-                <Input
-                  autoFocus
-                  placeholder="Ej: Impuestos, Licencias de Software, Seguros, Dietas..."
-                  value={otraCategoria}
-                  onChange={(e) => setOtraCategoria(e.target.value)}
-                  className="h-11 rounded-2xl bg-white dark:bg-slate-950 border-2 border-border/80 text-xs shadow-xs text-foreground placeholder:text-muted-foreground/40 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary transition-all"
+        {/* Contenido Dinámico por Paso */}
+        <div className="p-3.5 sm:p-4 overflow-y-auto flex-1 space-y-3 sm:space-y-3.5">
+          {/* ======================================================== */}
+          {/* PASO 1: Fecha de Emisión y Filas de Conceptos */}
+          {/* ======================================================== */}
+          {step === 1 && (
+            <div className="space-y-3 animate-in fade-in-50 duration-200">
+              {/* Fecha de Emisión del Documento en formato DD/MM/AAAA */}
+              <div className="space-y-1">
+                <Label className="text-xs font-bold text-foreground">Fecha de emisión del documento</Label>
+                <DMYDatePicker
+                  value={fechaDocumento}
+                  onChange={(newDate) => {
+                    setFechaDocumento(newDate);
+                    setItems(prev => prev.map(it => ({ ...it, fecha: newDate })));
+                  }}
+                  className="h-9.5 w-full rounded-xl"
                 />
               </div>
-            )}
 
-            {/* Monto con Fondo Blanco Puro y Separador de Miles */}
-            <div className="space-y-1.5 pt-1">
-              <Label className="text-xs font-bold text-foreground">Monto a Registrar (RD$)</Label>
-              <div className="relative flex items-center rounded-2xl bg-white dark:bg-slate-950 border-2 border-border/80 shadow-xs focus-within:border-primary focus-within:ring-3 focus-within:ring-primary/15 transition-all overflow-hidden">
-                <span className="pl-4 font-display font-black text-base text-muted-foreground select-none shrink-0">
+              {/* Sección de Conceptos */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <Label className="text-xs sm:text-sm font-bold text-foreground">Conceptos</Label>
+                  <span className="text-[10.5px] text-muted-foreground">Cada concepto puede tener su propia fecha</span>
+                </div>
+
+                {/* Sugerencias (Chips de Plantillas) */}
+                <div className="space-y-1">
+                  <span className="text-[10.5px] font-bold text-muted-foreground">Sugerencias:</span>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    {SUGERENCIAS_GASTOS_MENORES.map((sug) => {
+                      const Icon = sug.icon;
+                      return (
+                        <button
+                          key={sug.label}
+                          type="button"
+                          onClick={() => handleAddSuggestion(sug.label)}
+                          className="px-2 py-0.5 rounded-full border border-dashed border-border/80 bg-surface hover:bg-blue-50/70 dark:hover:bg-blue-950/40 hover:border-blue-400 text-foreground text-[10.5px] font-medium flex items-center gap-1 transition-all cursor-pointer active:scale-95 shadow-2xs"
+                        >
+                          <Icon className="h-2.5 w-2.5 text-muted-foreground shrink-0" />
+                          <span>{sug.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Filas de Conceptos Dinámicas */}
+                <div className="space-y-1.5 pt-0.5">
+                  {items.map((item) => (
+                    <div key={item.id} className="flex items-center gap-1.5 animate-in fade-in-50 duration-200">
+                      {/* Fecha Individual del Concepto (Día/Mes/Año) */}
+                      <DMYDatePicker
+                        value={item.fecha}
+                        onChange={(d) => handleUpdateItem(item.id, "fecha", d)}
+                        className="h-9 w-28 sm:w-30 shrink-0"
+                      />
+
+                      {/* Nombre del Concepto */}
+                      <Input
+                        placeholder="Ej. Combustible, Agua..."
+                        value={item.descripcion}
+                        onChange={(e) => handleUpdateItem(item.id, "descripcion", e.target.value)}
+                        className="h-9 flex-1 rounded-xl bg-surface border border-border/80 text-xs shadow-2xs"
+                      />
+
+                      {/* Monto con Separador de Miles */}
+                      <div className="relative w-24 sm:w-28 shrink-0 flex items-center rounded-xl bg-surface border border-border/80 shadow-2xs focus-within:border-blue-500 overflow-hidden">
+                        <span className="pl-2 font-display font-black text-[11px] text-muted-foreground select-none">
+                          RD$
+                        </span>
+                        <input
+                          type="text"
+                          inputMode="decimal"
+                          placeholder="0.00"
+                          value={item.rawMonto}
+                          onChange={(e) => handleUpdateItem(item.id, "rawMonto", e.target.value)}
+                          className="w-full h-9 pl-1 pr-2 bg-transparent text-xs font-black font-display text-foreground focus:outline-none"
+                        />
+                      </div>
+
+                      {/* Botón Eliminar Fila */}
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveItem(item.id)}
+                        className="h-8.5 w-8.5 rounded-xl flex items-center justify-center text-muted-foreground hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-all cursor-pointer shrink-0"
+                        title="Eliminar concepto"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Botón Agregar Otro Concepto */}
+                <button
+                  type="button"
+                  onClick={handleAddBlankItem}
+                  className="w-full py-2 rounded-xl border-2 border-dashed border-blue-400/60 hover:border-blue-600 hover:bg-blue-50/40 dark:hover:bg-blue-950/20 text-blue-600 dark:text-blue-400 text-xs font-bold flex items-center justify-center gap-1.5 cursor-pointer transition-all active:scale-[0.99] mt-1"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  <span>Agregar otro concepto</span>
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ======================================================== */}
+          {/* PASO 2: Resumen, Canal de Pago & Opciones Fiscales */}
+          {/* ======================================================== */}
+          {step === 2 && (
+            <div className="space-y-3 sm:space-y-3.5 animate-in fade-in-50 duration-200">
+              {/* Resumen del Gasto */}
+              <div className="p-3 rounded-xl bg-gradient-to-br from-blue-50 to-indigo-50/60 dark:from-blue-950/40 dark:to-indigo-950/20 border border-blue-200/80 dark:border-blue-900/60 flex items-center justify-between gap-2.5 shadow-2xs">
+                <div className="space-y-0.5">
+                  <div className="text-xs font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                    <Receipt className="h-3.5 w-3.5 text-blue-600" />
+                    <span>{validItems.length} concepto{validItems.length > 1 ? "s" : ""} ({formatToDMY(fechaDocumento)})</span>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground line-clamp-1">
+                    {validItems.map(it => `${it.descripcion} (${formatRD(it.monto)})`).join(", ")}
+                  </p>
+                </div>
+                <div className="text-right shrink-0">
+                  <span className="text-[9.5px] uppercase font-bold text-blue-700 dark:text-blue-300">Total</span>
+                  <div className="font-display font-black text-rose-600 dark:text-rose-400 text-lg sm:text-xl leading-none mt-0.5">
+                    {formatRD(totalMonto)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Canal de Pago */}
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-foreground">Canal de Pago *</Label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    { key: "Efectivo", label: "Efectivo", icon: Coins },
+                    { key: "Transferencia", label: "Transferencia", icon: Landmark },
+                    { key: "Tarjeta", label: "Tarjeta", icon: CreditCard },
+                    { key: "Cheque", label: "Cheque", icon: FileText },
+                  ].map((m) => {
+                    const Icon = m.icon;
+                    const isSelected = metodoPago === m.key;
+                    return (
+                      <button
+                        key={m.key}
+                        type="button"
+                        onClick={() => setMetodoPago(m.key)}
+                        className={`py-2 px-1.5 rounded-xl text-xs font-bold text-center flex flex-col items-center gap-1 transition-all border cursor-pointer ${
+                          isSelected
+                            ? "bg-blue-600 text-white border-blue-600 shadow-sm font-black scale-[1.02]"
+                            : "bg-surface border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5" />
+                        <span className="leading-tight text-[11px]">{m.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Toggle Añadir Beneficiario / Proveedor */}
+              <div className="p-2.5 sm:p-3 rounded-xl bg-muted/20 border border-border/60 space-y-2">
+                <div className="flex items-center justify-between gap-3">
+                  <div>
+                    <div className="text-xs font-bold text-foreground">Añadir Beneficiario / Proveedor (Opcional)</div>
+                    <p className="text-[10px] text-muted-foreground">Indicar a quién se le pagó el egreso menor</p>
+                  </div>
+                  <Switch
+                    checked={showBeneficiario}
+                    onCheckedChange={setShowBeneficiario}
+                    className="data-[state=checked]:bg-blue-600 shrink-0"
+                  />
+                </div>
+
+                {showBeneficiario && (
+                  <div className="pt-1 animate-in fade-in-50">
+                    <Input
+                      autoFocus
+                      placeholder="Ej: Colmado La Fe, Chofer Juan, Estación Gasolina..."
+                      value={proveedor}
+                      onChange={(e) => setProveedor(e.target.value)}
+                      className="h-9 rounded-xl bg-surface border border-border/80 text-xs shadow-2xs"
+                    />
+                  </div>
+                )}
+              </div>
+
+              {/* Toggle Emisión Fiscal DGII E43 */}
+              {isElectronic && (
+                <div className={`p-2.5 sm:p-3 rounded-xl border transition-all ${
+                  emitirFiscal
+                    ? "bg-emerald-50/60 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-800 shadow-2xs"
+                    : "bg-muted/20 border-border/60"
+                }`}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <ShieldCheck className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                        <span>Emitir Comprobante Fiscal DGII (E43 · Gastos Menores)</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">
+                        {emitirFiscal
+                          ? "✓ Deducible ante la DGII sin necesidad de RNC del proveedor."
+                          : "Gasto registrado únicamente para control interno de caja."}
+                      </p>
+                    </div>
+                    <Switch
+                      checked={emitirFiscal}
+                      onCheckedChange={setEmitirFiscal}
+                      className="data-[state=checked]:bg-emerald-600 shrink-0 scale-105"
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Footer con Total y Botones de Navegación del Wizard */}
+        <div className="p-3 px-4 sm:px-5 bg-slate-50 dark:bg-slate-900 border-t border-border/60 flex items-center justify-between gap-3 shrink-0">
+          <div>
+            <div className="text-[10px] font-medium text-muted-foreground">Total a registrar (exento)</div>
+            <div className="text-lg sm:text-xl font-black font-display text-slate-900 dark:text-white">
+              {formatRD(totalMonto)}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {step === 1 ? (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => onOpenChange(false)}
+                  className="rounded-xl px-3.5 sm:px-4 text-xs font-bold h-9.5 cursor-pointer"
+                >
+                  Cancelar
+                </Button>
+                <Button 
+                  onClick={handleNextStep} 
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-4 sm:px-5 h-9.5 text-xs font-bold shadow-md gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <span>Continuar a Pago</span>
+                  <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button 
+                  variant="outline" 
+                  onClick={() => setStep(1)}
+                  className="rounded-xl px-3.5 sm:px-4 text-xs font-bold h-9.5 cursor-pointer"
+                >
+                  ← Volver a Conceptos
+                </Button>
+                <Button 
+                  onClick={submit} 
+                  disabled={isSubmitting}
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5 h-9.5 text-xs font-bold shadow-md gap-1.5 cursor-pointer transition-all active:scale-95"
+                >
+                  <Send className="h-3.5 w-3.5" />
+                  <span>{isSubmitting ? "Emitiendo..." : "Emitir gasto menor"}</span>
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ==========================================
+// MODAL 2: NUEVA COMPRA FISCAL (E41 · PROVEEDORES INFORMALES CON RETENCIONES)
+// ==========================================
+function NewCompraModal({
+  open,
+  onOpenChange,
+  tenant,
+  tenantConfig,
+  ecfConfig,
+  tenantId,
+  empleadoId,
+  onDone,
+}: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  tenant?: Tenant;
+  tenantConfig?: TenantConfig;
+  ecfConfig?: any;
+  tenantId: string;
+  empleadoId: string;
+  onDone: () => void;
+}) {
+  const isElectronic = !!ecfConfig?.is_active || !!ecfConfig?.ef2_environment || !!tenant?.rnc;
+
+  const [rawMonto, setRawMonto] = useState("");
+  const [monto, setMonto] = useState(0);
+  const [proveedorNombre, setProveedorNombre] = useState("");
+  const [proveedorRnc, setProveedorRnc] = useState("");
+  const [concepto, setConcepto] = useState("");
+  const [categoria, setCategoria] = useState("Mantenimiento");
+  const [metodoPago, setMetodoPago] = useState("Efectivo");
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setRawMonto("");
+      setMonto(0);
+      setProveedorNombre("");
+      setProveedorRnc("");
+      setConcepto("");
+      setCategoria("Mantenimiento");
+      setMetodoPago("Efectivo");
+    }
+  }, [open]);
+
+  // Cálculos fiscales DGII para E41 (Compras con retención 100% ITBIS + 10% ISR)
+  const itbisAmount = Number((monto * 0.18).toFixed(2));
+  const itbisRetenido = itbisAmount; // 100% Retención ITBIS
+  const isrRetenido = Number((monto * 0.10).toFixed(2)); // 10% Retención ISR
+  const totalConItbis = monto + itbisAmount;
+  const totalRetenciones = itbisRetenido + isrRetenido;
+  const netoAPagar = Number((totalConItbis - totalRetenciones).toFixed(2));
+
+  async function submit() {
+    if (!proveedorNombre.trim()) {
+      toast.error("Ingresa el nombre del proveedor o técnico");
+      return;
+    }
+    if (!proveedorRnc.trim()) {
+      toast.error("Ingresa el RNC o Cédula del proveedor informal");
+      return;
+    }
+    if (!concepto.trim()) {
+      toast.error("Ingresa el concepto de la compra o servicio");
+      return;
+    }
+    if (monto <= 0) {
+      toast.error("Ingresa un monto válido mayor a RD$0.00");
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      const compraId = uid("gas");
+      let emittedNcf: string | undefined = undefined;
+      let emittedType: string | undefined = "E41";
+      let emittedStatus: string | undefined = undefined;
+      let emittedTrackId: string | undefined = undefined;
+      let emittedQr: string | undefined = undefined;
+
+      if (isElectronic && tenant) {
+        try {
+          toast.info("Emitiendo Comprobante de Compras (E41) ante la DGII...");
+
+          const dummyOrder: Orden = {
+            id: compraId,
+            tenant_id: tenant.id,
+            numero: `PUR-${Date.now().toString().slice(-6)}`,
+            cliente_nombre: proveedorNombre,
+            total: totalConItbis,
+            subtotal: monto,
+            itbis: itbisAmount,
+            descuento: 0,
+            estado: "ENTREGADO",
+            metodo_pago: metodoPago === "Cheque" ? "EFECTIVO" : (metodoPago.toUpperCase() as MetodoPago),
+            tipo_ecf: "E41",
+            saldo: 0,
+            creado_en: new Date().toISOString(),
+            items: [
+              {
+                descripcion: concepto,
+                cantidad: 1,
+                precio_unitario: monto,
+                is_exento: false,
+              },
+            ],
+          } as any;
+
+          const res = await emitirECF(
+            dummyOrder,
+            { id: "supplier", nombre: proveedorNombre, cedula: proveedorRnc } as any,
+            undefined,
+            (tenantConfig || { ncf_secuencia: "E41", itbis_incluido: false }) as any,
+            tenant,
+            "E41"
+          );
+
+          emittedNcf = res.encf;
+          emittedStatus = res.legal_status || "ACCEPTED";
+          emittedTrackId = res.track_id;
+          emittedQr = res.qr_content;
+        } catch (fiscalErr: any) {
+          console.error("Error al emitir e-CF E41:", fiscalErr);
+          toast.error(`Aviso DGII: ${fiscalErr.message || "No se pudo emitir el e-CF"}`);
+        }
+      }
+
+      // Guardar registro en Gastos
+      await saveGasto({
+        id: compraId,
+        tenant_id: tenantId,
+        empleado_id: empleadoId,
+        categoria,
+        descripcion: concepto,
+        monto: netoAPagar > 0 ? netoAPagar : monto,
+        metodo_pago: metodoPago,
+        proveedor: proveedorNombre,
+        proveedor_rnc: proveedorRnc,
+        ncf: emittedNcf,
+        tipo_ecf: "E41",
+        ecf_status: emittedStatus || "ACCEPTED",
+        ecf_track_id: emittedTrackId,
+        ecf_qr: emittedQr,
+        fecha: new Date().toISOString(),
+        aprobado: true,
+      });
+
+      // Descuento en Caja Abierta
+      try {
+        const caja = await getCajaAbierta(tenantId);
+        if (caja) {
+          const metodo = metodoPago === "Cheque" ? "EFECTIVO" : (metodoPago.toUpperCase() as MetodoPago);
+          await saveMovimiento({
+            id: uid("mov"),
+            tenant_id: tenantId,
+            caja_id: caja.id,
+            empleado_id: empleadoId,
+            tipo: "EGRESO",
+            concepto: `Compra E41: ${proveedorNombre} - ${concepto}${emittedNcf ? ` (${emittedNcf})` : ""}`,
+            monto: netoAPagar > 0 ? netoAPagar : monto,
+            metodo,
+            referencia: compraId,
+            creado_en: new Date().toISOString(),
+          });
+        }
+      } catch (cajaErr) {
+        console.error("Error al registrar movimiento en caja:", cajaErr);
+      }
+
+      if (emittedNcf) {
+        toast.success(`Compra registrada y comprobante ${emittedNcf} (E41) emitido ante la DGII ✓`);
+      } else {
+        toast.success("Compra registrada correctamente ✅");
+      }
+      onDone();
+    } catch (err: any) {
+      console.error("Error al registrar compra:", err);
+      toast.error(err?.message || "Error al registrar compra");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="rounded-3xl max-w-lg sm:max-w-xl p-0 gap-0 overflow-hidden border-none shadow-2xl bg-background text-foreground max-h-[92vh] flex flex-col">
+        {/* Cabecera del Diálogo */}
+        <div className="bg-blue-50/90 dark:bg-blue-950/40 p-5 pb-4 border-b border-border/60 shrink-0">
+          <div className="flex items-center gap-3.5 pr-8">
+            <div className="h-11 w-11 rounded-2xl bg-blue-100 dark:bg-blue-900/80 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-200/80 dark:border-blue-800 shadow-2xs shrink-0">
+              <ShoppingBag className="h-5 w-5" />
+            </div>
+            <div>
+              <DialogTitle className="text-base sm:text-lg font-display font-black text-foreground">
+                Registrar Compra Fiscal (E41)
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Comprobante para compras o servicios de proveedores y técnicos informales
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Formulario Espacioso */}
+        <div className="p-5 sm:p-6 overflow-y-auto flex-1 space-y-4">
+          {/* Fila Proveedor & RNC */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm font-bold text-foreground">Nombre Proveedor / Técnico *</Label>
+              <Input
+                autoFocus
+                placeholder="Ej: Juan Pérez (Electricista)"
+                value={proveedorNombre}
+                onChange={(e) => setProveedorNombre(e.target.value)}
+                className="h-10.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm shadow-2xs"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm font-bold text-foreground">RNC o Cédula *</Label>
+              <Input
+                placeholder="Ej: 00112345678"
+                value={proveedorRnc}
+                onChange={(e) => setProveedorRnc(e.target.value)}
+                className="h-10.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm shadow-2xs font-mono"
+              />
+            </div>
+          </div>
+
+          {/* Concepto */}
+          <div className="space-y-1.5">
+            <Label className="text-xs sm:text-sm font-bold text-foreground">Concepto del Bien o Servicio *</Label>
+            <Input
+              placeholder="Ej: Reparación eléctrica local, plomería, repuestos..."
+              value={concepto}
+              onChange={(e) => setConcepto(e.target.value)}
+              className="h-10.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm shadow-2xs"
+            />
+          </div>
+
+          {/* Fila Monto & Categoría */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm font-bold text-foreground">Monto Bruto (RD$) *</Label>
+              <div className="relative flex items-center rounded-xl bg-surface border border-border/80 shadow-2xs focus-within:border-blue-500 transition-all overflow-hidden">
+                <span className="pl-3 font-display font-black text-xs sm:text-sm text-muted-foreground select-none">
                   RD$
                 </span>
                 <input
                   type="text"
                   inputMode="decimal"
-                  autoFocus={f.categoria !== "Otros"}
                   placeholder="0.00"
                   value={rawMonto}
                   onChange={(e) => {
                     const formatted = formatAmountInput(e.target.value);
                     setRawMonto(formatted);
-                    setF(prev => ({ ...prev, monto: parseAmount(formatted) }));
+                    setMonto(parseAmount(formatted));
                   }}
-                  className="w-full h-12.5 pl-3 pr-4 bg-transparent text-2xl font-black font-display text-slate-900 dark:text-white placeholder:text-muted-foreground/30 focus:outline-none"
+                  className="w-full h-10.5 pl-2 pr-3 bg-transparent text-sm sm:text-base font-black font-display text-foreground focus:outline-none"
                 />
               </div>
             </div>
-          </div>
-        )}
 
-        {/* PASO 2: Detalle & Método de Pago */}
-        {step === 2 && (
-          <div className="p-5 space-y-4 animate-in fade-in-50 duration-200">
-            {/* Banner Resumen de Selección */}
-            <div className="p-3 rounded-2xl bg-white dark:bg-slate-950 border-2 border-border/80 shadow-2xs flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className={`p-1.5 rounded-xl ${catVisual.chipBg}`}>
-                  <CatIcon className="h-4 w-4" />
+            <div className="space-y-1.5">
+              <Label className="text-xs sm:text-sm font-bold text-foreground">Categoría</Label>
+              <select
+                value={categoria}
+                onChange={(e) => setCategoria(e.target.value)}
+                className="w-full h-10.5 px-3 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm font-medium text-foreground shadow-2xs focus:outline-none focus:border-blue-500 cursor-pointer"
+              >
+                {CATEGORIAS_GASTOS.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Canal de Pago */}
+          <div className="space-y-1.5">
+            <Label className="text-xs sm:text-sm font-bold text-foreground">Canal de Pago</Label>
+            <div className="grid grid-cols-4 gap-2">
+              {[
+                { key: "Efectivo", label: "Efectivo", icon: Coins },
+                { key: "Transferencia", label: "Transferencia", icon: Landmark },
+                { key: "Tarjeta", label: "Tarjeta", icon: CreditCard },
+                { key: "Cheque", label: "Cheque", icon: FileText },
+              ].map((m) => {
+                const Icon = m.icon;
+                const isSelected = metodoPago === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    type="button"
+                    onClick={() => setMetodoPago(m.key)}
+                    className={`py-2 px-1.5 rounded-xl text-xs sm:text-sm font-bold text-center flex flex-col items-center gap-1.5 transition-all border cursor-pointer ${
+                      isSelected
+                        ? "bg-blue-600 text-white border-blue-600 shadow-xs font-black scale-[1.02]"
+                        : "bg-surface border-border/80 text-muted-foreground hover:text-foreground hover:bg-muted/40"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                    <span className="leading-tight">{m.label}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Desglose de Retenciones Fiscales DGII */}
+          {monto > 0 && (
+            <div className="p-4 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/60 space-y-2 text-xs sm:text-sm animate-in fade-in-50">
+              <div className="flex items-center justify-between text-muted-foreground text-xs">
+                <span>Monto Bruto del Servicio:</span>
+                <span className="font-semibold text-foreground">{formatRD(monto)}</span>
+              </div>
+              <div className="flex items-center justify-between text-rose-600 dark:text-rose-400 text-xs">
+                <span>Retención 100% ITBIS (18%):</span>
+                <span className="font-bold">- {formatRD(itbisRetenido)}</span>
+              </div>
+              <div className="flex items-center justify-between text-rose-600 dark:text-rose-400 text-xs">
+                <span>Retención ISR (10%):</span>
+                <span className="font-bold">- {formatRD(isrRetenido)}</span>
+              </div>
+              <div className="pt-2 border-t border-blue-200/60 dark:border-blue-800/60 flex items-center justify-between">
+                <span className="font-black text-foreground text-xs sm:text-sm">Neto Total a Pagar al Proveedor:</span>
+                <span className="font-display font-black text-base sm:text-lg text-blue-600 dark:text-blue-400">
+                  {formatRD(netoAPagar)}
                 </span>
-                <span className="text-xs font-bold text-foreground capitalize">{displayCatName}</span>
-              </div>
-              <span className="font-display font-black text-rose-600 dark:text-rose-400 text-base">
-                {formatRD(f.monto)}
-              </span>
-            </div>
-
-            {/* Concepto / Descripción con Fondo Blanco Puro */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-foreground">Concepto o Descripción</Label>
-              <Input 
-                autoFocus
-                placeholder="Ej: Factura de electricidad Edesur, compra de detergente..." 
-                value={f.descripcion} 
-                onChange={(e) => setF({ ...f, descripcion: e.target.value })} 
-                className="h-11 rounded-2xl bg-white dark:bg-slate-950 border-2 border-border/80 text-xs shadow-xs text-foreground placeholder:text-muted-foreground/40 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary transition-all"
-              />
-            </div>
-
-            {/* Método de Pago (Tarjetas Visuales Elevadas) */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-foreground">Canal de Pago</Label>
-              <div className="grid grid-cols-4 gap-2">
-                {[
-                  {
-                    key: "Efectivo",
-                    label: "Efectivo",
-                    icon: Coins,
-                    activeClass: "border-emerald-500 ring-2 ring-emerald-500/20 bg-emerald-50/70 dark:bg-emerald-950/40 text-emerald-950 dark:text-emerald-200",
-                    iconBg: "bg-emerald-100 dark:bg-emerald-900/80 text-emerald-600 dark:text-emerald-300",
-                  },
-                  {
-                    key: "Transferencia",
-                    label: "Transferencia",
-                    icon: Landmark,
-                    activeClass: "border-indigo-500 ring-2 ring-indigo-500/20 bg-indigo-50/70 dark:bg-indigo-950/40 text-indigo-950 dark:text-indigo-200",
-                    iconBg: "bg-indigo-100 dark:bg-indigo-900/80 text-indigo-600 dark:text-indigo-300",
-                  },
-                  {
-                    key: "Tarjeta",
-                    label: "Tarjeta",
-                    icon: CreditCard,
-                    activeClass: "border-sky-500 ring-2 ring-sky-500/20 bg-sky-50/70 dark:bg-sky-950/40 text-sky-950 dark:text-sky-200",
-                    iconBg: "bg-sky-100 dark:bg-sky-900/80 text-sky-600 dark:text-sky-300",
-                  },
-                  {
-                    key: "Cheque",
-                    label: "Cheque",
-                    icon: FileText,
-                    activeClass: "border-amber-500 ring-2 ring-amber-500/20 bg-amber-50/70 dark:bg-amber-950/40 text-amber-950 dark:text-amber-200",
-                    iconBg: "bg-amber-100 dark:bg-amber-900/80 text-amber-600 dark:text-amber-300",
-                  },
-                ].map((m) => {
-                  const Icon = m.icon;
-                  const isSelected = f.metodo_pago === m.key;
-                  return (
-                    <button
-                      key={m.key}
-                      type="button"
-                      onClick={() => setF({ ...f, metodo_pago: m.key })}
-                      className={`py-2.5 px-2 rounded-2xl text-xs font-bold text-center flex flex-col items-center gap-1.5 transition-all border-2 cursor-pointer relative group ${
-                        isSelected
-                          ? `${m.activeClass} shadow-xs font-black scale-[1.02]`
-                          : "bg-white dark:bg-slate-950 border-border/80 text-muted-foreground hover:border-slate-300 dark:hover:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-900 hover:text-foreground shadow-2xs"
-                      }`}
-                    >
-                      <div className={`p-1.5 rounded-xl transition-transform group-hover:scale-110 shadow-2xs ${m.iconBg}`}>
-                        <Icon className="h-4 w-4" />
-                      </div>
-                      <span className="leading-tight">{m.label}</span>
-                    </button>
-                  );
-                })}
               </div>
             </div>
-
-            {/* Proveedor con Fondo Blanco Puro */}
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-foreground">Proveedor / Beneficiario (Opcional)</Label>
-              <Input 
-                placeholder="Ej: Claro Dominicana, Distribuidora XYZ..." 
-                value={f.proveedor} 
-                onChange={(e) => setF({ ...f, proveedor: e.target.value })} 
-                className="h-11 rounded-2xl bg-white dark:bg-slate-950 border-2 border-border/80 text-xs shadow-xs text-foreground placeholder:text-muted-foreground/40 focus-visible:ring-2 focus-visible:ring-primary/20 focus-visible:border-primary transition-all"
-              />
-            </div>
-          </div>
-        )}
-
-        {/* Footer con Navegación del Wizard */}
-        <div className="p-4 bg-slate-50/70 dark:bg-slate-900/60 border-t border-border/60 flex items-center justify-between gap-2">
-          {step === 1 ? (
-            <>
-              <Button 
-                variant="outline" 
-                onClick={() => onOpenChange(false)}
-                className="rounded-xl px-4 text-xs font-bold"
-              >
-                Cancelar
-              </Button>
-              <Button 
-                onClick={handleNextStep} 
-                className="bg-primary text-white rounded-xl px-5 text-xs font-bold shadow-xs gap-1.5 cursor-pointer"
-              >
-                <span>Continuar a Detalle</span>
-                <ArrowRight className="h-3.5 w-3.5" />
-              </Button>
-            </>
-          ) : (
-            <>
-              <Button 
-                variant="outline" 
-                onClick={() => setStep(1)}
-                className="rounded-xl px-4 text-xs font-bold cursor-pointer"
-              >
-                ← Volver a Monto
-              </Button>
-              <Button 
-                onClick={submit} 
-                disabled={isSubmitting}
-                className="bg-gradient-primary text-white rounded-xl px-5 text-xs font-bold shadow-xs gap-1.5 cursor-pointer"
-              >
-                <Check className="h-3.5 w-3.5" />
-                <span>{isSubmitting ? "Registrando..." : "Registrar Gasto"}</span>
-              </Button>
-            </>
           )}
+        </div>
+
+        {/* Footer */}
+        <div className="p-4 px-5 sm:px-6 bg-slate-50/90 dark:bg-slate-900/80 border-t border-border/60 flex items-center justify-between gap-3 shrink-0">
+          <Button 
+            variant="outline" 
+            onClick={() => onOpenChange(false)}
+            className="rounded-xl px-4 sm:px-5 text-xs sm:text-sm font-bold h-10 cursor-pointer"
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={submit} 
+            disabled={isSubmitting}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-5 text-xs sm:text-sm font-bold shadow-xs gap-1.5 cursor-pointer h-10"
+          >
+            <Check className="h-4 w-4" />
+            <span>{isSubmitting ? "Emitiendo..." : "Emitir Compra E41"}</span>
+          </Button>
         </div>
       </DialogContent>
     </Dialog>

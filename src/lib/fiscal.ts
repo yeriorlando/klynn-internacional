@@ -159,8 +159,17 @@ export async function emitirECF(
       : tipoECF || "E32";
 
     const normalizedStatus = String(response.estado || "").toLowerCase();
-    const accepted = /acept|procesad|aprob/.test(normalizedStatus) && !/rechaz/.test(normalizedStatus);
-    const rejected = /rechaz|error/.test(normalizedStatus);
+    const rejected = /rechaz|error|inv[aá]lid/i.test(normalizedStatus);
+    const accepted =
+      !rejected &&
+      ((typeof response.success === "boolean" ? response.success : true) &&
+        Boolean(response.ncf || assignedEncf) ||
+        /acept|procesad|aprob|registrad|emitid|completad|firmad|generad|enviad|valid|success/i.test(normalizedStatus));
+    const recipientName =
+      cliente?.nombre
+        ? `${cliente.nombre} ${cliente.apellido || ""}`.trim()
+        : orden.cliente_nombre || orden.items?.[0]?.descripcion || undefined;
+
     const ecfDoc: ECFDocument = {
       id: crypto.randomUUID(),
       tenant_id: tenant.id,
@@ -168,11 +177,13 @@ export async function emitirECF(
       encf: assignedEncf,
       tipo_ecf: tipoDoc,
       rnc_receptor: cliente?.cedula ?? undefined,
+      rnc_receptor_nombre: recipientName,
       track_id: response.dgii_info?.track_id || String(response.id_factura || ""),
       status: accepted ? "accepted" : rejected ? "rejected" : "pending",
       dgii_response: {
         ...response.raw,
         ...response,
+        payload: ef2Payload,
         klynnContext: { provider: "ef2", environment: targetEnvironment },
       },
       xml_content: response.xml_cloud_url ?? "",

@@ -1511,7 +1511,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     <td className="px-4 py-3">
                       {(() => {
                         const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
-                        const isAcceptedECF = isECFOrder && (/ACEPT|PROCESAD|APROB/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
+                        const isAcceptedECF = isECFOrder && (/ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
                         const isRejectedECF = isECFOrder && (/RECHAZ|ERROR/i.test(o.ecf_status || "") || o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
                         const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
 

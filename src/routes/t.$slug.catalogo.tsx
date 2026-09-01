@@ -1185,6 +1185,24 @@ function ItemDialog({
                       className="data-[state=checked]:bg-primary"
                     />
                   </label>
+
+                  {/* PRECIO EDITABLE EN CAJA */}
+                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors sm:col-span-2">
+                    <div className="flex items-center gap-2.5">
+                      <div className="h-7 w-7 rounded-lg bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                        <Pencil className="h-3.5 w-3.5" />
+                      </div>
+                      <div>
+                        <span className="text-xs font-bold text-foreground block">Precio Editable en Caja</span>
+                        <span className="text-[10px] text-muted-foreground block">Permite al cajero ajustar el precio manualmente al cobrar</span>
+                      </div>
+                    </div>
+                    <Switch
+                      checked={!!f.permitir_editar_precio}
+                      onCheckedChange={(v) => setF({ ...f, permitir_editar_precio: v })}
+                      className="data-[state=checked]:bg-primary"
+                    />
+                  </label>
                 </div>
               </div>
             </div>

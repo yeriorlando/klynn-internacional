@@ -578,10 +578,16 @@ export interface Gasto {
   monto: number;
   metodo_pago: string;
   proveedor?: string;
+  proveedor_rnc?: string;
   comprobante_url?: string;
   fecha: string;
   aprobado: boolean;
   is_caja_chica?: boolean;
+  ncf?: string;
+  tipo_ecf?: string;
+  ecf_status?: string;
+  ecf_track_id?: string;
+  ecf_qr?: string;
 }
 
 export interface CatalogoItem {
@@ -5285,6 +5291,7 @@ export async function saveECFDocument(doc: ECFDocument) {
     encf: doc.encf,
     tipo_ecf: doc.tipo_ecf,
     rnc_receptor: doc.rnc_receptor || null,
+    rnc_receptor_nombre: doc.rnc_receptor_nombre || (doc as any).cliente_nombre || null,
     track_id: doc.track_id || null,
     status: doc.status || "pending",
     // EF2 se identifica explícitamente para que el conciliador de servidor

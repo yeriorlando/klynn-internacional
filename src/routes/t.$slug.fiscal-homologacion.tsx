@@ -75,7 +75,7 @@ function HomologacionPage() {
         Version: '1.0',
         IdDoc: {
           TipoeCF: invoiceType,
-          TipoIngresos: '01',
+          ...(!['41', '43'].includes(invoiceType) ? { TipoIngresos: '01' } : {}),
           TipoPago: '1',
           ...(invoiceType === '32' ? { FechaLimitePago: fechaEF2() } : {}),
           ...(invoiceType === '34' ? { IndicadorNotaCredito: '0' } : {}),

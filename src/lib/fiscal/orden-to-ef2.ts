@@ -66,12 +66,20 @@ function paymentType(order: Orden) {
   return "1";
 }
 
-function buildLines(order: Orden, taxableBase: number, exemptBase: number) {
+function buildLines(
+  order: Orden,
+  taxableBase: number,
+  exemptBase: number,
+  typeCode: string = "32"
+) {
+  const isE41 = typeCode === "41";
+  const isE43 = typeCode === "43";
+
   const raw = (order.items || []).map((item) => ({
-    name: item.descripcion || "Servicio de lavandería",
+    name: item.descripcion || (isE43 ? "Gasto menor" : isE41 ? "Servicio / Compra" : "Servicio de lavandería"),
     quantity: Math.max(0.001, Number(item.cantidad || 1)),
     amount: Math.max(0, Number(item.cantidad || 1) * Number(item.precio_unitario || 0)),
-    exempt: Boolean(item.is_exento),
+    exempt: isE43 ? true : Boolean(item.is_exento),
   }));
 
   const rawTaxable = raw.filter((line) => !line.exempt).reduce((sum, line) => sum + line.amount, 0);
@@ -82,15 +90,20 @@ function buildLines(order: Orden, taxableBase: number, exemptBase: number) {
     raw.push({
       name: (order.servicios || []).length
         ? `Servicios: ${order.servicios.join(", ")}`
-        : "Servicios y ajustes de lavandería",
+        : "Servicios y ajustes",
       quantity: 1,
       amount: expectedBase - knownBase,
-      exempt: false,
+      exempt: isE43 ? true : false,
     });
   }
 
   if (raw.length === 0) {
-    raw.push({ name: "Servicio de lavandería", quantity: 1, amount: taxableBase || exemptBase, exempt: exemptBase > 0 });
+    raw.push({
+      name: isE43 ? "Gasto menor" : isE41 ? "Servicio / Compra" : "Servicio de lavandería",
+      quantity: 1,
+      amount: isE43 ? exemptBase : (taxableBase || exemptBase),
+      exempt: isE43 ? true : exemptBase > 0,
+    });
   }
 
   const taxableRawTotal = raw.filter((line) => !line.exempt).reduce((sum, line) => sum + line.amount, 0);
@@ -111,32 +124,62 @@ function buildLines(order: Orden, taxableBase: number, exemptBase: number) {
     if (line.exempt) exemptAllocated += rounded;
     else taxableAllocated += rounded;
     const unit = rounded / line.quantity;
-    return {
+
+    const itemObj: Record<string, any> = {
       NumeroLinea: String(index + 1),
       IndicadorFacturacion: line.exempt ? "4" : "1",
-      NombreItem: line.name.slice(0, 80),
-      IndicadorBienoServicio: "2",
-      CantidadItem: String(line.quantity),
-      UnidadMedida: "43",
-      PrecioUnitarioItem: money(unit),
-      MontoItem: money(rounded),
     };
+
+    // Para E41 con ITBIS gravado, el bloque Retencion DEBE ir estrictamente antes de NombreItem según XSD de la DGII
+    if (isE41 && !line.exempt && taxableBase > 0) {
+      const itbisLine = Number((rounded * 0.18).toFixed(2));
+      const isrLine = Number((rounded * 0.10).toFixed(2));
+      itemObj.Retencion = {
+        IndicadorAgenteRetencionoPercepcion: "1",
+        MontoITBISRetenido: money(itbisLine),
+        MontoISRRetenido: money(isrLine),
+      };
+    }
+
+    itemObj.NombreItem = line.name.slice(0, 80);
+    itemObj.IndicadorBienoServicio = "2";
+    if (isE41) {
+      itemObj.DescripcionItem = line.name.slice(0, 100);
+    }
+    itemObj.CantidadItem = String(line.quantity);
+    itemObj.UnidadMedida = "43";
+    itemObj.PrecioUnitarioItem = money(unit);
+    itemObj.MontoItem = money(rounded);
+
+    return itemObj;
   });
 
   const allocated = taxableAllocated + exemptAllocated;
   const target = taxableBase + exemptBase;
   if (Math.abs(target - allocated) >= 0.01) {
     const residual = Number((target - allocated).toFixed(2));
-    lines.push({
+    const residualIsExempt = isE43 || (residual > 0 && taxableBase === 0);
+    const adjustObj: Record<string, any> = {
       NumeroLinea: String(lines.length + 1),
-      IndicadorFacturacion: residual > 0 && taxableBase > 0 ? "1" : "4",
-      NombreItem: "Ajuste de total de la orden",
-      IndicadorBienoServicio: "2",
-      CantidadItem: "1",
-      UnidadMedida: "43",
-      PrecioUnitarioItem: money(Math.abs(residual)),
-      MontoItem: money(Math.abs(residual)),
-    });
+      IndicadorFacturacion: residualIsExempt ? "4" : "1",
+    };
+    if (isE41 && !residualIsExempt) {
+      const itbisRes = Number((Math.abs(residual) * 0.18).toFixed(2));
+      const isrRes = Number((Math.abs(residual) * 0.10).toFixed(2));
+      adjustObj.Retencion = {
+        IndicadorAgenteRetencionoPercepcion: "1",
+        MontoITBISRetenido: money(itbisRes),
+        MontoISRRetenido: money(isrRes),
+      };
+    }
+    adjustObj.NombreItem = "Ajuste de total de la orden";
+    adjustObj.IndicadorBienoServicio = "2";
+    if (isE41) adjustObj.DescripcionItem = "Ajuste de total de la orden";
+    adjustObj.CantidadItem = "1";
+    adjustObj.UnidadMedida = "43";
+    adjustObj.PrecioUnitarioItem = money(Math.abs(residual));
+    adjustObj.MontoItem = money(Math.abs(residual));
+    lines.push(adjustObj);
   }
   return lines;
 }
@@ -151,9 +194,11 @@ export function ordenToEF2Payload(
   sequenceExpiration?: string,
 ) {
   const typeCode = NCF_TO_EF2_TYPE[type || order.tipo_ecf || config.ncf_secuencia || "E32"] || "32";
+  const isDebitNote = typeCode === "33";
+  const isExpenseMinor = typeCode === "43";
+  const isPurchaseE41 = typeCode === "41";
+
   // Las notas E33/E34 son comprobantes nuevos: su fecha de emisión es hoy.
-  // La fecha histórica de la factura original viaja por separado en
-  // InformacionReferencia.FechaNCFModificado.
   const issueDate = dateDO(["33", "34"].includes(typeCode) ? new Date() : order.creado_en || new Date());
   const issuerRnc = normalizeTaxId(tenant.rnc);
   const isTestIssuer = !validTaxId(issuerRnc) || tenant.rnc?.toUpperCase().startsWith("SBX");
@@ -162,46 +207,65 @@ export function ordenToEF2Payload(
     ? EF2_DEFAULT_TEST_EMPRESA
     : tenant.nombre || "Empresa emisora";
 
+  const gross = Number(order.total || 0);
   const totalBeforeDelivery = Math.max(0, Number(order.subtotal || 0) + Number(order.itbis || 0));
   const discountFactor = totalBeforeDelivery > 0
     ? Math.max(0, Math.min(1, (totalBeforeDelivery - Number(order.descuento || 0)) / totalBeforeDelivery))
     : 1;
-  const itbis = Number((Number(order.itbis || 0) * discountFactor).toFixed(2));
-  const netBase = Number((Number(order.subtotal || 0) * discountFactor).toFixed(2));
-  const gross = Number(order.total || 0);
+  const itbis = isExpenseMinor ? 0 : Number((Number(order.itbis || 0) * discountFactor).toFixed(2));
+  const netBase = isExpenseMinor ? gross : Number((Number(order.subtotal || 0) * discountFactor).toFixed(2));
 
-  const rawTaxable = (order.items || [])
-    .filter((item) => !item.is_exento)
-    .reduce((sum, item) => sum + Number(item.cantidad || 1) * Number(item.precio_unitario || 0), 0);
-  const rawExempt = (order.items || [])
-    .filter((item) => item.is_exento)
-    .reduce((sum, item) => sum + Number(item.cantidad || 1) * Number(item.precio_unitario || 0), 0);
-  const rawBase = rawTaxable + rawExempt;
-  const taxableShare = rawBase > 0 ? rawTaxable / rawBase : itbis > 0 ? 1 : 0;
-  let taxableBase = itbis > 0 ? Number((netBase * taxableShare).toFixed(2)) : 0;
-  let exemptBase = Number((gross - taxableBase - itbis).toFixed(2));
-  if (exemptBase < 0) {
-    taxableBase = Number((gross - itbis).toFixed(2));
-    exemptBase = 0;
+  let taxableBase = 0;
+  let exemptBase = 0;
+
+  if (isExpenseMinor) {
+    exemptBase = gross;
+  } else if (isPurchaseE41) {
+    if (itbis > 0 || !order.items?.every((i) => i.is_exento)) {
+      taxableBase = netBase > 0 ? netBase : Number((gross / 1.18).toFixed(2));
+    } else {
+      exemptBase = gross;
+    }
+  } else {
+    const rawTaxable = (order.items || [])
+      .filter((item) => !item.is_exento)
+      .reduce((sum, item) => sum + Number(item.cantidad || 1) * Number(item.precio_unitario || 0), 0);
+    const rawExempt = (order.items || [])
+      .filter((item) => item.is_exento)
+      .reduce((sum, item) => sum + Number(item.cantidad || 1) * Number(item.precio_unitario || 0), 0);
+    const rawBase = rawTaxable + rawExempt;
+    const taxableShare = rawBase > 0 ? rawTaxable / rawBase : itbis > 0 ? 1 : 0;
+    taxableBase = itbis > 0 ? Number((netBase * taxableShare).toFixed(2)) : 0;
+    exemptBase = Number((gross - taxableBase - itbis).toFixed(2));
+    if (exemptBase < 0) {
+      taxableBase = Number((gross - itbis).toFixed(2));
+      exemptBase = 0;
+    }
   }
 
   const idDoc: Record<string, string> = {
     TipoeCF: typeCode,
-    TipoIngresos: "01",
     TipoPago: paymentType(order),
   };
-  // E33, E44 y E47 no usan este indicador en los ejemplos oficiales de EF2.
-  if (!["33", "44", "47"].includes(typeCode)) {
+
+  // DGII XSD: 'TipoIngresos' SOLO está permitido en comprobantes de ingresos (E31..E34, E44..E47).
+  // En comprobantes de compras o egresos (E41, E43) el XSD lo rechaza si se envía.
+  if (!["41", "43"].includes(typeCode)) {
+    idDoc.TipoIngresos = "01";
+  }
+
+  // E33, E43, E44 y E47 no usan IndicadorMontoGravado según los esquemas oficiales de EF2/DGII
+  if (!["33", "43", "44", "47"].includes(typeCode)) {
     idDoc.IndicadorMontoGravado = config.itbis_incluido ? "1" : "0";
   }
+
   if (typeCode === "32") {
     idDoc.FechaLimitePago = dateDO(new Date(Date.now() + 30 * 86400000));
   } else if (sequenceExpiration && typeCode !== "34") {
     idDoc.FechaVencimientoSecuencia = dateDO(sequenceExpiration);
   }
+
   if (typeCode === "34") {
-    // Este indicador depende de la antigüedad del e-CF afectado, no del tipo
-    // de modificación seleccionado para la nota.
     idDoc.IndicadorNotaCredito = creditNoteAgeIndicator(reference?.date || order.creado_en);
   }
 
@@ -220,19 +284,21 @@ export function ordenToEF2Payload(
     },
   };
 
+  // E43 (Gastos Menores) no lleva sección Comprador
   const buyerTaxId = normalizeTaxId(customer?.cedula);
   const referencedType = String(reference?.ncf || "").substring(0, 3).toUpperCase();
   const isConsumerContext = typeCode === "32" || (["33", "34"].includes(typeCode) && referencedType === "E32");
-  const needsBuyer = typeCode !== "43" && (!isConsumerContext || gross >= 250000);
-  if (needsBuyer) {
-    if (!customer || (typeCode !== "47" && !validTaxId(buyerTaxId))) {
-      throw new Error(`El comprobante E${typeCode} requiere un RNC o cédula válido del comprador.`);
+  const needsBuyer = !["43"].includes(typeCode) && (!isConsumerContext || gross >= 250000 || typeCode === "41");
+
+  if (needsBuyer && customer) {
+    if (typeCode !== "47" && !validTaxId(buyerTaxId)) {
+      throw new Error(`El comprobante E${typeCode} requiere un RNC o cédula válido.`);
     }
     header.Comprador = {
       ...(typeCode === "47"
         ? { IdentificadorExtranjero: customer.cedula || customer.id }
         : { RNCComprador: buyerTaxId }),
-      RazonSocialComprador: `${customer.nombre || ""} ${customer.apellido || ""}`.trim(),
+      RazonSocialComprador: `${customer.nombre || ""} ${customer.apellido || ""}`.trim() || "Proveedor / Comprador",
       CorreoComprador: customer.email || undefined,
       DireccionComprador: customer.direccion || "República Dominicana",
       MunicipioComprador: "010100",
@@ -250,24 +316,54 @@ export function ordenToEF2Payload(
     };
   }
 
-  // EF2 define la Nota de Débito (E33) con totales simplificados. Aunque la
-  // orden original tenga ITBIS, el ajuste se remite como MontoExento para no
-  // enviar campos gravados que el esquema E33 no contempla.
-  const isDebitNote = typeCode === "33";
-  const totals: Record<string, string> = isDebitNote
-    ? { MontoExento: money(gross), MontoTotal: money(gross) }
-    : { MontoTotal: money(gross) };
-  if (!isDebitNote && (taxableBase > 0 || itbis > 0)) {
-    totals.MontoGravadoTotal = money(taxableBase);
-    totals.MontoGravadoI1 = money(taxableBase);
-    totals.ITBIS1 = "18";
-    totals.TotalITBIS = money(itbis);
-    totals.TotalITBIS1 = money(itbis);
+  // Estructuración exacta de Totales según tipo de e-CF
+  let totals: Record<string, string> = {};
+
+  if (isExpenseMinor || isDebitNote) {
+    totals = {
+      MontoExento: money(gross),
+      MontoTotal: money(gross),
+    };
+  } else if (isPurchaseE41) {
+    if (taxableBase > 0) {
+      const itbisVal = Number((taxableBase * 0.18).toFixed(2));
+      const isrVal = Number((taxableBase * 0.10).toFixed(2));
+      const totalVal = taxableBase + itbisVal;
+
+      totals = {
+        MontoGravadoTotal: money(taxableBase),
+        MontoGravadoI1: money(taxableBase),
+        ITBIS1: "18",
+        TotalITBIS: money(itbisVal),
+        TotalITBIS1: money(itbisVal),
+        MontoTotal: money(totalVal),
+        ValorPagar: money(totalVal),
+        TotalITBISRetenido: money(itbisVal),
+        TotalISRRetencion: money(isrVal),
+      };
+    } else {
+      totals = {
+        MontoExento: money(gross),
+        MontoTotal: money(gross),
+      };
+    }
+  } else {
+    totals = { MontoTotal: money(gross) };
+    if (taxableBase > 0 || itbis > 0) {
+      totals.MontoGravadoTotal = money(taxableBase);
+      totals.MontoGravadoI1 = money(taxableBase);
+      totals.ITBIS1 = "18";
+      totals.TotalITBIS = money(itbis);
+      totals.TotalITBIS1 = money(itbis);
+    }
+    if (exemptBase > 0) {
+      totals.MontoExento = money(exemptBase);
+    }
   }
-  if (!isDebitNote && exemptBase > 0) totals.MontoExento = money(exemptBase);
+
   header.Totales = totals;
 
-  const detailOrder = isDebitNote
+  const detailOrder = isDebitNote || isExpenseMinor
     ? {
         ...order,
         subtotal: gross,
@@ -281,7 +377,7 @@ export function ordenToEF2Payload(
     ECF: {
       Encabezado: header,
       DetallesItems: {
-        Item: buildLines(detailOrder, isDebitNote ? 0 : taxableBase, isDebitNote ? gross : exemptBase),
+        Item: buildLines(detailOrder, isDebitNote || isExpenseMinor ? 0 : taxableBase, isDebitNote || isExpenseMinor ? gross : exemptBase, typeCode),
       },
     },
   };
