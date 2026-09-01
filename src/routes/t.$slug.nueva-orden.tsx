@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
-import { supabase } from "@/lib/supabase";
+import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { motion } from "framer-motion";
@@ -156,7 +156,9 @@ export const Route = createFileRoute("/t/$slug/nueva-orden")({
 function isConnectivityFailure(error: unknown): boolean {
   if (typeof navigator !== "undefined" && !navigator.onLine) return true;
   const message = error instanceof Error ? error.message : String(error || "");
-  return /failed to fetch|networkerror|network request failed|load failed|connection (?:refused|reset)|err_(?:internet_disconnected|network_changed|connection)/i.test(message);
+  return /failed to fetch|networkerror|network request failed|load failed|connection (?:refused|reset)|err_(?:internet_disconnected|network_changed|connection)|jwt expired|token expired|session expired|unauthorized|401|auth|timeout|aborted|gateway|502|503|504/i.test(
+    message,
+  );
 }
 
 const OPCIONES_CREDITO = [
@@ -1955,8 +1957,8 @@ function getMarbeteColorStyle(colorName?: string) {
         ? cfg.tiempo_entrega_urgente || 3
         : cfg.tiempo_entrega_estandar || 24;
       const now = new Date();
-      now.setHours(now.getHours() + horasAdd);
-      deliveryDate.setHours(now.getHours(), now.getMinutes(), 0, 0);
+      // 0. Garantizar sesión de Supabase fresca antes de emisión
+      await ensureFreshSupabaseSession().catch(() => {});
 
       const freshFiscalConfig = fiscalConfigData || (await getECFConfig(tenant.id).catch(() => null));
       const isElectronic = Boolean(
@@ -2139,28 +2141,19 @@ function getMarbeteColorStyle(colorName?: string) {
             }
           } catch (fErr: any) {
             console.error("Error Fiscal:", fErr);
-            if (isConnectivityFailure(fErr)) {
-              ordenActualizada = {
-                ...orden,
-                ncf: undefined,
-                tipo_ecf: activeTipo,
-                ecf_status: "PENDING_OFFLINE_TRANSMISSION",
-                ncf_vencimiento: ncfVencimiento,
-              };
-              await saveOrden(ordenActualizada);
-              toast.warning("Sin conexión: se generó una pre-factura pendiente de transmisión.");
+            const isTransient = isConnectivityFailure(fErr);
+            ordenActualizada = {
+              ...orden,
+              ncf: undefined,
+              tipo_ecf: activeTipo,
+              ecf_status: "PENDING_OFFLINE_TRANSMISSION",
+              ncf_vencimiento: ncfVencimiento,
+            };
+            await saveOrden(ordenActualizada);
+            if (isTransient) {
+              toast.warning("Modo contingencia: Comprobante guardado como pendiente de transmisión automática con DGII.");
             } else {
-              ordenActualizada = {
-                ...orden,
-                ncf: undefined,
-                tipo_ecf: activeTipo,
-                ecf_status: "ERROR",
-                ncf_vencimiento: ncfVencimiento,
-              };
-              await saveOrden(ordenActualizada);
-              toast.error(`No se pudo emitir el e-CF: ${fErr?.message || "Error fiscal desconocido"}`, {
-                duration: 10000,
-              });
+              toast.info(`Orden guardada con éxito. Timbrado fiscal pendiente de transmisión: ${fErr?.message || "Servicio no disponible temporalmente"}`);
             }
           }
         }

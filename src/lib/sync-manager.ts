@@ -3,7 +3,7 @@
  * Procesa la cola de salida (Outbox) de IndexedDB hacia Supabase y EF2/DGII.
  */
 
-import { supabase } from "@/lib/supabase";
+import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
 import { offlineDB, type SyncOutboxItem } from "@/lib/offline-db";
 import {
   read,
@@ -413,6 +413,8 @@ class SyncManager {
 
     const activeTenantId = tenantId || this.getActiveTenantId();
     if (!activeTenantId) return { synced: 0, failed: 0 };
+
+    await ensureFreshSupabaseSession().catch(() => {});
 
     this.isProcessing = true;
     this.notifyStatusChange("syncing");

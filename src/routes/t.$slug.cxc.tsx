@@ -1070,7 +1070,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
                 console.error("Error Fiscal en Cobrar Todo:", fErr);
                 const message = String(fErr?.message || fErr || '');
                 const isConnectivityFailure = typeof navigator !== "undefined" && !navigator.onLine
-                  || /failed to fetch|network|connection|timeout|timed out|load failed/i.test(message);
+                  || /failed to fetch|network|connection|timeout|timed out|load failed|jwt expired|token expired|session expired|unauthorized|401|auth|gateway|502|503|504/i.test(message);
                 finalEcfStatus = isConnectivityFailure ? "PENDING_OFFLINE_TRANSMISSION" : "ERROR";
                 toast.error(`Error al generar comprobante fiscal para orden #${o.numero}: ` + fErr.message);
               }

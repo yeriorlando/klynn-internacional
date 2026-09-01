@@ -1,4 +1,4 @@
-import { supabase } from "./supabase";
+import { supabase, ensureFreshSupabaseSession } from "./supabase";
 import { createClient } from "@supabase/supabase-js";
 import { offlineDB } from "./offline-db";
 import { syncManager } from "./sync-manager";
@@ -3213,6 +3213,9 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   const realId = resolveTenantId(tenant_id);
   const d = new Date();
   const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  // 0. Refrescar sesión de Supabase si está por expirar
+  await ensureFreshSupabaseSession().catch(() => {});
 
   // 1. Recopilar números locales existentes (localStorage y IndexedDB outbox)
   const localSeqs: number[] = [];

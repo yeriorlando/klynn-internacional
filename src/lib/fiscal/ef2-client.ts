@@ -5,7 +5,7 @@
  * nunca se devuelve al navegador; solamente se permite enviar una credencial
  * explícita al probarla antes de guardarla.
  */
-import { supabase } from "@/lib/supabase";
+import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
 export {
   EF2_BASE_URL,
   EF2_DEFAULT_TEST_USERNAME,
@@ -212,11 +212,20 @@ export class EF2Client {
   constructor(private readonly config: EF2ClientConfig = {}) {}
 
   private async execute<T = any>(action: EF2Action, payload: any = {}): Promise<T> {
+    await ensureFreshSupabaseSession().catch(() => {});
+    const { data: sessionData } = await supabase.auth.getSession();
+    const headers: Record<string, string> = {};
+    if (sessionData?.session?.access_token) {
+      headers.Authorization = `Bearer ${sessionData.session.access_token}`;
+    }
+
     const credentials =
       action === "verificar_token" && (this.config.token || this.config.username)
         ? { token: this.config.token, username: this.config.username }
         : undefined;
+
     const { data, error } = await supabase.functions.invoke("ef2-proxy", {
+      headers,
       body: {
         action,
         payload,
@@ -225,7 +234,36 @@ export class EF2Client {
         credentials,
       },
     });
-    if (error) throw new Error(await proxyErrorMessage(error));
+
+    if (error) {
+      const errMsg = await proxyErrorMessage(error);
+      if (/sesi[oó]n (?:inv[aá]lida|expirada|requerida)|jwt expired|token expired/i.test(errMsg)) {
+        try {
+          const refreshed = await supabase.auth.refreshSession();
+          if (refreshed.data.session?.access_token) {
+            const retryHeaders = { Authorization: `Bearer ${refreshed.data.session.access_token}` };
+            const retryRes = await supabase.functions.invoke("ef2-proxy", {
+              headers: retryHeaders,
+              body: {
+                action,
+                payload,
+                tenantId: this.config.tenantId,
+                environment: this.config.environment,
+                credentials,
+              },
+            });
+            if (!retryRes.error && retryRes.data) {
+              if (retryRes.data.error && retryRes.data.success === false) {
+                throw new Error(retryRes.data.message || retryRes.data.error);
+              }
+              return retryRes.data as T;
+            }
+          }
+        } catch {}
+      }
+      throw new Error(errMsg);
+    }
+
     if (data?.error && data?.success === false) throw new Error(data.message || data.error);
     return data as T;
   }

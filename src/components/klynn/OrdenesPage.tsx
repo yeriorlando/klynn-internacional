@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Switch } from "@/components/ui/switch";
 import {
-  getOrdenes, saveOrden, getClientes, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
+  getOrdenes, saveOrden, getClientes, getClienteById, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
   type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant, type EstanteriaZona,
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
   updateOrdenEstado, can
@@ -36,7 +36,7 @@ import {
 import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
 import { toast } from "sonner";
 import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
-import { supabase } from "@/lib/supabase";
+import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -1497,6 +1497,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <tbody>
               {paginatedOrders.map((o) => {
                 const c = clientes.find((x) => x.id === o.cliente_id);
+                const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
+                const isAcceptedECF = isECFOrder && (/ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
+                const isRejectedECF = isECFOrder && (/RECHAZ|ERROR/i.test(o.ecf_status || "") || o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
+                const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
+
                 return (
                   <tr 
                     key={o.id} 
@@ -1509,14 +1514,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     }}
                   >
                     <td className="px-4 py-3">
-                      {(() => {
-                        const isECFOrder = !!(o.tipo_ecf?.startsWith("E") || o.ncf?.startsWith("E") || o.ecf_status === "PENDING_OFFLINE_TRANSMISSION");
-                        const isAcceptedECF = isECFOrder && (/ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID/i.test(o.ecf_status || "") || o.ecf_status === "ACCEPTED" || o.ecf_status === "ACCEPTED_WITH_OBSERVATIONS");
-                        const isRejectedECF = isECFOrder && (/RECHAZ|ERROR/i.test(o.ecf_status || "") || o.ecf_status === "REJECTED" || o.ecf_status === "ERROR");
-                        const isPendingECF = isECFOrder && !isAcceptedECF && !isRejectedECF;
-
-                        return (
-                          <div className="flex items-center gap-3">
+                      <div className="flex items-center gap-3">
                             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#eef2f6] text-[#2c4e82] dark:bg-slate-800 dark:text-blue-400 animate-in fade-in zoom-in duration-200 border border-[#d6e0ea]/50">
                               <Receipt className="h-5 w-5" />
                             </div>
@@ -1572,8 +1570,6 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                               </span>
                             </div>
                           </div>
-                        );
-                      })()}
                     </td>
                     <td className="px-4 py-3 text-center">
                       {o.estado === "ANULADA" ? (
@@ -1810,7 +1806,71 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 </>
                               )}
    
-                              {o.estado !== "ANULADA" && (
+                                 {o.estado !== "ANULADA" && (isPendingECF || isRejectedECF) && (
+                                 <button
+                                   onClick={async () => {
+                                     setOpenMenuId(null);
+                                     toast.info(`Reintentando timbrado DGII para #${o.numero}...`);
+                                     try {
+                                       await ensureFreshSupabaseSession();
+                                       const cliente = clientes.find((x) => x.id === o.cliente_id) || (o.cliente_id ? await getClienteById(o.cliente_id) : null);
+                                       const ordenLimpia: Orden = {
+                                         ...o,
+                                         id: `${o.id}:retry:${Date.now()}`,
+                                         ncf: undefined,
+                                         ecf_status: "PENDING_OFFLINE_TRANSMISSION",
+                                       };
+                                       const res = await emitirECF(
+                                         ordenLimpia,
+                                         cliente,
+                                         ecfConfig?.pronesoft_tenant_id,
+                                         tenant.config,
+                                         tenant,
+                                         o.tipo_ecf || "E32"
+                                       );
+                                       const legalStatus = String(res.legal_status || res.document?.legal_status || "").toUpperCase();
+                                       const accepted = Boolean(res.encf) && !/RECHAZ|ERROR|INVALID/.test(legalStatus);
+                                       const updated = {
+                                         ...o,
+                                         ncf: res.encf,
+                                         tipo_ecf: o.tipo_ecf || "E32",
+                                         ecf_status: accepted ? "ACCEPTED" : "REJECTED",
+                                         ecf_id: res.document?.id,
+                                         ecf_qr: res.stamp_url || (res.document as any)?.document_stamp_url || "",
+                                         ecf_security_code: res.security_code || "",
+                                         ecf_signature_date: (res.document as any)?.signature_date || new Date().toISOString(),
+                                       };
+                                       await saveOrden(updated);
+                                       await queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+                                       await queryClient.refetchQueries({ queryKey: ["ordenes", tenantId] });
+                                       if (accepted) {
+                                          toast.success(`Comprobante ${res.encf} emitido y aceptado por DGII ✓`);
+                                        } else {
+                                          const rawDgii = res.document?.dgii_response as any;
+                                          const dgiiMensaje =
+                                            rawDgii?.dgii?.mensaje ||
+                                            rawDgii?.dgii_info?.mensaje ||
+                                            rawDgii?.mensaje ||
+                                            rawDgii?.error ||
+                                            rawDgii?.message ||
+                                            res.message ||
+                                            "";
+                                          const motivo = dgiiMensaje ? `: ${dgiiMensaje}` : "";
+                                          toast.error(`Comprobante ${res.encf} rechazado por DGII${motivo}`, {
+                                            duration: 10000,
+                                          });
+                                        }
+                                     } catch (err: any) {
+                                       toast.error(`Error al retransmitir e-CF: ${err?.message || "Error desconocido"}`);
+                                     }
+                                   }}
+                                   className="text-emerald-600 dark:text-emerald-400 font-bold"
+                                 >
+                                   <RefreshCw className="h-4 w-4" /> Reintentar Timbrado DGII
+                                 </button>
+                               )}
+
+                               {o.estado !== "ANULADA" && (
                                 <>
                                   {o.saldo > 0 && isAuthorized && (
                                     <button 
@@ -3995,7 +4055,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             console.error("Error Fiscal al cobrar:", fErr);
             const message = String(fErr?.message || fErr || '');
             const isConnectivityFailure = typeof navigator !== "undefined" && !navigator.onLine
-              || /failed to fetch|network|connection|timeout|timed out|load failed/i.test(message);
+              || /failed to fetch|network|connection|timeout|timed out|load failed|jwt expired|token expired|session expired|unauthorized|401|auth|gateway|502|503|504/i.test(message);
             finalNCF = undefined;
             finalTipoECF = tipoECFDefault;
             finalEcfStatus = isConnectivityFailure ? "PENDING_OFFLINE_TRANSMISSION" : "ERROR";
