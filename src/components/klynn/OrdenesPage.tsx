@@ -2123,8 +2123,18 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               onClick={() => setConfirmarAnulacion(true)}
               disabled={motivoAnular.trim().length < 5 || isAnulando}
             >
-              {isAnulando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-              <span>{isAnulando ? "Procesando con DGII…" : "Anular orden"}</span>
+              {isAnulando ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <XCircle className="h-4 w-4" />
+              )}
+              <span>
+                {isAnulando
+                  ? anular?.ncf
+                    ? "Procesando con DGII…"
+                    : "Anulando orden…"
+                  : "Anular orden"}
+              </span>
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2159,7 +2169,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               className="bg-rose-600 text-white hover:bg-rose-700 gap-2"
             >
               {isAnulando ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}
-              {isAnulando ? "Enviando a EF2/DGII…" : "Sí, anular y emitir E34"}
+              {isAnulando
+                ? anular?.ncf
+                  ? "Enviando a EF2/DGII…"
+                  : "Anulando orden…"
+                : anular?.ncf
+                  ? "Sí, anular y emitir E34"
+                  : "Sí, anular orden"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

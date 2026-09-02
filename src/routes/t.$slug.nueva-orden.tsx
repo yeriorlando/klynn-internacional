@@ -698,10 +698,19 @@ function NuevaOrdenPage() {
       .slice(0, 5);
   }, [ordenes]);
 
-  const isElectronic = Boolean(
+  const activePlan = useMemo(() => plans.find((p) => p.id === tenant?.plan_id), [plans, tenant?.plan_id]);
+  const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
+
+  const isElectronic = hasFiscalModule && Boolean(
     fiscalConfigData?.is_active || 
     tenant.config?.modo_facturacion === "electronica"
   );
+  const isTraditional = hasFiscalModule && Boolean(
+    tenant.config?.modo_facturacion === "tradicional" ||
+    tenant.config?.ncf_facturacion_activa
+  );
+  const isFiscalActive = hasFiscalModule && (isElectronic || isTraditional);
+
   useEffect(() => {
     if (isElectronic) {
       setTipoECF((prev) => (prev && prev.startsWith("E") ? prev : "E32"));
@@ -1615,7 +1624,7 @@ function getMarbeteColorStyle(colorName?: string) {
   const subtotalBruto = subtotalGravableBase + subtotalExentoBase + costoServicios;
   const recargo = recargoTotal;
 
-  if ((cfg.ncf_facturacion_activa || cfg.modo_facturacion === "tradicional" || cfg.modo_facturacion === "electronica" || isElectronic) && aplicarItbis && itbisRate > 0) {
+  if (isFiscalActive && aplicarItbis && itbisRate > 0) {
     if (cfg.itbis_incluido) {
       // ITBIS ya está en los precios.
       // Calculamos cuánto de la base gravable es ITBIS
@@ -1961,7 +1970,7 @@ function getMarbeteColorStyle(colorName?: string) {
       await ensureFreshSupabaseSession().catch(() => {});
 
       const freshFiscalConfig = fiscalConfigData || (await getECFConfig(tenant.id).catch(() => null));
-      const isElectronic = Boolean(
+      const isElectronic = hasFiscalModule && Boolean(
         freshFiscalConfig?.is_active ||
         tenant.config?.modo_facturacion === "electronica" ||
         fiscalConfigData?.is_active
@@ -1981,7 +1990,7 @@ function getMarbeteColorStyle(colorName?: string) {
       let ncfVencimiento: string | undefined = undefined;
       let finalNCF: string | undefined = undefined;
 
-      const isFiscalActive = Boolean(
+      const isFiscalActive = hasFiscalModule && Boolean(
         cfg.ncf_facturacion_activa ||
         cfg.modo_facturacion === "tradicional" ||
         cfg.modo_facturacion === "electronica" ||
@@ -4564,7 +4573,7 @@ function getMarbeteColorStyle(colorName?: string) {
                         </div>
 
                         {/* Divider if ITBIS is active */}
-                        {(cfg.ncf_facturacion_activa || cfg.modo_facturacion === "tradicional" || cfg.modo_facturacion === "electronica") && (
+                        {isFiscalActive && (
                           <>
                             <div className="h-px bg-border/60" />
                             {/* Option 3: ITBIS */}

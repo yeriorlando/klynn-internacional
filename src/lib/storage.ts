@@ -4610,28 +4610,36 @@ export function getNextRenewalDate(
   }
 
   const now = new Date(fromDate);
-  now.setHours(0, 0, 0, 0);
+  const nowZero = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 0, 0, 0, 0);
 
   const start = new Date(parsed);
-  start.setHours(0, 0, 0, 0);
-
-  if (start.getTime() > now.getTime()) {
-    return start;
-  }
+  const startZero = new Date(start.getFullYear(), start.getMonth(), start.getDate(), 0, 0, 0, 0);
 
   const targetDay = start.getDate();
-  let candidateYear = now.getFullYear();
-  let candidateMonth = now.getMonth();
 
   const makeDate = (y: number, m: number, d: number) => {
     const daysInMonth = new Date(y, m + 1, 0).getDate();
     const clampedDay = Math.min(d, daysInMonth);
-    return new Date(y, m, clampedDay, 23, 59, 59, 999);
+    return new Date(y, m, clampedDay, 0, 0, 0, 0);
   };
 
+  // Si la fecha de inicio es estrictamente en el futuro
+  if (startZero.getTime() > nowZero.getTime()) {
+    return makeDate(start.getFullYear(), start.getMonth() + 1, targetDay);
+  }
+
+  // Si la fecha de inicio es HOY (recién configurado o nuevo plan que arranca hoy)
+  if (startZero.getTime() === nowZero.getTime()) {
+    return makeDate(now.getFullYear(), now.getMonth() + 1, targetDay);
+  }
+
+  // Si la fecha de inicio fue en el pasado:
+  let candidateYear = now.getFullYear();
+  let candidateMonth = now.getMonth();
   let candidate = makeDate(candidateYear, candidateMonth, targetDay);
 
-  if (candidate.getTime() <= now.getTime()) {
+  // Si el día de corte de este mes ya llegó o ya pasó (<= hoy), la próxima renovación es el próximo mes
+  if (candidate.getTime() <= nowZero.getTime()) {
     candidateMonth += 1;
     if (candidateMonth > 11) {
       candidateMonth = 0;

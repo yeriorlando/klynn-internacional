@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil,
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
@@ -24,6 +24,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DatePicker } from "@/components/ui/date-picker";
 import {
   getTenants,
   getTenantBranchName,
@@ -86,6 +87,18 @@ import {
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+
+export interface FleetOnlineSession {
+  tenant_id: string;
+  tenant_nombre: string;
+  tenant_slug: string;
+  sucursal: string;
+  empleado_id: string;
+  empleado_nombre: string;
+  empleado_email: string;
+  empleado_rol: string;
+  online_at: string;
+}
 
 export const Route = createFileRoute("/admin")({
   head: () => ({ meta: [{ title: "Super Admin — Klynn" }] }),
@@ -209,6 +222,41 @@ function AdminPage() {
   const [fiscalEnvFilter, setFiscalEnvFilter] = useState<'all' | 'sandbox' | 'production'>('sandbox');
   const [testingEf2, setTestingEf2] = useState(false);
   const [ef2Status, setEf2Status] = useState<any>(null);
+
+  // Monitoreo de presencia en tiempo real de lavanderías (Fleet Telemetry)
+  const [onlineSessions, setOnlineSessions] = useState<FleetOnlineSession[]>([]);
+  const [openOnlineMonitor, setOpenOnlineMonitor] = useState(false);
+
+  useEffect(() => {
+    const channel = supabase.channel("klynn-fleet-presence");
+
+    channel
+      .on("presence", { event: "sync" }, () => {
+        const state = channel.presenceState();
+        const active: FleetOnlineSession[] = [];
+        Object.values(state).forEach((presences: any) => {
+          if (Array.isArray(presences)) {
+            presences.forEach((p: any) => {
+              if (p && p.tenant_id) {
+                active.push(p as FleetOnlineSession);
+              }
+            });
+          }
+        });
+        setOnlineSessions(active);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
+
+  const onlineTenantIds = useMemo(() => {
+    return new Set(onlineSessions.map((s) => s.tenant_id));
+  }, [onlineSessions]);
+
+  const uniqueOnlineTenantsCount = onlineTenantIds.size;
 
   // Standby Hetzner
   const [isSyncingStandby, setIsSyncingStandby] = useState(false);
@@ -826,7 +874,7 @@ function AdminPage() {
         <h1 className="font-display text-4xl">Panel central Klynn</h1>
         <p className="mt-1 text-muted-foreground">Administra todas las lavanderías y los planes SaaS.</p>
 
-        <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <KPI 
             title="MRR Estimado" 
             value={formatRD(mrrEstimado)} 
@@ -848,6 +896,28 @@ function AdminPage() {
             icon={Building2} 
             variant="amber" 
           />
+          <div 
+            onClick={() => setOpenOnlineMonitor(true)}
+            className="cursor-pointer group"
+          >
+            <Card className="p-3.5 sm:p-5 h-full rounded-2xl bg-emerald-500/10 border border-emerald-500/25 hover:border-emerald-500/50 hover:bg-emerald-500/[0.16] shadow-2xs hover:shadow-md transition-all">
+              <div className="flex items-start justify-between gap-1.5">
+                <div className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-bold flex items-center gap-1.5">
+                  <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                  <span>En Línea Ahora</span>
+                </div>
+                <Activity className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400 group-hover:scale-110 transition-transform" />
+              </div>
+              <div className="mt-1.5 sm:mt-2 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl lg:text-3xl flex items-baseline gap-1.5">
+                <span>{uniqueOnlineTenantsCount}</span>
+                <span className="text-xs sm:text-sm font-semibold text-muted-foreground">/ {tenants.length}</span>
+              </div>
+              <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
+                <span>{onlineSessions.length} {onlineSessions.length === 1 ? 'terminal activa' : 'terminales activas'}</span>
+                <span className="text-[10px] underline opacity-80 group-hover:opacity-100">Ver monitor →</span>
+              </div>
+            </Card>
+          </div>
           <KPI 
             title="Órdenes Totales" 
             value={totalOrdenes.toLocaleString("es-DO")} 
@@ -1140,6 +1210,12 @@ function AdminPage() {
                                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                       {getTenantBranchName(t)}
                                     </span>
+                                    {onlineTenantIds.has(t.id) && (
+                                      <span className="inline-flex items-center gap-1 text-[9.5px] font-black text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/70 px-1.5 py-0.2 rounded-md border border-emerald-300 dark:border-emerald-700 shadow-2xs">
+                                        <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                        <span>En línea</span>
+                                      </span>
+                                    )}
                                     {isSelected && (
                                       <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />
                                     )}
@@ -1468,8 +1544,14 @@ function AdminPage() {
 
                         <div className="min-w-0 flex-1">
                           <div className="flex items-center justify-between gap-1.5">
-                            <h3 className="font-bold text-foreground text-sm tracking-tight truncate flex items-center gap-1.5">
-                              <span>{t.nombre}</span>
+                            <h3 className="font-bold text-foreground text-sm tracking-tight truncate flex items-center gap-1.5 flex-wrap">
+                              <span className="truncate">{t.nombre}</span>
+                              {onlineTenantIds.has(t.id) && (
+                                <span className="inline-flex items-center gap-1 text-[9px] font-black text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/70 px-1.5 py-0.2 rounded-full border border-emerald-300 dark:border-emerald-700 shadow-2xs">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-ping" />
+                                  <span>En línea</span>
+                                </span>
+                              )}
                               {isSelected && <span className="h-2 w-2 rounded-full bg-primary shrink-0 animate-pulse" />}
                             </h3>
                             {t.estado === "ACTIVO" ? (
@@ -3454,12 +3536,19 @@ function AdminPage() {
                           <Calendar className="h-3 w-3 text-primary" /> Fecha Inicial / Día de Corte *
                         </Label>
                         <div className="relative">
-                          <Input
-                            id="edit-plan-start-date"
-                            type="date"
-                            className="rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-semibold"
-                            value={planFechaInicio}
-                            onChange={(e) => setPlanFechaInicio(e.target.value)}
+                          <DatePicker
+                            date={planFechaInicio ? parseDateSafe(planFechaInicio) || undefined : undefined}
+                            setDate={(newDate) => {
+                              if (newDate) {
+                                const yyyy = newDate.getFullYear();
+                                const mm = String(newDate.getMonth() + 1).padStart(2, "0");
+                                const dd = String(newDate.getDate()).padStart(2, "0");
+                                setPlanFechaInicio(`${yyyy}-${mm}-${dd}`);
+                              } else {
+                                setPlanFechaInicio("");
+                              }
+                            }}
+                            className="rounded-xl h-10 text-xs sm:text-sm bg-surface border-border/60 focus:ring-1 focus:ring-primary/20 font-bold"
                           />
                         </div>
                         {(() => {
@@ -3785,6 +3874,16 @@ function AdminPage() {
         </DialogContent>
       </Dialog>
 
+      <OnlineMonitorDialog 
+        open={openOnlineMonitor} 
+        onOpenChange={setOpenOnlineMonitor} 
+        sessions={onlineSessions} 
+        tenants={tenants} 
+        onNavigateToTenant={(t) => {
+          setActiveTenant(t.slug);
+          navigate({ to: `/t/${t.slug}/nueva-orden` });
+        }} 
+      />
       <PlanDialog open={openPlan} onOpenChange={setOpenPlan} initial={editingPlan} onSaved={() => { setTick((r) => r + 1); setOpenPlan(false); }} />
       <BankDetailsDialog open={openBank} onOpenChange={setOpenBank} config={globalConfig} onSaved={() => { setTick((r) => r + 1); setOpenBank(false); }} />
       <LicenciaDialog open={openLicenciaModal} onOpenChange={setOpenLicenciaModal} initial={editingLicencia} onSaved={() => { setTick(r => r + 1); setOpenLicenciaModal(false); }} />
@@ -4028,6 +4127,154 @@ function KPI({
       </div>
       {sub && <div className={`mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate ${styles.sub}`}>{sub}</div>}
     </Card>
+  );
+}
+
+function OnlineMonitorDialog({
+  open,
+  onOpenChange,
+  sessions,
+  tenants,
+  onNavigateToTenant,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  sessions: FleetOnlineSession[];
+  tenants: Tenant[];
+  onNavigateToTenant: (tenant: Tenant) => void;
+}) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, { tenant?: Tenant; sessions: FleetOnlineSession[] }>();
+    sessions.forEach((s) => {
+      const existing = map.get(s.tenant_id) || { tenant: tenants.find((t) => t.id === s.tenant_id), sessions: [] };
+      existing.sessions.push(s);
+      map.set(s.tenant_id, existing);
+    });
+    return Array.from(map.entries());
+  }, [sessions, tenants]);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl rounded-3xl p-6 sm:p-7 max-h-[85vh] flex flex-col">
+        <DialogHeader className="border-b pb-4">
+          <DialogTitle className="text-xl font-black font-display flex items-center gap-2.5 text-foreground pr-8">
+            <span className="h-3 w-3 rounded-full bg-emerald-500 animate-ping shrink-0" />
+            <span>Monitor de Lavanderías en Vivo</span>
+            <Badge className="bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 text-xs font-black ml-auto mr-8 sm:mr-10">
+              {grouped.length} {grouped.length === 1 ? 'lavandería en línea' : 'lavanderías en línea'}
+            </Badge>
+          </DialogTitle>
+          <DialogDescription className="text-xs text-muted-foreground">
+            Telemetría en tiempo real de terminales, cajeros y personal operando actualmente en la plataforma.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="flex-1 overflow-y-auto py-3 space-y-3 pr-1">
+          {grouped.length === 0 ? (
+            <div className="py-12 text-center text-muted-foreground text-sm space-y-2">
+              <WifiOff className="h-10 w-10 mx-auto text-slate-400 opacity-60" />
+              <p className="font-bold">No hay lavanderías conectadas en este momento</p>
+              <p className="text-xs text-slate-500 max-w-xs mx-auto">
+                Cuando un cajero o administrador abra Klynn en su terminal o celular, aparecerá aquí automáticamente.
+              </p>
+            </div>
+          ) : (
+            grouped.map(([tenantId, { tenant, sessions: tenantSessions }]) => {
+              const displayName = tenant?.nombre || tenantSessions[0]?.tenant_nombre || "Lavandería";
+              return (
+                <div 
+                  key={tenantId}
+                  className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-xs space-y-3 transition-all hover:border-emerald-500/40"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="relative shrink-0">
+                        {tenant?.logo_url ? (
+                          <img 
+                            src={tenant.logo_url} 
+                            alt={displayName} 
+                            className="h-11 w-11 rounded-full object-contain border bg-white p-0.5" 
+                          />
+                        ) : (
+                          <div 
+                            className="h-11 w-11 rounded-full flex items-center justify-center text-white font-black text-sm shadow-xs"
+                            style={{ backgroundColor: tenant?.color_primario || "#0891b2" }}
+                          >
+                            {displayName.charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2 flex-wrap">
+                          <span className="truncate">{displayName}</span>
+                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full">
+                            {tenantSessions.length} {tenantSessions.length === 1 ? 'conexión' : 'conexiones'}
+                          </span>
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                          {tenant?.config?.nombre_sucursal || tenantSessions[0]?.sucursal || "Sucursal Principal"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {tenant && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => {
+                          onOpenChange(false);
+                          onNavigateToTenant(tenant);
+                        }}
+                        className="rounded-xl font-bold text-xs h-8 gap-1.5 border-emerald-300 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950 cursor-pointer shadow-xs shrink-0"
+                      >
+                        <span>Entrar</span>
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Button>
+                    )}
+                  </div>
+
+                  {/* Terminales / Sesiones activas de este tenant */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-emerald-500/15">
+                    {tenantSessions.map((session, idx) => (
+                      <div 
+                        key={idx}
+                        className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs"
+                      >
+                        <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                          <Users className="h-3.5 w-3.5" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-bold text-foreground truncate flex items-center gap-1.5">
+                            <span className="truncate">{session.empleado_nombre || "Usuario"}</span>
+                            <Badge variant="outline" className="text-[9px] px-1 py-0 font-extrabold uppercase">
+                              {session.empleado_rol || "Cajero"}
+                            </Badge>
+                          </div>
+                          <div className="text-[10px] text-muted-foreground truncate">
+                            Conectado: {new Date(session.online_at).toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" })}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        <DialogFooter className="border-t pt-3">
+          <Button 
+            variant="outline" 
+            onClick={() => onOpenChange(false)} 
+            className="rounded-xl h-9 text-xs font-bold w-full sm:w-auto"
+          >
+            Cerrar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -4712,7 +4959,17 @@ function LicenciaDialog({ open, onOpenChange, initial, onSaved }: {
               {frecuencia !== "permanente" && (
                 <div className="space-y-2">
                   <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">Fecha de Expiración</Label>
-                  <Input type="date" value={f.expira_en?.substring(0, 10) || ""} onChange={(e) => setF({ ...f, expira_en: new Date(e.target.value).toISOString() })} className="h-11 rounded-xl" />
+                  <DatePicker
+                    date={f.expira_en ? parseDateSafe(f.expira_en) || new Date(f.expira_en) : undefined}
+                    setDate={(newDate) => {
+                      if (newDate) {
+                        setF({ ...f, expira_en: newDate.toISOString() });
+                      } else {
+                        setF({ ...f, expira_en: undefined });
+                      }
+                    }}
+                    className="h-11 rounded-xl bg-surface font-semibold"
+                  />
                 </div>
               )}
             </div>

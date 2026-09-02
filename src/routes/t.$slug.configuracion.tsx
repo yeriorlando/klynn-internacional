@@ -33,7 +33,7 @@ import {
   type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
-import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA, consultarRNC, isECFReady } from "@/lib/fiscal";
+import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA, consultarRNC, isECFReady, syncSequencesEF2 } from "@/lib/fiscal";
 import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -4120,6 +4120,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
 
   async function updateCfg(c: Partial<TenantConfig>) {
     const next: Tenant = { ...tenant, config: { ...cfg, ...c } } as Tenant;
+    onTenantUpdate?.(next);
     await saveTenant(next);
     toast.success("Ajustes fiscales actualizados");
   }
@@ -4224,7 +4225,10 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
               />
             </Field>
 
-            <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+            <div 
+              onClick={() => updateCfg({ itbis_incluido: !cfg.itbis_incluido })}
+              className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer select-none"
+            >
               <div className="flex items-center gap-3">
                 <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
                   <Receipt className="h-4.5 w-4.5" />
@@ -4234,7 +4238,11 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                   <p className="text-[11px] text-muted-foreground mt-0.5">Desglosar internamente el impuesto del total.</p>
                 </div>
               </div>
-              <Switch checked={cfg.itbis_incluido} onCheckedChange={(v) => updateCfg({ itbis_incluido: v })} />
+              <Switch 
+                checked={Boolean(cfg.itbis_incluido)} 
+                onCheckedChange={(v) => updateCfg({ itbis_incluido: v })} 
+                onClick={(e) => e.stopPropagation()}
+              />
             </div>
           </div>
         </Card>
@@ -4766,41 +4774,17 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       onClick={async () => {
                         try {
                           toast.info("Consultando secuencias en EF2 API...");
-                          const client = getEF2Client({
-                            tenantId: tenant.id,
-                            environment: assignedEnvironment,
-                          });
-                          const res = await client.consultarSecuencias();
-                          const items = res?.data || (Array.isArray(res) ? res : []);
-                          if (Array.isArray(items) && items.length > 0) {
-                            let count = 0;
-                            for (const item of items) {
-                              const tipoCodigo = String(item.tipo_codigo || item.prefijo || "E32").toUpperCase();
-                              const formattedType = tipoCodigo.startsWith("E") ? tipoCodigo : `E${tipoCodigo}`;
-                              const existing = sequences.find(s => s.tipo_ecf === formattedType);
-                              await saveECFSequence({
-                                id: existing?.id || crypto.randomUUID(),
-                                ef2_sequence_id: item.id,
-                                tenant_id: tenant.id,
-                                tipo_ecf: formattedType,
-                                prefijo: 'E',
-                                valor_inicial: item.desde ?? 1,
-                                valor_final: item.hasta ?? 100,
-                                valor_actual: item.secuencia_actual ?? 0,
-                                expiration_date: item.fecha_vencimiento ? new Date(item.fecha_vencimiento).toISOString().split('T')[0] : undefined,
-                                is_active: Boolean(item.estado),
-                                recibir_alertas: existing?.recibir_alertas ?? false,
-                                alerta_limite: existing?.alerta_limite ?? 50
-                              });
-                              count++;
-                            }
-                            toast.success(`Se sincronizaron ${count} secuencias desde EF2 API ✓`);
+                          const ranges = await syncSequencesEF2(tenant.id);
+                          await queryClient.invalidateQueries({ queryKey: ["ecf-sequences", tenant.id] });
+                          if (Array.isArray(ranges) && ranges.length > 0) {
+                            toast.success(`Se sincronizaron ${ranges.length} secuencias desde EF2 API ✓`);
                             onRefresh();
                           } else {
-                            toast.info("Secuencias locales al día con EF2 API");
+                            toast.warning("EF2 no devolvió secuencias para esta empresa/token. Verifica que estén creadas en el portal de EF2.");
                           }
                         } catch (e: any) {
-                          toast.info("Secuencias locales al día con el servidor fiscal");
+                          console.error("Error sincronizando secuencias EF2:", e);
+                          toast.error(e?.message || "Error al sincronizar secuencias con EF2");
                         }
                       }}
                     >

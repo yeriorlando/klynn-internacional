@@ -637,6 +637,47 @@ export function TenantShell() {
     };
   }, [tenantId, user?.empleado?.rol]);
 
+  // Monitoreo de presencia en tiempo real para Super Admin (/admin)
+  useEffect(() => {
+    if (!tenantId || tenantId === "__loading__" || !user?.empleado?.id || user.empleado.id === "__loading__") {
+      return;
+    }
+
+    const presenceKey = `${tenantId}:${user.empleado.id}`;
+    const presenceChannel = supabase.channel("klynn-fleet-presence", {
+      config: {
+        presence: {
+          key: presenceKey,
+        },
+      },
+    });
+
+    presenceChannel.subscribe(async (status) => {
+      if (status === "SUBSCRIBED") {
+        try {
+          await presenceChannel.track({
+            tenant_id: tenantId,
+            tenant_nombre: user.tenant.nombre,
+            tenant_slug: user.tenant.slug,
+            sucursal: user.tenant.config?.nombre_sucursal || "Principal",
+            empleado_id: user.empleado.id,
+            empleado_nombre: user.empleado.nombre,
+            empleado_email: user.empleado.email,
+            empleado_rol: user.empleado.rol,
+            online_at: new Date().toISOString(),
+          });
+        } catch (err) {
+          console.warn("Aviso al registrar presencia de lavandería:", err);
+        }
+      }
+    });
+
+    return () => {
+      presenceChannel.untrack().catch(() => {});
+      supabase.removeChannel(presenceChannel);
+    };
+  }, [tenantId, user?.empleado?.id, user?.empleado?.nombre, user?.empleado?.rol, user?.tenant?.nombre, user?.tenant?.slug, user?.tenant?.config?.nombre_sucursal]);
+
   // Protección de rutas — DEBE estar antes del return condicional
   useEffect(() => {
     if (!user || user.tenant.id === "__loading__") return;
