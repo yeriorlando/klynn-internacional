@@ -3718,7 +3718,7 @@ function getMarbeteColorStyle(colorName?: string) {
               <div className="space-y-1">
                 <div className="flex justify-between text-xs text-muted-foreground font-bold">
                   <span>SUBTOTAL</span>
-                  <span>{formatRD(subtotalBruto)}</span>
+                  <span>{formatRD(subtotal)}</span>
                 </div>
                 {esUrgente && recargoTotal > 0 && (
                   <div className="flex justify-between text-xs text-rose-600 font-bold">
