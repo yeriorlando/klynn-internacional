@@ -1,5 +1,5 @@
 import type { Orden, Tenant, Empleado, Cliente, Servicio } from "@/lib/storage";
-import { formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES } from "@/lib/storage";
+import { formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled } from "@/lib/storage";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ClipboardList,
@@ -93,7 +93,11 @@ export function Ticket({
 
   const vuelto = pagoRecibido && pagoRecibido > orden.total ? pagoRecibido - orden.total : 0;
 
-  // Detección de comprobante electrónico (e-CF)
+  const hasFiscalModule = isModuleEnabled(tenant, "facturacion_fiscal");
+  // Se muestra la columna y fila de ITBIS si la orden tiene ITBIS cobrado (preservando órdenes históricas)
+  const mostrarColumnaItbis = Boolean(orden.itbis && orden.itbis > 0);
+
+  // Detección de comprobante electrónico (e-CF): respeta órdenes históricas ya emitidas
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
   const isCreditNote = Boolean(orden.nota_credito_ncf);
   const isDebitNote = !isCreditNote && Boolean(orden.nota_debito_ncf);
@@ -131,7 +135,7 @@ export function Ticket({
   const qrData = actualQR || fallbackQR;
 
   let tipoDocumento = "RECIBO DE ORDEN";
-  if (!esProduccion) {
+  if (!esProduccion && (hasFiscalModule || orden.ncf || orden.tipo_ecf)) {
     if (orden.nota_credito_ncf) {
       tipoDocumento = isECF ? "NOTA DE CRÉDITO ELECTRÓNICA" : "NOTA DE CRÉDITO";
     } else if (orden.nota_debito_ncf) {
@@ -522,11 +526,13 @@ export function Ticket({
                         <Shirt className="h-3.5 w-3.5 shrink-0" />
                         <span>DESCRIPCIÓN</span>
                       </div>
-                      <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
-                        <BadgePercent className="h-3 w-3 shrink-0" />
-                        <span>ITBIS</span>
-                      </div>
-                      <div className="w-[28%] text-right pr-3 flex items-center justify-end gap-0.5">
+                      {mostrarColumnaItbis && (
+                        <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
+                          <BadgePercent className="h-3 w-3 shrink-0" />
+                          <span>ITBIS</span>
+                        </div>
+                      )}
+                      <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 flex items-center justify-end gap-0.5`}>
                         <Tag className="h-3 w-3 shrink-0" />
                         <span>VALOR</span>
                       </div>
@@ -539,10 +545,12 @@ export function Ticket({
                           <div className="font-bold text-[10.5px]">Servicio {sName}</div>
                           <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(p)}</div>
                         </div>
-                        <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
-                          {orden.itbis > 0 ? formatNumber(p * ((cfg?.itbis_porcentaje || 18) / 100)) : "0.00"}
-                        </div>
-                        <div className="w-[28%] text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
+                        {mostrarColumnaItbis && (
+                          <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                            {orden.itbis > 0 ? formatNumber(p * ((cfg?.itbis_porcentaje || 18) / 100)) : "0.00"}
+                          </div>
+                        )}
+                        <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>
                           {formatNumber(p)}
                         </div>
                       </div>
@@ -559,7 +567,6 @@ export function Ticket({
                             itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
                           } else {
                             itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
-                            valor = baseTotal + itemItbis;
                           }
                         }
 
@@ -575,10 +582,12 @@ export function Ticket({
                               {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
                               {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                             </div>
-                            <div className="w-[20%] text-right font-semibold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10px]">
-                              {baseTotal > 0 ? (itemItbis > 0 ? formatNumber(itemItbis) : "0.00") : "—"}
-                            </div>
-                            <div className="w-[28%] text-right pr-3 font-bold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">
+                            {mostrarColumnaItbis && (
+                              <div className="w-[20%] text-right font-semibold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                                {baseTotal > 0 ? (itemItbis > 0 ? formatNumber(itemItbis) : "0.00") : "—"}
+                              </div>
+                            )}
+                            <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 text-black tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>
                               {baseTotal > 0 ? formatNumber(valor) : "—"}
                             </div>
                           </div>
@@ -597,11 +606,13 @@ export function Ticket({
                       <Shirt className="h-3.5 w-3.5 shrink-0" />
                       <span>DESCRIPCIÓN</span>
                     </div>
-                    <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
-                      <BadgePercent className="h-3 w-3 shrink-0" />
-                      <span>ITBIS</span>
-                    </div>
-                    <div className="w-[28%] text-right pr-3 flex items-center justify-end gap-0.5">
+                    {mostrarColumnaItbis && (
+                      <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
+                        <BadgePercent className="h-3 w-3 shrink-0" />
+                        <span>ITBIS</span>
+                      </div>
+                    )}
+                    <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 flex items-center justify-end gap-0.5`}>
                       <Tag className="h-3 w-3 shrink-0" />
                       <span>VALOR</span>
                     </div>
@@ -617,7 +628,6 @@ export function Ticket({
                           itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
                         } else {
                           itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
-                          valor = baseTotal + itemItbis;
                         }
                       }
                       return (
@@ -631,8 +641,10 @@ export function Ticket({
                             {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>
-                          <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">{itemItbis > 0 ? formatNumber(itemItbis) : "0.00"}</div>
-                          <div className="w-[28%] text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]">{formatNumber(valor)}</div>
+                          {mostrarColumnaItbis && (
+                            <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">{itemItbis > 0 ? formatNumber(itemItbis) : "0.00"}</div>
+                          )}
+                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>{formatNumber(valor)}</div>
                         </div>
                       );
                     })}
@@ -668,7 +680,7 @@ export function Ticket({
           <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
         </div>
 
-        {orden.itbis > 0 && (
+        {mostrarColumnaItbis && orden.itbis > 0 && (
           <div className="flex justify-between items-center gap-2">
             <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Landmark className="h-3.5 w-3.5 shrink-0 text-black" />
