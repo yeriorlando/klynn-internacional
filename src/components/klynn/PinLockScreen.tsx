@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Unlock, Delete, LogOut, Eye, EyeOff, ShieldCheck, Store, CheckCircle2 } from "lucide-react";
+import { Lock, Unlock, LogOut, Eye, EyeOff, ShieldCheck, Store, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -81,6 +81,17 @@ export function PinLockScreen({
   const [isVerifyingPassword, setIsVerifyingPassword] = useState<boolean>(false);
 
   const isCheckingRef = useRef<boolean>(false);
+  const pinInputRef = useRef<HTMLInputElement>(null);
+
+  // Auto-enfocar el campo de PIN al abrir la pantalla de bloqueo
+  useEffect(() => {
+    if (isOpen && !usePasswordFallback) {
+      const timer = setTimeout(() => {
+        pinInputRef.current?.focus();
+      }, 150);
+      return () => clearTimeout(timer);
+    }
+  }, [isOpen, usePasswordFallback]);
 
   // Reloj en tiempo real y fecha con ortografía correcta en español
   useEffect(() => {
@@ -231,12 +242,19 @@ export function PinLockScreen({
     if (!isOpen || usePasswordFallback) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Si el input oculto está enfocado, su onChange nativo procesa la entrada sin duplicar
+      if (document.activeElement === pinInputRef.current) {
+        return;
+      }
+
       if (e.key >= "0" && e.key <= "9") {
         e.preventDefault();
         handleDigit(e.key);
+        pinInputRef.current?.focus();
       } else if (e.key === "Backspace") {
         e.preventDefault();
         handleDelete();
+        pinInputRef.current?.focus();
       } else if (e.key === "Escape") {
         e.preventDefault();
         handleClear();
@@ -500,93 +518,86 @@ export function PinLockScreen({
             </p>
           </div>
 
-          {/* Vista A: Teclado PIN */}
+          {/* Vista A: Campo PIN Elegante (Sin el teclado numérico molesto) */}
           {!usePasswordFallback ? (
-            <div className="mt-4 space-y-3.5">
+            <div className="mt-4 space-y-4">
               <p className="text-xs font-semibold text-center text-slate-500 dark:text-slate-400">
                 Ingresa tu PIN de 4 dígitos
               </p>
 
-              {/* Los 4 Círculos Indicadores */}
-              <motion.div
-                animate={isError ? { x: [-10, 10, -6, 6, -3, 3, 0] } : {}}
-                transition={{ duration: 0.35 }}
-                className="flex items-center justify-center gap-3.5 py-0.5"
+              {/* Contenedor interactivo con Círculos Grandes */}
+              <div
+                className="relative flex items-center justify-center py-2 cursor-pointer group"
+                onClick={() => pinInputRef.current?.focus()}
               >
-                {[0, 1, 2, 3].map((index) => {
-                  const isFilled = pin.length > index;
-                  return (
-                    <motion.div
-                      key={index}
-                      initial={false}
-                      animate={{
-                        scale: isFilled ? [1, 1.2, 1] : 1,
-                      }}
-                      transition={{ duration: 0.16 }}
-                      className={`h-3.5 w-3.5 rounded-full transition-all duration-200 ${
-                        isError
-                          ? "bg-rose-500 ring-3 ring-rose-500/20"
-                          : isSuccess
-                            ? "bg-emerald-500 ring-3 ring-emerald-500/20"
-                            : isFilled
-                              ? "bg-[#1B4B73] dark:bg-[#F0B900] ring-3 ring-[#1B4B73]/20 dark:ring-[#F0B900]/20"
-                              : "border-2 border-slate-300 dark:border-slate-700 bg-transparent"
-                      }`}
-                    />
-                  );
-                })}
-              </motion.div>
+                {/* Input transparente interactivo que recibe teclado y táctil */}
+                <input
+                  ref={pinInputRef}
+                  type="password"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  maxLength={4}
+                  autoFocus
+                  autoComplete="off"
+                  value={pin}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                    setPin(val);
+                    if (val.length === 4) {
+                      verifyPin(val);
+                    }
+                  }}
+                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10 select-none"
+                  aria-label="PIN de 4 dígitos"
+                  disabled={isUnlocking}
+                />
+
+                {/* Los 4 Círculos Grandes - Tamaño aumentado a 30px (h-7.5 w-7.5) */}
+                <motion.div
+                  animate={isError ? { x: [-12, 12, -8, 8, -4, 4, 0] } : {}}
+                  transition={{ duration: 0.38 }}
+                  className="flex items-center justify-center gap-5 sm:gap-6 py-3 px-7 rounded-2xl bg-slate-50/80 dark:bg-slate-800/60 border border-slate-200/90 dark:border-slate-700 shadow-inner group-hover:border-[#1B4B73]/40 dark:group-hover:border-[#F0B900]/40 transition-colors"
+                >
+                  {[0, 1, 2, 3].map((index) => {
+                    const isFilled = pin.length > index;
+                    return (
+                      <motion.div
+                        key={index}
+                        initial={false}
+                        animate={{
+                          scale: isFilled ? [1, 1.22, 1] : 1,
+                        }}
+                        transition={{ duration: 0.18 }}
+                        className={`h-7 w-7 sm:h-7.5 sm:w-7.5 rounded-full transition-all duration-200 flex items-center justify-center ${
+                          isError
+                            ? "bg-rose-500 border-2 border-rose-500 ring-4 ring-rose-500/20"
+                            : isSuccess
+                              ? "bg-emerald-500 border-2 border-emerald-500 ring-4 ring-emerald-500/20"
+                              : isFilled
+                                ? "bg-[#1B4B73] dark:bg-[#F0B900] border-2 border-[#1B4B73] dark:border-[#F0B900] ring-4 ring-[#1B4B73]/20 dark:ring-[#F0B900]/25 shadow-xs"
+                                : "border-[2.5px] border-slate-300/90 dark:border-slate-600 bg-white/90 dark:bg-slate-800/90"
+                        }`}
+                      >
+                        {isFilled && (
+                          <div className="h-2 w-2 rounded-full bg-white dark:bg-slate-900 opacity-90" />
+                        )}
+                      </motion.div>
+                    );
+                  })}
+                </motion.div>
+              </div>
 
               {/* Mensaje de error si falla */}
-              <div className="h-3 text-center">
+              <div className="h-4 text-center -mt-1">
                 {errorMessage && (
-                  <p className="text-[10.5px] font-bold text-rose-500 animate-in fade-in">
+                  <p className="text-[11px] font-bold text-rose-500 animate-in fade-in">
                     {errorMessage}
                   </p>
                 )}
               </div>
 
-              {/* Teclado Numérico Táctil */}
-              <div className="grid grid-cols-3 gap-2 max-w-[225px] mx-auto pt-0.5">
-                {["1", "2", "3", "4", "5", "6", "7", "8", "9"].map((num) => (
-                  <button
-                    key={num}
-                    type="button"
-                    disabled={isUnlocking}
-                    onClick={() => handleDigit(num)}
-                    className="h-11 w-full rounded-xl bg-slate-100/90 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-foreground font-display font-bold text-lg transition-all active:scale-90 flex items-center justify-center shadow-2xs cursor-pointer select-none"
-                  >
-                    {num}
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  disabled={isUnlocking}
-                  onClick={handleClear}
-                  className="h-11 w-full rounded-xl text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 font-bold text-[11px] uppercase tracking-wider transition-all active:scale-90 flex items-center justify-center cursor-pointer select-none"
-                >
-                  Limpiar
-                </button>
-                <button
-                  type="button"
-                  disabled={isUnlocking}
-                  onClick={() => handleDigit("0")}
-                  className="h-11 w-full rounded-xl bg-slate-100/90 dark:bg-slate-800/80 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-foreground font-display font-bold text-lg transition-all active:scale-90 flex items-center justify-center shadow-2xs cursor-pointer select-none"
-                >
-                  0
-                </button>
-                <button
-                  type="button"
-                  disabled={isUnlocking}
-                  onClick={handleDelete}
-                  className="h-11 w-full rounded-xl bg-slate-100/50 dark:bg-slate-800/40 hover:bg-slate-200 dark:hover:bg-slate-700/80 text-slate-600 dark:text-slate-300 transition-all active:scale-90 flex items-center justify-center shadow-2xs cursor-pointer select-none"
-                >
-                  <Delete className="h-4.5 w-4.5" />
-                </button>
-              </div>
-
               {/* Alternar a contraseña si olvidó el PIN */}
-              <div className="pt-1.5 text-center">
+              <div className="pt-1 text-center">
                 <button
                   type="button"
                   onClick={() => setUsePasswordFallback(true)}

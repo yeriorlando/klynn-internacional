@@ -225,6 +225,23 @@ export function TenantShell() {
     return () => window.removeEventListener("klynn-tenant-config-changed", handleConfigChange);
   }, []);
 
+  const [liveEmpleado, setLiveEmpleado] = useState<any>(user?.empleado);
+  useEffect(() => {
+    if (user?.empleado) {
+      setLiveEmpleado(user.empleado);
+    }
+  }, [user?.empleado]);
+
+  useEffect(() => {
+    const handleEmpChange = (e: any) => {
+      if (e.detail) {
+        setLiveEmpleado((prev: any) => ({ ...(prev || {}), ...e.detail }));
+      }
+    };
+    window.addEventListener("klynn-auth-user-changed", handleEmpChange);
+    return () => window.removeEventListener("klynn-auth-user-changed", handleEmpChange);
+  }, []);
+
   const inactivityMinutes = liveConfig?.bloqueo_inactividad_minutos ?? user?.tenant?.config?.bloqueo_inactividad_minutos ?? 0;
   const lastActivityRef = useRef<number>(Date.now());
 
@@ -1001,7 +1018,7 @@ export function TenantShell() {
       {/* Pantalla de Bloqueo por Inactividad (PIN) */}
       <PinLockScreen
         isOpen={isScreenLocked}
-        empleado={empleado}
+        empleado={liveEmpleado || empleado}
         tenant={tenant}
         cajaAbierta={cajaAbierta}
         onUnlock={handleUnlock}

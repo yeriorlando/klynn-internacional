@@ -2535,15 +2535,26 @@ export async function saveEmpleado(e: Empleado) {
 
   // 0. Registrar o sincronizar en Supabase Auth
   let isNew = false;
-  if (!e.id || e.id.startsWith("emp_")) {
+
+  // Buscar si el empleado ya existe en la base de datos por ID o por Email
+  const { data: existingById } = e.id && !e.id.startsWith("emp_")
+    ? await supabase.from("empleados").select("id, email").eq("id", e.id).maybeSingle()
+    : { data: null };
+
+  const { data: existingByEmail } = await supabase
+    .from("empleados")
+    .select("id, email")
+    .eq("email", emailLower)
+    .maybeSingle();
+
+  const existingRecord = existingById || existingByEmail;
+
+  if (existingRecord) {
+    // Si ya existe el registro, NO ES UN EMPLEADO NUEVO -> ES UNA EDICIÓN / ACTUALIZACIÓN
+    isNew = false;
+    e.id = existingRecord.id;
+  } else if (!e.id || e.id.startsWith("emp_")) {
     isNew = true;
-  } else {
-    const { data: existing } = await supabase
-      .from("empleados")
-      .select("id")
-      .eq("id", e.id)
-      .maybeSingle();
-    isNew = !existing;
   }
 
   if (isNew) {
@@ -2566,9 +2577,10 @@ export async function saveEmpleado(e: Empleado) {
           authError.message.toLowerCase().includes("already registered") ||
           authError.status === 422
         ) {
-          throw new Error(
-            `El correo "${emailLower}" ya está registrado en el sistema. Por favor utiliza un correo electrónico diferente para este empleado.`,
-          );
+          console.warn("Usuario ya existe en Auth, procediendo con la actualización en empleados...");
+          if (existingByEmail) {
+            e.id = existingByEmail.id;
+          }
         } else {
           console.error("SIGNUP ERROR:", authError);
           throw new Error("Error de Auth al crear empleado: " + authError.message);
@@ -2623,17 +2635,35 @@ export async function saveEmpleado(e: Empleado) {
         if (e.password && e.password.length >= 6 && e.password !== "***") {
           console.log("Auto-actualización de contraseña...");
           const { error: updateError } = await supabase.auth.updateUser({ password: e.password });
-          if (updateError) authErrorMsg = "Error auto-update: " + updateError.message;
+          if (updateError) {
+            const msg = updateError.message.toLowerCase();
+            if (msg.includes("different from the old password") || msg.includes("same as the old")) {
+              // Si la contraseña ingresada es la misma que ya tenía, no bloqueamos el guardado del perfil ni del PIN
+              console.log("La contraseña ingresada es idéntica a la actual. Se conserva sin cambios.");
+            } else if (msg.includes("at least 6 characters")) {
+              authErrorMsg = "La nueva contraseña debe tener al menos 6 caracteres.";
+            } else {
+              authErrorMsg = "Error al actualizar contraseña: La nueva contraseña debe ser diferente a la contraseña actual.";
+            }
+          }
         }
 
         if (currentUser.email?.toLowerCase() !== emailLower) {
           console.log("Auto-actualización de email...");
           const { error: emailError } = await supabase.auth.updateUser({ email: emailLower });
-          if (emailError)
-            authErrorMsg =
-              (authErrorMsg ? authErrorMsg + " " : "") +
-              "Error auto-update email: " +
-              emailError.message;
+          if (emailError) {
+            const emailMsg = emailError.message.toLowerCase();
+            if (emailMsg.includes("already been registered") || emailMsg.includes("already registered")) {
+              authErrorMsg =
+                (authErrorMsg ? authErrorMsg + " " : "") +
+                "El correo electrónico ya está registrado por otro usuario.";
+            } else {
+              authErrorMsg =
+                (authErrorMsg ? authErrorMsg + " " : "") +
+                "Error al actualizar correo: " +
+                emailError.message;
+            }
+          }
         }
       } else if (e.id && e.id.length === 36) {
         // Actualizar usuario existente (empleado) que ya tiene ID de Auth (UUID)
@@ -2677,6 +2707,24 @@ export async function saveEmpleado(e: Empleado) {
   if (dbError) {
     console.error("DB ERROR:", dbError);
     throw new Error("Error DB: " + dbError.message);
+  }
+
+  // 3. Sincronizar con la sesión local activa si el empleado actualizado es el que está en sesión
+  if (typeof window !== "undefined") {
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (
+          parsed?.empleado &&
+          (parsed.empleado.id === e.id || parsed.empleado.email?.toLowerCase() === emailLower)
+        ) {
+          parsed.empleado = { ...parsed.empleado, ...dataToSave };
+          localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
+          window.dispatchEvent(new CustomEvent("klynn-auth-user-changed", { detail: parsed.empleado }));
+        }
+      } catch {}
+    }
   }
 
   if (authErrorMsg) throw new Error(authErrorMsg);
