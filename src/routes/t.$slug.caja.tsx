@@ -125,6 +125,7 @@ function CajaPage() {
   const [printMovs, setPrintMovs] = useState<MovimientoCaja[]>([]);
   const [cierrePage, setCierrePage] = useState(1);
   const [movsPage, setMovsPage] = useState(1);
+  const [showMovimientosPrint, setShowMovimientosPrint] = useState(false);
 
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
   const { data: todas = [], isLoading: loadingTodas } = useCajas(tenantId);
@@ -233,6 +234,32 @@ function CajaPage() {
         formato={tenant.config?.formato_ticket || "80mm"}
         montoInicial={selectedPrintCaja.monto_inicial}
         onBack={() => setSelectedPrintCaja(null)}
+      />
+    );
+  }
+
+  if (showMovimientosPrint && caja) {
+    const targetEmp = empleados.find((e) => e.id === caja.empleado_id) || empleado;
+    const targetEmpName = targetEmp
+      ? targetEmp.apellido && targetEmp.apellido !== "null"
+        ? `${targetEmp.nombre} ${targetEmp.apellido}`
+        : targetEmp.nombre
+      : empleado?.nombre || "Cajero";
+
+    return (
+      <ReporteMovimientosTurnoThermal
+        caja={caja}
+        movimientos={orderedMovs}
+        tenant={tenant}
+        empleadoName={targetEmpName}
+        ventasEf={ventasEf}
+        ventasTar={ventasTar}
+        ventasTrans={ventasTrans}
+        otrosIng={otrosIng}
+        egresos={egresos}
+        efectivoEsperado={efectivoEsperado}
+        formato={tenant.config?.formato_ticket || "80mm"}
+        onBack={() => setShowMovimientosPrint(false)}
       />
     );
   }
@@ -463,9 +490,23 @@ function CajaPage() {
                 <ArrowLeftRight className="h-5 w-5 text-primary shrink-0" />
                 <span>Movimientos del turno</span>
               </h3>
-              <Badge className="bg-primary text-white hover:bg-primary border-none font-bold">
-                {movs.length}
-              </Badge>
+              <div className="flex items-center gap-2.5">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setShowMovimientosPrint(true)}
+                  disabled={movs.length === 0}
+                  className="h-8 gap-1.5 font-bold text-xs border-primary/40 text-primary hover:bg-primary/10 cursor-pointer shadow-2xs"
+                  title="Imprimir ticket 80mm de auditoría con todos los movimientos del turno"
+                >
+                  <Printer className="h-3.5 w-3.5" />
+                  <span>Imprimir</span>
+                </Button>
+                <Badge className="bg-primary text-white hover:bg-primary border-none font-bold">
+                  {movs.length}
+                </Badge>
+              </div>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
@@ -2352,7 +2393,7 @@ function ReporteCierrePrint({
           </div>
 
           <div className="mt-10 text-center text-[10px] text-slate-400 italic">
-            Documento generado por Klynn POS - {new Date().toLocaleString()}
+            Documento generado por Klynn Cloud - {new Date().toLocaleString("es-DO")}
           </div>
         </div>
       </div>
@@ -2897,6 +2938,27 @@ function ReporteCuadreThermal({
         m.metodo === "EFECTIVO",
     )
     .reduce((s, m) => s + m.monto, 0);
+  const abonosTarjeta = movimientos
+    .filter(
+      (m) =>
+        (m.tipo === "ABONO" ||
+          m.concepto.includes("Abono inicial orden") ||
+          m.concepto.startsWith("Cobro de saldo orden #")) &&
+        m.metodo === "TARJETA",
+    )
+    .reduce((s, m) => s + m.monto, 0);
+  const abonosTransferencia = movimientos
+    .filter(
+      (m) =>
+        (m.tipo === "ABONO" ||
+          m.concepto.includes("Abono inicial orden") ||
+          m.concepto.startsWith("Cobro de saldo orden #")) &&
+        m.metodo === "TRANSFERENCIA",
+    )
+    .reduce((s, m) => s + m.monto, 0);
+  const totalTarjetas = card + abonosTarjeta;
+  const totalTransferencias = transfer + abonosTransferencia;
+  const totalDigital = totalTarjetas + totalTransferencias;
   const manualIngresos = movimientos
     .filter((m) => m.tipo === "INGRESO" && !m.concepto.includes("Apertura de caja"))
     .reduce((s, m) => s + m.monto, 0);
@@ -2928,7 +2990,7 @@ function ReporteCuadreThermal({
 
   const ventasRealizadas = ordenes.filter((o) => o.estado !== "ANULADA").length;
   const devoluciones =
-    movimientos.filter((m) => m.concepto.includes("Reembolso: Anulaci")).length ||
+movimientos.filter((m) => m.concepto.includes("Reembolso: Anulaci")).length ||
     ordenes.filter((o) => o.estado === "ANULADA").length;
   const montoDescontado = ordenes
     .filter((o) => o.estado !== "ANULADA")
@@ -2936,14 +2998,12 @@ function ReporteCuadreThermal({
   const itbisRecaudado = ordenes
     .filter((o) => o.estado !== "ANULADA")
     .reduce((s, o) => s + (o.itbis || 0), 0);
-
-  const w = formato === "57mm" ? "w-[58mm]" : "w-[80mm]";
-  const cols = formato === "57mm" ? "max-w-[32ch]" : "max-w-[44ch]";
+  const w = formato === "57mm" ? "w-[58mm] max-w-[58mm]" : "w-[80mm] max-w-[80mm]";
 
   return createPortal(
-    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target">
-      <div className="max-w-md mx-auto p-8 print:p-0 print:max-w-none print:m-0">
-        <div className="flex justify-between items-start border-b-2 border-primary/20 pb-4 mb-8 print:hidden relative z-[100000]">
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target flex flex-col items-center py-6 print:p-0">
+      <div className="w-full max-w-md mx-auto print:max-w-none print:m-0 flex flex-col items-center">
+        <div className="w-full flex justify-between items-center border-b-2 border-primary/20 pb-4 mb-6 print:hidden">
           <Button
             variant="outline"
             onClick={(e) => {
@@ -2959,39 +3019,64 @@ function ReporteCuadreThermal({
               e.preventDefault();
               window.print();
             }}
-            className="bg-primary text-white gap-2 cursor-pointer"
+            className="bg-primary text-white gap-2 cursor-pointer font-bold shadow-sm"
           >
-            <Printer className="h-4 w-4" /> Imprimir
+            <Printer className="h-4 w-4" /> Imprimir ahora
           </Button>
         </div>
 
         <div
-          className={`print-area thermal-ticket mx-auto ${w} ${cols} bg-white p-4 font-mono text-[11px] leading-snug text-black border border-dashed border-black/10 print:border-none`}
+          className={`thermal-ticket mx-auto ${w} bg-white px-3 py-3 text-[11px] leading-snug text-black border border-dashed border-black/20 print:border-none`}
+          style={{
+            fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            WebkitPrintColorAdjust: "exact",
+            printColorAdjust: "exact",
+          }}
         >
+          {/* Encabezado */}
           <div className="text-center space-y-0.5">
             {tenant.logo_url ? (
               <div className="flex justify-center mb-1">
                 <img
                   src={tenant.logo_url}
                   alt="Logo"
-                  className="h-16 w-auto max-w-[150px] object-contain filter grayscale"
+                  className="h-16 w-auto max-w-[180px] object-contain filter grayscale mx-auto"
                 />
               </div>
             ) : (
-              <div className="text-base font-bold uppercase leading-tight">{tenant.nombre}</div>
+              <div className="text-xl font-bold uppercase tracking-tight text-center leading-tight">
+                {tenant.nombre}
+              </div>
             )}
-            <div className="font-bold">CUADRE DE CAJA</div>
-            {mostrarRango && <div className="text-[9px] uppercase">{rango}</div>}
-          </div>
-          <div className="my-2 border-t border-dashed border-black" />
-
-          <div className="space-y-1">
-            <div className="flex justify-between">
-              <span>Empleado:</span> <span className="font-bold">{empleadoName}</span>
+            {tenant.nombre_sucursal && (
+              <div className="text-[10px] uppercase font-semibold text-black/80">{tenant.nombre_sucursal}</div>
+            )}
+            {tenant.rnc && (
+              <div className="text-[10px] font-medium">RNC: {tenant.rnc}</div>
+            )}
+            {tenant.telefono && (
+              <div className="text-[10px] font-medium">Tel: {tenant.telefono}</div>
+            )}
+            <div className="my-2 border-t-[1.5px] border-dashed border-black" />
+            <div className="text-center font-black uppercase text-[12px] py-1 tracking-wider text-black border border-black rounded-xs">
+              ★ CUADRE DE CAJA ★
             </div>
-            <div className="flex justify-between">
-              <span>Fecha:</span>{" "}
-              <span>
+            {mostrarRango && (
+              <div className="text-[10px] text-center uppercase font-bold text-black mt-1">{rango}</div>
+            )}
+          </div>
+
+          <div className="my-2 border-t-[1.5px] border-dashed border-black" />
+
+          {/* Metadatos */}
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Empleado:</span>
+              <span className="font-bold text-black">{empleadoName}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Fecha de Emisión:</span>
+              <span className="font-semibold tabular-nums text-black">
                 {new Date().toLocaleString("es-DO", {
                   day: "2-digit",
                   month: "2-digit",
@@ -3003,134 +3088,177 @@ function ReporteCuadreThermal({
               </span>
             </div>
           </div>
-          <div className="my-2 border-t border-dashed border-black" />
 
-          <div className="font-bold my-1 text-center">[1] RESUMEN DE VENTAS</div>
-          <div className="border-t border-dashed border-black mb-2" />
-          <div className="space-y-1">
-            <div className="flex justify-between">
-              <span>Ventas al Contado:</span> <span>{formatRD(ventasContado)}</span>
+          {/* [1] RESUMEN DE VENTAS */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [1] RESUMEN DE VENTAS
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Ventas al Contado:</span>
+              <span className="font-bold tabular-nums">{formatRD(ventasContado)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Ventas a Crédito:</span> <span>{formatRD(ventasCredito)}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Ventas a Crédito:</span>
+              <span className="font-bold tabular-nums">{formatRD(ventasCredito)}</span>
             </div>
             {retirar > 0 && (
-              <div className="flex justify-between">
-                <span>Pago al Retirar:</span> <span>{formatRD(retirar)}</span>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-black/80">Pago al Retirar:</span>
+                <span className="font-bold tabular-nums">{formatRD(retirar)}</span>
               </div>
             )}
-            <div className="border-t border-dashed border-black my-1" />
-            <div className="flex justify-between font-bold">
-              <span>TOTAL FACTURADO:</span> <span>{formatRD(totalFacturado)}</span>
+            <div className="border-t-2 border-black my-1.5" />
+            <div className="flex justify-between items-center text-[12px] font-black">
+              <span>TOTAL FACTURADO:</span>
+              <span className="tabular-nums">{formatRD(totalFacturado)}</span>
             </div>
           </div>
 
-          <div className="mt-4 border-t border-dashed border-black" />
-          <div className="font-bold my-1 text-center">[2] MOVIMIENTOS DE CAJA</div>
-          <div className="border-t border-dashed border-black mb-2" />
-          <div className="space-y-1">
-            <div className="flex justify-between">
-              <span>(+) Efectivo en Ventas:</span> <span>{formatRD(cash)}</span>
+          {/* [2] MOVIMIENTOS DE CAJA */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [2] MOVIMIENTOS DE CAJA
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+
+          {/* Sub-bloque: MOVIMIENTOS EN EFECTIVO */}
+          <div className="text-[10.5px] font-black uppercase text-black text-center tracking-wider my-0.5">
+            -- MOVIMIENTOS EN EFECTIVO --
+          </div>
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Fondo Inicial (Apertura):</span>
+              <span className="font-bold tabular-nums">{formatRD(montoInicial)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>(+) Tarjeta:</span> <span>{formatRD(card)}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Ventas en Efectivo:</span>
+              <span className="font-bold tabular-nums">{formatRD(cash)}</span>
             </div>
-            <div className="flex justify-between">
-              <span>(+) Transferencia:</span> <span>{formatRD(transfer)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>(+) Abonos a Crédito:</span> <span>{formatRD(abonosCredito)}</span>
-            </div>
-            <div className="flex justify-between">
-              <span>(+) Fondo Inicial:</span> <span>{formatRD(montoInicial)}</span>
-            </div>
+            {abonosEfectivo > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-black/80">(+) Abonos a Crédito (Efectivo):</span>
+                <span className="font-bold tabular-nums">{formatRD(abonosEfectivo)}</span>
+              </div>
+            )}
             {manualIngresos > 0 && (
-              <div className="flex justify-between">
-                <span>(+) Otros Ingresos:</span> <span>{formatRD(manualIngresos)}</span>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-black/80">(+) Otros Ingresos (Efectivo):</span>
+                <span className="font-bold tabular-nums">{formatRD(manualIngresos)}</span>
               </div>
             )}
             {manualEgresos > 0 && (
-              <div className="flex justify-between">
-                <span>(-) Egresos / Retiros:</span> <span>{formatRD(manualEgresos)}</span>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-black/80">(-) Egresos / Retiros:</span>
+                <span className="font-bold tabular-nums">{formatRD(manualEgresos)}</span>
               </div>
             )}
             {anulado > 0 && (
-              <div className="flex justify-between">
-                <span>(-) Anulaciones:</span> <span>{formatRD(anulado)}</span>
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-black/80">(-) Anulaciones / Reembolsos:</span>
+                <span className="font-bold tabular-nums">{formatRD(anulado)}</span>
               </div>
             )}
-
-            <div className="border-t border-dashed border-black my-1" />
-            <div className="flex justify-between font-bold">
-              <span>TOTAL EFECTIVO EN CAJA:</span> <span>{formatRD(realTotalEfectivo)}</span>
-            </div>
-            <div className="flex justify-between font-bold border-t border-black pt-1 mt-1 text-xs">
-              <span>TOTAL RECAUDADO:</span> <span>{formatRD(totalDineroRecaudado)}</span>
+            <div className="border-t-2 border-black my-1.5" />
+            <div className="flex justify-between items-center text-[12px] font-black">
+              <span>TOTAL EFECTIVO EN CAJA:</span>
+              <span className="tabular-nums">{formatRD(realTotalEfectivo)}</span>
             </div>
           </div>
 
-          <div className="mt-4 border-t border-dashed border-black" />
-          <div className="font-bold my-1 text-center">[3] DETALLE DE ÓRDENES</div>
-          <div className="border-t border-dashed border-black mb-2" />
-          <div className="space-y-2">
-            <div className="flex justify-between text-[10px] font-bold border-b border-black/5 pb-1">
-              <span># ORDEN (TIPO)</span>
-              <span>TOTAL</span>
+          {/* Sub-bloque: COBROS DIGITALES / BANCO */}
+          <div className="mt-2.5 border-t border-dotted border-black/50" />
+          <div className="text-[10.5px] font-black uppercase text-black text-center tracking-wider my-0.5">
+            -- COBROS DIGITALES / BANCO --
+          </div>
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Tarjetas (Verifone):</span>
+              <span className="font-bold tabular-nums">{formatRD(card)}</span>
+            </div>
+            {abonosTarjeta > 0 && (
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="font-medium text-black/70 pl-2">↳ Abonos con Tarjeta:</span>
+                <span className="font-bold tabular-nums">{formatRD(abonosTarjeta)}</span>
+              </div>
+            )}
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Transferencias (Banco):</span>
+              <span className="font-bold tabular-nums">{formatRD(transfer)}</span>
+            </div>
+            {abonosTransferencia > 0 && (
+              <div className="flex justify-between items-center text-[10px]">
+                <span className="font-medium text-black/70 pl-2">↳ Abonos por Transferencia:</span>
+                <span className="font-bold tabular-nums">{formatRD(abonosTransferencia)}</span>
+              </div>
+            )}
+            <div className="border-t border-black my-1" />
+            <div className="flex justify-between items-center text-[11.5px] font-bold">
+              <span>TOTAL DIGITAL / BANCO:</span>
+              <span className="tabular-nums">{formatRD(totalDigital)}</span>
+            </div>
+          </div>
+
+          {/* Gran Total */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black pt-1" />
+          <div className="flex justify-between items-center text-[13px] font-black py-0.5">
+            <span className="tracking-tight">TOTAL GENERAL:</span>
+            <span className="tabular-nums font-black text-[13.5px]">{formatRD(totalDineroRecaudado)}</span>
+          </div>
+
+          {/* [3] DETALLE DE ÓRDENES */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [3] DETALLE DE ÓRDENES ({ordenes.length})
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+          <div className="space-y-1.5">
+            <div className="flex justify-between text-[10px] font-bold border-b border-black/20 pb-1">
+              <span># ORDEN (MÉTODO)</span>
+              <span>MONTO</span>
             </div>
             {ordenes.map((o) => {
-              const isCredito = o.metodo_pago === "CREDITO";
               const label =
                 o.metodo_pago === "CREDITO"
-                  ? "CRE"
+                  ? "CRÉDITO"
                   : o.metodo_pago === "PAGO_AL_RETIRAR"
-                    ? "PAR"
-                    : o.metodo_pago?.substring(0, 3);
-              const abono =
-                movimientos?.find(
-                  (m) => m.concepto.includes(o.numero) && m.concepto.includes("Abono inicial"),
-                )?.monto || 0;
+                    ? "AL RETIRAR"
+                    : o.metodo_pago || "CONTADO";
 
               return (
-                <div key={o.id} className="flex flex-col">
-                  <div className="flex justify-between font-medium">
-                    <span>
-                      {o.numero} <span className="font-bold">({label})</span>
-                    </span>
-                    <span>{formatRD(o.total)}</span>
-                  </div>
-                  {isCredito && (
-                    <div className="pl-2 space-y-0.5 mt-0.5 text-[10px] text-black/80">
-                      <div className="flex justify-between">
-                        <span>{`> Abono Inicial:`}</span>
-                        <span>{formatRD(abono)}</span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>{`> Balance Pendiente:`}</span>
-                        <span>{formatRD(o.total - abono)}</span>
-                      </div>
-                    </div>
-                  )}
+                <div key={o.id} className="flex justify-between items-center text-[11px] border-b border-dotted border-black/20 pb-0.5">
+                  <span className="font-semibold text-black">
+                    {o.numero} <span className="font-bold text-black uppercase text-[10px]">({label})</span>
+                  </span>
+                  <span className="font-bold tabular-nums text-black">{formatRD(o.total)}</span>
                 </div>
               );
             })}
           </div>
 
+          {/* [4] OTROS MOVIMIENTOS DE CAJA */}
           {displayMovs.length > 0 && (
             <>
-              <div className="mt-4 border-t border-dashed border-black" />
-              <div className="font-bold my-1 text-center">[4] OTROS MOVIMIENTOS DE CAJA</div>
-              <div className="border-t border-dashed border-black mb-2" />
-              <div className="space-y-1">
-                <div className="flex justify-between text-[10px] font-bold border-b border-black/5 pb-1">
+              <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+              <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+                [4] OTROS MOVIMIENTOS DE CAJA
+              </div>
+              <div className="border-t border-dashed border-black my-1" />
+              <div className="space-y-1.5 text-[11px]">
+                <div className="flex justify-between text-[10px] font-bold border-b border-black/20 pb-1">
                   <span>CONCEPTO</span>
                   <span>MONTO</span>
                 </div>
                 {displayMovs.map((m) => {
                   const isNegative = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
                   return (
-                    <div key={m.id} className="flex justify-between items-start gap-1 text-[10px]">
-                      <span className="text-left max-w-[70%] leading-tight">{m.concepto}</span>
-                      <span className="font-bold shrink-0">
+                    <div key={m.id} className="flex justify-between items-start gap-1 border-b border-dotted border-black/20 pb-0.5">
+                      <span className="text-left font-medium leading-tight max-w-[70%]">
+                        {m.concepto.replace(/\s*\[(EFECTIVO|TARJETA|TRANSFERENCIA|CREDITO|PAGO_AL_RETIRAR|.*?)]/gi, "").trim()}
+                      </span>
+                      <span className="font-bold tabular-nums shrink-0">
                         {isNegative ? "-" : "+"}
                         {formatRD(m.monto)}
                       </span>
@@ -3141,34 +3269,42 @@ function ReporteCuadreThermal({
             </>
           )}
 
-          <div className="mt-4 border-t border-dashed border-black" />
-          <div className="font-bold my-1 text-center">[5] ESTADÍSTICAS DEL TURNO</div>
-          <div className="border-t border-dashed border-black mb-2" />
-          <div className="space-y-1">
-            <div className="flex justify-between">
-              <span>Órdenes Procesadas:</span> <span className="font-bold">{ventasRealizadas}</span>
+          {/* [5] ESTADÍSTICAS DEL TURNO */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [5] ESTADÍSTICAS DEL TURNO
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Órdenes Procesadas:</span>
+              <span className="font-bold tabular-nums">{ventasRealizadas}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Devoluciones / Anulaciones:</span>{" "}
-              <span className="font-bold">{devoluciones}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Devoluciones / Anulaciones:</span>
+              <span className="font-bold tabular-nums">{devoluciones}</span>
             </div>
-            <div className="flex justify-between">
-              <span>Descuentos Aplicados:</span>{" "}
-              <span className="font-bold">{formatRD(montoDescontado)}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Descuentos Aplicados:</span>
+              <span className="font-bold tabular-nums">{formatRD(montoDescontado)}</span>
             </div>
-            <div className="flex justify-between font-bold">
-              <span>ITBIS Recaudado ({tenant.config?.itbis_porcentaje ?? 18}%):</span>{" "}
-              <span className="font-bold">{formatRD(itbisRecaudado)}</span>
-            </div>
-            <div className="flex justify-between font-bold border-t border-dashed border-black/40 pt-1 mt-1 text-xs">
-              <span>TOTAL RECAUDADO:</span> <span>{formatRD(totalDineroRecaudado)}</span>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">ITBIS Recaudado ({tenant.config?.itbis_porcentaje ?? 18}%):</span>
+              <span className="font-bold tabular-nums">{formatRD(itbisRecaudado)}</span>
             </div>
           </div>
 
-          <div className="my-4 border-t border-dashed border-black" />
-          <div className="mt-12 text-center">
-            <div className="border-t border-black w-3/4 mx-auto pt-1 mb-10">Firma Cajero</div>
-            <div className="text-[9px] italic">Klynn POS System</div>
+          {/* Firma Cajero */}
+          <div className="mt-14 text-center">
+            <div className="border-t border-black w-48 mx-auto" />
+            <div className="font-bold text-[11px] mt-1 uppercase">Cajero(a) en Turno</div>
+            <div className="text-[10px] text-black/70 font-medium">{empleadoName}</div>
+          </div>
+
+          {/* Pie de ticket */}
+          <div className="mt-6 border-t-[1.5px] border-dashed border-black pt-2 text-center text-[10px] text-black/70 font-medium">
+            Documento emitido por el sistema.
+            <div className="font-bold text-black mt-0.5">Klynn Cloud • {new Date().toLocaleString("es-DO")}</div>
           </div>
         </div>
       </div>
@@ -3178,16 +3314,16 @@ function ReporteCuadreThermal({
           __html: `
         @media print {
           @page {
-            size: ${tenant.config?.formato_ticket === "57mm" ? "57mm 210mm" : "80mm 297mm"};
-            margin: 0;
+            size: ${formato === "57mm" ? "57mm auto" : "80mm auto"};
+            margin: 0 auto !important;
           }
 
           html,
           body {
-            width: ${tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"};
+            width: 100% !important;
             margin: 0 !important;
             padding: 0 !important;
-            background: #fff;
+            background: #fff !important;
             overflow: visible !important;
             height: auto !important;
           }
@@ -3195,26 +3331,377 @@ function ReporteCuadreThermal({
           /* Ocultar todo el sitio */
           body > *:not(.atomic-print-target) { display: none !important; }
 
-          /* Mostrar solo el ticket */
+          /* Centrar el ticket en la página de impresión */
           .atomic-print-target {
-            display: block !important;
-            visibility: visible !important;
-            position: relative !important;
-            left: -2mm !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: flex-start !important;
             width: 100% !important;
-            max-width: ${tenant.config?.formato_ticket === "57mm" ? "52mm" : "72mm"} !important;
-            padding: ${tenant.config?.formato_ticket === "57mm" ? "1.5mm" : "2mm"} !important;
             margin: 0 auto !important;
-            background: white;
-            color: black;
-            font-family: monospace;
-            font-size: ${tenant.config?.formato_ticket === "57mm" ? "10px" : "12px"};
-            line-height: ${tenant.config?.formato_ticket === "57mm" ? "1.2" : "1.3"} !important;
+            padding: 0 !important;
+            position: static !important;
+            background: white !important;
             box-sizing: border-box !important;
           }
 
-          .thermal-ticket { border: none !important; padding: 0 !important; width: 100% !important; -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
-          
+          .thermal-ticket {
+            display: block !important;
+            width: ${formato === "57mm" ? "58mm" : "80mm"} !important;
+            max-width: ${formato === "57mm" ? "58mm" : "80mm"} !important;
+            margin: 0 auto !important;
+            padding: 2mm 3mm !important;
+            box-sizing: border-box !important;
+            border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
+          /* Evitar cortes */
+          .atomic-print-target * {
+            page-break-inside: avoid !important;
+            break-inside: avoid !important;
+            visibility: visible !important;
+          }
+
+          .no-print { display: none !important; }
+        }
+      `,
+        }}
+      />
+    </div>,
+    document.body,
+  );
+}
+
+function ReporteMovimientosTurnoThermal({
+  caja,
+  movimientos,
+  tenant,
+  empleadoName,
+  ventasEf,
+  ventasTar,
+  ventasTrans,
+  otrosIng,
+  egresos,
+  efectivoEsperado,
+  formato = "80mm",
+  onBack,
+}: {
+  caja: Caja;
+  movimientos: MovimientoCaja[];
+  tenant: Tenant;
+  empleadoName: string;
+  ventasEf: number;
+  ventasTar: number;
+  ventasTrans: number;
+  otrosIng: number;
+  egresos: number;
+  efectivoEsperado: number;
+  formato?: "57mm" | "80mm";
+  onBack: () => void;
+}) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      window.print();
+    }, 350);
+    return () => clearTimeout(timer);
+  }, []);
+
+  // Orden cronológico (del más antiguo al más reciente para fines de auditoría)
+  const cronoSortedMovs = useMemo(() => {
+    return [...movimientos].sort(
+      (a, b) => +new Date(a.creado_en) - +new Date(b.creado_en),
+    );
+  }, [movimientos]);
+
+  const w = formato === "57mm" ? "w-[58mm] max-w-[58mm]" : "w-[80mm] max-w-[80mm]";
+
+  return createPortal(
+    <div className="fixed inset-0 bg-white z-[99999] overflow-y-auto pointer-events-auto atomic-print-target flex flex-col items-center py-6 print:p-0">
+      <div className="w-full max-w-md mx-auto print:max-w-none print:m-0 flex flex-col items-center">
+        <div className="w-full flex justify-between items-center border-b-2 border-primary/20 pb-4 mb-6 print:hidden">
+          <Button
+            variant="outline"
+            onClick={(e) => {
+              e.preventDefault();
+              onBack();
+            }}
+            className="cursor-pointer"
+          >
+            Cerrar
+          </Button>
+          <Button
+            onClick={(e) => {
+              e.preventDefault();
+              window.print();
+            }}
+            className="bg-primary text-white gap-2 cursor-pointer font-bold shadow-sm"
+          >
+            <Printer className="h-4 w-4" /> Imprimir ahora
+          </Button>
+        </div>
+
+        <div
+          className={`thermal-ticket mx-auto ${w} bg-white px-3 py-3 text-[11px] leading-snug text-black border border-dashed border-black/20 print:border-none`}
+          style={{
+            fontFamily: '"Plus Jakarta Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+            WebkitPrintColorAdjust: "exact",
+            printColorAdjust: "exact",
+          }}
+        >
+          {/* Encabezado */}
+          <div className="text-center space-y-0.5">
+            {tenant.logo_url ? (
+              <div className="flex justify-center mb-1">
+                <img
+                  src={tenant.logo_url}
+                  alt="Logo"
+                  className="h-16 w-auto max-w-[180px] object-contain filter grayscale mx-auto"
+                />
+              </div>
+            ) : (
+              <div className="text-xl font-bold uppercase tracking-tight text-center leading-tight">
+                {tenant.nombre}
+              </div>
+            )}
+            {tenant.nombre_sucursal && (
+              <div className="text-[10px] uppercase font-semibold text-black/80">{tenant.nombre_sucursal}</div>
+            )}
+            {tenant.rnc && (
+              <div className="text-[10px] font-medium">RNC: {tenant.rnc}</div>
+            )}
+            {tenant.telefono && (
+              <div className="text-[10px] font-medium">Tel: {tenant.telefono}</div>
+            )}
+            <div className="my-2 border-t-[1.5px] border-dashed border-black" />
+            <div className="text-center font-black uppercase text-[12px] py-1 tracking-wider text-black border border-black rounded-xs">
+              ★ AUDITORÍA DE MOVIMIENTOS ★
+            </div>
+            <div className="text-[10px] text-center uppercase font-bold text-black mt-1">
+              TURNO / CAJA {caja.estado === "ABIERTA" ? "(EN CURSO)" : "(CERRADA)"}
+            </div>
+          </div>
+
+          <div className="my-2 border-t-[1.5px] border-dashed border-black" />
+
+          {/* Datos del Turno */}
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Cajero / Responsable:</span>
+              <span className="font-bold text-black">{empleadoName}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Apertura de Caja:</span>
+              <span className="font-semibold tabular-nums text-black">{formatDateTimeRD(caja.abierta_en)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Fecha Auditoría:</span>
+              <span className="font-semibold tabular-nums text-black">
+                {new Date().toLocaleString("es-DO", {
+                  day: "2-digit",
+                  month: "2-digit",
+                  year: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                  hour12: true,
+                })}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Total Movimientos:</span>
+              <span className="font-bold tabular-nums text-black">{movimientos.length}</span>
+            </div>
+          </div>
+
+          {/* [1] Resumen Financiero */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [1] RESUMEN FINANCIERO
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+
+          {/* Sub-bloque: MOVIMIENTOS EN EFECTIVO */}
+          <div className="text-[10.5px] font-black uppercase text-black text-center tracking-wider my-0.5">
+            -- MOVIMIENTOS EN EFECTIVO --
+          </div>
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Fondo Inicial (Apertura):</span>
+              <span className="font-bold tabular-nums">{formatRD(caja.monto_inicial || 0)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Ventas en Efectivo:</span>
+              <span className="font-bold tabular-nums">{formatRD(ventasEf)}</span>
+            </div>
+            {otrosIng > 0 && (
+              <div className="flex justify-between items-center">
+                <span className="font-semibold text-black/80">(+) Otros Ingresos / Abonos:</span>
+                <span className="font-bold tabular-nums">{formatRD(otrosIng)}</span>
+              </div>
+            )}
+            {egresos > 0 && (
+              <div className="flex justify-between items-center text-black">
+                <span className="font-semibold text-black/80">(-) Egresos / Gastos / Retiros:</span>
+                <span className="font-bold tabular-nums">{formatRD(egresos)}</span>
+              </div>
+            )}
+            <div className="border-t-2 border-black my-1.5" />
+            <div className="flex justify-between items-center text-[12px] font-black">
+              <span>TOTAL EFECTIVO EN CAJA:</span>
+              <span className="tabular-nums">{formatRD(efectivoEsperado)}</span>
+            </div>
+          </div>
+
+          {/* Sub-bloque: COBROS DIGITALES / BANCO */}
+          <div className="mt-2.5 border-t border-dotted border-black/50" />
+          <div className="text-[10.5px] font-black uppercase text-black text-center tracking-wider my-0.5">
+            -- COBROS DIGITALES / BANCO --
+          </div>
+          <div className="space-y-1 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Tarjetas (Verifone):</span>
+              <span className="font-bold tabular-nums">{formatRD(ventasTar)}</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">(+) Transferencias (Banco):</span>
+              <span className="font-bold tabular-nums">{formatRD(ventasTrans)}</span>
+            </div>
+            <div className="border-t border-black my-1" />
+            <div className="flex justify-between items-center text-[11.5px] font-bold">
+              <span>TOTAL DIGITAL / BANCO:</span>
+              <span className="tabular-nums">{formatRD(ventasTar + ventasTrans)}</span>
+            </div>
+          </div>
+
+          {/* Gran Total */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black pt-1" />
+          <div className="flex justify-between items-center text-[13px] font-black py-0.5">
+            <span className="tracking-tight">TOTAL GENERAL:</span>
+            <span className="tabular-nums font-black text-[13.5px]">{formatRD(ventasEf + ventasTar + ventasTrans + otrosIng)}</span>
+          </div>
+
+          {/* [2] Detalle Cronológico */}
+          <div className="mt-3 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [2] REGISTRO DETALLADO ({cronoSortedMovs.length})
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+
+          <div className="space-y-1.5">
+            {cronoSortedMovs.map((m, idx) => {
+              const isEgreso = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
+              const sign = isEgreso ? "-" : "+";
+              const timeStr = new Date(m.creado_en).toLocaleTimeString("es-DO", {
+                hour: "2-digit",
+                minute: "2-digit",
+                hour12: true,
+              });
+
+              const cleanConcepto = (m.concepto || "Sin concepto")
+                .replace(/\s*\[(EFECTIVO|TARJETA|TRANSFERENCIA|CREDITO|PAGO_AL_RETIRAR|.*?)]/gi, "")
+                .trim();
+
+              return (
+                <div key={m.id || idx} className="border-b border-dotted border-black/30 pb-1.5 text-[11px]">
+                  <div className="flex justify-between items-center font-bold">
+                    <span>
+                      #{idx + 1} {timeStr} <span className="uppercase text-[9.5px] px-1 py-0.2 border border-black rounded-xs">{m.tipo}</span>
+                    </span>
+                    <span className="tabular-nums font-black">
+                      {sign}{formatRD(m.monto)}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center text-[10px] text-black/80 mt-0.5">
+                    <span className="truncate max-w-[32ch] font-medium">{cleanConcepto}</span>
+                    <span className="font-bold uppercase text-[10px] text-black">{m.metodo || "N/A"}</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {/* [3] Cuadre de Auditoría y Firmas */}
+          <div className="mt-4 border-t-[1.5px] border-dashed border-black" />
+          <div className="text-center font-bold tracking-widest text-[11px] uppercase py-0.5">
+            [3] VERIFICACIÓN Y AUDITORÍA
+          </div>
+          <div className="border-t border-dashed border-black my-1" />
+
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Efectivo Contado en Caja:</span>
+              <span className="font-bold">RD$ ____________</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="font-semibold text-black/80">Diferencia (Sobrante/Faltante):</span>
+              <span className="font-bold">RD$ ____________</span>
+            </div>
+            <div className="pt-2 text-center text-[10px] font-bold uppercase">
+              [  ] CONFORME   /   [  ] CON OBSERVACIÓN
+            </div>
+          </div>
+
+          {/* Firma Cajero */}
+          <div className="mt-14 text-center">
+            <div className="border-t border-black w-48 mx-auto" />
+            <div className="font-bold text-[11px] mt-1 uppercase">Cajero(a) en Turno</div>
+            <div className="text-[10px] text-black/70 font-medium">{empleadoName}</div>
+          </div>
+
+          {/* Pie de ticket */}
+          <div className="mt-6 border-t-[1.5px] border-dashed border-black pt-2 text-center text-[10px] text-black/70 font-medium">
+            Documento emitido para fines de auditoría interna.
+            <div className="font-bold text-black mt-0.5">Klynn Cloud • {new Date().toLocaleString("es-DO")}</div>
+          </div>
+        </div>
+      </div>
+
+      <style
+        dangerouslySetInnerHTML={{
+          __html: `
+        @media print {
+          @page {
+            size: ${formato === "57mm" ? "57mm auto" : "80mm auto"};
+            margin: 0 auto !important;
+          }
+
+          html,
+          body {
+            width: 100% !important;
+            margin: 0 !important;
+            padding: 0 !important;
+            background: #fff !important;
+            overflow: visible !important;
+            height: auto !important;
+          }
+
+          body > *:not(.atomic-print-target) { display: none !important; }
+
+          /* Centrar el ticket en la página de impresión */
+          .atomic-print-target {
+            display: flex !important;
+            justify-content: center !important;
+            align-items: flex-start !important;
+            width: 100% !important;
+            margin: 0 auto !important;
+            padding: 0 !important;
+            position: static !important;
+            background: white !important;
+            box-sizing: border-box !important;
+          }
+
+          .thermal-ticket {
+            display: block !important;
+            width: ${formato === "57mm" ? "58mm" : "80mm"} !important;
+            max-width: ${formato === "57mm" ? "58mm" : "80mm"} !important;
+            margin: 0 auto !important;
+            padding: 2mm 3mm !important;
+            box-sizing: border-box !important;
+            border: none !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+
           /* Evitar cortes */
           .atomic-print-target * {
             page-break-inside: avoid !important;

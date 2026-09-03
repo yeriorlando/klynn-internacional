@@ -92,6 +92,7 @@ import { useNavigate } from "@tanstack/react-router";
 import {
   CobrarOrdenDialog,
   TicketPrintPortal,
+  FacturaA4PrintPortal,
   OrderDetail,
   esTransicionEstadoPermitida,
   isMetodoCredito,
@@ -1136,6 +1137,17 @@ function DashboardPage() {
           empleados={empleados}
           esProduccion={true}
           onClose={() => setShowPrintProduccion(null)}
+        />
+      )}
+
+      {/* Visor e impresión de Factura A4 */}
+      {showDownloadA4 && (
+        <FacturaA4PrintPortal
+          orden={showDownloadA4}
+          tenant={tenant}
+          clientes={clientes}
+          empleados={empleados}
+          onClose={() => setShowDownloadA4(null)}
         />
       )}
 

@@ -415,63 +415,21 @@ function CentroFiscalPage() {
 
   function getDgiiValidationUrl(doc: any) {
     if (!doc) return "";
-
-    const env = ecfConfig?.ef2_environment || (ecfConfig as any)?.environment || (ecfConfig?.ambiente === "produccion" ? "eCF" : "TesteCF");
-    const isProd = env === "eCF" || env === "production" || ecfConfig?.ambiente === "produccion";
-
-    // 1. Determinar el endpoint oficial exacto de la DGII según el ambiente
-    let baseUrl = "https://fc.dgii.gov.do/certecf/ConsultaTimbreFC";
-    if (isProd) {
-      baseUrl = "https://fc.dgii.gov.do/ecf/ConsultaTimbreFC";
-    } else if (env === "TesteCF") {
-      baseUrl = "https://fc.dgii.gov.do/testecf/ConsultaTimbreFC";
-    } else {
-      baseUrl = "https://fc.dgii.gov.do/certecf/ConsultaTimbreFC";
-    }
-
-    // 2. En pruebas/sandbox de EF2, el RNC emisor ante la DGII siempre es el certificado de EF2 (132596161)
-    // Solo en producción se utiliza el RNC propio del negocio.
-    const rnc = (
-      isProd
-        ? (ecfConfig?.rnc_emisor || tenant?.rnc || "132596161")
-        : (ecfConfig?.rnc_emisor || "132596161")
-    ).replace(/\D/g, "");
-
-    const encf = String(doc.encf || "").trim();
-    const monto = Number(doc.totalAmount || 0).toFixed(2);
-    const secCode = String(doc.securityCode || "").trim();
-
-    // 3. Si ya viene el qrContent oficial de EF2
     if (doc.qrContent && typeof doc.qrContent === "string" && doc.qrContent.startsWith("http")) {
-      // Corregir endpoint antiguo obsoleto si existiera
-      if (doc.qrContent.includes("consulta_ecf")) {
-        const params = new URLSearchParams();
-        params.set("RncEmisor", rnc || "132596161");
-        params.set("ENCF", encf);
-        params.set("MontoTotal", monto);
-        if (secCode && secCode !== "null" && secCode !== "undefined") {
-          params.set("CodigoSeguridad", secCode);
-        }
-        return `${baseUrl}?${params.toString()}`;
-      }
-
-      // Si ya es un enlace oficial de ConsultaTimbreFC
-      if (doc.qrContent.includes("ConsultaTimbreFC")) {
-        try {
-          const parsed = new URL(doc.qrContent);
-          // Si estamos en sandbox y tenía el RNC del negocio en lugar del de EF2, corregirlo
-          if (!isProd && parsed.searchParams.get("RncEmisor") && parsed.searchParams.get("RncEmisor") !== "132596161") {
-            parsed.searchParams.set("RncEmisor", rnc || "132596161");
-          }
-          return parsed.toString();
-        } catch {}
-      }
       return doc.qrContent;
     }
+    const isProd = ecfConfig?.ef2_environment === "eCF" || (ecfConfig as any)?.environment === "production";
+    const baseUrl = isProd
+      ? "https://fc.dgii.gov.do/ecf/ConsultaTimbreFC"
+      : "https://fc.dgii.gov.do/certecf/ConsultaTimbreFC";
 
-    // 4. Construcción con parámetros oficiales de la DGII
+    const rnc = (tenant?.rnc || ecfConfig?.rnc_emisor || "132596161").replace(/\D/g, "");
+    const encf = doc.encf || "";
+    const monto = Number(doc.totalAmount || 0).toFixed(2);
+    const secCode = (doc.securityCode || "").trim();
+
     const params = new URLSearchParams();
-    params.set("RncEmisor", rnc || "132596161");
+    params.set("RncEmisor", rnc);
     params.set("ENCF", encf);
     params.set("MontoTotal", monto);
     if (secCode && secCode !== "null" && secCode !== "undefined") {
@@ -553,22 +511,6 @@ function CentroFiscalPage() {
       const item = Array.isArray(res?.data) ? res.data[0] : res?.facturas?.[0] || res?.data || res;
       const dgii = item?.dgii || {};
       const docs = item?.documentos || {};
-
-      const liveQr = docs.qr_link || docs.timbre_qr || docs.qr || item?.qr_link || item?.qr || doc.qrContent;
-      const liveSec = item?.codigo_seguridad || dgii.codigo_seguridad || doc.securityCode;
-      const livePdf = docs.pdf || docs.pdf_url || item?.pdf_cloud_url || doc.pdfUrl;
-      const liveXml = docs.xml || docs.xml_url || item?.xml_cloud_url || doc.xmlUrl;
-      const liveTrack = dgii.track_id || item?.track_id || doc.trackId;
-
-      setSelectedAuditDetail((prev: any) => ({
-        ...(prev || doc),
-        qrContent: liveQr,
-        securityCode: liveSec,
-        pdfUrl: livePdf,
-        xmlUrl: liveXml,
-        trackId: liveTrack,
-        rawAudit: item,
-      }));
 
       setAuditLogs([
         {

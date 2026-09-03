@@ -3397,22 +3397,26 @@ export function TicketPrintPortal({
   );
 }
 
-function FacturaA4PrintPortal({ orden, tenant, clientes, empleados, onClose }: { orden: Orden; tenant: any; clientes: any[]; empleados: any[]; onClose: () => void }) {
+export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados = [], onClose }: { orden: Orden; tenant: any; clientes?: any[]; empleados?: any[]; onClose: () => void }) {
   const [emp, setEmp] = useState<any>(null);
   const [cli, setCli] = useState<any>(null);
   const [srvList, setSrvList] = useState<any[]>([]);
 
   useEffect(() => {
     Promise.all([
-      getEmpleadoById(orden.empleado_id).catch(() => null),
-      Promise.resolve(clientes.find(c => c.id === orden.cliente_id)),
-      getServicios(tenant.id)
+      orden.empleado_id ? getEmpleadoById(orden.empleado_id).catch(() => null) : Promise.resolve(null),
+      orden.cliente_id ? (clientes?.find(c => c.id === orden.cliente_id) || getClienteById(orden.cliente_id).catch(() => null)) : Promise.resolve(null),
+      tenant?.id ? getServicios(tenant.id).catch(() => []) : Promise.resolve([])
     ]).then(([e, c, s]) => {
-      setEmp(e || empleados.find(x => x.id === orden.empleado_id) || { nombre: "Personal" });
+      setEmp(e || empleados?.find(x => x.id === orden.empleado_id) || { nombre: "Personal" });
       setCli(c || { nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
-      setSrvList(s);
+      setSrvList(s || []);
+    }).catch(() => {
+      setEmp({ nombre: "Personal" });
+      setCli({ nombre: "Consumidor", apellido: "Final", cedula: "", telefono: "" });
+      setSrvList([]);
     });
-  }, [orden, tenant.id, clientes, empleados]);
+  }, [orden, tenant?.id, clientes, empleados]);
 
   if (!emp || !cli) return null;
 
