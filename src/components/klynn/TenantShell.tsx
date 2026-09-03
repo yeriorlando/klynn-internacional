@@ -54,6 +54,7 @@ import {
   Layers,
   WifiOff,
   Tag,
+  Lock,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -103,6 +104,7 @@ import { queryClient } from "@/router";
 import { useCajaAbierta, prefetchTenantData } from "@/hooks/use-queries";
 import ThemeSwitch from "@/components/theme-switch";
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
+import { PinLockScreen } from "@/components/klynn/PinLockScreen";
 import { UserAvatar } from "@/components/klynn/UserAvatar";
 
 interface NavItem {
@@ -197,6 +199,82 @@ export function TenantShell() {
         || pathname.endsWith("/estanteria")
         || pathname.endsWith("/reportes"));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Bloqueo de pantalla por inactividad (PIN)
+  const [isScreenLocked, setIsScreenLocked] = useState<boolean>(() => {
+    if (typeof window !== "undefined") {
+      return sessionStorage.getItem("klynn_screen_locked") === "true";
+    }
+    return false;
+  });
+
+  const [liveConfig, setLiveConfig] = useState<any>(user?.tenant?.config);
+  useEffect(() => {
+    if (user?.tenant?.config) {
+      setLiveConfig(user.tenant.config);
+    }
+  }, [user?.tenant?.config]);
+
+  useEffect(() => {
+    const handleConfigChange = (e: any) => {
+      if (e.detail) {
+        setLiveConfig((prev: any) => ({ ...(prev || {}), ...e.detail }));
+      }
+    };
+    window.addEventListener("klynn-tenant-config-changed", handleConfigChange);
+    return () => window.removeEventListener("klynn-tenant-config-changed", handleConfigChange);
+  }, []);
+
+  const inactivityMinutes = liveConfig?.bloqueo_inactividad_minutos ?? user?.tenant?.config?.bloqueo_inactividad_minutos ?? 0;
+  const lastActivityRef = useRef<number>(Date.now());
+
+  // Si la configuración está en 0 / Desactivado, limpiar cualquier bloqueo residual
+  useEffect(() => {
+    if (!inactivityMinutes || inactivityMinutes <= 0) {
+      setIsScreenLocked(false);
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("klynn_screen_locked");
+      }
+    }
+  }, [inactivityMinutes]);
+
+  useEffect(() => {
+    if (!inactivityMinutes || inactivityMinutes <= 0 || isScreenLocked) return;
+
+    const resetTimer = () => {
+      lastActivityRef.current = Date.now();
+    };
+
+    const events = ["mousemove", "mousedown", "keydown", "touchstart", "scroll", "click"];
+    events.forEach((evt) => window.addEventListener(evt, resetTimer, { passive: true }));
+
+    const checkInterval = setInterval(() => {
+      if (isScreenLocked) return;
+      const elapsed = Date.now() - lastActivityRef.current;
+      const thresholdMs = inactivityMinutes * 60 * 1000;
+      if (elapsed >= thresholdMs) {
+        setIsScreenLocked(true);
+        sessionStorage.setItem("klynn_screen_locked", "true");
+      }
+    }, 3000);
+
+    return () => {
+      events.forEach((evt) => window.removeEventListener(evt, resetTimer));
+      clearInterval(checkInterval);
+    };
+  }, [inactivityMinutes, isScreenLocked]);
+
+  const handleUnlock = () => {
+    setIsScreenLocked(false);
+    sessionStorage.removeItem("klynn_screen_locked");
+    lastActivityRef.current = Date.now();
+    toast.success("Pantalla desbloqueada 🔓");
+  };
+
+  const handleManualLock = () => {
+    setIsScreenLocked(true);
+    sessionStorage.setItem("klynn_screen_locked", "true");
+  };
 
   const [isOnline, setIsOnline] = useState(true);
   const [isInstalled, setIsInstalled] = useState(false);
@@ -805,6 +883,10 @@ export function TenantShell() {
     tenant.estado === "TRIAL" && new Date(tenant.trial_hasta).getTime() < Date.now();
 
   async function onLogout() {
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem("klynn_screen_locked");
+    }
+    setIsScreenLocked(false);
     const slug = tenant?.slug || (typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/)?.[1] : null);
     setIsLoggingOut(true);
     await logout();
@@ -909,12 +991,22 @@ export function TenantShell() {
 
   return (
     <div
-      className={`bg-background print:hidden ${pathname.endsWith("/conversations") ? "h-full overflow-hidden" : "min-h-screen"}`}
+      className={`bg-background print:hidden ${pathname.endsWith("/conversations") ? "h-full overflow-hidden" : "min-h-screen"} ${isScreenLocked ? "h-screen max-h-screen overflow-hidden" : ""}`}
     >
       <BrandStyle tenant={tenant} />
       {tenant.estado !== "SUSPENDIDO" && tenant.estado !== "CANCELADO" && (
         <TourManager userId={empleado.id} />
       )}
+
+      {/* Pantalla de Bloqueo por Inactividad (PIN) */}
+      <PinLockScreen
+        isOpen={isScreenLocked}
+        empleado={empleado}
+        tenant={tenant}
+        cajaAbierta={cajaAbierta}
+        onUnlock={handleUnlock}
+        onLogout={onLogout}
+      />
 
       {/* Overlay de Suspensión Premium Compacto */}
       {(tenant.estado === "SUSPENDIDO" || tenant.estado === "CANCELADO") && (
@@ -1352,7 +1444,7 @@ export function TenantShell() {
             <DropdownMenuTrigger asChild>
               <button
                 type="button"
-                className="relative grid h-10 w-10 place-items-center rounded-xl border border-transparent transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 data-[state=open]:border-slate-200 data-[state=open]:bg-white data-[state=open]:shadow-sm dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:data-[state=open]:border-slate-700 dark:data-[state=open]:bg-slate-900"
+                className="relative grid h-10 w-10 place-items-center rounded-xl border border-transparent transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 data-[state=open]:border-slate-200 data-[state=open]:bg-white data-[state=open]:shadow-sm dark:hover:border-slate-700 dark:hover:bg-slate-900 dark:data-[state=open]:border-slate-700 dark:data-[state=open]:bg-slate-900 cursor-pointer"
                 aria-label={
                   unreadNotifs > 0 ? `Notificaciones, ${unreadNotifs} sin leer` : "Notificaciones"
                 }
@@ -1638,7 +1730,18 @@ export function TenantShell() {
             </DropdownMenuContent>
           </DropdownMenu>
 
-          <UserMenu empleado={empleado} onLogout={onLogout} />
+          {/* Botón de bloqueo manual rápido */}
+          <button
+            type="button"
+            onClick={handleManualLock}
+            title="Bloquear pantalla (PIN)"
+            aria-label="Bloquear pantalla"
+            className="relative grid h-10 w-10 place-items-center rounded-xl border border-transparent transition-all duration-200 hover:border-slate-200 hover:bg-white hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30 dark:hover:border-slate-700 dark:hover:bg-slate-900 cursor-pointer active:scale-95 text-slate-600 dark:text-slate-300"
+          >
+            <Lock className="h-5 w-5" strokeWidth={2} />
+          </button>
+
+          <UserMenu empleado={empleado} onLogout={onLogout} onLock={handleManualLock} />
         </header>
 
         {/* Barra de progreso de navegación superior ultra suave */}
@@ -2246,7 +2349,7 @@ function SidebarContent({
   );
 }
 
-function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void }) {
+function UserMenu({ empleado, onLogout, onLock }: { empleado: any; onLogout: () => void; onLock?: () => void }) {
   const navigate = useNavigate();
   const { nombre, rol, avatar_url } = empleado;
   const [open, setOpen] = useState(false);
@@ -2391,6 +2494,24 @@ function UserMenu({ empleado, onLogout }: { empleado: any; onLogout: () => void 
             </span>
             <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-blue-500 dark:text-slate-600" />
           </DropdownMenuItem>
+
+          {onLock && (
+            <DropdownMenuItem
+              onSelect={onLock}
+              className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-amber-50 focus:text-amber-950 dark:focus:bg-amber-950/30 dark:focus:text-white"
+            >
+              <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-amber-50 text-amber-600 ring-1 ring-amber-100 transition-colors group-focus:bg-amber-100 dark:bg-amber-950/50 dark:text-amber-400 dark:ring-amber-900">
+                <Lock className="h-3.5 w-3.5" strokeWidth={2} />
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block text-xs font-bold leading-tight">Bloquear terminal</span>
+                <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
+                  Proteger pantalla con PIN
+                </span>
+              </span>
+              <ChevronRight className="h-3.5 w-3.5 text-slate-300 transition-transform group-focus:translate-x-0.5 group-focus:text-amber-500 dark:text-slate-600" />
+            </DropdownMenuItem>
+          )}
 
           <DropdownMenuSeparator className="mx-1 my-1 bg-slate-100 dark:bg-slate-800" />
 

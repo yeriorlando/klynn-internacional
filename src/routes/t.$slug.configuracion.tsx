@@ -1038,6 +1038,74 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                   </div>
                 </div>
               </div>
+
+              {/* Sección 4: Bloqueo por inactividad (PIN) */}
+              <div className="pt-5 border-t border-border/70">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700">
+                  <div className="flex items-center gap-3.5">
+                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Lock className="h-5.5 w-5.5" />
+                    </div>
+                    <div>
+                      <div className="text-sm font-bold text-foreground flex items-center gap-2">
+                        <span>Bloquear después de X tiempo (PIN)</span>
+                        <Badge variant="outline" className="text-[10px] font-bold border-emerald-300 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50">
+                          Seguridad POS
+                        </Badge>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Suspende la terminal automáticamente tras inactividad y exige el PIN de 4 dígitos del empleado para continuar.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 self-start lg:self-auto shrink-0 bg-white dark:bg-slate-950 p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs flex-wrap sm:flex-nowrap">
+                    {[
+                      { val: 0, label: "Desactivado" },
+                      { val: 1, label: "1 min" },
+                      { val: 2, label: "2 min" },
+                      { val: 3, label: "3 min" },
+                      { val: 5, label: "5 min" },
+                      { val: 10, label: "10 min" },
+                    ].map(({ val, label }) => {
+                      const currentVal = tenant.config?.bloqueo_inactividad_minutos ?? 0;
+                      const isSelected = currentVal === val;
+                      return (
+                        <button
+                          key={val}
+                          type="button"
+                          onClick={() => {
+                            updateCfg({ bloqueo_inactividad_minutos: val });
+                            saveCfg({ bloqueo_inactividad_minutos: val });
+                          }}
+                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                            isSelected
+                              ? "bg-[#1B4B73] text-white shadow-xs"
+                              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      );
+                    })}
+
+                    <div className="hidden sm:block h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 focus-within:border-[#1B4B73] focus-within:ring-2 focus-within:ring-[#1B4B73]/15 transition-all">
+                      <input
+                        type="number"
+                        min={0}
+                        max={120}
+                        value={tenant.config?.bloqueo_inactividad_minutos ?? 0}
+                        onChange={(e) => updateCfg({ bloqueo_inactividad_minutos: Math.max(0, Number(e.target.value)) })}
+                        onBlur={(e) => saveCfg({ bloqueo_inactividad_minutos: Math.max(0, Number(e.target.value)) })}
+                        className="w-8 text-center text-xs font-black bg-transparent border-none outline-none text-foreground p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
+                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">MIN</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Footer de Guardar */}

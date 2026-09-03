@@ -851,12 +851,17 @@ function AdminPage() {
           </div>
           <div className="flex items-center gap-3">
             {user?.empleado?.email && (
-              <div className="hidden sm:flex items-center gap-2 px-3.5 py-2 sm:py-2.5 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm font-semibold text-slate-700 dark:text-slate-200 shadow-2xs">
+              <div className="hidden sm:flex items-center gap-2.5 px-3.5 py-1.5 rounded-2xl bg-[#1B4B73] border-0 text-white shadow-xs">
+                <div className="h-6 w-6 rounded-full bg-white/20 text-[#F0B900] flex items-center justify-center text-[11px] font-black shrink-0">
+                  {user.empleado.email.charAt(0).toUpperCase()}
+                </div>
+                <span className="text-xs sm:text-sm font-bold text-white tracking-tight truncate max-w-[200px]">
+                  {user.empleado.email}
+                </span>
                 <span className="relative flex h-2 w-2 shrink-0">
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-400" />
                 </span>
-                <span className="truncate max-w-[200px]">{user.empleado.email}</span>
               </div>
             )}
             <button
@@ -4155,25 +4160,28 @@ function OnlineMonitorDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-2xl rounded-3xl p-6 sm:p-7 max-h-[85vh] flex flex-col">
-        <DialogHeader className="border-b pb-4">
-          <DialogTitle className="text-xl font-black font-display flex items-center gap-2.5 text-foreground pr-8">
-            <span className="h-3 w-3 rounded-full bg-emerald-500 animate-ping shrink-0" />
-            <span>Monitor de Lavanderías en Vivo</span>
-            <Badge className="bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 text-xs font-black ml-auto mr-8 sm:mr-10">
-              {grouped.length} {grouped.length === 1 ? 'lavandería en línea' : 'lavanderías en línea'}
+      <DialogContent className="max-w-lg rounded-2xl p-4 sm:p-5 max-h-[80vh] flex flex-col gap-3">
+        <DialogHeader className="border-b pb-3 space-y-1">
+          <DialogTitle className="text-base sm:text-lg font-bold flex items-center gap-2 text-foreground pr-8">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+              <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
+            </span>
+            <span className="truncate">Monitor de Lavanderías en Vivo</span>
+            <Badge className="bg-emerald-100 dark:bg-emerald-950/70 text-emerald-800 dark:text-emerald-300 border-emerald-300 text-[10px] font-bold ml-auto shrink-0">
+              {grouped.length} {grouped.length === 1 ? 'lavandería' : 'lavanderías'}
             </Badge>
           </DialogTitle>
-          <DialogDescription className="text-xs text-muted-foreground">
+          <DialogDescription className="text-xs text-muted-foreground leading-normal">
             Telemetría en tiempo real de terminales, cajeros y personal operando actualmente en la plataforma.
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-y-auto py-3 space-y-3 pr-1">
+        <div className="flex-1 overflow-y-auto py-1 space-y-2.5 pr-0.5 -mr-1">
           {grouped.length === 0 ? (
-            <div className="py-12 text-center text-muted-foreground text-sm space-y-2">
-              <WifiOff className="h-10 w-10 mx-auto text-slate-400 opacity-60" />
-              <p className="font-bold">No hay lavanderías conectadas en este momento</p>
+            <div className="py-8 text-center text-muted-foreground text-xs space-y-1.5">
+              <WifiOff className="h-8 w-8 mx-auto text-slate-400 opacity-60" />
+              <p className="font-bold text-sm">No hay lavanderías conectadas en este momento</p>
               <p className="text-xs text-slate-500 max-w-xs mx-auto">
                 Cuando un cajero o administrador abra Klynn en su terminal o celular, aparecerá aquí automáticamente.
               </p>
@@ -4184,35 +4192,35 @@ function OnlineMonitorDialog({
               return (
                 <div 
                   key={tenantId}
-                  className="p-4 rounded-2xl border border-emerald-500/20 bg-emerald-50/40 dark:bg-emerald-950/20 shadow-xs space-y-3 transition-all hover:border-emerald-500/40"
+                  className="p-3 rounded-xl border border-emerald-500/20 bg-emerald-50/35 dark:bg-emerald-950/20 shadow-2xs space-y-2 hover:border-emerald-500/40 transition-colors"
                 >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
+                  <div className="flex items-center justify-between gap-2.5">
+                    <div className="flex items-center gap-2.5 min-w-0">
                       <div className="relative shrink-0">
                         {tenant?.logo_url ? (
                           <img 
                             src={tenant.logo_url} 
                             alt={displayName} 
-                            className="h-11 w-11 rounded-full object-contain border bg-white p-0.5" 
+                            className="h-9 w-9 rounded-full object-contain border bg-white p-0.5" 
                           />
                         ) : (
                           <div 
-                            className="h-11 w-11 rounded-full flex items-center justify-center text-white font-black text-sm shadow-xs"
+                            className="h-9 w-9 rounded-full flex items-center justify-center text-white font-bold text-xs shadow-2xs"
                             style={{ backgroundColor: tenant?.color_primario || "#0891b2" }}
                           >
                             {displayName.charAt(0).toUpperCase()}
                           </div>
                         )}
-                        <span className="absolute bottom-0 right-0 h-3.5 w-3.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
+                        <span className="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 border-2 border-white dark:border-slate-900" />
                       </div>
                       <div className="min-w-0">
-                        <h4 className="font-bold text-sm text-foreground flex items-center gap-2 flex-wrap">
-                          <span className="truncate">{displayName}</span>
-                          <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-2 py-0.5 rounded-full">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h4 className="font-bold text-xs sm:text-sm text-foreground truncate">{displayName}</h4>
+                          <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 bg-emerald-100 dark:bg-emerald-950/80 px-1.5 py-0.2 rounded-full">
                             {tenantSessions.length} {tenantSessions.length === 1 ? 'conexión' : 'conexiones'}
                           </span>
-                        </h4>
-                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                        </div>
+                        <p className="text-[11px] text-muted-foreground truncate">
                           {tenant?.config?.nombre_sucursal || tenantSessions[0]?.sucursal || "Sucursal Principal"}
                         </p>
                       </div>
@@ -4226,32 +4234,32 @@ function OnlineMonitorDialog({
                           onOpenChange(false);
                           onNavigateToTenant(tenant);
                         }}
-                        className="rounded-xl font-bold text-xs h-8 gap-1.5 border-emerald-300 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950 cursor-pointer shadow-xs shrink-0"
+                        className="rounded-lg font-semibold text-xs h-7 px-2.5 gap-1 border-emerald-300 text-emerald-800 dark:text-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-950 cursor-pointer shadow-2xs shrink-0"
                       >
                         <span>Entrar</span>
-                        <ArrowRight className="h-3.5 w-3.5" />
+                        <ArrowRight className="h-3 w-3" />
                       </Button>
                     )}
                   </div>
 
                   {/* Terminales / Sesiones activas de este tenant */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1 border-t border-emerald-500/15">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 pt-1.5 border-t border-emerald-500/15">
                     {tenantSessions.map((session, idx) => (
                       <div 
                         key={idx}
-                        className="flex items-center gap-2 p-2 rounded-xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 text-xs"
+                        className="flex items-center gap-2 p-1.5 px-2 rounded-lg bg-white/90 dark:bg-slate-900/80 border border-slate-200/80 dark:border-slate-800/80 text-xs shadow-2xs"
                       >
-                        <div className="h-7 w-7 rounded-lg bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
-                          <Users className="h-3.5 w-3.5" />
+                        <div className="h-6 w-6 rounded-md bg-emerald-500/10 text-emerald-700 dark:text-emerald-400 flex items-center justify-center font-bold shrink-0">
+                          <Users className="h-3 w-3" />
                         </div>
                         <div className="min-w-0 flex-1">
-                          <div className="font-bold text-foreground truncate flex items-center gap-1.5">
-                            <span className="truncate">{session.empleado_nombre || "Usuario"}</span>
-                            <Badge variant="outline" className="text-[9px] px-1 py-0 font-extrabold uppercase">
+                          <div className="font-semibold text-foreground truncate flex items-center gap-1">
+                            <span className="truncate text-xs">{session.empleado_nombre || "Usuario"}</span>
+                            <Badge variant="outline" className="text-[8.5px] px-1 py-0 h-3.5 font-bold uppercase tracking-wider">
                               {session.empleado_rol || "Cajero"}
                             </Badge>
                           </div>
-                          <div className="text-[10px] text-muted-foreground truncate">
+                          <div className="text-[9.5px] text-muted-foreground truncate">
                             Conectado: {new Date(session.online_at).toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" })}
                           </div>
                         </div>
@@ -4264,11 +4272,12 @@ function OnlineMonitorDialog({
           )}
         </div>
 
-        <DialogFooter className="border-t pt-3">
+        <DialogFooter className="border-t pt-2 mt-0.5">
           <Button 
             variant="outline" 
+            size="sm"
             onClick={() => onOpenChange(false)} 
-            className="rounded-xl h-9 text-xs font-bold w-full sm:w-auto"
+            className="rounded-lg h-7.5 px-3 text-xs font-semibold w-full sm:w-auto"
           >
             Cerrar
           </Button>

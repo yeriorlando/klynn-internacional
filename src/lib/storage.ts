@@ -233,6 +233,7 @@ export interface TenantConfig {
   habilitar_control_marbetes?: boolean;
   ultimo_marbete_color?: string;
   ultimo_marbete_secuencia?: number;
+  bloqueo_inactividad_minutos?: number;
 }
 
 export interface WeeklySummaryConfig {
@@ -830,6 +831,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   ticket_imprimir_copia_caja: false,
   ticket_imprimir_marquillas_auto: false,
   habilitar_control_marbetes: false,
+  bloqueo_inactividad_minutos: 0,
   whatsapp: {
     enabled: false,
     api_key: "",
@@ -1394,6 +1396,10 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
       payload: { config: cleanConfig },
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+  }
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("klynn-tenant-config-changed", { detail: cleanConfig }));
   }
 }
 
@@ -4137,7 +4143,13 @@ export function setSession(s: Session | null) {
         s.offline_expires_at ||
         new Date(Date.parse(verifiedAt) + 12 * 60 * 60 * 1000).toISOString(),
     });
-  } else if (isBrowser()) localStorage.removeItem(KEY.session);
+    if (isBrowser()) {
+      sessionStorage.removeItem("klynn_screen_locked");
+    }
+  } else if (isBrowser()) {
+    localStorage.removeItem(KEY.session);
+    sessionStorage.removeItem("klynn_screen_locked");
+  }
 }
 
 async function cacheEmployeeForOffline(emp: Empleado, password: string): Promise<void> {
@@ -4361,6 +4373,7 @@ export async function logout() {
       localStorage.removeItem("klynn_emp_id_admin");
       localStorage.removeItem("klynn_read_virtuals");
       localStorage.removeItem("klynn_deleted_virtuals");
+      sessionStorage.removeItem("klynn_screen_locked");
       // Limpiar cachés de tenants y empleados para evitar filtración de perfiles
       Object.keys(localStorage).forEach((key) => {
         if (
@@ -4391,7 +4404,7 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   const cacheUserResult = (empleado: Empleado, tenant: Tenant) => {
     if (typeof window !== "undefined") {
       try {
-        const safeEmployee = { ...empleado, password: "***", pin: undefined };
+        const safeEmployee = { ...empleado, password: "***", pin: empleado.pin || "" };
         localStorage.setItem(
           "klynn_last_auth_user",
           JSON.stringify({ empleado: safeEmployee, tenant }),
