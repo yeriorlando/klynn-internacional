@@ -331,7 +331,7 @@ function PromocionesPage() {
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black font-display text-foreground">{totalActivas}</span>
             <span className="text-[11px] font-semibold text-emerald-600">
-              {totalActivas === 1 ? "activa en POS" : "activas en POS"}
+              {totalActivas === 1 ? "Activa en POS" : "Activas en POS"}
             </span>
           </div>
         </Card>
@@ -345,7 +345,7 @@ function PromocionesPage() {
           </div>
           <div className="mt-2 flex items-baseline gap-2">
             <span className="text-2xl font-black font-display text-foreground">{totalUsos}</span>
-            <span className="text-[11px] font-semibold text-muted-foreground">veces aplicadas</span>
+            <span className="text-[11px] font-semibold text-muted-foreground">Veces aplicadas</span>
           </div>
         </Card>
 
@@ -672,7 +672,7 @@ function PromocionesPage() {
                     placeholder="Ej. Martes de Edredones, Combo 20 Libras, Black Friday..."
                     value={nombre}
                     onChange={(e) => setNombre(e.target.value)}
-                    className="mt-1 h-8.5 rounded-lg text-xs font-semibold"
+                    className="mt-1 h-8.5 rounded-lg text-xs font-semibold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     autoFocus
                   />
                 </div>
@@ -683,7 +683,7 @@ function PromocionesPage() {
                     placeholder="Ej. 20% de descuento en ropa de cama todos los martes para llenar la jornada"
                     value={descripcion}
                     onChange={(e) => setDescripcion(e.target.value)}
-                    className="mt-1 rounded-lg text-xs resize-none py-1.5"
+                    className="mt-1 rounded-lg text-xs resize-none py-1.5 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     rows={2}
                   />
                 </div>
@@ -729,7 +729,7 @@ function PromocionesPage() {
                         max={tipoDescuento === "PORCENTAJE" ? 100 : 99999}
                         value={valorDescuento || ""}
                         onChange={(e) => setValorDescuento(parseFloat(e.target.value) || 0)}
-                        className="h-8.5 rounded-lg text-xs font-black pr-10 text-center"
+                        className="h-8.5 rounded-lg text-xs font-black pr-10 text-center bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                       />
                       <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-black text-muted-foreground">
                         {tipoDescuento === "PORCENTAJE" ? "%" : "RD$"}
@@ -920,7 +920,7 @@ function PromocionesPage() {
                         placeholder="Buscar categoría en catálogo..."
                         value={searchScopeItem}
                         onChange={(e) => setSearchScopeItem(e.target.value)}
-                        className="h-8 pl-8 pr-7 text-xs rounded-xl bg-background border-border/70"
+                        className="h-8 pl-8 pr-7 text-xs rounded-xl bg-white dark:bg-slate-900 border-border/70"
                       />
                       {searchScopeItem && (
                         <button
@@ -1013,7 +1013,7 @@ function PromocionesPage() {
                         placeholder="Buscar servicio..."
                         value={searchScopeItem}
                         onChange={(e) => setSearchScopeItem(e.target.value)}
-                        className="h-8 pl-8 pr-7 text-xs rounded-xl bg-background border-border/70"
+                        className="h-8 pl-8 pr-7 text-xs rounded-xl bg-white dark:bg-slate-900 border-border/70"
                       />
                       {searchScopeItem && (
                         <button
@@ -1135,7 +1135,7 @@ function PromocionesPage() {
                       placeholder="0 = Sin mínimo"
                       value={minPiezas || ""}
                       onChange={(e) => setMinPiezas(parseInt(e.target.value) || 0)}
-                      className="mt-1 h-8 rounded-lg text-xs"
+                      className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                   </div>
 
@@ -1147,7 +1147,7 @@ function PromocionesPage() {
                       placeholder="0 = Sin mínimo"
                       value={minSubtotal || ""}
                       onChange={(e) => setMinSubtotal(parseFloat(e.target.value) || 0)}
-                      className="mt-1 h-8 rounded-lg text-xs"
+                      className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                   </div>
                 </div>
@@ -1160,7 +1160,7 @@ function PromocionesPage() {
                       type="date"
                       value={fechaInicio}
                       onChange={(e) => setFechaInicio(e.target.value)}
-                      className="mt-1 h-8 rounded-lg text-xs"
+                      className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                   </div>
                   <div>
@@ -1169,7 +1169,7 @@ function PromocionesPage() {
                       type="date"
                       value={fechaFin}
                       onChange={(e) => setFechaFin(e.target.value)}
-                      className="mt-1 h-8 rounded-lg text-xs"
+                      className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                     />
                   </div>
                 </div>
@@ -1181,7 +1181,7 @@ function PromocionesPage() {
                     placeholder="EJ. BIENVENIDA10, VERANO2026 (VACÍO = AUTOMÁTICA)"
                     value={codigoCupon}
                     onChange={(e) => setCodigoCupon(e.target.value.toUpperCase())}
-                    className="mt-1 h-8 rounded-lg text-xs uppercase font-mono font-bold"
+                    className="mt-1 h-8 rounded-lg text-xs uppercase font-mono font-bold bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                   />
                   <span className="text-[10px] text-muted-foreground mt-0.5 block">
                     Si ingresas un cupón, el cajero deberá introducir este código para aplicarlo.

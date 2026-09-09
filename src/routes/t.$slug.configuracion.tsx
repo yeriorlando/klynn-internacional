@@ -551,6 +551,7 @@ function ConfigPage() {
   const [showCheckout, setShowCheckout] = useState(false);
   const [showHistorialPagos, setShowHistorialPagos] = useState(false);
   const [showSuccess, setShowSuccess] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
   const cfg: TenantConfig = tenant?.config || DEFAULT_CONFIG;
 
@@ -928,9 +929,11 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
   // Impresora Windows (POS80): siempre lista para probar vía diálogo del navegador.
   const isPrinterConnected = true;
 
-  async function save(updates: Partial<Tenant>) {
+  async function save(updates?: Partial<Tenant>) {
+    if (isSaving) return;
+    setIsSaving(true);
     try {
-      const next: Tenant = { ...tenant!, ...updates } as Tenant;
+      const next: Tenant = { ...tenant!, ...(updates || {}) } as Tenant;
       await saveTenant(next);
       if (next.config) {
         await saveTenantConfig(tenantId, next.config);
@@ -938,10 +941,12 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
       setTenant(next);
       queryClient.invalidateQueries({ queryKey: ["tenant"] });
       queryClient.invalidateQueries({ queryKey: ["tenants"] });
-      toast.success("Guardado correctamente ✅");
+      toast.success("¡Cambios guardados correctamente! ✅");
     } catch (err: any) {
       console.error("Error saving tenant:", err);
       toast.error("Error al guardar: " + (err.message || "desconocido"));
+    } finally {
+      setIsSaving(false);
     }
   }
   async function saveCfg(c: Partial<TenantConfig>, silent = false) {
@@ -1250,10 +1255,11 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
               </span>
               <Button 
                 onClick={() => save(tenant)}
-                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+                disabled={isSaving}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 disabled:opacity-60"
               >
-                <Save className="h-4 w-4" />
-                <span>Guardar cambios</span>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <span>{isSaving ? "Guardando..." : "Guardar cambios"}</span>
               </Button>
             </div>
           </Card>
@@ -1433,10 +1439,11 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
             </span>
             <Button 
               onClick={() => save(tenant)}
-              className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+              disabled={isSaving}
+              className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 disabled:opacity-60"
             >
-              <Save className="h-4 w-4" />
-              <span>Guardar cambios</span>
+              {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+              <span>{isSaving ? "Guardando..." : "Guardar cambios"}</span>
             </Button>
           </Card>
         </TabsContent>
@@ -1626,10 +1633,11 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
               </span>
               <Button 
                 onClick={() => save(tenant)}
-                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+                disabled={isSaving}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 disabled:opacity-60"
               >
-                <Save className="h-4 w-4" />
-                <span>Guardar cambios</span>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <span>{isSaving ? "Guardando..." : "Guardar cambios"}</span>
               </Button>
             </div>
           </Card>
@@ -2381,10 +2389,11 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
               </span>
               <Button 
                 onClick={() => save(tenant)}
-                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+                disabled={isSaving}
+                className="w-full sm:w-auto bg-primary hover:bg-primary/95 text-white font-bold h-10 px-5 rounded-xl shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2 disabled:opacity-60"
               >
-                <Save className="h-4 w-4" />
-                <span>Guardar cambios</span>
+                {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+                <span>{isSaving ? "Guardando..." : "Guardar cambios"}</span>
               </Button>
             </div>
           </Card>
