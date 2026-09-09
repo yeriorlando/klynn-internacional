@@ -565,21 +565,27 @@ serve(async (req) => {
     const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || Deno.env.get("SUPABASE_SERVICE_KEY");
     if (!supabaseUrl || !anonKey || !serviceKey) return json({ error: "Configuración incompleta de Supabase" }, 500);
     const admin = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
+    const url = new URL(req.url);
     const body = await req.json().catch(() => ({}));
-    const action = String(body?.action || "test");
+    const action = String(url.searchParams.get("action") || body?.action || "test");
     const { data: globalConfig } = await admin.from("global_config").select("*").eq("id", 1).maybeSingle();
 
     if (action === "run-scheduled") {
       const expectedSecret = Deno.env.get("WEEKLY_SUMMARY_CRON_SECRET") || "klynn_cron_secret_2026";
-      const cronSecretHeader = req.headers.get("x-cron-secret");
-      const authHeader = req.headers.get("Authorization") || "";
+      const passedSecret =
+        req.headers.get("x-cron-secret") ||
+        url.searchParams.get("secret") ||
+        url.searchParams.get("cron_secret") ||
+        body?.secret ||
+        body?.cron_secret;
+      const authHeader = req.headers.get("Authorization") || req.headers.get("authorization") || "";
       const isServiceRole =
         authHeader.includes(serviceKey) ||
         (anonKey && authHeader.includes(anonKey)) ||
         req.headers.get("apikey") === serviceKey;
 
       let isAuthorized = false;
-      if (cronSecretHeader && cronSecretHeader === expectedSecret) {
+      if (passedSecret && passedSecret === expectedSecret) {
         isAuthorized = true;
       } else if (isServiceRole) {
         isAuthorized = true;
