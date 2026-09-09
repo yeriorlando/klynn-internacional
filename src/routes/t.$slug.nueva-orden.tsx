@@ -702,6 +702,7 @@ function NuevaOrdenPage() {
   const [weightPickerService, setWeightPickerService] = useState<Servicio | null>(null);
   const [weightQty, setWeightQty] = useState<number>(10);
   const [selectedPromo, setSelectedPromo] = useState<Promocion | null>(null);
+  const [promoDismissedManually, setPromoDismissedManually] = useState(false);
 
   useEffect(() => {
     if (servicePickerItem) {
@@ -858,9 +859,30 @@ function NuevaOrdenPage() {
     }
   }, [validTipos, tipoECF]);
 
+  // Si los items llegan a 0, permitir que se vuelva a evaluar la auto-promoción en una nueva orden
+  useEffect(() => {
+    if (items.length === 0) {
+      setPromoDismissedManually(false);
+    }
+  }, [items.length]);
+
   // Auto-detección de promociones aplicables si no hay promo fijada ni descuento manual
   useEffect(() => {
-    if (!hasPromocionesModule || selectedPromo || descuento > 0 || items.length === 0) return;
+    // REGLA FUNDAMENTAL: Si el cliente tiene un descuento fijo, NO APLICA NINGUNA PROMOCIÓN
+    const hasFixedDiscount = cliente && (cliente.descuento_fijo ?? 0) > 0;
+    if (hasFixedDiscount) {
+      if (selectedPromo) setSelectedPromo(null);
+      return;
+    }
+
+    if (
+      !hasPromocionesModule || 
+      selectedPromo || 
+      descuento > 0 || 
+      promoDismissedManually || 
+      items.length === 0
+    ) return;
+
     const currentDay = new Date().getDay();
     const todayStr = new Date().toISOString().split("T")[0];
 
@@ -898,7 +920,7 @@ function NuevaOrdenPage() {
       toast.success(`✨ Promoción aplicada: ${p.nombre}`, { id: `promo-${p.id}`, duration: 3000 });
       break;
     }
-  }, [items, promocionesData, selectedPromo, descuento, totalPiezasCalculadas, catalogoMap, hasPromocionesModule]);
+  }, [items, promocionesData, selectedPromo, descuento, totalPiezasCalculadas, catalogoMap, hasPromocionesModule, promoDismissedManually, cliente?.descuento_fijo]);
 
   const [metodo, setMetodo] = useState<MetodoPago>("PAGO_AL_RETIRAR");
   const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("PAGO_AL_RETIRAR");
@@ -996,6 +1018,33 @@ function NuevaOrdenPage() {
       handleSelectGeneric("Persona");
     }
   }, [tenantId]);
+
+  // Auto-aplicar descuento fijo del cliente si la opción está activada en Configuración > Caja
+  useEffect(() => {
+    const isDescuentoClienteHabilitado = cfg?.descuento_cliente_activo !== false;
+    if (!isDescuentoClienteHabilitado) return;
+
+    if (cliente && (cliente.descuento_fijo ?? 0) > 0) {
+      // SI EL CLIENTE TIENE DESCUENTO FIJO, NO APLICA NINGUNA PROMOCIÓN
+      setSelectedPromo(null);
+      setPromoDismissedManually(true);
+      setDescuento(Number(cliente.descuento_fijo));
+      toast.info(`Descuento de cliente aplicado: ${cliente.descuento_fijo}%`, {
+        id: "descuento-cliente-auto",
+      });
+    } else if (cliente && (cliente.descuento_fijo ?? 0) === 0) {
+      setDescuento(0);
+    }
+  }, [cliente?.id, cliente?.descuento_fijo, cfg?.descuento_cliente_activo]);
+
+  // Sincronizar el cliente seleccionado con la lista actualizada de clientes (por si se actualizó su descuento o datos)
+  useEffect(() => {
+    if (!cliente || !clientes || clientes.length === 0) return;
+    const fresh = clientes.find((c) => c.id === cliente.id);
+    if (fresh && fresh.descuento_fijo !== cliente.descuento_fijo) {
+      setCliente(fresh);
+    }
+  }, [clientes, cliente?.id]);
 
 
 
@@ -1107,6 +1156,7 @@ function getMarbeteColorStyle(colorName?: string) {
     setCustomServicePrices({});
     setDescuento(0);
     setSelectedPromo(null);
+    setPromoDismissedManually(false);
     setNotas("");
     setUbicacionRopa("");
     setShowNotesPOS(false);
@@ -2644,32 +2694,56 @@ function getMarbeteColorStyle(colorName?: string) {
                   <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setShowDiscountPOS(true)}
-                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
-                    selectedPromo
-                      ? "bg-emerald-700 text-white shadow-inner ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-background"
-                      : descuento > 0
-                        ? "bg-rose-700 text-white shadow-inner ring-2 ring-rose-400 ring-offset-1 dark:ring-offset-background"
-                        : "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
-                  }`}
-                >
-                  {selectedPromo ? (
-                    <Sparkles className="h-4 w-4 transition-colors text-white" />
-                  ) : (
-                    <Percent
-                      className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
-                    />
+                <div className="flex items-center shadow-sm rounded-lg overflow-hidden">
+                  <button
+                    type="button"
+                    onClick={() => setShowDiscountPOS(true)}
+                    className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                      selectedPromo
+                        ? "bg-emerald-700 text-white shadow-inner ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-background"
+                        : descuento > 0
+                          ? "bg-rose-700 text-white shadow-inner ring-2 ring-rose-400 ring-offset-1 dark:ring-offset-background"
+                          : "bg-rose-600 hover:bg-rose-700 text-white"
+                    }`}
+                  >
+                    {selectedPromo ? (
+                      <Sparkles className="h-4 w-4 transition-colors text-white" />
+                    ) : (
+                      <Percent
+                        className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                      />
+                    )}
+                    <span>
+                      {selectedPromo
+                        ? `Promo: ${selectedPromo.nombre}`
+                        : cliente && (cliente.descuento_fijo ?? 0) > 0 && descuento === Number(cliente.descuento_fijo)
+                          ? `Desc. Cliente: ${descuento}%`
+                          : descuento > 0
+                            ? `Desc. ${descuento}%`
+                            : "Descuento / Promo"}
+                    </span>
+                  </button>
+                  {(selectedPromo || descuento > 0) && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setPromoDismissedManually(true);
+                        setSelectedPromo(null);
+                        setDescuento(0);
+                        toast.info(selectedPromo ? "Promoción removida" : "Descuento removido");
+                      }}
+                      className={`h-9 px-2 flex items-center justify-center border-l border-white/25 transition-colors text-white cursor-pointer active:scale-95 ${
+                        selectedPromo
+                          ? "bg-emerald-800 hover:bg-emerald-900"
+                          : "bg-rose-800 hover:bg-rose-900"
+                      }`}
+                      title={selectedPromo ? "Quitar promoción de esta orden" : "Quitar descuento"}
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
                   )}
-                  <span>
-                    {selectedPromo
-                      ? `Promo: ${selectedPromo.nombre}`
-                      : descuento > 0
-                        ? `Desc. ${descuento}%`
-                        : "Descuento / Promo"}
-                  </span>
-                </button>
+                </div>
 
                 <button
                   type="button"
@@ -2800,6 +2874,8 @@ function getMarbeteColorStyle(colorName?: string) {
               selectedPromo={selectedPromo}
               setSelectedPromo={setSelectedPromo}
               hasPromocionesModule={hasPromocionesModule}
+              cliente={cliente}
+              setPromoDismissedManually={setPromoDismissedManually}
             />
 
             <NotesPOSDialog
@@ -3328,7 +3404,7 @@ function getMarbeteColorStyle(colorName?: string) {
                       )}
                     </div>
                     <div className="flex flex-col min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
+                      <div className="flex items-center gap-1.5 flex-wrap">
                         <span className="text-xs font-bold text-slate-900 dark:text-slate-100 truncate">
                           {cliente.nombre} {cliente.apellido || ""}
                         </span>
@@ -3338,6 +3414,11 @@ function getMarbeteColorStyle(colorName?: string) {
                         >
                           {cliente.tipo === "Empresa" ? "Empresa" : "Cliente"}
                         </Badge>
+                        {(cliente.descuento_fijo ?? 0) > 0 && (
+                          <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-black shrink-0">
+                            %{cliente.descuento_fijo}% Desc. Fijo
+                          </Badge>
+                        )}
                       </div>
                       <div className="flex items-center gap-2 text-[10px] text-slate-500 dark:text-slate-400 font-medium truncate mt-0.5">
                         {cliente.telefono && cliente.telefono !== "---" && (
@@ -4060,22 +4141,41 @@ function getMarbeteColorStyle(colorName?: string) {
                           <Sparkles className="h-3.5 w-3.5" />
                           <span>PROMO: {selectedPromo.nombre}</span>
                         </span>
+                      ) : (cliente && (cliente.descuento_fijo ?? 0) > 0 && descuento === Number(cliente.descuento_fijo)) ? (
+                        <span className="inline-flex items-center gap-1 text-rose-600 dark:text-rose-400 font-black">
+                          <Percent className="h-3.5 w-3.5" />
+                          <span>DESCUENTO CLIENTE ({descuento}%)</span>
+                        </span>
                       ) : (
                         <span>DESCUENTO ({descuento}%)</span>
                       )}
                     </span>
                     <div className="flex items-center gap-1">
                       <span>-{formatRD(descuentoMonto)}</span>
-                      {selectedPromo && (
+                      {selectedPromo ? (
                         <button
                           type="button"
                           onClick={() => {
+                            setPromoDismissedManually(true);
                             setSelectedPromo(null);
                             setDescuento(0);
                             toast.info("Promoción removida");
                           }}
                           className="h-4 w-4 rounded text-muted-foreground hover:text-destructive hover:bg-rose-50 flex items-center justify-center text-[10px] cursor-pointer"
                           title="Remover promoción"
+                        >
+                          ✕
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPromoDismissedManually(true);
+                            setDescuento(0);
+                            toast.info("Descuento removido");
+                          }}
+                          className="h-4 w-4 rounded text-muted-foreground hover:text-destructive hover:bg-rose-50 flex items-center justify-center text-[10px] cursor-pointer"
+                          title="Remover descuento"
                         >
                           ✕
                         </button>
@@ -4343,6 +4443,11 @@ function getMarbeteColorStyle(colorName?: string) {
                         key={c.id}
                         onClick={() => {
                           setCliente(c);
+                          if (cfg?.descuento_cliente_activo !== false && (c.descuento_fijo ?? 0) > 0) {
+                            setSelectedPromo(null);
+                            setPromoDismissedManually(true);
+                            setDescuento(Number(c.descuento_fijo));
+                          }
                           if (!isPosMode) {
                             irAlPasoSiguienteDelCliente();
                           }
@@ -4376,7 +4481,12 @@ function getMarbeteColorStyle(colorName?: string) {
                             </div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3 shrink-0">
+                        <div className="flex items-center gap-2 shrink-0">
+                          {(c.descuento_fijo ?? 0) > 0 && (
+                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[10px] font-black">
+                              %{c.descuento_fijo}% Desc.
+                            </Badge>
+                          )}
                           {c.tipo === "Empresa" ? (
                             <Badge
                               variant="outline"
@@ -5621,6 +5731,11 @@ function getMarbeteColorStyle(colorName?: string) {
                     onClick={() => {
                       setCliente(c);
                       setIsClientModalOpen(false);
+                      if (cfg?.descuento_cliente_activo !== false && (c.descuento_fijo ?? 0) > 0) {
+                        setSelectedPromo(null);
+                        setPromoDismissedManually(true);
+                        setDescuento(Number(c.descuento_fijo));
+                      }
                       const isEmpresa = c.tipo === "Empresa" || (c.cedula && c.cedula.length >= 9);
                       const target = isElectronic
                         ? isEmpresa
@@ -5654,8 +5769,13 @@ function getMarbeteColorStyle(colorName?: string) {
                         )}
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="font-bold text-sm truncate leading-snug">
-                          {c.nombre} {c.apellido || ""}
+                        <div className="flex items-center gap-1.5 font-bold text-sm truncate leading-snug">
+                          <span className="truncate">{c.nombre} {c.apellido || ""}</span>
+                          {(c.descuento_fijo ?? 0) > 0 && (
+                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-black shrink-0">
+                              %{c.descuento_fijo}% Desc.
+                            </Badge>
+                          )}
                         </div>
                         <div
                           className={`text-xs transition-colors mt-0.5 ${
@@ -5717,6 +5837,11 @@ function getMarbeteColorStyle(colorName?: string) {
         onDone={(c) => {
           if (c) {
             setCliente(c);
+            if (cfg?.descuento_cliente_activo !== false && (c.descuento_fijo ?? 0) > 0) {
+              setSelectedPromo(null);
+              setPromoDismissedManually(true);
+              setDescuento(Number(c.descuento_fijo));
+            }
             if (!isPosMode) {
               irAlPasoSiguienteDelCliente();
             }
@@ -5762,7 +5887,7 @@ function getMarbeteColorStyle(colorName?: string) {
                   onChange={(e) => setRncInput(e.target.value)}
                   placeholder="Ej. 131123456"
                   disabled={rncLoading}
-                  className="h-10 rounded-xl border-border bg-background"
+                  className="h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus:bg-white"
                   onKeyDown={(e) => e.key === "Enter" && handleSearchEmpresaRNC()}
                   autoFocus
                 />
@@ -8413,6 +8538,8 @@ function DiscountPOSDialog({
   selectedPromo,
   setSelectedPromo,
   hasPromocionesModule = true,
+  cliente,
+  setPromoDismissedManually,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
@@ -8423,8 +8550,11 @@ function DiscountPOSDialog({
   selectedPromo?: Promocion | null;
   setSelectedPromo?: (p: Promocion | null) => void;
   hasPromocionesModule?: boolean;
+  cliente?: Cliente | null;
+  setPromoDismissedManually?: (v: boolean) => void;
 }) {
-  const [activeTab, setActiveTab] = useState<"promos" | "manual">("promos");
+  const hasFixedDiscount = Boolean(cliente && (cliente.descuento_fijo ?? 0) > 0);
+  const [activeTab, setActiveTab] = useState<"promos" | "manual">("manual");
   const [val, setVal] = useState(discount > 0 ? String(discount) : "");
   const [couponInput, setCouponInput] = useState("");
 
@@ -8432,15 +8562,17 @@ function DiscountPOSDialog({
 
   useEffect(() => {
     if (open) {
-      setVal(discount > 0 ? String(discount) : "");
+      setVal(discount > 0 ? String(discount) : (hasFixedDiscount ? String(cliente?.descuento_fijo) : ""));
       setCouponInput("");
-      if (hasPromocionesModule && promociones && promociones.some((p) => p.activo)) {
+      if (hasFixedDiscount) {
+        setActiveTab("manual");
+      } else if (hasPromocionesModule && promociones && promociones.some((p) => p.activo) && !selectedPromo && discount === 0) {
         setActiveTab("promos");
       } else {
         setActiveTab("manual");
       }
     }
-  }, [open, discount, promociones, hasPromocionesModule]);
+  }, [open, discount, promociones, hasPromocionesModule, hasFixedDiscount, cliente?.descuento_fijo, selectedPromo]);
 
   const activePromos = useMemo(() => {
     const currentDay = new Date().getDay();
@@ -8461,6 +8593,7 @@ function DiscountPOSDialog({
       toast.error(`Límite permitido: ${maxLimit}%`);
       return;
     }
+    if (setPromoDismissedManually) setPromoDismissedManually(true);
     if (setSelectedPromo) setSelectedPromo(null);
     setDiscount(num);
     toast.success(`Descuento de ${num}% aplicado`);
@@ -8468,6 +8601,11 @@ function DiscountPOSDialog({
   }
 
   function handleSelectPromo(p: Promocion) {
+    if (hasFixedDiscount) {
+      toast.warning(`Este cliente ya tiene un descuento fijo del ${cliente?.descuento_fijo}%. No aplican promociones adicionales.`);
+      return;
+    }
+    if (setPromoDismissedManually) setPromoDismissedManually(false);
     if (setDiscount) setDiscount(0);
     if (setSelectedPromo) setSelectedPromo(p);
     toast.success(`Promoción "${p.nombre}" aplicada`);
@@ -8475,6 +8613,10 @@ function DiscountPOSDialog({
   }
 
   function handleApplyCoupon() {
+    if (hasFixedDiscount) {
+      toast.warning(`Este cliente ya tiene un descuento fijo del ${cliente?.descuento_fijo}%. No aplican cupones adicionales.`);
+      return;
+    }
     if (!couponInput.trim()) return;
     const match = promociones.find(
       (p) => p.activo && p.codigo_cupon?.toLowerCase() === couponInput.trim().toLowerCase()
@@ -8483,6 +8625,7 @@ function DiscountPOSDialog({
       toast.error("Cupón no válido o inactivo");
       return;
     }
+    if (setPromoDismissedManually) setPromoDismissedManually(false);
     if (setDiscount) setDiscount(0);
     if (setSelectedPromo) setSelectedPromo(match);
     toast.success(`¡Cupón "${match.codigo_cupon}" aplicado exitosamente!`);
@@ -8490,11 +8633,12 @@ function DiscountPOSDialog({
   }
 
   function handleClear() {
+    if (setPromoDismissedManually) setPromoDismissedManually(true);
     if (setDiscount) setDiscount(0);
     if (setSelectedPromo) setSelectedPromo(null);
     setVal("");
     setCouponInput("");
-    toast.info("Descuentos y promociones removidos");
+    toast.info("Descuentos y promociones removidos de esta orden");
     onOpenChange(false);
   }
 
@@ -8522,17 +8666,56 @@ function DiscountPOSDialog({
           </DialogDescription>
         </DialogHeader>
 
+        {hasFixedDiscount && (
+          <div className="flex items-center justify-between p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-xs">
+            <div className="flex items-center gap-2">
+              <Badge className="bg-emerald-600 text-white text-[10px] font-black shrink-0">
+                %{cliente?.descuento_fijo}% Fijo
+              </Badge>
+              <span className="font-semibold text-emerald-900 dark:text-emerald-200 text-xs">
+                Cliente VIP con descuento fijo ({cliente?.descuento_fijo}%). No aplican promociones adicionales.
+              </span>
+            </div>
+            {discount !== Number(cliente?.descuento_fijo) && (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (setPromoDismissedManually) setPromoDismissedManually(true);
+                  if (setSelectedPromo) setSelectedPromo(null);
+                  setDiscount(Number(cliente?.descuento_fijo));
+                  setVal(String(cliente?.descuento_fijo));
+                  toast.success(`Descuento de cliente (${cliente?.descuento_fijo}%) re-aplicado`);
+                  onOpenChange(false);
+                }}
+                className="h-7 text-[11px] font-bold border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 shrink-0 cursor-pointer"
+              >
+                Re-aplicar
+              </Button>
+            )}
+          </div>
+        )}
+
         {/* TAB SWITCHER (Solo si tiene módulo de promociones) */}
         {hasPromocionesModule && (
           <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mt-1">
             <button
               type="button"
-              onClick={() => setActiveTab("promos")}
+              disabled={hasFixedDiscount}
+              onClick={() => {
+                if (hasFixedDiscount) {
+                  toast.warning(`Este cliente tiene un descuento fijo del ${cliente?.descuento_fijo}%. No aplican promociones.`);
+                  return;
+                }
+                setActiveTab("promos");
+              }}
               className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
                 activeTab === "promos"
                   ? "bg-white dark:bg-slate-900 text-foreground shadow-xs"
                   : "text-muted-foreground hover:text-foreground"
-              }`}
+              } ${hasFixedDiscount ? "opacity-40 cursor-not-allowed" : ""}`}
+              title={hasFixedDiscount ? "No aplican promociones a clientes con descuento fijo" : ""}
             >
               <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
               <span>Promociones del Día ({activePromos.length})</span>
@@ -8677,7 +8860,6 @@ function DiscountPOSDialog({
             )}
           </div>
         )}
-
         <DialogFooter className="gap-2 border-t border-border/60 pt-3">
           {(discount > 0 || selectedPromo) && (
             <Button
@@ -8685,7 +8867,7 @@ function DiscountPOSDialog({
               onClick={handleClear}
               className="flex-1 h-10 rounded-xl border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold text-xs cursor-pointer"
             >
-              Quitar Descuento
+              {selectedPromo ? "Quitar Promoción" : "Quitar Descuento"}
             </Button>
           )}
 

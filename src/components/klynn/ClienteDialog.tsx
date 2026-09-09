@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { UserPlus, Phone, Mail, MapPin, Trash2, Search, Loader2, CreditCard, Coins, Check, AlertTriangle, FileText, Building2, User, ArrowRight, ArrowLeft, Building, Truck } from "lucide-react";
+import { UserPlus, Phone, Mail, MapPin, Trash2, Search, Loader2, CreditCard, Coins, Check, AlertTriangle, FileText, Building2, User, ArrowRight, ArrowLeft, Building, Truck, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,7 +20,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { saveCliente, deleteCliente, formatPhoneRD, uid, type Cliente, saveOrden, saveMovimiento, formatRD, type Orden, type MetodoPago } from "@/lib/storage";
+import { saveCliente, deleteCliente, formatPhoneRD, uid, type Cliente, saveOrden, saveMovimiento, formatRD, formatAmountInput, parseAmount, type Orden, type MetodoPago } from "@/lib/storage";
 import { toast } from "sonner";
 import { consultarRNC } from "@/lib/fiscal";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -88,7 +88,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
     cedula: "", 
     notas: "", 
     tipo: "Consumidor Final" as Cliente["tipo"], 
-    limite_credito: 0 
+    limite_credito: 0,
+    descuento_fijo: 0 
   };
   const [f, setF] = useState(cliente ? { ...empty, ...cliente } : empty);
   const [hasDelivery, setHasDelivery] = useState(!!cliente?.direccion);
@@ -269,6 +270,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
         notas: f.notas || undefined, 
         tipo: f.tipo, 
         limite_credito: f.limite_credito,
+        descuento_fijo: Number(f.descuento_fijo) || 0,
         creado_en: cliente?.creado_en || new Date().toISOString(),
       };
       await saveCliente(c); 
@@ -376,8 +378,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Tipo de Cliente</Label>
                   <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
-                    <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm font-medium"><SelectValue /></SelectTrigger>
-                    <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)]">
+                    <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"><SelectValue /></SelectTrigger>
+                    <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
                       <SelectItem value="Consumidor Final" disabled={!canSelectConsumer}>
                         <span className="flex items-center gap-2">
                           <User className="h-4 w-4 text-teal-600" />
@@ -405,7 +407,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                       value={f.telefono} 
                       onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
                       placeholder="809-000-0000" 
-                      className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium"
+                      className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
                     />
                   </div>
                 </div>
@@ -418,7 +420,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre de la Empresa *</Label>
                     <div className="relative">
                       <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
                     </div>
                   </div>
                   {tenant.config?.ncf_facturacion_activa ? (
@@ -431,13 +433,13 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                             value={f.cedula} 
                             onChange={(e) => setF({ ...f, cedula: e.target.value })} 
                             placeholder="131-12345-6"
-                            className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium w-full"
+                            className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
                           />
                         </div>
                         <Button
                           type="button"
                           variant="outline"
-                          className="h-10 rounded-xl px-3 text-xs sm:text-sm gap-1.5 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-bold shrink-0 cursor-pointer"
+                          className="h-10 rounded-xl px-3 text-xs sm:text-sm gap-1.5 border-slate-300 dark:border-slate-800 text-primary hover:bg-primary/5 flex items-center font-bold shrink-0 cursor-pointer bg-white dark:bg-slate-900 shadow-xs"
                           onClick={handleSearchRNC}
                           disabled={loadingRNC}
                         >
@@ -460,29 +462,67 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre *</Label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Juan" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
                     </div>
                   </div>
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Apellido *</Label>
                     <div className="relative">
                       <User className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                      <Input value={f.apellido} onChange={(e) => setF({ ...f, apellido: e.target.value })} placeholder="Ej. Pérez" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
                     </div>
                   </div>
                 </div>
               )}
 
-              {/* Email & Línea de Crédito */}
+              {/* Email & Descuento Fijo */}
               <div className="grid gap-3 grid-cols-2">
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Email (Opcional)</Label>
                   <div className="relative">
                     <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                    <Input value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} placeholder="cliente@correo.com" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium" />
+                    <Input 
+                      value={f.email} 
+                      onChange={(e) => setF({ ...f, email: e.target.value })} 
+                      placeholder="cliente@correo.com" 
+                      className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" 
+                    />
                   </div>
                 </div>
 
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400 flex items-center gap-1">
+                      <Percent className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400" />
+                      <span>Descuento Fijo (%)</span>
+                    </Label>
+                    {Number(f.descuento_fijo || 0) > 0 && (
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 border-emerald-300 dark:border-emerald-800 font-bold leading-none">
+                        {f.descuento_fijo}% OFF
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="relative">
+                    <Percent className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input 
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={f.descuento_fijo === 0 ? "" : (f.descuento_fijo ?? "")}
+                      onChange={(e) => {
+                        const raw = e.target.value;
+                        const num = raw === "" ? 0 : Math.max(0, Math.min(100, Number(raw) || 0));
+                        setF({ ...f, descuento_fijo: num });
+                      }}
+                      placeholder="0 (Sin descuento)" 
+                      className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" 
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Línea de Crédito */}
+              <div className="grid gap-3 grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Línea de Crédito</Label>
@@ -492,19 +532,17 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                       className="scale-85 origin-right cursor-pointer"
                     />
                   </div>
-                  {f.limite_credito > 0 ? (
+                  {f.limite_credito > 0 && (
                     <div className="relative animate-in fade-in duration-150">
                       <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                       <Input 
-                        type="number" 
-                        value={f.limite_credito} 
-                        onChange={(e) => setF({ ...f, limite_credito: Number(e.target.value) || 0 })} 
-                        className="h-10 pl-9.5 rounded-xl font-bold text-xs sm:text-sm"
+                        type="text" 
+                        inputMode="numeric"
+                        value={formatAmountInput(String(f.limite_credito))} 
+                        onChange={(e) => setF({ ...f, limite_credito: parseAmount(e.target.value) })} 
+                        placeholder="5,000"
+                        className="h-10 pl-9.5 rounded-xl font-bold text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
                       />
-                    </div>
-                  ) : (
-                    <div className="h-10 flex items-center px-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/60 dark:border-slate-800 text-xs text-muted-foreground">
-                      Sin crédito habilitado
                     </div>
                   )}
                 </div>

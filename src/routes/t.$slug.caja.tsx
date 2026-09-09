@@ -32,6 +32,7 @@ import {
   Loader2,
   ArrowLeftRight,
   History,
+  KeyRound,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -1058,25 +1059,54 @@ function Row({
 
 function AmountField({
   label,
+  icon: Icon,
+  badgeText,
+  badgeClassName,
+  buttonClassName,
+  expectedVal,
   value,
   onChange,
+  autoFocus,
+  disabled,
 }: {
   label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  badgeText?: string;
+  badgeClassName?: string;
+  buttonClassName?: string;
+  expectedVal?: number;
   value: string;
   onChange: (v: string) => void;
+  autoFocus?: boolean;
+  disabled?: boolean;
 }) {
   return (
-    <div className="flex flex-col gap-2">
-      <Label className="text-[12px] font-black uppercase tracking-widest text-foreground px-1 text-center w-full">
-        {label}
-      </Label>
-      <div className="relative group">
-        <div className="absolute left-4 top-1/2 -translate-y-1/2 font-display text-sm font-bold text-primary/30 group-focus-within:text-primary/50 transition-colors">
+    <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-gradient-to-b from-slate-50/70 to-white dark:from-slate-900/70 dark:to-slate-900 p-3 shadow-2xs focus-within:border-slate-400 dark:focus-within:border-slate-600 focus-within:ring-2 focus-within:ring-slate-400/10 transition-all flex flex-col justify-between gap-1.5">
+      <div className="flex items-center justify-between gap-1.5">
+        <span className="text-[10px] font-bold uppercase tracking-tight text-slate-700 dark:text-slate-300 flex items-center gap-1.5 whitespace-nowrap">
+          <Icon className="h-3.5 w-3.5 shrink-0 text-slate-500 dark:text-slate-400" />
+          {label}
+        </span>
+        {badgeText && (
+          <span
+            className={
+              badgeClassName ||
+              "text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-slate-100 text-slate-600 border border-slate-200"
+            }
+          >
+            {badgeText}
+          </span>
+        )}
+      </div>
+
+      <div className="flex items-center justify-center gap-1.5 py-1">
+        <span className="font-display text-lg font-bold text-slate-400 dark:text-slate-500 select-none">
           RD$
-        </div>
+        </span>
         <input
           type="text"
           inputMode="decimal"
+          autoFocus={autoFocus}
           value={value}
           onChange={(e) => onChange(formatAmountInput(e.target.value))}
           onBlur={() => {
@@ -1088,9 +1118,36 @@ function AmountField({
               );
           }}
           placeholder="0.00"
-          className="h-20 w-full px-6 text-center font-display text-4xl font-bold text-primary rounded-2xl border-2 border-slate-200 bg-white shadow-sm focus:border-primary focus:ring-4 focus:ring-primary/10 transition-all outline-none placeholder:text-slate-100"
+          disabled={disabled}
+          className="w-full max-w-[160px] bg-transparent text-center font-display text-2xl font-black text-slate-900 dark:text-white outline-none placeholder:text-slate-200 dark:placeholder:text-slate-700 tracking-tight"
         />
       </div>
+
+      {expectedVal !== undefined && (
+        <div className="flex items-center justify-center pt-1 border-t border-slate-100 dark:border-slate-800">
+          <button
+            type="button"
+            tabIndex={-1}
+            disabled={disabled}
+            onClick={() =>
+              onChange(
+                expectedVal > 0
+                  ? expectedVal.toLocaleString("en-US", {
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })
+                  : "",
+              )
+            }
+            className={
+              buttonClassName ||
+              "text-[10px] font-semibold px-2.5 py-0.5 rounded-lg border shadow-2xs transition-all active:scale-95 bg-slate-100 hover:bg-slate-200 text-slate-700 border-slate-200"
+            }
+          >
+            Copiar esperado
+          </button>
+        </div>
+      )}
     </div>
   );
 }
@@ -1802,214 +1859,327 @@ function CierreDialog({
       }}
     >
       <DialogContent
-        className={`transition-all duration-300 ${showSuccess ? "max-w-md" : "max-w-2xl"}`}
+        className="transition-all duration-300 max-w-2xl rounded-2xl p-5 shadow-2xl border-border/80"
       >
         <AnimatePresence mode="wait">
           {!showSuccess ? (
             <motion.div
               key="cierre-form"
-              initial={{ opacity: 0, y: 20 }}
+              initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+              exit={{ opacity: 0, y: -12 }}
+              className="space-y-3.5"
             >
-              <DialogHeader>
-                <DialogTitle>Cerrar caja — Cuadre</DialogTitle>
+              <DialogHeader className="flex flex-row items-center gap-2.5 space-y-0 pb-0.5">
+                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 border border-rose-200/60 dark:border-rose-800/60 shadow-2xs">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <div>
+                  <DialogTitle className="font-display text-lg font-bold tracking-tight text-slate-900 dark:text-white">
+                    Cerrar caja — Cuadre
+                  </DialogTitle>
+                  <p className="text-[11px] text-muted-foreground">
+                    Ingresa el conteo físico para verificar diferencias y cerrar el turno.
+                  </p>
+                </div>
               </DialogHeader>
-              <div className="space-y-6">
-                <div className="grid grid-cols-3 gap-3">
-                  <div className="rounded-2xl bg-emerald-500/5 p-4 text-center border-2 border-emerald-500/10">
-                    <div className="text-[9px] uppercase font-black tracking-wider text-emerald-600 mb-1">
-                      Efectivo Esperado
-                    </div>
-                    <div className="font-display text-2xl text-emerald-700 font-bold">
-                      {formatRD(efectivoEsperado)}
-                    </div>
+
+              {/* Valores Esperados en Sistema */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="rounded-xl border border-emerald-100 dark:border-emerald-900/50 bg-emerald-50/50 dark:bg-emerald-950/30 p-2 text-center shadow-2xs">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-emerald-600 dark:text-emerald-400 flex items-center justify-center gap-1">
+                    <Banknote className="h-3 w-3" /> Efectivo Esperado
                   </div>
-                  <div className="rounded-2xl bg-sky-500/5 p-4 text-center border-2 border-sky-500/10">
-                    <div className="text-[9px] uppercase font-black tracking-wider text-sky-600 mb-1">
-                      Tarjeta Esperada
-                    </div>
-                    <div className="font-display text-2xl text-sky-700 font-bold">
-                      {formatRD(ventasTar)}
-                    </div>
-                  </div>
-                  <div className="rounded-2xl bg-indigo-500/5 p-4 text-center border-2 border-indigo-500/10">
-                    <div className="text-[9px] uppercase font-black tracking-wider text-indigo-600 mb-1">
-                      Transferencia Esperada
-                    </div>
-                    <div className="font-display text-2xl text-indigo-750 font-bold">
-                      {formatRD(ventasTrans)}
-                    </div>
+                  <div className="font-display text-sm sm:text-base font-black text-emerald-700 dark:text-emerald-300 mt-0.5">
+                    {formatRD(efectivoEsperado)}
                   </div>
                 </div>
-                <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                <div className="rounded-xl border border-sky-100 dark:border-sky-900/50 bg-sky-50/50 dark:bg-sky-950/30 p-2 text-center shadow-2xs">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-sky-600 dark:text-sky-400 flex items-center justify-center gap-1">
+                    <CreditCard className="h-3 w-3" /> Tarjeta Esperada
+                  </div>
+                  <div className="font-display text-sm sm:text-base font-black text-sky-700 dark:text-sky-300 mt-0.5">
+                    {formatRD(ventasTar)}
+                  </div>
+                </div>
+                <div className="rounded-xl border border-indigo-100 dark:border-indigo-900/50 bg-indigo-50/50 dark:bg-indigo-950/30 p-2 text-center shadow-2xs">
+                  <div className="text-[9px] font-bold uppercase tracking-wider text-indigo-600 dark:text-indigo-400 flex items-center justify-center gap-1">
+                    <Landmark className="h-3 w-3" /> Transferencia
+                  </div>
+                  <div className="font-display text-sm sm:text-base font-black text-indigo-700 dark:text-indigo-300 mt-0.5">
+                    {formatRD(ventasTrans)}
+                  </div>
+                </div>
+              </div>
+
+              {/* Conteo Físico por Método */}
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between px-0.5">
+                  <Label className="block text-[10px] font-bold uppercase tracking-wider text-slate-500">
+                    Conteo Físico por Método
+                  </Label>
+                  <span className="text-[10px] text-muted-foreground font-medium">
+                    Total Esperado: <strong className="font-display text-slate-700 dark:text-slate-300">{formatRD(totalEsperado)}</strong>
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
                   <AmountField
-                    label="💵 EFECTIVO CONTADO"
+                    label="Efectivo"
+                    icon={Banknote}
+                    badgeText="Físico"
+                    badgeClassName="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-emerald-100 text-emerald-800 border border-emerald-300/80 dark:bg-emerald-950/80 dark:text-emerald-300 dark:border-emerald-800"
+                    buttonClassName="text-[10px] font-semibold px-2.5 py-0.5 rounded-lg border shadow-2xs transition-all active:scale-95 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-200/90 dark:bg-emerald-950/60 dark:hover:bg-emerald-900/60 dark:text-emerald-300 dark:border-emerald-800"
+                    expectedVal={efectivoEsperado}
                     value={contadoEfStr}
                     onChange={setContadoEfStr}
+                    autoFocus
+                    disabled={loading}
                   />
                   <AmountField
-                    label="💳 TARJETA"
+                    label="Tarjeta"
+                    icon={CreditCard}
+                    badgeText="POS"
+                    badgeClassName="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-sky-100 text-sky-800 border border-sky-300/80 dark:bg-sky-950/80 dark:text-sky-300 dark:border-sky-800"
+                    buttonClassName="text-[10px] font-semibold px-2.5 py-0.5 rounded-lg border shadow-2xs transition-all active:scale-95 bg-sky-50 hover:bg-sky-100 text-sky-800 border-sky-200/90 dark:bg-sky-950/60 dark:hover:bg-sky-900/60 dark:text-sky-300 dark:border-sky-800"
+                    expectedVal={ventasTar}
                     value={contadoTarStr}
                     onChange={setContadoTarStr}
+                    disabled={loading}
                   />
                   <AmountField
-                    label="🏦 TRANSFERENCIA"
+                    label="Transferencia"
+                    icon={Landmark}
+                    badgeText="Banco"
+                    badgeClassName="text-[9px] font-bold px-2 py-0.5 rounded-full shrink-0 bg-indigo-100 text-indigo-800 border border-indigo-300/80 dark:bg-indigo-950/80 dark:text-indigo-300 dark:border-indigo-800"
+                    buttonClassName="text-[10px] font-semibold px-2.5 py-0.5 rounded-lg border shadow-2xs transition-all active:scale-95 bg-indigo-50 hover:bg-indigo-100 text-indigo-800 border-indigo-200/90 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/60 dark:text-indigo-300 dark:border-indigo-800"
+                    expectedVal={ventasTrans}
                     value={contadoTransStr}
                     onChange={setContadoTransStr}
+                    disabled={loading}
                   />
                 </div>
-                <div
-                  className={`rounded-xl px-4 py-3 border-2 transition-colors ${dif === 0 ? "bg-emerald-50 border-emerald-100" : dif < 0 ? "bg-rose-50 border-rose-100" : "bg-amber-50 border-amber-100"}`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
+              </div>
+
+              {/* Resumen del Cuadre / Diferencia */}
+              <div
+                className={`rounded-2xl p-3 border transition-all ${
+                  dif === 0
+                    ? "bg-emerald-50/80 dark:bg-emerald-950/40 border-emerald-200/80 dark:border-emerald-800/60 shadow-2xs"
+                    : dif < 0
+                      ? "bg-rose-50/80 dark:bg-rose-950/40 border-rose-200/80 dark:border-rose-800/60 shadow-2xs"
+                      : "bg-amber-50/80 dark:bg-amber-950/40 border-amber-200/80 dark:border-amber-800/60 shadow-2xs"
+                }`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl ${
+                        dif === 0
+                          ? "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300"
+                          : dif < 0
+                            ? "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300"
+                            : "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300"
+                      }`}
+                    >
+                      {dif === 0 ? (
+                        <CheckCircle2 className="h-4 w-4" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4" />
+                      )}
+                    </div>
+                    <div className="min-w-0">
                       <div
-                        className={`text-[10px] font-black uppercase tracking-widest ${dif === 0 ? "text-emerald-700" : dif < 0 ? "text-rose-700" : "text-amber-700"}`}
+                        className={`text-xs font-bold tracking-tight ${
+                          dif === 0
+                            ? "text-emerald-900 dark:text-emerald-200"
+                            : dif < 0
+                              ? "text-rose-900 dark:text-rose-200"
+                              : "text-amber-900 dark:text-amber-200"
+                        }`}
                       >
                         {dif === 0
-                          ? "Caja cuadrada ✓"
+                          ? "Caja perfectamente cuadrada ✓"
                           : dif < 0
                             ? "Faltante en caja"
                             : "Sobrante en caja"}
                       </div>
+                      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 flex-wrap">
+                        <span>Esperado: <strong className="text-slate-700 dark:text-slate-300">{formatRD(totalEsperado)}</strong></span>
+                        <span>•</span>
+                        <span>Contado: <strong className="text-slate-700 dark:text-slate-300">{formatRD(totalContado)}</strong></span>
+                      </div>
                       {Math.abs(dif) > umbral && (
-                        <div
-                          className={`mt-0.5 flex items-center gap-1 text-[10px] font-bold ${dif < 0 ? "text-rose-600/70" : "text-amber-600/70"}`}
-                        >
-                          <AlertTriangle className="h-3 w-3" /> Excede umbral ({formatRD(umbral)})
+                        <div className="text-[10px] font-bold text-rose-600 dark:text-rose-400 mt-0.5 flex items-center gap-1">
+                          <AlertTriangle className="h-3 w-3" /> Excede umbral de tolerancia ({formatRD(umbral)})
                         </div>
                       )}
                     </div>
+                  </div>
+                  <div className="text-right shrink-0">
                     <div
-                      className={`text-2xl font-display font-black ${dif === 0 ? "text-emerald-700" : dif < 0 ? "text-rose-700" : "text-amber-700"}`}
+                      className={`font-display text-xl sm:text-2xl font-black ${
+                        dif === 0
+                          ? "text-emerald-700 dark:text-emerald-300"
+                          : dif < 0
+                            ? "text-rose-700 dark:text-rose-300"
+                            : "text-amber-700 dark:text-amber-300"
+                      }`}
                     >
                       {formatRD(Math.abs(dif))}
                     </div>
+                    <div className="text-[9px] font-semibold text-muted-foreground">
+                      {dif === 0 ? "Sin diferencias" : dif < 0 ? "Faltante" : "Sobrante"}
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                <div className="space-y-3">
-                  <div className="flex items-center justify-between rounded-xl border border-border/50 bg-accent/5 px-4 py-2">
-                    <div className="flex flex-col">
-                      <span className="text-sm font-semibold text-foreground">
+              {/* Opción de Notas */}
+              <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <FileText className="h-3.5 w-3.5 text-slate-400" />
+                    <div>
+                      <span className="text-xs font-semibold text-slate-800 dark:text-slate-200">
                         ¿Añadir nota o explicación?
                       </span>
-                      <span className="text-[10px] text-muted-foreground italic">
+                      <span className="text-[10px] text-muted-foreground block">
                         Solo si hubo alguna novedad en el cuadre
                       </span>
                     </div>
-                    <Switch checked={showNotas} onCheckedChange={setShowNotas} disabled={loading} />
                   </div>
-
-                  <AnimatePresence>
-                    {showNotas && (
-                      <motion.div
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        className="overflow-hidden"
-                      >
-                        <Textarea
-                          value={notas}
-                          onChange={(e) => setNotas(e.target.value)}
-                          rows={2}
-                          disabled={loading}
-                          placeholder="Escribe aquí cualquier observación sobre el cuadre..."
-                          className="bg-accent/5 border-border/60 focus:bg-background transition-colors"
-                        />
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                  <Switch checked={showNotas} onCheckedChange={setShowNotas} disabled={loading} />
                 </div>
 
-                {empleadoRol !== "ADMIN" && (
-                  <div>
-                    <Label className="mb-1.5 block text-[10px] font-black uppercase tracking-widest text-muted-foreground/70 px-1">
-                      PIN / firma del empleado
-                    </Label>
-                    <Input
-                      type="password"
-                      value={pin}
-                      onChange={(e) => setPin(e.target.value)}
-                      placeholder="••••"
-                      disabled={loading}
-                      className="h-12 text-center text-2xl tracking-[0.5em] rounded-xl border-2 border-slate-100 bg-white"
-                    />
-                  </div>
-                )}
+                <AnimatePresence>
+                  {showNotas && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: "auto" }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="overflow-hidden pt-2"
+                    >
+                      <Textarea
+                        value={notas}
+                        onChange={(e) => setNotas(e.target.value)}
+                        rows={2}
+                        disabled={loading}
+                        placeholder="Escribe aquí cualquier observación sobre el cuadre..."
+                        className="bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-xs rounded-xl"
+                      />
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => onOpenChange(false)} disabled={loading}>
+
+              {/* PIN de empleado si no es Admin */}
+              {empleadoRol !== "ADMIN" && (
+                <div className="rounded-xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 p-2.5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <Label className="text-[10px] font-bold uppercase tracking-wider text-slate-600 dark:text-slate-400 flex items-center gap-1.5">
+                      <KeyRound className="h-3.5 w-3.5 text-slate-400" />
+                      PIN de Autorización
+                    </Label>
+                    <span className="text-[9px] text-muted-foreground">Firma requerida para cerrar</span>
+                  </div>
+                  <Input
+                    type="password"
+                    value={pin}
+                    onChange={(e) => setPin(e.target.value)}
+                    placeholder="••••"
+                    disabled={loading}
+                    className="h-10 text-center text-xl tracking-[0.4em] rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900"
+                  />
+                </div>
+              )}
+
+              {/* Footer con estilo idéntico a Apertura de Caja */}
+              <DialogFooter className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+                <Button
+                  variant="outline"
+                  onClick={() => onOpenChange(false)}
+                  disabled={loading}
+                  className="h-9 px-4 text-xs font-semibold rounded-xl border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300"
+                >
                   Cancelar
                 </Button>
                 <Button
                   onClick={submit}
-                  className="bg-gradient-primary text-white"
                   disabled={loading}
+                  className="h-9 px-5 text-xs font-bold rounded-xl bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 text-white shadow-xs gap-1.5"
                 >
-                  <CheckCircle2 className="mr-1.5 h-4 w-4" />{" "}
-                  {loading ? "Cerrando..." : "Cerrar caja"}
+                  {loading ? (
+                    <>
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      Cerrando...
+                    </>
+                  ) : (
+                    <>
+                      <Lock className="h-3.5 w-3.5" />
+                      Cerrar Caja
+                    </>
+                  )}
                 </Button>
               </DialogFooter>
             </motion.div>
           ) : (
             <motion.div
               key="cierre-success"
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              className="py-4 text-center space-y-4"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              className="py-2 text-center space-y-3.5"
             >
               <div className="flex justify-center">
-                <div className="relative flex h-20 w-20 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 shadow-sm border-4 border-white ring-4 ring-emerald-50/50">
-                  <Wallet className="h-8 w-8" />
-                  <div className="absolute -right-1 -top-1 rounded-full bg-emerald-500 p-1 text-white shadow-sm ring-2 ring-white">
-                    <CheckCircle2 className="h-4 w-4" />
+                <div className="relative flex h-16 w-16 items-center justify-center rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
+                  <Lock className="h-7 w-7" />
+                  <div className="absolute -right-1 -top-1 rounded-full bg-emerald-500 p-1 text-white shadow-2xs ring-2 ring-white dark:ring-slate-900">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
                   </div>
                 </div>
               </div>
-              <div className="space-y-1">
-                <h2 className="text-2xl font-display font-black text-slate-900">Caja Cerrada</h2>
+              <div className="space-y-0.5">
+                <h2 className="text-xl font-display font-black text-slate-900 dark:text-white tracking-tight">Caja Cerrada Exitosamente</h2>
                 <p className="text-xs text-muted-foreground">
-                  El cuadre ha sido registrado correctamente.
+                  El cuadre ha sido registrado y el turno ha finalizado.
                 </p>
               </div>
 
-              <div className="bg-slate-50 p-4 rounded-xl border border-slate-100 space-y-2">
-                <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider">
+              <div className="bg-slate-50 dark:bg-slate-900/50 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2">
+                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
                   <span>Efectivo Contado:</span>
-                  <span className="text-slate-900 font-bold">{formatRD(contadoEf)}</span>
+                  <span className="text-slate-900 dark:text-white font-bold">{formatRD(contadoEf)}</span>
                 </div>
-                <div className="flex justify-between text-xs text-slate-500 uppercase font-bold tracking-wider">
+                <div className="flex justify-between text-xs text-slate-500 dark:text-slate-400 font-semibold">
                   <span>Total Contado:</span>
-                  <span className="text-slate-900 font-bold">
+                  <span className="text-slate-900 dark:text-white font-bold">
                     {formatRD(contadoEf + contadoTar + contadoTrans)}
                   </span>
                 </div>
-                <div className="border-t border-slate-200 pt-2 flex flex-col items-center justify-center">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-primary/70">
-                    VENTAS DEL DÍA
+                <div className="border-t border-slate-200/80 dark:border-slate-800 pt-2 flex flex-col items-center justify-center">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+                    Ventas del Turno
                   </span>
-                  <span className="text-2xl font-display font-black text-primary mt-0.5">
+                  <span className="text-2xl font-display font-black text-slate-900 dark:text-white mt-0.5 tracking-tight">
                     {formatRD(savedTotalRecaudado)}
                   </span>
                 </div>
               </div>
 
-              <div className="flex gap-3 pt-2">
+              <div className="flex gap-2.5 pt-1">
                 <Button
                   onClick={() => onOpenChange(false)}
-                  className="flex-1 bg-primary/10 hover:bg-primary/20 text-primary h-9 text-xs font-bold gap-2 shadow-none border-none rounded-xl"
+                  variant="outline"
+                  className="flex-1 h-9 text-xs font-semibold rounded-xl border-slate-200 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800 gap-1.5"
                 >
-                  <ArrowLeft className="h-4 w-4" /> Volver a caja
+                  <ArrowLeft className="h-3.5 w-3.5" /> Volver a caja
                 </Button>
                 <Button
                   onClick={handlePrint}
                   disabled={loadingOrders}
-                  className="flex-1 bg-gradient-primary text-white h-9 text-xs font-bold gap-2 shadow-none rounded-xl"
+                  className="flex-1 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:text-slate-900 text-white h-9 text-xs font-bold gap-1.5 shadow-xs rounded-xl"
                 >
-                  <Printer className="h-4 w-4" />{" "}
+                  <Printer className="h-3.5 w-3.5" />{" "}
                   {loadingOrders ? "Preparando..." : "Imprimir Cierre"}
                 </Button>
               </div>

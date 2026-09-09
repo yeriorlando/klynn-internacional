@@ -236,6 +236,7 @@ export interface TenantConfig {
   ultimo_marbete_color?: string;
   ultimo_marbete_secuencia?: number;
   bloqueo_inactividad_minutos?: number;
+  descuento_cliente_activo?: boolean;
 }
 
 export interface WeeklySummaryConfig {
@@ -310,6 +311,7 @@ export interface Cliente {
   notas?: string;
   tipo: "Consumidor Final" | "Empresa";
   limite_credito: number;
+  descuento_fijo?: number;
   creado_en: string;
 }
 
@@ -873,6 +875,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   ticket_imprimir_marquillas_auto: false,
   habilitar_control_marbetes: false,
   bloqueo_inactividad_minutos: 0,
+  descuento_cliente_activo: true,
   whatsapp: {
     enabled: false,
     api_key: "",
@@ -2970,7 +2973,15 @@ export async function saveCliente(c: Cliente) {
 
   try {
     const { error } = await supabase.from("clientes").upsert(c);
-    if (error) throw error;
+    if (error) {
+      if (error.code === "42703" && "descuento_fijo" in c) {
+        const { descuento_fijo: _, ...rest } = c;
+        const { error: retryError } = await supabase.from("clientes").upsert(rest);
+        if (retryError) throw retryError;
+      } else {
+        throw error;
+      }
+    }
   } catch (err) {
     console.warn("Offline outbox fallback for cliente:", err);
     await offlineDB.addToOutbox({

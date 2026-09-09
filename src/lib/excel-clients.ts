@@ -14,6 +14,7 @@ export interface ParsedClienteItem {
   referencia?: string;
   tipo: "Consumidor Final" | "Empresa";
   limite_credito: number;
+  descuento_fijo?: number;
   notas?: string;
 }
 
@@ -81,6 +82,7 @@ export function downloadClientsTemplate() {
     "Referencia",
     "Tipo (Consumidor Final / Empresa)",
     "Límite Crédito (RD$)",
+    "Descuento Fijo (%)",
     "Notas",
   ];
 
@@ -99,6 +101,7 @@ export function downloadClientsTemplate() {
     { wch: 24 }, // Referencia
     { wch: 32 }, // Tipo
     { wch: 22 }, // Límite Crédito
+    { wch: 20 }, // Descuento Fijo
     { wch: 30 }, // Notas
   ];
 
@@ -130,6 +133,7 @@ export function exportClientsToExcel(
     "Referencia": c.referencia || "",
     "Tipo (Consumidor Final / Empresa)": c.tipo === "Empresa" ? "Empresa" : "Consumidor Final",
     "Límite Crédito (RD$)": c.limite_credito || 0,
+    "Descuento Fijo (%)": c.descuento_fijo || 0,
     "Notas": c.notas || "",
   }));
 
@@ -357,7 +361,27 @@ export async function parseClientsExcelFile(file: File): Promise<ExcelClientsPar
       limite_credito = 0;
     }
 
-    // 9. Extraer Notas
+    // 9. Extraer Descuento Fijo (%)
+    const descuentoFijoRaw =
+      row["Descuento Fijo (%)"] ??
+      row["Descuento Fijo"] ??
+      row["Descuento (%)"] ??
+      row["Descuento"] ??
+      row["descuento_fijo"] ??
+      0;
+
+    let descuento_fijo =
+      typeof descuentoFijoRaw === "number"
+        ? descuentoFijoRaw
+        : parseFloat(String(descuentoFijoRaw).replace(/[^0-9.-]/g, ""));
+
+    if (isNaN(descuento_fijo) || descuento_fijo < 0) {
+      descuento_fijo = 0;
+    } else if (descuento_fijo > 100) {
+      descuento_fijo = 100;
+    }
+
+    // 10. Extraer Notas
     const notas = String(
       row["Notas"] ||
         row["Observaciones"] ||
@@ -390,6 +414,7 @@ export async function parseClientsExcelFile(file: File): Promise<ExcelClientsPar
       referencia: referencia || undefined,
       tipo,
       limite_credito,
+      descuento_fijo,
       notas: notas || undefined,
     });
   });

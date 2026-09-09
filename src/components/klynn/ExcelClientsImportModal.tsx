@@ -164,6 +164,7 @@ export function ExcelClientsImportModal({
           notas: p.notas || existing?.notas,
           tipo: p.tipo || existing?.tipo || "Consumidor Final",
           limite_credito: p.limite_credito !== undefined ? p.limite_credito : (existing?.limite_credito || 0),
+          descuento_fijo: p.descuento_fijo !== undefined ? p.descuento_fijo : (existing?.descuento_fijo || 0),
           creado_en: existing?.creado_en || new Date().toISOString(),
         };
 

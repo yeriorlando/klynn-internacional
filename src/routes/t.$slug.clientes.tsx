@@ -24,7 +24,8 @@ import {
   ArrowUpDown,
   ExternalLink,
   Pencil,
-  FileText
+  FileText,
+  Percent
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -409,6 +410,13 @@ function ClientesPage() {
                         {c.limite_credito > 0 && (
                           <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-bold border-purple-200 bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
                             Crédito: {formatRD(c.limite_credito)}
+                          </Badge>
+                        )}
+
+                        {Number(c.descuento_fijo || 0) > 0 && (
+                          <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-bold border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 gap-1 flex items-center">
+                            <Percent className="h-2.5 w-2.5" />
+                            {c.descuento_fijo}% Desc.
                           </Badge>
                         )}
                       </div>
