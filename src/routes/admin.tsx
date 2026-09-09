@@ -194,6 +194,7 @@ function AdminPage() {
   const [modOverrideProcesos, setModOverrideProcesos] = useState(false);
   const [modOverrideEstanteria, setModOverrideEstanteria] = useState(true);
   const [modOverridePosOffline, setModOverridePosOffline] = useState(false);
+  const [modOverridePromociones, setModOverridePromociones] = useState(false);
   const [tenantFiscalEnvironment, setTenantFiscalEnvironment] = useState<"TesteCF" | "CerteCF" | "eCF">("TesteCF");
   const [tenantFiscalActive, setTenantFiscalActive] = useState(false);
   const [tenantEf2Token, setTenantEf2Token] = useState<string>("");
@@ -677,6 +678,9 @@ function AdminPage() {
     setModOverridePosOffline(t.config?.modulos_override?.pos_offline !== undefined
       ? t.config.modulos_override.pos_offline
       : (pOfTenant?.modulos.pos_offline !== undefined ? !!pOfTenant.modulos.pos_offline : false));
+    setModOverridePromociones(t.config?.modulos_override?.promociones !== undefined
+      ? t.config.modulos_override.promociones
+      : (pOfTenant?.modulos.promociones !== undefined ? !!pOfTenant.modulos.promociones : false));
 
     setEditStep(1);
     setOpenEditModal(true);
@@ -769,6 +773,7 @@ function AdminPage() {
             procesos: modOverrideProcesos,
             estanteria: modOverrideEstanteria,
             pos_offline: modOverridePosOffline,
+            promociones: modOverridePromociones,
           }
         );
       } else {
@@ -1173,6 +1178,9 @@ function AdminPage() {
                         const hasOffline = t.config?.modulos_override?.pos_offline !== undefined 
                           ? t.config.modulos_override.pos_offline 
                           : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
+                        const hasPromociones = t.config?.modulos_override?.promociones !== undefined 
+                          ? t.config.modulos_override.promociones 
+                          : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
 
                         const daysRemaining = t.trial_hasta
                           ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1385,6 +1393,16 @@ function AdminPage() {
                                 >
                                   <WifiOff className="h-3 w-3" />
                                 </span>
+                                <span
+                                  title={hasPromociones ? "Promociones y Cupones: Habilitado" : "Promociones: Inactivo"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasPromociones
+                                      ? "bg-emerald-50 text-emerald-700 border border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Sparkles className="h-3 w-3" />
+                                </span>
                               </div>
                             </td>
 
@@ -1513,6 +1531,7 @@ function AdminPage() {
                   const hasProcesos = t.config?.modulos_override?.procesos !== undefined ? t.config.modulos_override.procesos : (planOfTenant?.modulos.procesos !== undefined ? !!planOfTenant.modulos.procesos : true);
                   const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined ? t.config.modulos_override.estanteria : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
                   const hasOffline = t.config?.modulos_override?.pos_offline !== undefined ? t.config.modulos_override.pos_offline : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
+                  const hasPromociones = t.config?.modulos_override?.promociones !== undefined ? t.config.modulos_override.promociones : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
 
                   const daysRemaining = t.trial_hasta
                     ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1636,6 +1655,7 @@ function AdminPage() {
                             <span className={`p-1 rounded ${hasProcesos ? 'text-teal-600 bg-teal-50 dark:bg-teal-950/60' : 'text-muted-foreground/30 opacity-40'}`}><Wrench className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasOffline ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasOffline ? "Modo Offline: Habilitado (Punto de Venta sin conexión)" : "Modo Offline: Inactivo"}><WifiOff className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones y Cupones: Habilitado" : "Promociones: Inactivo"}><Sparkles className="h-3 w-3" /></span>
                           </div>
                         </div>
 
@@ -1925,14 +1945,12 @@ function AdminPage() {
                       </div>
                       <div className="space-y-1.5">
                         {[
-                          { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-                          { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-                          { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-                          { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
                           { key: "estanteria", label: "Estantería virtual" },
-                        ].map(({ key, label, extra }) => {
+                          { key: "promociones", label: "Promociones y Cupones" },
+                          { key: "logistica", label: "Envío a domicilio" },
+                          { key: "pos_offline", label: "Modo Offline" },
+                        ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
                             <div 
@@ -1955,17 +1973,33 @@ function AdminPage() {
                                   <path d="m9 9 6 6" />
                                 </svg>
                               )}
-                              <span className="flex items-center flex-wrap gap-1">
-                                <span>{label}</span>
-                                {extra && (
-                                  <span className={`text-[10px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
-                                    {extra}
-                                  </span>
-                                )}
-                              </span>
+                              <span>{label}</span>
                             </div>
                           );
                         })}
+                      </div>
+
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2.5 pt-2 border-t border-border/60 mb-2">
+                        Complementos Opcionales
+                      </div>
+                      <div className="space-y-1.5">
+                        {[
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                          { key: "whatsapp", label: "Mensajería WhatsApp" },
+                          { key: "multisucursal", label: "Sucursal Adicional" },
+                        ].map(({ key, label }) => (
+                          <div 
+                            key={key} 
+                            className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0">
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M12 8v8" />
+                              <path d="M8 12h8" />
+                            </svg>
+                            <span>{label}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
                   </div>
@@ -2108,54 +2142,72 @@ function AdminPage() {
                       {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
                         
-                        {/* Desglose de Módulos */}
-                        <div>
-                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                            MÓDULOS HABILITADOS
+                        {/* Desglose de Módulos Habilitados y Complementos */}
+                        <div className="space-y-3">
+                          <div>
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                              MÓDULOS HABILITADOS
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                              {[
+                                { key: "procesos", label: "Tablero de Procesos" },
+                                { key: "estanteria", label: "Estantería virtual" },
+                                { key: "promociones", label: "Promociones y Cupones" },
+                                { key: "logistica", label: "Envío a domicilio" },
+                                { key: "pos_offline", label: "Modo Offline" },
+                              ].map(({ key, label }) => {
+                                const v = !!p.modulos?.[key as keyof typeof p.modulos];
+                                return (
+                                  <div 
+                                    key={key} 
+                                    className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                      v 
+                                        ? "text-green-700 dark:text-green-400" 
+                                        : "text-slate-400 line-through opacity-70"
+                                    }`}
+                                  >
+                                    {v ? (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="m9 12 2 2 4-4" />
+                                      </svg>
+                                    ) : (
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="m15 9-6 6" />
+                                        <path d="m9 9 6 6" />
+                                      </svg>
+                                    )}
+                                    <span>{label}</span>
+                                  </div>
+                                );
+                              })}
+                            </div>
                           </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
-                            {[
-                              { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-                              { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-                              { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-                              { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-                              { key: "logistica", label: "Envío a domicilio" },
-                              { key: "procesos", label: "Tablero de Procesos" },
-                              { key: "estanteria", label: "Estantería virtual" },
-                            ].map(({ key, label, extra }) => {
-                              const v = !!p.modulos?.[key as keyof typeof p.modulos];
-                              return (
+
+                          <div className="pt-2 border-t border-border/40">
+                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                              COMPLEMENTOS OPCIONALES
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                              {[
+                                { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                                { key: "whatsapp", label: "Mensajería WhatsApp" },
+                                { key: "multisucursal", label: "Sucursal Adicional" },
+                              ].map(({ key, label }) => (
                                 <div 
                                   key={key} 
-                                  className={`flex items-center gap-1.5 text-[11px] font-semibold ${
-                                    v 
-                                      ? "text-green-700 dark:text-green-400" 
-                                      : "text-slate-400 line-through opacity-70"
-                                  }`}
+                                  className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300"
                                 >
-                                  {v ? (
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
-                                      <circle cx="12" cy="12" r="10" />
-                                      <path d="m9 12 2 2 4-4" />
-                                    </svg>
-                                  ) : (
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
-                                      <circle cx="12" cy="12" r="10" />
-                                      <path d="m15 9-6 6" />
-                                      <path d="m9 9 6 6" />
-                                    </svg>
-                                  )}
-                                  <span className="flex items-center flex-wrap gap-1">
-                                    <span>{label}</span>
-                                    {extra && (
-                                      <span className={`text-[9px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
-                                        {extra}
-                                      </span>
-                                    )}
-                                  </span>
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0">
+                                    <circle cx="12" cy="12" r="10" />
+                                    <path d="M12 8v8" />
+                                    <path d="M8 12h8" />
+                                  </svg>
+                                  <span>{label}</span>
                                 </div>
-                              );
-                            })}
+                              ))}
+                            </div>
                           </div>
                         </div>
 
@@ -3386,7 +3438,7 @@ function AdminPage() {
                 >
                   2
                 </span>
-                <span>Módulos Habilitados ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria].filter(Boolean).length})</span>
+                <span>Módulos Habilitados ({[modOverrideWa, modOverrideFiscal, modOverrideMultisucursal, modOverrideLogistica, modOverrideProcesos, modOverrideEstanteria, modOverridePosOffline, modOverridePromociones].filter(Boolean).length})</span>
               </button>
             </div>
           </div>
@@ -3474,6 +3526,8 @@ function AdminPage() {
                           setModOverrideLogistica(!!newPlan.modulos.logistica);
                           setModOverrideProcesos(newPlan.modulos.procesos !== undefined ? !!newPlan.modulos.procesos : true);
                           setModOverrideEstanteria(newPlan.modulos.estanteria !== undefined ? !!newPlan.modulos.estanteria : true);
+                          setModOverridePosOffline(newPlan.modulos.pos_offline !== undefined ? !!newPlan.modulos.pos_offline : false);
+                          setModOverridePromociones(newPlan.modulos.promociones !== undefined ? !!newPlan.modulos.promociones : false);
                         }
                       }}
                     >
@@ -3771,6 +3825,8 @@ function AdminPage() {
                           setModOverrideLogistica(!!currentPlan.modulos.logistica);
                           setModOverrideProcesos(currentPlan.modulos.procesos !== undefined ? !!currentPlan.modulos.procesos : true);
                           setModOverrideEstanteria(currentPlan.modulos.estanteria !== undefined ? !!currentPlan.modulos.estanteria : true);
+                          setModOverridePosOffline(currentPlan.modulos.pos_offline !== undefined ? !!currentPlan.modulos.pos_offline : false);
+                          setModOverridePromociones(currentPlan.modulos.promociones !== undefined ? !!currentPlan.modulos.promociones : false);
                         }
                         toast.info("Restablecido a los módulos del Plan Oficial");
                       }}
@@ -3803,6 +3859,7 @@ function AdminPage() {
                     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, checked: modOverrideLogistica, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideLogistica(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
                     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideProcesos(v); }, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
                     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideEstanteria(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+                    { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, checked: modOverridePromociones, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePromociones(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
                   ].map(({ key, label, desc, icon: IconComp, checked, onChange, colorClass, bgClass }) => (
                     <div
                       key={key}
@@ -4300,7 +4357,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         id: ("plan_" + Date.now()) as PlanId,
         nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
         limite_whatsapp_mes: 300,
-        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false },
+        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false },
       });
     }
   }, [open, initial]);
@@ -4332,6 +4389,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         logistica: !!f.modulos?.logistica,
         procesos: !!f.modulos?.procesos,
         estanteria: !!f.modulos?.estanteria,
+        promociones: !!f.modulos?.promociones,
       },
       destacado: f.destacado,
       es_especial: !!f.es_especial,
@@ -4358,6 +4416,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+    { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
   ];
 
   return (
@@ -4533,48 +4592,55 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                 </div>
               </div>
 
-              {/* DESTACADO SWITCH (COMPACT) */}
-              <label className="flex items-center justify-between p-2 px-2.5 rounded-xl border border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors">
-                <div className="flex items-center gap-2">
-                  <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
-                  <div className="leading-tight">
-                    <span className="text-xs font-bold text-foreground">Marcar como plan destacado / popular</span>
-                    <p className="text-[9.5px] text-muted-foreground">Muestra la insignia en la tabla de precios</p>
+              {/* DESTACADO & PLAN ESPECIAL EN 2 COLUMNAS */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {/* 1. DESTACADO */}
+                <label className="flex items-center justify-between p-2 px-2.5 rounded-xl border border-primary/20 bg-primary/5 cursor-pointer hover:bg-primary/10 transition-colors">
+                  <div className="flex items-center gap-2 pr-1.5 min-w-0">
+                    <Sparkles className="h-3.5 w-3.5 text-primary shrink-0" />
+                    <div className="leading-tight min-w-0">
+                      <span className="text-xs font-bold text-foreground block truncate">Plan destacado / popular</span>
+                      <p className="text-[9px] text-muted-foreground truncate">Insignia en tabla de precios</p>
+                    </div>
                   </div>
-                </div>
-                <Switch checked={!!f.destacado} onCheckedChange={(v) => setF({ ...f, destacado: v })} />
-              </label>
+                  <Switch 
+                    checked={!!f.destacado} 
+                    onCheckedChange={(v) => setF({ ...f, destacado: v })} 
+                    className="shrink-0 scale-90"
+                  />
+                </label>
 
-              {/* PLAN ESPECIAL SWITCH (INFERIOR SUTIL) */}
-              <div className="rounded-xl border border-sky-200/80 dark:border-sky-800/60 bg-sky-50/40 dark:bg-sky-950/20 p-2.5 space-y-2">
-                <label className="flex items-center justify-between cursor-pointer">
-                  <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0" />
-                    <div className="leading-tight">
-                      <span className="text-xs font-bold text-foreground">Mostrar como Plan Especial / Barra inferior</span>
-                      <p className="text-[9.5px] text-muted-foreground">Se mostrará sutilmente debajo de las 3 columnas principales sin alterar el diseño</p>
+                {/* 2. PLAN ESPECIAL */}
+                <label className="flex items-center justify-between p-2 px-2.5 rounded-xl border border-sky-200/80 dark:border-sky-800/60 bg-sky-50/40 dark:bg-sky-950/20 cursor-pointer hover:bg-sky-50/70 transition-colors">
+                  <div className="flex items-center gap-2 pr-1.5 min-w-0">
+                    <Sparkles className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                    <div className="leading-tight min-w-0">
+                      <span className="text-xs font-bold text-foreground block truncate">Plan Especial / Barra</span>
+                      <p className="text-[9px] text-muted-foreground truncate">Debajo de 3 columnas</p>
                     </div>
                   </div>
                   <Switch 
                     checked={!!f.es_especial} 
                     onCheckedChange={(v) => setF({ ...f, es_especial: v, titulo_especial: v ? (f.titulo_especial || "Plan especial") : f.titulo_especial })} 
+                    className="shrink-0 scale-90"
                   />
                 </label>
-
-                {f.es_especial && (
-                  <div className="pt-2 border-t border-sky-200/60 dark:border-sky-800/40 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
-                    <Label className="text-[9.5px] font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300">
-                      Título / Indicador de la barra (ej: Plan especial, Plan Inicial, Edición Limitada)
-                    </Label>
-                    <Input
-                      value={f.titulo_especial ?? "Plan especial"}
-                      onChange={(e) => setF({ ...f, titulo_especial: e.target.value })}
-                      placeholder="Plan especial"
-                      className="h-8 rounded-lg bg-background border-sky-300 dark:border-sky-700 text-xs font-semibold"
-                    />
-                  </div>
-                )}
               </div>
+
+              {/* TÍTULO PLAN ESPECIAL (Si está activo) */}
+              {f.es_especial && (
+                <div className="p-2.5 rounded-xl border border-sky-200/80 dark:border-sky-800/60 bg-sky-50/30 dark:bg-sky-950/20 space-y-1 animate-in fade-in slide-in-from-top-1 duration-150">
+                  <Label className="text-[9.5px] font-bold uppercase tracking-wider text-sky-800 dark:text-sky-300">
+                    Título / Indicador de la barra (ej: Plan especial, Plan Inicial, Edición Limitada)
+                  </Label>
+                  <Input
+                    value={f.titulo_especial ?? "Plan especial"}
+                    onChange={(e) => setF({ ...f, titulo_especial: e.target.value })}
+                    placeholder="Plan especial"
+                    className="h-8 rounded-lg bg-background border-sky-300 dark:border-sky-700 text-xs font-semibold"
+                  />
+                </div>
+              )}
 
               {/* SUCURSALES ADICIONALES (COMPACT) */}
               <div className="rounded-xl border border-border/70 p-2.5 bg-slate-50/50 dark:bg-slate-900/40 space-y-2">

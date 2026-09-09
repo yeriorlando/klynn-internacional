@@ -53,7 +53,7 @@ const KLYNN_MODULES_LEFT = [
   },
   {
     id: "fiscal",
-    title: "Facturación DGII e-CF",
+    title: "Facturación Electrónica e-CF",
     subtitle: "Comprobantes B01, B02, B14",
     icon: Landmark,
     bgClass: "bg-blue-600/10 text-blue-700",

@@ -117,59 +117,150 @@ function WeeklySummaryTab({
   activeProvider: "klynn_connect" | "wasender";
   onSave: (value: WeeklySummaryConfig) => Promise<void>;
 }) {
+  const initialPhone = value.whatsapp_phone
+    ? formatPhoneRD(value.whatsapp_phone)
+    : formatPhoneRD(tenant.config?.alerta_ncf_telefono || tenant.telefono || "");
+
   const [draft, setDraft] = useState<WeeklySummaryConfig>({
     enabled: value.enabled === true,
     frequency: value.frequency || "weekly",
-    channel: value.channel || "email",
+    channel: value.channel || "whatsapp",
     email: value.email || tenant.email || "",
-    whatsapp_phone: value.whatsapp_phone || tenant.config?.alerta_ncf_telefono || tenant.telefono || "",
+    whatsapp_phone: initialPhone,
   });
   const [saving, setSaving] = useState(false);
   const [testing, setTesting] = useState(false);
 
   useEffect(() => {
     if (value) {
-      setDraft((prev) => ({
+      setDraft({
         enabled: value.enabled === true,
-        frequency: value.frequency || prev.frequency || "weekly",
-        channel: value.channel || prev.channel || "email",
-        email: value.email || prev.email || tenant.email || "",
-        whatsapp_phone: value.whatsapp_phone || prev.whatsapp_phone || tenant.config?.alerta_ncf_telefono || tenant.telefono || "",
-      }));
+        frequency: value.frequency || "weekly",
+        channel: value.channel || "whatsapp",
+        email: value.email || tenant.email || "",
+        whatsapp_phone: value.whatsapp_phone ? formatPhoneRD(value.whatsapp_phone) : initialPhone,
+      });
     }
   }, [value?.enabled, value?.frequency, value?.channel, value?.email, value?.whatsapp_phone]);
 
   const usesEmail = draft.channel === "email" || draft.channel === "both";
   const usesWhatsApp = draft.channel === "whatsapp" || draft.channel === "both";
 
-  function validate() {
-    if (usesEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(draft.email.trim())) {
-      toast.error("Introduce un correo válido para recibir el resumen.");
+  const isDirty =
+    draft.enabled !== (value.enabled === true) ||
+    draft.frequency !== (value.frequency || "weekly") ||
+    draft.channel !== (value.channel || "whatsapp") ||
+    draft.email.trim().toLowerCase() !== (value.email || tenant.email || "").trim().toLowerCase() ||
+    draft.whatsapp_phone.replace(/\D/g, "") !== (value.whatsapp_phone || initialPhone).replace(/\D/g, "");
+
+  function validateQuiet(candidate: WeeklySummaryConfig) {
+    const needEmail = candidate.channel === "email" || candidate.channel === "both";
+    const needWA = candidate.channel === "whatsapp" || candidate.channel === "both";
+    if (needEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) return false;
+    if (needWA && candidate.whatsapp_phone.replace(/\D/g, "").length < 10) return false;
+    return true;
+  }
+
+  function validate(candidate = draft) {
+    const needEmail = candidate.channel === "email" || candidate.channel === "both";
+    const needWA = candidate.channel === "whatsapp" || candidate.channel === "both";
+    if (needEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(candidate.email.trim())) {
+      toast.error("Introduce un correo válido para recibir el resumen ejecutivo.");
       return false;
     }
-    if (usesWhatsApp && draft.whatsapp_phone.replace(/\D/g, "").length < 10) {
-      toast.error("Introduce un número de WhatsApp válido con código de país.");
+    if (needWA && candidate.whatsapp_phone.replace(/\D/g, "").length < 10) {
+      toast.error("Introduce un número de WhatsApp válido (al menos 10 dígitos) para recibir el resumen.");
       return false;
     }
     return true;
   }
 
+  function cleanConfig(config: WeeklySummaryConfig): WeeklySummaryConfig {
+    return {
+      ...config,
+      email: config.email.trim().toLowerCase(),
+      whatsapp_phone: config.whatsapp_phone.trim(),
+    };
+  }
+
   async function handleToggleEnabled(enabled: boolean) {
+    if (enabled && !validate(draft)) {
+      // Bloquear cambio de switch a ON si los campos no son válidos
+      return;
+    }
     const nextDraft = { ...draft, enabled };
     setDraft(nextDraft);
-    if (enabled && !validate()) return;
     setSaving(true);
     try {
-      await onSave({
-        ...nextDraft,
-        email: nextDraft.email.trim().toLowerCase(),
-        whatsapp_phone: nextDraft.whatsapp_phone.trim(),
-      });
-      toast.success(enabled
-        ? `${nextDraft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} activado ✓`
-        : "Resumen desactivado");
+      await onSave(cleanConfig(nextDraft));
+      toast.success(
+        enabled
+          ? `${nextDraft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} activado en Supabase ✓`
+          : "Resumen desactivado en Supabase",
+      );
+    } catch (err: any) {
+      // Revertir en caso de error de red
+      setDraft(draft);
+      toast.error("Error al guardar en Supabase: " + (err?.message || ""));
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleFrequencyChange(frequency: WeeklySummaryConfig["frequency"]) {
+    const nextDraft = { ...draft, frequency };
+    setDraft(nextDraft);
+    if (nextDraft.enabled && validateQuiet(nextDraft)) {
+      setSaving(true);
+      try {
+        await onSave(cleanConfig(nextDraft));
+        toast.success(`Frecuencia guardada: ${frequency === "monthly" ? "Mensual" : "Semanal"} ✓`);
+      } catch (err: any) {
+        toast.error("Error al guardar frecuencia: " + (err?.message || ""));
+      } finally {
+        setSaving(false);
+      }
+    }
+  }
+
+  async function handleChannelChange(channel: WeeklySummaryConfig["channel"]) {
+    const nextDraft = { ...draft, channel };
+    setDraft(nextDraft);
+    if (nextDraft.enabled && validateQuiet(nextDraft)) {
+      setSaving(true);
+      try {
+        await onSave(cleanConfig(nextDraft));
+        toast.success(
+          `Canal guardado: ${
+            channel === "both" ? "Correo y WhatsApp" : channel === "whatsapp" ? "WhatsApp" : "Correo electrónico"
+          } ✓`,
+        );
+      } catch (err: any) {
+        toast.error("Error al guardar canal: " + (err?.message || ""));
+      } finally {
+        setSaving(false);
+      }
+    }
+  }
+
+  async function handleBlurField(fieldName: "email" | "whatsapp_phone") {
+    if (validateQuiet(draft)) {
+      const isFieldDirty =
+        fieldName === "email"
+          ? draft.email.trim().toLowerCase() !== (value.email || "").trim().toLowerCase()
+          : draft.whatsapp_phone.replace(/\D/g, "") !== (value.whatsapp_phone || "").replace(/\D/g, "");
+
+      if (isFieldDirty) {
+        setSaving(true);
+        try {
+          await onSave(cleanConfig(draft));
+          toast.success(`${fieldName === "email" ? "Correo" : "WhatsApp"} guardado en Supabase ✓`);
+        } catch (err: any) {
+          toast.error("Error al guardar: " + (err?.message || ""));
+        } finally {
+          setSaving(false);
+        }
+      }
     }
   }
 
@@ -177,14 +268,14 @@ function WeeklySummaryTab({
     if (!validate()) return;
     setSaving(true);
     try {
-      await onSave({
-        ...draft,
-        email: draft.email.trim().toLowerCase(),
-        whatsapp_phone: draft.whatsapp_phone.trim(),
-      });
-      toast.success(draft.enabled
-        ? `${draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} guardado y activado ✓`
-        : "Preferencias del resumen guardadas");
+      await onSave(cleanConfig(draft));
+      toast.success(
+        draft.enabled
+          ? `${draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} guardado en Supabase ✓`
+          : "Preferencias guardadas en Supabase ✓",
+      );
+    } catch (err: any) {
+      toast.error("Error al guardar en Supabase: " + (err?.message || "desconocido"));
     } finally {
       setSaving(false);
     }
@@ -194,15 +285,11 @@ function WeeklySummaryTab({
     if (!validate()) return;
     setTesting(true);
     try {
-      const cleanDraft = {
-        ...draft,
-        email: draft.email.trim().toLowerCase(),
-        whatsapp_phone: draft.whatsapp_phone.trim(),
-      };
-      await onSave(cleanDraft);
-      const result = await sendWeeklySummaryTest(tenant.id, cleanDraft.channel, cleanDraft.frequency);
+      const clean = cleanConfig(draft);
+      await onSave(clean);
+      const result = await sendWeeklySummaryTest(tenant.id, clean.channel, clean.frequency);
       if (result.sent.length > 0) {
-        toast.success(`Resumen de prueba enviado por ${result.sent.join(" y ")}.`);
+        toast.success(`Resumen de prueba enviado con éxito por ${result.sent.join(" y ")} 🚀`);
       }
       if (result.failed.length > 0) {
         toast.error(result.failed.map((item) => `${item.channel}: ${item.error}`).join(" | "));
@@ -222,79 +309,115 @@ function WeeklySummaryTab({
             <TrendingUp className="h-5.5 w-5.5" />
           </div>
           <div>
-            <h3 className="font-display font-bold text-lg text-foreground leading-tight">
-              {draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal del negocio"}
-            </h3>
-            <p className="text-xs text-muted-foreground mt-0.5">
+            <div className="flex items-center gap-2 flex-wrap">
+              <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                {draft.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal del negocio"}
+              </h3>
+              {draft.enabled ? (
+                <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 text-[10.5px] font-bold gap-1">
+                  <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                  Activo
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="text-slate-500 dark:text-slate-400 text-[10.5px] font-bold">
+                  Inactivo
+                </Badge>
+              )}
+              {isDirty && (
+                <Badge variant="outline" className="text-amber-600 dark:text-amber-400 border-amber-300 bg-amber-50 dark:bg-amber-950/40 text-[10.5px] font-bold">
+                  ● Cambios pendientes
+                </Badge>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
               {draft.frequency === "monthly"
                 ? "Recibe el día 1.º de cada mes el resultado consolidado del mes anterior."
-                : "Recibe cada lunes el resultado de la semana anterior."}
+                : "Recibe cada lunes a las 7:00 a. m. el resultado consolidado de la semana anterior."}
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-4 py-3">
-          <div>
-            <p className="text-xs font-bold text-foreground">Activar resumen</p>
-            <p className="text-[11px] text-muted-foreground">
-              {draft.frequency === "monthly" ? "El día 1.º de cada mes, a las 7:00 a. m." : "Cada lunes, a las 7:00 a. m."}
-            </p>
+        <div className="flex items-center gap-3 flex-wrap sm:flex-nowrap">
+          {isDirty && (
+            <Button
+              size="sm"
+              onClick={handleSave}
+              disabled={saving || testing}
+              className="rounded-xl bg-primary text-white font-bold gap-1.5 h-10 px-4 text-xs shadow-xs"
+            >
+              {saving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Save className="h-3.5 w-3.5" />}
+              Guardar cambios
+            </Button>
+          )}
+          <div className="flex items-center gap-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-4 py-2.5">
+            <div>
+              <p className="text-xs font-bold text-foreground">Activar resumen</p>
+              <p className="text-[11px] text-muted-foreground">
+                {draft.frequency === "monthly" ? "Día 1.º de mes (7:00 a. m.)" : "Lunes (7:00 a. m.)"}
+              </p>
+            </div>
+            {saving ? (
+              <Loader2 className="h-5 w-5 animate-spin text-primary" />
+            ) : (
+              <Switch checked={draft.enabled} onCheckedChange={handleToggleEnabled} disabled={saving || testing} />
+            )}
           </div>
-          <Switch checked={draft.enabled} onCheckedChange={handleToggleEnabled} />
         </div>
       </div>
 
       <div className="grid gap-5 md:grid-cols-2">
-        <Field label="Tipo de resumen" icon={Calendar} hint="Puedes activar el semanal o el ejecutivo mensual.">
+        <Field label="Frecuencia del resumen" icon={Calendar} hint="Puedes programar el envío semanal o el mensual consolidado.">
           <Select
             value={draft.frequency}
-            onValueChange={(frequency: WeeklySummaryConfig["frequency"]) => setDraft((current) => ({ ...current, frequency }))}
+            onValueChange={handleFrequencyChange}
           >
             <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="weekly">Resumen semanal</SelectItem>
-              <SelectItem value="monthly">Resumen ejecutivo mensual</SelectItem>
+              <SelectItem value="weekly">Resumen semanal (Cada lunes a las 7:00 a. m.)</SelectItem>
+              <SelectItem value="monthly">Resumen ejecutivo mensual (Día 1.º a las 7:00 a. m.)</SelectItem>
             </SelectContent>
           </Select>
         </Field>
 
-        <Field label="Canal de entrega" icon={Send} hint="Puedes recibirlo por uno o por ambos canales.">
-          <Select value={draft.channel} onValueChange={(channel: WeeklySummaryConfig["channel"]) => setDraft((current) => ({ ...current, channel }))}>
+        <Field label="Canal de entrega" icon={Send} hint="Elige por dónde deseas recibir el resumen directivo.">
+          <Select value={draft.channel} onValueChange={handleChannelChange}>
             <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="email">Correo electr&oacute;nico</SelectItem>
               <SelectItem value="whatsapp">WhatsApp</SelectItem>
-              <SelectItem value="both">Correo y WhatsApp</SelectItem>
+              <SelectItem value="email">Correo electrónico</SelectItem>
+              <SelectItem value="both">Correo electrónico y WhatsApp</SelectItem>
             </SelectContent>
           </Select>
         </Field>
-
-        {usesEmail && (
-          <Field label="Correo destinatario" icon={Mail} hint="Se completa inicialmente con el correo del negocio.">
-            <Input
-              type="email"
-              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}
-              value={draft.email}
-              onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
-              placeholder="propietario@lavanderia.com"
-            />
-          </Field>
-        )}
 
         {usesWhatsApp && (
           <Field
             label="WhatsApp destinatario"
             icon={MessageCircle}
-            hint={`Se enviar\u00e1 con el proveedor activo en Administraci\u00f3n: ${activeProvider === "klynn_connect" ? "Klynn Connect" : "WasenderAPI"}.`}
+            hint={`Se enviará con el motor activo (${activeProvider === "klynn_connect" ? "Klynn Connect" : "WasenderAPI"}) al teléfono del propietario.`}
           >
             <Input
               className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}
               value={draft.whatsapp_phone}
               onChange={(event) => setDraft((current) => ({ ...current, whatsapp_phone: formatPhoneRD(event.target.value) }))}
+              onBlur={() => handleBlurField("whatsapp_phone")}
               placeholder="1 809 000 0000"
+            />
+          </Field>
+        )}
+
+        {usesEmail && (
+          <Field label="Correo destinatario" icon={Mail} hint="Correo electrónico donde se enviará el informe en formato HTML.">
+            <Input
+              type="email"
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}
+              value={draft.email}
+              onChange={(event) => setDraft((current) => ({ ...current, email: event.target.value }))}
+              onBlur={() => handleBlurField("email")}
+              placeholder="propietario@lavanderia.com"
             />
           </Field>
         )}
@@ -306,10 +429,10 @@ function WeeklySummaryTab({
         <div className="mb-5 flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
           <div className="min-w-0">
             <h4 className="text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
-              El resumen incluir&aacute;
+              El resumen incluirá
             </h4>
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
-              Una vista breve de las &aacute;reas que requieren tu atenci&oacute;n.
+              Métricas clave calculadas automáticamente con los datos reales de tu lavandería.
             </p>
           </div>
           <span className="inline-flex w-fit shrink-0 items-center gap-1.5 text-[11px] font-bold text-primary">
@@ -322,22 +445,22 @@ function WeeklySummaryTab({
           {[
             {
               title: "Ventas y rendimiento",
-              description: "Ventas, \u00f3rdenes y ticket promedio",
+              description: "Ventas netas, órdenes y ticket promedio",
               icon: TrendingUp,
             },
             {
               title: "Gastos y resultado",
-              description: "Egresos y balance estimado",
+              description: "Egresos y balance estimado del período",
               icon: Receipt,
             },
             {
-              title: "Cobros y operaci\u00f3n",
-              description: "Cuentas por cobrar y trabajo pendiente",
+              title: "Cobros y operación",
+              description: "Cuentas por cobrar y trabajo en proceso",
               icon: Wallet,
             },
             {
-              title: "Salud fiscal",
-              description: `Incidencias e-CF y comparaci\u00f3n ${draft.frequency === "monthly" ? "mensual" : "semanal"}`,
+              title: "Salud fiscal y arqueo",
+              description: `Incidencias e-CF y comparativa ${draft.frequency === "monthly" ? "mensual" : "semanal"}`,
               icon: ShieldCheck,
             },
           ].map((item) => {
@@ -364,15 +487,27 @@ function WeeklySummaryTab({
         </div>
       </section>
 
-      <div className="pt-5 border-t border-border/70 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3">
-        <Button variant="outline" onClick={handleTest} disabled={testing || saving} className="rounded-xl font-bold gap-2">
-          {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-          Enviar resumen de prueba
-        </Button>
-        <Button onClick={handleSave} disabled={saving || testing} className="rounded-xl bg-primary text-white font-bold gap-2">
-          {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-          Guardar preferencias
-        </Button>
+      <div className="pt-5 border-t border-border/70 flex flex-col-reverse sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div className="text-xs text-muted-foreground">
+          {draft.enabled ? (
+            <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4" />
+              Programado para enviarse {draft.frequency === "monthly" ? "el día 1.º de cada mes a las 7:00 a. m." : "cada lunes a las 7:00 a. m."}
+            </span>
+          ) : (
+            <span>Activa el interruptor arriba para recibir tus reportes automáticamente.</span>
+          )}
+        </div>
+        <div className="flex items-center gap-3">
+          <Button variant="outline" onClick={handleTest} disabled={testing || saving} className="rounded-xl font-bold gap-2">
+            {testing ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            Enviar prueba ahora
+          </Button>
+          <Button onClick={handleSave} disabled={saving || testing} className="rounded-xl bg-primary text-white font-bold gap-2">
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            Guardar preferencias
+          </Button>
+        </div>
       </div>
     </Card>
   );
@@ -809,7 +944,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
       toast.error("Error al guardar: " + (err.message || "desconocido"));
     }
   }
-  async function saveCfg(c: Partial<TenantConfig>) {
+  async function saveCfg(c: Partial<TenantConfig>, silent = false) {
     try {
       const nextConfig = { ...cfg, ...c };
       const next: Tenant = { ...tenant!, config: nextConfig } as Tenant;
@@ -818,7 +953,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
       setTenant(next);
       queryClient.invalidateQueries({ queryKey: ["tenant"] });
       queryClient.invalidateQueries({ queryKey: ["tenants"] });
-      toast.success("Configuración guardada correctamente ✅");
+      if (!silent) toast.success("Configuración guardada correctamente ✅");
     } catch (err: any) {
       console.error("Error saving config:", err);
       toast.error("Error al guardar configuración: " + (err.message || "desconocido"));
@@ -1327,7 +1462,13 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
               {/* Fila 1: Configuración de impresión y tiempos */}
               <div className="grid gap-5 md:grid-cols-3">
                 <Field label="Formato de papel" icon={Printer}>
-                  <Select value={cfg.formato_ticket} onValueChange={(v: any) => updateCfg({ formato_ticket: v })}>
+                  <Select
+                    value={cfg.formato_ticket}
+                    onValueChange={async (v: "57mm" | "80mm") => {
+                      updateCfg({ formato_ticket: v });
+                      await saveCfg({ formato_ticket: v });
+                    }}
+                  >
                     <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
                       <SelectValue placeholder="Seleccionar formato" />
                     </SelectTrigger>
@@ -2279,7 +2420,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
             tenant={tenant}
             value={cfg.weekly_summary || DEFAULT_CONFIG.weekly_summary!}
             activeProvider={globalConfig?.whatsapp_engine || "klynn_connect"}
-            onSave={(weeklySummary) => saveCfg({ weekly_summary: weeklySummary })}
+            onSave={(weeklySummary) => saveCfg({ weekly_summary: weeklySummary }, true)}
           />
         </TabsContent>
 
@@ -2472,15 +2613,6 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       </svg>
                       <span>{p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</span>
                     </div>
-                    {p.modulos?.whatsapp && (
-                      <div className="text-xs flex items-center gap-2.5 font-semibold text-blue-600 dark:text-blue-400">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
-                          <circle cx="12" cy="12" r="10" />
-                          <path d="m9 12 2 2 4-4" />
-                        </svg>
-                        <span>{p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp/mes` : "Mensajes WhatsApp Ilimitados"}</span>
-                      </div>
-                    )}
 
                     <div className="border-t border-border/60 pt-3 mt-3 text-left">
                       <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
@@ -2488,14 +2620,12 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                       </div>
                       <div className="space-y-2">
                         {[
-                          { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-                          { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-                          { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-                          { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
                           { key: "estanteria", label: "Estantería virtual" },
-                        ].map(({ key, label, extra }) => {
+                          { key: "promociones", label: "Promociones y Cupones" },
+                          { key: "logistica", label: "Envío a domicilio" },
+                          { key: "pos_offline", label: "Modo Offline" },
+                        ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
                             <div 
@@ -2518,22 +2648,33 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                                   <path d="m9 9 6 6" />
                                 </svg>
                               )}
-                              <span className="flex items-center flex-wrap gap-1">
-                                <span>{label}</span>
-                                {extra && (
-                                  <span className={`text-[10px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
-                                    {extra}
-                                  </span>
-                                )}
-                                {key === "multisucursal" && v && (
-                                  <span className="text-[9px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded uppercase tracking-wider ml-0.5">
-                                    Hasta {1 + (p.limite_sucursales_adicionales || 0)}
-                                  </span>
-                                )}
-                              </span>
+                              <span>{label}</span>
                             </div>
                           );
                         })}
+                      </div>
+
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-3 pt-2.5 border-t border-border/40 mb-2">
+                        Complementos Opcionales
+                      </div>
+                      <div className="space-y-2">
+                        {[
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                          { key: "whatsapp", label: "Mensajería WhatsApp" },
+                          { key: "multisucursal", label: "Sucursal Adicional" },
+                        ].map(({ key, label }) => (
+                          <div 
+                            key={key} 
+                            className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0">
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M12 8v8" />
+                              <path d="M8 12h8" />
+                            </svg>
+                            <span>{label}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -2727,59 +2868,72 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
                       
-                      {/* Desglose de Módulos Habilitados */}
-                      <div>
-                        <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                          MÓDULOS HABILITADOS
+                      {/* Desglose de Módulos Habilitados y Complementos */}
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            MÓDULOS HABILITADOS
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                              { key: "procesos", label: "Tablero de Procesos" },
+                              { key: "estanteria", label: "Estantería virtual" },
+                              { key: "promociones", label: "Promociones y Cupones" },
+                              { key: "logistica", label: "Envío a domicilio" },
+                              { key: "pos_offline", label: "Modo Offline" },
+                            ].map(({ key, label }) => {
+                              const v = !!p.modulos?.[key as keyof typeof p.modulos];
+                              return (
+                                <div 
+                                  key={key} 
+                                  className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                    v 
+                                      ? "text-green-700 dark:text-green-400" 
+                                      : "text-slate-400 line-through opacity-70"
+                                  }`}
+                                >
+                                  {v ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m9 12 2 2 4-4" />
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m15 9-6 6" />
+                                      <path d="m9 9 6 6" />
+                                    </svg>
+                                  )}
+                                  <span>{label}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
-                          {[
-                            { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-                            { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-                            { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-                            { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-                            { key: "logistica", label: "Envío a domicilio" },
-                            { key: "procesos", label: "Tablero de Procesos" },
-                            { key: "estanteria", label: "Estantería virtual" },
-                          ].map(({ key, label, extra }) => {
-                            const v = !!p.modulos?.[key as keyof typeof p.modulos];
-                            return (
+
+                        <div className="pt-2 border-t border-border/40">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            COMPLEMENTOS OPCIONALES
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                              { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                              { key: "whatsapp", label: "Mensajería WhatsApp" },
+                              { key: "multisucursal", label: "Sucursal Adicional" },
+                            ].map(({ key, label }) => (
                               <div 
                                 key={key} 
-                                className={`flex items-center gap-1.5 text-[11px] font-semibold ${
-                                  v 
-                                    ? "text-green-700 dark:text-green-400" 
-                                    : "text-slate-400 line-through opacity-70"
-                                }`}
+                                className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300"
                               >
-                                {v ? (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="m9 12 2 2 4-4" />
-                                  </svg>
-                                ) : (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="m15 9-6 6" />
-                                    <path d="m9 9 6 6" />
-                                  </svg>
-                                )}
-                                <span className="flex items-center flex-wrap gap-1">
-                                  <span>{label}</span>
-                                  {extra && (
-                                    <span className={`text-[9px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
-                                      {extra}
-                                    </span>
-                                  )}
-                                  {key === "multisucursal" && v && (
-                                    <span className="text-[8.5px] font-bold text-primary bg-primary/10 px-1 py-0.2 rounded uppercase tracking-wider ml-0.5">
-                                      Hasta {1 + (p.limite_sucursales_adicionales || 0)}
-                                    </span>
-                                  )}
-                                </span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="M12 8v8" />
+                                  <path d="M8 12h8" />
+                                </svg>
+                                <span>{label}</span>
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
                       </div>
 

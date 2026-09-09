@@ -51,6 +51,7 @@ import {
   Tag,
   Layers,
   Package,
+  PackagePlus,
   MapPin,
   WifiOff,
   Lock,
@@ -126,6 +127,8 @@ import {
   type ECFDocument,
   type Empleado,
   type Tenant,
+  type Promocion,
+  registrarUsoPromocion,
   NCF_NOMBRES,
 } from "@/lib/storage";
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
@@ -142,6 +145,7 @@ import {
   useECFConfig,
   usePlans,
   useECFSequences,
+  usePromociones,
 } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -431,6 +435,19 @@ function ItemNotePopover({
   );
 }
 
+function getAdaptiveTitleStyle(name: string): string {
+  const len = (name || "").trim().length;
+  if (len > 28) {
+    return "text-[10px] sm:text-[11px] leading-tight tracking-tight";
+  }
+  if (len > 18) {
+    return "text-[11px] sm:text-xs leading-tight tracking-tight";
+  }
+  if (len > 12) {
+    return "text-xs sm:text-[13px] leading-snug";
+  }
+  return "text-xs sm:text-sm leading-snug";
+}
 
 function NuevaOrdenPage() {
   const user = useRequireAuth();
@@ -679,9 +696,22 @@ function NuevaOrdenPage() {
   const [showCategoryModal, setShowCategoryModal] = useState(false);
   const [categorySearchQuery, setCategorySearchQuery] = useState("");
   const [servicePickerItem, setServicePickerItem] = useState<CatalogoItem | null>(null);
+  const [treatmentQuantities, setTreatmentQuantities] = useState<Record<string, number>>({});
+  const [packagePickerService, setPackagePickerService] = useState<Servicio | null>(null);
+  const [packageExtraQty, setPackageExtraQty] = useState<number>(0);
+  const [weightPickerService, setWeightPickerService] = useState<Servicio | null>(null);
+  const [weightQty, setWeightQty] = useState<number>(10);
+  const [selectedPromo, setSelectedPromo] = useState<Promocion | null>(null);
+
+  useEffect(() => {
+    if (servicePickerItem) {
+      setTreatmentQuantities({});
+    }
+  }, [servicePickerItem]);
 
   const { data: catalogoData = [], isLoading: loadingCatalog } = useCatalogo(tenantId);
   const { data: serviciosData = [], isLoading: loadingServicios } = useServicios(tenantId);
+  const { data: promocionesData = [] } = usePromociones(tenantId);
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: ordenes = [] } = useOrdenes(tenantId);
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
@@ -700,6 +730,7 @@ function NuevaOrdenPage() {
 
   const activePlan = useMemo(() => plans.find((p) => p.id === tenant?.plan_id), [plans, tenant?.plan_id]);
   const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
+  const hasPromocionesModule = isModuleEnabled(tenant || null, "promociones", activePlan);
 
   const isElectronic = hasFiscalModule && Boolean(
     fiscalConfigData?.is_active || 
@@ -826,6 +857,48 @@ function NuevaOrdenPage() {
       }
     }
   }, [validTipos, tipoECF]);
+
+  // Auto-detección de promociones aplicables si no hay promo fijada ni descuento manual
+  useEffect(() => {
+    if (!hasPromocionesModule || selectedPromo || descuento > 0 || items.length === 0) return;
+    const currentDay = new Date().getDay();
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    const automaticas = promocionesData.filter(
+      (p) => p.activo && p.es_automatica && !p.codigo_cupon
+    );
+
+    const currentSubtotal = items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0);
+
+    for (const p of automaticas) {
+      if (p.dias_semana && p.dias_semana.length > 0 && !p.dias_semana.includes(currentDay)) continue;
+      if (p.fecha_inicio && todayStr < p.fecha_inicio) continue;
+      if (p.fecha_fin && todayStr > p.fecha_fin) continue;
+      if (p.min_piezas && p.min_piezas > 0 && totalPiezasCalculadas < p.min_piezas) continue;
+      if (p.min_subtotal && p.min_subtotal > 0 && currentSubtotal < p.min_subtotal) continue;
+
+      if (p.tipo_aplicacion === "POR_CATEGORIA") {
+        const cats = (p.categorias || []).map((c) => c.toLowerCase());
+        const hasMatch = items.some((it) => {
+          const catItem = catalogoMap.get(it.descripcion);
+          return cats.includes((catItem?.categoria || "").toLowerCase());
+        });
+        if (!hasMatch) continue;
+      } else if (p.tipo_aplicacion === "POR_SERVICIO") {
+        const srvs = (p.servicios || []).map((s) => s.toLowerCase());
+        const hasMatch = items.some((it) => srvs.includes((it.servicio_origen || "").toLowerCase()));
+        if (!hasMatch) continue;
+      } else if (p.tipo_aplicacion === "POR_PRENDA") {
+        const prendas = (p.prendas || []).map((pr) => pr.toLowerCase());
+        const hasMatch = items.some((it) => prendas.includes(it.descripcion.toLowerCase()));
+        if (!hasMatch) continue;
+      }
+
+      setSelectedPromo(p);
+      toast.success(`✨ Promoción aplicada: ${p.nombre}`, { id: `promo-${p.id}`, duration: 3000 });
+      break;
+    }
+  }, [items, promocionesData, selectedPromo, descuento, totalPiezasCalculadas, catalogoMap, hasPromocionesModule]);
 
   const [metodo, setMetodo] = useState<MetodoPago>("PAGO_AL_RETIRAR");
   const [opcionPagoSelected, setOpcionPagoSelected] = useState<string>("PAGO_AL_RETIRAR");
@@ -1033,6 +1106,7 @@ function getMarbeteColorStyle(colorName?: string) {
     setServiciosSel([]);
     setCustomServicePrices({});
     setDescuento(0);
+    setSelectedPromo(null);
     setNotas("");
     setUbicacionRopa("");
     setShowNotesPOS(false);
@@ -1193,7 +1267,7 @@ function getMarbeteColorStyle(colorName?: string) {
   const itemCountsMap = useMemo(() => {
     const map: Record<string, number> = {};
     for (const it of items) {
-      const rawName = it.descripcion.replace("↳ ", "");
+      const rawName = it.descripcion.replace("↳ ", "").replace(/\s*\([^)]*\)$/, "").trim();
       map[rawName] = (map[rawName] || 0) + it.cantidad;
     }
     return map;
@@ -1213,14 +1287,29 @@ function getMarbeteColorStyle(colorName?: string) {
     const map: Record<string, number> = {};
     for (const s of serviciosSel) {
       map[s] = (map[s] || 0) + 1;
+      map[s.toLowerCase()] = (map[s.toLowerCase()] || 0) + 1;
     }
     return map;
   }, [serviciosSel]);
 
-  const selectedServices = useMemo(
-    () => servicios.filter((service) => Boolean(serviceCountsMap[service.nombre])),
-    [servicios, serviceCountsMap],
-  );
+  const selectedServices = useMemo(() => {
+    const uniqueSel = Array.from(new Set(serviciosSel));
+    return uniqueSel.map((sName) => {
+      const match = servicios.find(
+        (s) =>
+          s.nombre.toLowerCase() === sName.toLowerCase() ||
+          s.id === sName
+      );
+      if (match) return match;
+      return {
+        id: sName,
+        nombre: sName,
+        precio: 0,
+        activo: true,
+        tenant_id: tenantId,
+      } as Servicio;
+    });
+  }, [servicios, serviciosSel, tenantId]);
 
   const catalogFiltered = useMemo(() => {
     let list = catalogoEfectivo;
@@ -1597,7 +1686,7 @@ function getMarbeteColorStyle(colorName?: string) {
       let price = s.precio;
       if (customServicePrices[s.nombre] !== undefined) {
         price = customServicePrices[s.nombre];
-      } else if (cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0) {
+      } else if ((s.por_libra || (!s.permite_piezas_adicionales && cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO")) && prendasConPrecio.length > 0) {
         price = 0;
       }
       return acc + price * qty;
@@ -1639,8 +1728,78 @@ function getMarbeteColorStyle(colorName?: string) {
   }
 
   const subtotalConImpuestos = subtotal + itbis;
-  const descuentoMonto = +((subtotalConImpuestos * descuento) / 100).toFixed(2);
-  total = +(subtotalConImpuestos - descuentoMonto + costoEnvio).toFixed(2);
+
+  // Evaluación dinámica de la promoción seleccionada
+  const promoEvaluada = (() => {
+    if (!selectedPromo) return null;
+    const currentDay = new Date().getDay();
+    const todayStr = new Date().toISOString().split("T")[0];
+
+    if (!selectedPromo.activo) return { valida: false, monto: 0, motivo: "Promoción pausada" };
+    if (selectedPromo.dias_semana && selectedPromo.dias_semana.length > 0 && !selectedPromo.dias_semana.includes(currentDay)) {
+      return { valida: false, monto: 0, motivo: "No aplica hoy" };
+    }
+    if (selectedPromo.fecha_inicio && todayStr < selectedPromo.fecha_inicio) {
+      return { valida: false, monto: 0, motivo: "Aún no inicia" };
+    }
+    if (selectedPromo.fecha_fin && todayStr > selectedPromo.fecha_fin) {
+      return { valida: false, monto: 0, motivo: "Ya expiró" };
+    }
+    if (selectedPromo.min_piezas && selectedPromo.min_piezas > 0 && totalPiezasCalculadas < selectedPromo.min_piezas) {
+      return { valida: false, monto: 0, motivo: `Mín. ${selectedPromo.min_piezas} piezas requeridas` };
+    }
+    if (selectedPromo.min_subtotal && selectedPromo.min_subtotal > 0 && subtotalBase < selectedPromo.min_subtotal) {
+      return { valida: false, monto: 0, motivo: `Mín. ${formatRD(selectedPromo.min_subtotal)} requerido` };
+    }
+
+    let base = 0;
+    if (selectedPromo.tipo_aplicacion === "TODA_LA_ORDEN") {
+      base = subtotalConImpuestos;
+    } else if (selectedPromo.tipo_aplicacion === "POR_CATEGORIA") {
+      const cats = (selectedPromo.categorias || []).map((c) => c.toLowerCase());
+      for (const it of items) {
+        const catItem = catalogoMap.get(it.descripcion);
+        const itemCat = (catItem?.categoria || "").toLowerCase();
+        if (cats.includes(itemCat)) {
+          base += it.cantidad * it.precio_unitario;
+        }
+      }
+    } else if (selectedPromo.tipo_aplicacion === "POR_SERVICIO") {
+      const srvs = (selectedPromo.servicios || []).map((s) => s.toLowerCase());
+      for (const it of items) {
+        const srvOrigen = (it.servicio_origen || "").toLowerCase();
+        if (srvs.includes(srvOrigen)) {
+          base += it.cantidad * it.precio_unitario;
+        }
+      }
+    } else if (selectedPromo.tipo_aplicacion === "POR_PRENDA") {
+      const prendas = (selectedPromo.prendas || []).map((p) => p.toLowerCase());
+      for (const it of items) {
+        if (prendas.includes(it.descripcion.toLowerCase())) {
+          base += it.cantidad * it.precio_unitario;
+        }
+      }
+    }
+
+    if (base <= 0) {
+      return { valida: false, monto: 0, motivo: "No hay prendas o servicios elegibles" };
+    }
+
+    let monto = 0;
+    if (selectedPromo.tipo_descuento === "PORCENTAJE") {
+      monto = +((base * selectedPromo.valor_descuento) / 100).toFixed(2);
+    } else {
+      monto = Math.min(base, Number(selectedPromo.valor_descuento || 0));
+    }
+
+    return { valida: true, monto };
+  })();
+
+  const descuentoMonto = selectedPromo && promoEvaluada?.valida
+    ? promoEvaluada.monto
+    : +((subtotalConImpuestos * descuento) / 100).toFixed(2);
+
+  total = +(Math.max(0, subtotalConImpuestos - descuentoMonto) + costoEnvio).toFixed(2);
 
   const vuelto = metodo === "EFECTIVO" && recibido > total ? recibido - total : 0;
   const faltante = metodo === "EFECTIVO" && recibido > 0 && recibido < total ? total - recibido : 0;
@@ -2033,10 +2192,11 @@ function getMarbeteColorStyle(colorName?: string) {
                 it.servicio_origen === sName &&
                 (it.precio_unitario || 0) > 0,
             );
-            let sPrice = servicios.find((x) => x.nombre === sName)?.precio || 0;
+            const srvObj = servicios.find((x) => x.nombre === sName);
+            let sPrice = srvObj?.precio || 0;
             if (customServicePrices[sName] !== undefined) {
               sPrice = customServicePrices[sName];
-            } else if (cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0) {
+            } else if ((srvObj?.por_libra || (!srvObj?.permite_piezas_adicionales && cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO")) && prendasConPrecio.length > 0) {
               sPrice = 0;
             }
             acc[sName] = sPrice;
@@ -2048,6 +2208,8 @@ function getMarbeteColorStyle(colorName?: string) {
         subtotal: +subtotal.toFixed(2),
         itbis,
         descuento: descuentoMonto,
+        promocion_id: selectedPromo?.id,
+        promocion_nombre: selectedPromo?.nombre,
         total,
         pagado,
         saldo,
@@ -2250,6 +2412,10 @@ function getMarbeteColorStyle(colorName?: string) {
             ultimo_marbete_secuencia: isNaN(nextSec) ? undefined : nextSec,
           },
         }).catch(() => {});
+      }
+
+      if (selectedPromo && descuentoMonto > 0) {
+        void registrarUsoPromocion(selectedPromo.id, tenant.id, descuentoMonto).catch(() => {});
       }
 
       setCreada({ ...ordenActualizada });
@@ -2481,12 +2647,28 @@ function getMarbeteColorStyle(colorName?: string) {
                 <button
                   type="button"
                   onClick={() => setShowDiscountPOS(true)}
-                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${descuento > 0 ? "bg-rose-700 text-white shadow-inner ring-2 ring-rose-400 ring-offset-1 dark:ring-offset-background" : "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"}`}
+                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
+                    selectedPromo
+                      ? "bg-emerald-700 text-white shadow-inner ring-2 ring-emerald-400 ring-offset-1 dark:ring-offset-background"
+                      : descuento > 0
+                        ? "bg-rose-700 text-white shadow-inner ring-2 ring-rose-400 ring-offset-1 dark:ring-offset-background"
+                        : "bg-rose-600 hover:bg-rose-700 text-white shadow-sm"
+                  }`}
                 >
-                  <Percent
-                    className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
-                  />
-                  <span>{descuento > 0 ? `Desc. ${descuento}%` : "Descuento"}</span>
+                  {selectedPromo ? (
+                    <Sparkles className="h-4 w-4 transition-colors text-white" />
+                  ) : (
+                    <Percent
+                      className={`h-4 w-4 transition-colors text-white ${descuento > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                    />
+                  )}
+                  <span>
+                    {selectedPromo
+                      ? `Promo: ${selectedPromo.nombre}`
+                      : descuento > 0
+                        ? `Desc. ${descuento}%`
+                        : "Descuento / Promo"}
+                  </span>
                 </button>
 
                 <button
@@ -2517,11 +2699,12 @@ function getMarbeteColorStyle(colorName?: string) {
                   <button
                     type="button"
                     onClick={() => {
-                      if (marbetesList.length === 0) {
+                      if (!marbetesList || marbetesList.length === 0) {
+                        const fallbackColor = "AZUL";
                         setMarbetesList([
                           {
                             id: uid(),
-                            color: "",
+                            color: fallbackColor,
                             piezas: totalPiezasCalculadas || 1,
                             secuencia: "",
                           },
@@ -2529,23 +2712,15 @@ function getMarbeteColorStyle(colorName?: string) {
                       }
                       setShowMarbeteModal(true);
                     }}
-                    className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${
-                      marbetesList.some((m) => m.secuencia)
-                        ? "bg-amber-600 hover:bg-amber-700 text-white shadow-inner ring-2 ring-amber-400 ring-offset-1 dark:ring-offset-background"
-                        : "bg-amber-500 hover:bg-amber-600 text-white shadow-sm"
-                    }`}
+                    className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${marbetesList.length > 0 ? "bg-teal-700 text-white shadow-inner ring-2 ring-teal-400 ring-offset-1 dark:ring-offset-background" : "bg-teal-600 hover:bg-teal-700 text-white shadow-sm"}`}
                   >
-                    <Tag className="h-4 w-4 transition-colors text-white" />
+                    <Tag
+                      className={`h-4 w-4 transition-colors text-white ${marbetesList.length > 0 ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                    />
                     <span>
-                      {(() => {
-                        const valid = marbetesList.filter((m) => m.secuencia);
-                        if (valid.length === 0) return "Marbete";
-                        if (valid.length === 1) {
-                          return `${valid[0].color || "Tira"} ${valid[0].piezas}p #${valid[0].secuencia}`;
-                        }
-                        const totalP = valid.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0);
-                        return `${valid.length} Tiras (${totalP} pzs)`;
-                      })()}
+                      {marbetesList.length > 0
+                        ? `Marbete (${marbetesList.reduce((acc, it) => acc + (Number(it.piezas) || 0), 0)})`
+                        : "Marbetes"}
                     </span>
                   </button>
                 )}
@@ -2621,6 +2796,10 @@ function getMarbeteColorStyle(colorName?: string) {
               discount={descuento}
               setDiscount={setDescuento}
               empleado={user?.empleado}
+              promociones={hasPromocionesModule ? promocionesData : []}
+              selectedPromo={selectedPromo}
+              setSelectedPromo={setSelectedPromo}
+              hasPromocionesModule={hasPromocionesModule}
             />
 
             <NotesPOSDialog
@@ -2806,18 +2985,37 @@ function getMarbeteColorStyle(colorName?: string) {
                               <button
                                 key={s.id}
                                 onClick={() => {
-                                  setServiciosSel((arr) =>
-                                    arr.includes(s.nombre) ? arr : [...arr, s.nombre],
-                                  );
-                                  setDesgloseServiceName(s.nombre);
-                                  setIndexDesglose(-1);
-                                  if (enablePrendas) {
+                                  // Si el servicio es un paquete con piezas adicionales configuradas
+                                  if (s.permite_piezas_adicionales && (s.precio_pieza_adicional ?? 0) > 0) {
+                                    setPackagePickerService(s);
+                                    setPackageExtraQty(0);
+                                    return;
+                                  }
+
+                                  // Si el servicio es cobro por libra
+                                  if (s.por_libra) {
+                                    setWeightPickerService(s);
+                                    setWeightQty(10);
+                                    return;
+                                  }
+
+                                  if (enablePrendas && cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO") {
+                                    setServiciosSel((arr) =>
+                                      arr.includes(s.nombre) ? arr : [...arr, s.nombre],
+                                    );
+                                    setDesgloseServiceName(s.nombre);
+                                    setIndexDesglose(-1);
                                     setPosFilterTab("PRENDAS");
                                     setActiveCategory("TODAS LAS PRENDAS");
                                     toast.info(
                                       `Servicio "${s.nombre}" activo. Selecciona las prendas asociadas.`,
                                       { duration: 3000 },
                                     );
+                                  } else {
+                                    updateServiceQuantity(s.nombre, 1);
+                                    setDesgloseServiceName(s.nombre);
+                                    setIndexDesglose(-1);
+                                    toast.success(`Servicio "${s.nombre}" agregado ✨`, { duration: 2000 });
                                   }
                                 }}
                                 className={`group relative flex flex-col items-center justify-center gap-3 p-4 rounded-2xl border-2 transition-all active:scale-95 text-center ${
@@ -2840,12 +3038,20 @@ function getMarbeteColorStyle(colorName?: string) {
                                   </div>
                                 )}
                                 <div className="w-full text-center">
-                                  <div className="text-sm font-bold leading-tight line-clamp-1">
+                                  <div
+                                    className={`min-h-[2.5rem] sm:min-h-[2.85rem] flex items-center justify-center font-bold line-clamp-3 px-0.5 break-words ${getAdaptiveTitleStyle(s.nombre)}`}
+                                    title={s.nombre}
+                                  >
                                     {s.nombre}
                                   </div>
                                   <div className="mt-1 text-base font-display font-extrabold text-primary tracking-tight">
                                     {formatRD(s.precio)}
                                     {s.por_libra ? <span className="text-xs font-bold opacity-85">/lb</span> : ""}
+                                    {s.permite_piezas_adicionales ? (
+                                      <span className="block text-[10px] font-bold text-purple-600 dark:text-purple-400 mt-0.5">
+                                        {s.piezas_incluidas ? `${s.piezas_incluidas} pzs · ` : ""}extra +{formatRD(s.precio_pieza_adicional || 0)}
+                                      </span>
+                                    ) : null}
                                   </div>
                                 </div>
                                 {srvCount > 0 && (
@@ -2908,10 +3114,11 @@ function getMarbeteColorStyle(colorName?: string) {
                                           es_libra: item.por_libra,
                                           is_exento: item.is_exento,
                                         });
+                                        toast.success(`${item.nombre} agregado ✨`);
                                         return;
                                       }
 
-                                      // 1. Si el usuario está explícitamente desglosando prendas en un servicio
+                                      // 1. Si el usuario está explícitamente desglosando prendas en un servicio activo
                                       if (desgloseServiceName) {
                                         const srvObj = serviciosData.find(s => s.nombre === desgloseServiceName || s.id === desgloseServiceName);
                                         const matchedPrice = (desgloseServiceName && item.precios_servicios?.[desgloseServiceName] !== undefined)
@@ -2931,86 +3138,56 @@ function getMarbeteColorStyle(colorName?: string) {
                                         return;
                                       }
 
-                                      // 2. Si la prenda tiene múltiples tratamientos -> Abrir selector de tratamiento
-                                      if (srvPrices.length > 1) {
-                                        setServicePickerItem(item);
-                                        return;
-                                      }
-
-                                      // 3. Si la prenda tiene exactamente 1 tratamiento configurado
-                                      if (srvPrices.length === 1) {
-                                        const [singleSrvKey, singleSrvPrice] = srvPrices[0];
-                                        const srvFound = serviciosData.find(s => s.id === singleSrvKey || s.nombre === singleSrvKey);
-                                        const singleSrvName = srvFound ? srvFound.nombre : singleSrvKey;
-                                        const price = Number(singleSrvPrice);
-                                        setServiciosSel((prev) => {
-                                          if (!prev.includes(singleSrvName)) {
-                                            return [...prev, singleSrvName];
-                                          }
-                                          return prev;
-                                        });
-                                        setItems((arr) => {
-                                          const itemDesc = `↳ ${item.nombre}`;
-                                          const idx = arr.findIndex(
-                                            (x) =>
-                                              x.descripcion === itemDesc &&
-                                              x.precio_unitario === price &&
-                                              x.servicio_origen === singleSrvName,
-                                          );
-                                          if (idx > -1) {
-                                            return arr.map((it, i) =>
-                                              i === idx ? { ...it, cantidad: it.cantidad + 1 } : it,
-                                            );
-                                          }
-                                          return [
-                                            ...arr,
-                                            {
-                                              descripcion: itemDesc,
-                                              cantidad: 1,
-                                              precio_unitario: price,
-                                              servicio_origen: singleSrvName,
-                                              es_libra: item.por_libra || false,
-                                              is_exento: !!item.is_exento,
-                                            },
-                                          ];
-                                        });
-                                        toast.success(`${item.nombre} agregado a ${singleSrvName} ✨`);
-                                        return;
-                                      }
-
-                                      // 4. Si la modalidad es SERVICIOS_PRIMERO y no ha seleccionado servicio
+                                      // 2. Si la modalidad es estrictamente SERVICIOS_PRIMERO y no hay servicio seleccionado
                                       if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO" && enableServicios && serviciosSel.length === 0) {
                                         toast.warning(
                                           "Por favor, selecciona primero un servicio.",
-                                          {
-                                            duration: 3500,
-                                          },
+                                          { duration: 3500 },
                                         );
                                         setPosFilterTab("SERVICIOS");
                                         setActiveCategory("TODOS");
                                         return;
                                       }
 
-                                      // 5. Prenda estándar suelta o anexada al último servicio si no tiene matriz propia
+                                      // 3. Prenda con múltiples tratamientos -> Abrir selector de tratamiento
+                                      if (srvPrices.length > 1) {
+                                        setServicePickerItem(item);
+                                        return;
+                                      }
+
+                                      // 4. Prenda estándar (1 tratamiento o precio base) en SERVICIOS_PRIMERO con servicio previo:
                                       const lastService = serviciosSel.length > 0 ? serviciosSel[serviciosSel.length - 1] : "";
-                                      if (lastService && enableServicios) {
+                                      if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO" && lastService && enableServicios) {
+                                        const srvObj = serviciosData.find(s => s.nombre.toLowerCase() === lastService.toLowerCase() || s.id === lastService);
+                                        const matchedPrice = (lastService && item.precios_servicios?.[lastService] !== undefined)
+                                          ? Number(item.precios_servicios[lastService])
+                                          : (srvObj && item.precios_servicios?.[srvObj.id] !== undefined)
+                                            ? Number(item.precios_servicios[srvObj.id])
+                                            : (item.precio || 0);
+
                                         addItemDesglose({
                                           descripcion: `↳ ${item.nombre}`,
                                           cantidad: 1,
-                                          precio_unitario: item.precio || 0,
+                                          precio_unitario: matchedPrice,
                                           es_libra: item.por_libra || false,
                                           is_exento: !!item.is_exento,
                                           servicio_origen: lastService,
                                         });
-                                      } else {
-                                        addItem({
-                                          descripcion: item.nombre,
-                                          cantidad: 1,
-                                          precio_unitario: item.precio,
-                                          es_libra: item.por_libra,
-                                          is_exento: item.is_exento,
-                                        });
+                                        return;
                                       }
+
+                                      // 5. En modo FLEXIBLE (o PRENDAS_CON_SERVICIOS):
+                                      // La prenda tiene precio directo (ej. GORRA RD$110.00, CARTERA PEQUEÑA RD$300.00).
+                                      // Se factura DIRECTAMENTE como prenda, SIN crear cajas de servicio fantasma arriba y SIN ↳.
+                                      const directPrice = srvPrices.length === 1 ? Number(srvPrices[0][1]) : (item.precio || 0);
+                                      addItem({
+                                        descripcion: item.nombre,
+                                        cantidad: 1,
+                                        precio_unitario: directPrice,
+                                        es_libra: item.por_libra || false,
+                                        is_exento: !!item.is_exento,
+                                      });
+                                      toast.success(`${item.nombre} agregado ✨`);
                                     }}
                                     className="group relative flex flex-col items-center justify-center gap-2.5 p-3 sm:p-4 rounded-2xl border-2 border-border bg-card hover:border-primary/40 hover:bg-primary/5 hover:shadow-elegant transition-all active:scale-95 text-center cursor-pointer"
                                   >
@@ -3028,7 +3205,10 @@ function getMarbeteColorStyle(colorName?: string) {
                                       </div>
                                     )}
                                     <div className="w-full text-center">
-                                      <div className="text-xs sm:text-sm font-bold leading-tight line-clamp-1">
+                                      <div
+                                        className={`min-h-[2.5rem] sm:min-h-[2.85rem] flex items-center justify-center font-bold line-clamp-3 px-0.5 break-words ${getAdaptiveTitleStyle(item.nombre)}`}
+                                        title={item.nombre}
+                                      >
                                         {item.nombre}
                                       </div>
                                       {item.descripcion && (
@@ -3238,18 +3418,18 @@ function getMarbeteColorStyle(colorName?: string) {
                 <>
                   {/* Servicios Seleccionados en Carrito POS */}
                   {selectedServices.map((srv) => {
-                      const count = serviceCountsMap[srv.nombre] || 0;
+                      const count = serviceCountsMap[srv.nombre] || serviceCountsMap[srv.nombre.toLowerCase()] || 1;
                       const prendasDelServicio = indexedItems.filter(
                         ({ item }) =>
                           item.descripcion.startsWith("↳") &&
                           (item.servicio_origen
-                            ? item.servicio_origen === srv.nombre
-                            : serviciosSel[0] === srv.nombre),
+                            ? item.servicio_origen.toLowerCase() === srv.nombre.toLowerCase()
+                            : serviciosSel[0]?.toLowerCase() === srv.nombre.toLowerCase()),
                       );
                       const prendasConPrecio = prendasDelServicio.filter(
                         ({ item }) => (item.precio_unitario || 0) > 0,
                       );
-                      const isAgrupador = cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO" && prendasConPrecio.length > 0;
+                      const isAgrupador = (srv.por_libra || (!srv.permite_piezas_adicionales && cfg?.pos_modalidad_operativa !== "SERVICIOS_PRIMERO")) && prendasConPrecio.length > 0;
                       const unitPrice =
                         customServicePrices[srv.nombre] !== undefined
                           ? customServicePrices[srv.nombre]
@@ -3263,9 +3443,21 @@ function getMarbeteColorStyle(colorName?: string) {
                             className={`flex flex-col gap-1.5 p-2.5 rounded-xl border transition-all animate-in fade-in duration-200 ${isActiveService ? "border-emerald-500 bg-emerald-50/70 dark:bg-emerald-950/50 shadow-md ring-2 ring-emerald-400/50" : "border-primary/20 bg-primary/5"}`}
                           >
                             <div className="flex justify-between items-start">
-                              <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1">
+                              <div className="flex items-center gap-1.5 text-xs font-bold text-primary leading-tight flex-1 flex-wrap">
                                 <WashingMachine className="h-3.5 w-3.5 text-primary shrink-0" />
                                 <span className="line-clamp-1">{srv.nombre}</span>
+                                {srv.por_libra && (
+                                  <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded border border-emerald-200 dark:border-emerald-800">
+                                    {formatRD(srv.precio)}/lb
+                                  </span>
+                                )}
+                                {srv.permite_piezas_adicionales && (
+                                  <span className="text-[10px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-950/50 px-1.5 py-0.2 rounded border border-purple-200 dark:border-purple-800">
+                                    {(srv.piezas_incluidas || 0) > 0
+                                      ? `Base ${srv.piezas_incluidas} pzs`
+                                      : `Extra +${formatRD(srv.precio_pieza_adicional || 0)}`}
+                                  </span>
+                                )}
                               </div>
                               <Button
                                 variant="ghost"
@@ -3296,66 +3488,84 @@ function getMarbeteColorStyle(colorName?: string) {
                               </Button>
                             </div>
                             <div className="flex justify-between items-center">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
-                                  onClick={() => updateServiceQuantity(srv.nombre, -1)}
-                                >
-                                  <Minus className="h-2.5 w-2.5" />
-                                </Button>
-                                <span className="text-xs font-bold w-5 text-center">{count}</span>
-                                <Button
-                                  variant="outline"
-                                  size="icon"
-                                  className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
-                                  onClick={() => updateServiceQuantity(srv.nombre, 1)}
-                                >
-                                  <Plus className="h-2.5 w-2.5" />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="default"
-                                  size="sm"
-                                  className={`h-6 px-2.5 text-[10px] font-extrabold gap-1.5 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1 text-white ${
-                                    isActiveService
-                                      ? "bg-emerald-800 text-white hover:bg-emerald-900 border-emerald-800"
-                                      : "bg-primary text-white hover:bg-primary/90 border-primary"
-                                  }`}
-                                  title={`Añadir prendas para ${srv.nombre}`}
-                                  onClick={() => {
-                                    setIndexDesglose(-1);
-                                    if (isActiveService) {
-                                      setDesgloseServiceName("");
-                                    } else {
-                                      setDesgloseServiceName(srv.nombre);
-                                      if (cfg?.pos_modal_desglose === true) {
-                                        setShowDesgloseDialog(true);
+                              {srv.por_libra ? (
+                                <div className="flex items-center gap-1.5">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-6 px-2 text-[10px] font-bold gap-1 rounded-lg border-emerald-300 dark:border-emerald-700 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100 cursor-pointer active:scale-95 shadow-2xs"
+                                    onClick={() => {
+                                      setWeightPickerService(srv);
+                                      setWeightQty(10);
+                                    }}
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                    <span>Pesar otra carga</span>
+                                  </Button>
+                                </div>
+                              ) : (
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 hover:text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 dark:hover:bg-rose-900/60"
+                                    onClick={() => updateServiceQuantity(srv.nombre, -1)}
+                                  >
+                                    <Minus className="h-2.5 w-2.5" />
+                                  </Button>
+                                  <span className="text-xs font-bold w-5 text-center">{count}</span>
+                                  <Button
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 hover:text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 dark:hover:bg-emerald-900/60"
+                                    onClick={() => updateServiceQuantity(srv.nombre, 1)}
+                                  >
+                                    <Plus className="h-2.5 w-2.5" />
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    variant="default"
+                                    size="sm"
+                                    className={`h-6 px-2.5 text-[10px] font-extrabold gap-1.5 rounded-lg shadow-2xs transition-all active:scale-95 cursor-pointer ml-1 text-white ${
+                                      isActiveService
+                                        ? "bg-emerald-800 text-white hover:bg-emerald-900 border-emerald-800"
+                                        : "bg-primary text-white hover:bg-primary/90 border-primary"
+                                    }`}
+                                    title={`Añadir prendas para ${srv.nombre}`}
+                                    onClick={() => {
+                                      setIndexDesglose(-1);
+                                      if (isActiveService) {
+                                        setDesgloseServiceName("");
                                       } else {
-                                        setPosFilterTab("PRENDAS");
-                                        setActiveCategory("TODAS LAS PRENDAS");
-                                        toast.info(
-                                          `Modo Servicio Activo: Se añadirán prendas a ${srv.nombre}`,
-                                          { duration: 3000 },
-                                        );
+                                        setDesgloseServiceName(srv.nombre);
+                                        if (cfg?.pos_modal_desglose === true) {
+                                          setShowDesgloseDialog(true);
+                                        } else {
+                                          setPosFilterTab("PRENDAS");
+                                          setActiveCategory("TODAS LAS PRENDAS");
+                                          toast.info(
+                                            `Modo Servicio Activo: Se añadirán prendas a ${srv.nombre}`,
+                                            { duration: 3000 },
+                                          );
+                                        }
                                       }
-                                    }
-                                  }}
-                                >
-                                  {isActiveService ? (
-                                    <>
-                                      <Check className="h-3 w-3 stroke-[2.5]" />
-                                      <span className="whitespace-nowrap">Finalizar</span>
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Plus className="h-3 w-3 stroke-[2.5]" />
-                                      <span className="whitespace-nowrap">Añadir prendas</span>
-                                    </>
-                                  )}
-                                </Button>
-                              </div>
+                                    }}
+                                  >
+                                    {isActiveService ? (
+                                      <>
+                                        <Check className="h-3 w-3 stroke-[2.5]" />
+                                        <span className="whitespace-nowrap">Finalizar</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Plus className="h-3 w-3 stroke-[2.5]" />
+                                        <span className="whitespace-nowrap">Añadir prendas</span>
+                                      </>
+                                    )}
+                                  </Button>
+                                </div>
+                              )}
                               {srv.permitir_editar_precio ? (
                                 <div className="flex flex-col items-end gap-1">
                                   <div className="flex items-center gap-1.5">
@@ -3397,9 +3607,13 @@ function getMarbeteColorStyle(colorName?: string) {
                                 <div className="flex items-center justify-between gap-1.5">
                                   <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                                     <Shirt className="h-3 w-3 text-primary shrink-0" />
-                                    <span className="text-xs font-bold truncate">
-                                      {it.descripcion}
-                                      {it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                                    <span className="text-xs font-bold break-words">
+                                      {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*lb\)/gi, "")}
+                                      {it.es_libra
+                                        ? ` (${it.cantidad} lb)`
+                                        : it.cantidad > 1
+                                          ? ` (x${it.cantidad})`
+                                          : ""}
                                     </span>
                                     <button
                                       type="button"
@@ -3447,27 +3661,91 @@ function getMarbeteColorStyle(colorName?: string) {
                                 </div>
 
                                 <div className="flex justify-between items-center pt-0.5">
-                                  <div className="flex items-center gap-1.5">
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-5 w-5 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800"
-                                      onClick={() => updateItemQuantity(itemOriginalIndex, -1)}
-                                    >
-                                      <Minus className="h-2 w-2" />
-                                    </Button>
-                                    <span className="text-xs font-bold w-4 text-center">
-                                      {it.cantidad}
-                                    </span>
-                                    <Button
-                                      variant="outline"
-                                      size="icon"
-                                      className="h-5 w-5 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800"
-                                      onClick={() => updateItemQuantity(itemOriginalIndex, 1)}
-                                    >
-                                      <Plus className="h-2 w-2" />
-                                    </Button>
-                                  </div>
+                                  {it.es_libra ? (
+                                    <div className="flex items-center gap-1.5 text-xs font-semibold">
+                                      <span className="text-slate-800 dark:text-slate-300 text-[10px] font-black">
+                                        Peso:
+                                      </span>
+                                      <div className="flex items-center gap-1">
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 cursor-pointer"
+                                          onClick={() => {
+                                            const nextVal = Math.max(0.5, +((it.cantidad || 0) - 0.5).toFixed(2));
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                              )
+                                            );
+                                          }}
+                                          title="Disminuir peso"
+                                        >
+                                          <Minus className="h-3 w-3" />
+                                        </Button>
+                                        <Input
+                                          type="number"
+                                          step="0.1"
+                                          min="0.1"
+                                          className="w-16 h-7 text-center text-xs font-black border-emerald-300 dark:border-emerald-700 focus:border-emerald-500 rounded-lg shadow-xs p-1"
+                                          value={it.cantidad}
+                                          onChange={(e) => {
+                                            const val = parseFloat(e.target.value);
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex
+                                                  ? { ...item, cantidad: isNaN(val) ? 0 : val }
+                                                  : item
+                                              )
+                                            );
+                                          }}
+                                        />
+                                        <Button
+                                          type="button"
+                                          variant="outline"
+                                          size="icon"
+                                          className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 cursor-pointer"
+                                          onClick={() => {
+                                            const nextVal = +((it.cantidad || 0) + 0.5).toFixed(2);
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                              )
+                                            );
+                                          }}
+                                          title="Aumentar peso"
+                                        >
+                                          <Plus className="h-3 w-3" />
+                                        </Button>
+                                        <span className="text-emerald-700 dark:text-emerald-400 text-[11px] font-bold ml-0.5">
+                                          lb
+                                        </span>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="flex items-center gap-1.5">
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-5 w-5 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800"
+                                        onClick={() => updateItemQuantity(itemOriginalIndex, -1)}
+                                      >
+                                        <Minus className="h-2 w-2" />
+                                      </Button>
+                                      <span className="text-xs font-bold min-w-4 text-center px-1">
+                                        {it.cantidad}
+                                      </span>
+                                      <Button
+                                        variant="outline"
+                                        size="icon"
+                                        className="h-5 w-5 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800"
+                                        onClick={() => updateItemQuantity(itemOriginalIndex, 1)}
+                                      >
+                                        <Plus className="h-2 w-2" />
+                                      </Button>
+                                    </div>
+                                  )}
                                   <div className="text-xs font-black text-primary">
                                     {formatRD(it.cantidad * it.precio_unitario)}
                                   </div>
@@ -3495,9 +3773,13 @@ function getMarbeteColorStyle(colorName?: string) {
                           <div className="flex items-center justify-between gap-1.5">
                             <div className="flex items-center gap-2 min-w-0 flex-1 flex-wrap">
                               {isDetail && <Shirt className="h-3 w-3 text-primary shrink-0" />}
-                              <span className="text-xs font-bold truncate">
-                                {it.descripcion}
-                                {isDetail && it.cantidad > 1 ? ` (x${it.cantidad})` : ""}
+                              <span className="text-xs font-bold break-words">
+                                {it.descripcion.replace(/\s*\(\d+(\.\d+)?\s*lb\)/gi, "")}
+                                {it.es_libra
+                                  ? ` (${it.cantidad} lb)`
+                                  : isDetail && it.cantidad > 1
+                                    ? ` (x${it.cantidad})`
+                                    : ""}
                               </span>
                               <button
                                 type="button"
@@ -3547,27 +3829,65 @@ function getMarbeteColorStyle(colorName?: string) {
                           <div className="flex justify-between items-center pt-0.5">
                             {it.es_libra ? (
                               <div className="flex items-center gap-1.5 text-xs font-semibold">
-                                <span className="text-slate-850 dark:text-slate-300 text-[10px] font-black">
+                                <span className="text-slate-800 dark:text-slate-300 text-[10px] font-black">
                                   Peso:
                                 </span>
-                                <Input
-                                  type="number"
-                                  step="any"
-                                  min="0.1"
-                                  className="w-16 h-6 text-center text-xs font-black border-primary/30 focus:border-primary focus-visible:ring-0 rounded-md shadow-xs p-1"
-                                  value={it.cantidad}
-                                  onChange={(e) => {
-                                    const val = parseFloat(e.target.value) || 0;
-                                    setItems((prev) =>
-                                      prev.map((item, idx) =>
-                                        idx === itemOriginalIndex ? { ...item, cantidad: val } : item,
-                                      ),
-                                    );
-                                  }}
-                                />
-                                <span className="text-muted-foreground text-[10px] font-bold">
-                                  lb
-                                </span>
+                                <div className="flex items-center gap-1">
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md bg-rose-50 text-rose-600 border-rose-200 hover:bg-rose-100 dark:bg-rose-950/40 dark:text-rose-400 dark:border-rose-800 cursor-pointer"
+                                    onClick={() => {
+                                      const nextVal = Math.max(0.5, +((it.cantidad || 0) - 0.5).toFixed(2));
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                        )
+                                      );
+                                    }}
+                                    title="Disminuir peso"
+                                  >
+                                    <Minus className="h-3 w-3" />
+                                  </Button>
+                                  <Input
+                                    type="number"
+                                    step="0.1"
+                                    min="0.1"
+                                    className="w-16 h-7 text-center text-xs font-black border-emerald-300 dark:border-emerald-700 focus:border-emerald-500 rounded-lg shadow-xs p-1"
+                                    value={it.cantidad}
+                                    onChange={(e) => {
+                                      const val = parseFloat(e.target.value);
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex
+                                            ? { ...item, cantidad: isNaN(val) ? 0 : val }
+                                            : item
+                                        )
+                                      );
+                                    }}
+                                  />
+                                  <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="icon"
+                                    className="h-6 w-6 rounded-md bg-emerald-50 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-400 dark:border-emerald-800 cursor-pointer"
+                                    onClick={() => {
+                                      const nextVal = +((it.cantidad || 0) + 0.5).toFixed(2);
+                                      setItems((prev) =>
+                                        prev.map((item, idx) =>
+                                          idx === itemOriginalIndex ? { ...item, cantidad: nextVal } : item
+                                        )
+                                      );
+                                    }}
+                                    title="Aumentar peso"
+                                  >
+                                    <Plus className="h-3 w-3" />
+                                  </Button>
+                                  <span className="text-emerald-700 dark:text-emerald-400 text-[11px] font-bold ml-0.5">
+                                    lb
+                                  </span>
+                                </div>
                               </div>
                             ) : (
                               <div className="flex items-center gap-1.5">
@@ -3733,9 +4053,34 @@ function getMarbeteColorStyle(colorName?: string) {
                   </div>
                 )}
                 {descuentoMonto > 0 && (
-                  <div className="flex justify-between text-xs text-rose-600 font-bold">
-                    <span>DESCUENTO ({descuento}%)</span>
-                    <span>-{formatRD(descuentoMonto)}</span>
+                  <div className="flex justify-between items-center text-xs font-bold text-rose-600 dark:text-rose-400">
+                    <span className="flex items-center gap-1">
+                      {selectedPromo ? (
+                        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-black">
+                          <Sparkles className="h-3.5 w-3.5" />
+                          <span>PROMO: {selectedPromo.nombre}</span>
+                        </span>
+                      ) : (
+                        <span>DESCUENTO ({descuento}%)</span>
+                      )}
+                    </span>
+                    <div className="flex items-center gap-1">
+                      <span>-{formatRD(descuentoMonto)}</span>
+                      {selectedPromo && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setSelectedPromo(null);
+                            setDescuento(0);
+                            toast.info("Promoción removida");
+                          }}
+                          className="h-4 w-4 rounded text-muted-foreground hover:text-destructive hover:bg-rose-50 flex items-center justify-center text-[10px] cursor-pointer"
+                          title="Remover promoción"
+                        >
+                          ✕
+                        </button>
+                      )}
+                    </div>
                   </div>
                 )}
                 {servicioDomicilio && costoEnvio > 0 && (
@@ -4084,6 +4429,16 @@ function getMarbeteColorStyle(colorName?: string) {
                                   return next;
                                 });
                               } else {
+                                if (s.permite_piezas_adicionales && (s.precio_pieza_adicional ?? 0) > 0) {
+                                  setPackagePickerService(s);
+                                  setPackageExtraQty(0);
+                                  return;
+                                }
+                                if (s.por_libra) {
+                                  setWeightPickerService(s);
+                                  setWeightQty(10);
+                                  return;
+                                }
                                 setServiciosSel((arr) => [...arr, s.nombre]);
                               }
                             }}
@@ -4107,7 +4462,10 @@ function getMarbeteColorStyle(colorName?: string) {
                               </div>
                             )}
                             <div className="w-full text-center">
-                              <div className="text-xs font-bold leading-tight line-clamp-1 text-slate-800 dark:text-slate-100">
+                              <div
+                                className={`min-h-[2.25rem] flex items-center justify-center font-bold line-clamp-3 px-0.5 break-words text-slate-800 dark:text-slate-100 ${getAdaptiveTitleStyle(s.nombre)}`}
+                                title={s.nombre}
+                              >
                                 {s.nombre}
                               </div>
                               <div className="mt-0.5 text-xs font-display font-extrabold text-emerald-600 tracking-tight">
@@ -5523,7 +5881,7 @@ function getMarbeteColorStyle(colorName?: string) {
                 )}
               </div>
               <div className="min-w-0 flex-1">
-                <DialogTitle className="text-lg font-black font-display text-foreground leading-tight truncate">
+                <DialogTitle className="text-base sm:text-lg font-black font-display text-foreground leading-tight break-words">
                   {servicePickerItem?.nombre}
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground mt-0.5">
@@ -5540,14 +5898,66 @@ function getMarbeteColorStyle(colorName?: string) {
                 Tratamientos Disponibles
               </span>
               <span className="text-[10px] font-bold text-primary">
-                1 clic para agregar
+                Selecciona servicio
               </span>
             </div>
 
             {(() => {
+              const handleAddTreatment = (srvName: string, price: number, qtyToAdd = 1) => {
+                if (!servicePickerItem) return;
+                const finalPrice = Number(price);
+                const qty = Math.max(1, qtyToAdd);
+
+                const srvObj = serviciosData.find(
+                  (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName
+                );
+                const canonicalServiceName = srvObj ? srvObj.nombre : srvName;
+                const targetService = desgloseServiceName || canonicalServiceName;
+                setServiciosSel((prev) => {
+                  if (!prev.some((x) => x.toLowerCase() === targetService.toLowerCase())) {
+                    return [...prev, targetService];
+                  }
+                  return prev;
+                });
+
+                // Agregar la prenda como desglose anidado "↳ [Prenda]"
+                setItems((arr) => {
+                  const itemDesc = `↳ ${servicePickerItem.nombre}`;
+                  const idx = arr.findIndex(
+                    (x) =>
+                      x.descripcion === itemDesc &&
+                      x.precio_unitario === finalPrice &&
+                      (x.servicio_origen || "").toLowerCase() === targetService.toLowerCase(),
+                  );
+                  if (idx > -1) {
+                    return arr.map((item, i) =>
+                      i === idx ? { ...item, cantidad: item.cantidad + qty } : item,
+                    );
+                  }
+                  return [
+                    ...arr,
+                    {
+                      descripcion: itemDesc,
+                      cantidad: qty,
+                      precio_unitario: finalPrice,
+                      servicio_origen: targetService,
+                      es_libra: servicePickerItem.por_libra || false,
+                      is_exento: !!servicePickerItem.is_exento,
+                    },
+                  ];
+                });
+                toast.success(
+                  qty > 1
+                    ? `${qty}x ${servicePickerItem.nombre} agregados a ${targetService} ✨`
+                    : `${servicePickerItem.nombre} agregado a ${targetService} ✨`,
+                );
+                setServicePickerItem(null);
+              };
+
               const map = new Map<string, { price: number; srvObj: any }>();
               if (servicePickerItem?.precios_servicios && typeof servicePickerItem.precios_servicios === "object") {
                 Object.entries(servicePickerItem.precios_servicios).forEach(([k, p]) => {
+                  if (k.startsWith("__")) return;
                   const num = Number(p);
                   if (num > 0) {
                     const srvObj = serviciosData.find(
@@ -5561,96 +5971,520 @@ function getMarbeteColorStyle(colorName?: string) {
                   }
                 });
               }
+
+              const rawPermitir = (servicePickerItem?.precios_servicios as any)?.__permitir_cantidad;
+
               return Array.from(map.entries()).map(([srvName, { price, srvObj }]) => {
+                const allowsQty = Boolean(
+                  rawPermitir && (
+                    rawPermitir[srvName] ||
+                    (srvObj && rawPermitir[srvObj.id]) ||
+                    (srvObj && rawPermitir[srvObj.nombre])
+                  ),
+                );
+                const currentQty = treatmentQuantities[srvName] || 1;
+
+                if (allowsQty) {
+                  return (
+                    <div
+                      key={srvName}
+                      className="w-full p-3.5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-emerald-500/40 dark:border-emerald-500/30 shadow-xs transition-all text-left"
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0 flex-1">
+                          <div className="h-11 w-11 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 flex items-center justify-center shrink-0 text-xl overflow-hidden">
+                            {srvObj?.imagen_url ? (
+                              <img
+                                src={srvObj.imagen_url}
+                                alt={srvName}
+                                className="h-full w-full object-cover"
+                              />
+                            ) : (
+                              <span>{srvObj?.icono || "🧺"}</span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-sm font-bold text-foreground truncate">
+                                {srvName}
+                              </span>
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20">
+                                Piezas adicionales
+                              </span>
+                            </div>
+                            {srvObj?.descripcion ? (
+                              <span className="text-[11px] text-muted-foreground block line-clamp-1 mt-0.5">
+                                {srvObj.descripcion}
+                              </span>
+                            ) : null}
+                          </div>
+                        </div>
+
+                        <div className="text-right shrink-0">
+                          <span className="text-lg font-black font-display text-foreground block leading-tight">
+                            {formatRD(Number(price))}
+                          </span>
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            {servicePickerItem?.por_libra ? "/ libra" : "por pieza"}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Stepper numérico [-] [ N ] [+] y botón Agregar */}
+                      <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800/90 p-1 rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xs">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTreatmentQuantities((prev) => ({
+                                ...prev,
+                                [srvName]: Math.max(1, (prev[srvName] || 1) - 1),
+                              }));
+                            }}
+                            className="h-8 w-8 rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-foreground flex items-center justify-center font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                            title="Disminuir piezas"
+                          >
+                            <Minus className="h-3.5 w-3.5" />
+                          </button>
+
+                          <input
+                            type="number"
+                            min={1}
+                            max={999}
+                            value={currentQty}
+                            onChange={(e) => {
+                              const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                              setTreatmentQuantities((prev) => ({
+                                ...prev,
+                                [srvName]: val,
+                              }));
+                            }}
+                            className="w-12 h-8 text-center font-black text-sm text-foreground bg-transparent border-none focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setTreatmentQuantities((prev) => ({
+                                ...prev,
+                                [srvName]: (prev[srvName] || 1) + 1,
+                              }));
+                            }}
+                            className="h-8 w-8 rounded-lg bg-white dark:bg-slate-700 hover:bg-slate-200 dark:hover:bg-slate-600 text-foreground flex items-center justify-center font-bold transition-all shadow-xs cursor-pointer active:scale-95"
+                            title="Aumentar piezas"
+                          >
+                            <Plus className="h-3.5 w-3.5" />
+                          </button>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={() => handleAddTreatment(srvName, price, currentQty)}
+                          className="h-10 px-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer active:scale-95 shrink-0"
+                        >
+                          <Plus className="h-4 w-4" />
+                          <span>
+                            Agregar {currentQty > 1 ? `${currentQty} piezas` : "1 pieza"} ({formatRD(Number(price) * currentQty)})
+                          </span>
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
                 return (
                   <button
                     key={srvName}
                     type="button"
-                    onClick={() => {
-                      if (!servicePickerItem) return;
-                      const finalPrice = Number(price);
-                      // Asegurar que el servicio principal esté en la orden / serviciosSel
-                      setServiciosSel((prev) => {
-                        if (!prev.includes(srvName)) {
-                          return [...prev, srvName];
-                        }
-                        return prev;
-                      });
-
-                        // Agregar la prenda como desglose anidado "↳ [Prenda]"
-                        setItems((arr) => {
-                          const itemDesc = `↳ ${servicePickerItem.nombre}`;
-                          const idx = arr.findIndex(
-                            (x) =>
-                              x.descripcion === itemDesc &&
-                              x.precio_unitario === finalPrice &&
-                              x.servicio_origen === srvName,
-                          );
-                          if (idx > -1) {
-                            return arr.map((item, i) =>
-                              i === idx ? { ...item, cantidad: item.cantidad + 1 } : item,
-                            );
-                          }
-                          return [
-                            ...arr,
-                            {
-                              descripcion: itemDesc,
-                              cantidad: 1,
-                              precio_unitario: finalPrice,
-                              servicio_origen: srvName,
-                              es_libra: servicePickerItem.por_libra || false,
-                              is_exento: !!servicePickerItem.is_exento,
-                            },
-                          ];
-                        });
-                        toast.success(`${servicePickerItem.nombre} agregado a ${srvName} ✨`);
-                        setServicePickerItem(null);
-                      }}
-                      className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200/90 dark:border-slate-800 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all text-left cursor-pointer group active:scale-[0.98]"
-                    >
-                      <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-3">
-                        <div className="h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 text-xl overflow-hidden group-hover:scale-105 group-hover:bg-primary/10 group-hover:text-primary transition-all">
-                          {srvObj?.imagen_url ? (
-                            <img
-                              src={srvObj.imagen_url}
-                              alt={srvName}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <span>{srvObj?.icono || "🧺"}</span>
-                          )}
-                        </div>
-                        <div className="min-w-0">
-                          <span className="text-sm font-bold text-foreground block group-hover:text-primary transition-colors truncate">
-                            {srvName}
-                          </span>
-                          {srvObj?.descripcion ? (
-                            <span className="text-[11px] text-muted-foreground block line-clamp-1 mt-0.5">
-                              {srvObj.descripcion}
-                            </span>
-                          ) : null}
-                        </div>
+                    onClick={() => handleAddTreatment(srvName, price, 1)}
+                    className="w-full flex items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border-2 border-slate-200/90 dark:border-slate-800 hover:border-primary hover:bg-primary/5 hover:shadow-md transition-all text-left cursor-pointer group active:scale-[0.98]"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-3">
+                      <div className="h-11 w-11 rounded-xl bg-slate-100 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 flex items-center justify-center shrink-0 text-xl overflow-hidden group-hover:scale-105 group-hover:bg-primary/10 group-hover:text-primary transition-all">
+                        {srvObj?.imagen_url ? (
+                          <img
+                            src={srvObj.imagen_url}
+                            alt={srvName}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <span>{srvObj?.icono || "🧺"}</span>
+                        )}
                       </div>
-
-                      <div className="flex items-center gap-2 shrink-0">
-                        <div className="text-right">
-                          <span className="text-lg font-black font-display text-foreground group-hover:text-primary transition-colors block leading-tight">
-                            {formatRD(Number(price))}
+                      <div className="min-w-0">
+                        <span className="text-sm font-bold text-foreground block group-hover:text-primary transition-colors truncate">
+                          {srvName}
+                        </span>
+                        {srvObj?.descripcion ? (
+                          <span className="text-[11px] text-muted-foreground block line-clamp-1 mt-0.5">
+                            {srvObj.descripcion}
                           </span>
-                          {servicePickerItem?.por_libra && (
-                            <span className="text-[10px] text-muted-foreground font-semibold">
-                              / libra
-                            </span>
-                          )}
-                        </div>
-                        <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-primary group-hover:text-white text-slate-500 flex items-center justify-center transition-all shadow-xs shrink-0">
-                          <Plus className="h-4 w-4" />
-                        </div>
+                        ) : null}
                       </div>
-                    </button>
-                  );
-                });
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <span className="text-lg font-black font-display text-foreground group-hover:text-primary transition-colors block leading-tight">
+                          {formatRD(Number(price))}
+                        </span>
+                        {servicePickerItem?.por_libra && (
+                          <span className="text-[10px] text-muted-foreground font-semibold">
+                            / libra
+                          </span>
+                        )}
+                      </div>
+                      <div className="h-8 w-8 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-primary group-hover:text-white text-slate-500 flex items-center justify-center transition-all shadow-xs shrink-0">
+                        <Plus className="h-4 w-4" />
+                      </div>
+                    </div>
+                  </button>
+                );
+              });
             })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Paquetes con Piezas Adicionales POS */}
+      <Dialog
+        open={!!packagePickerService}
+        onOpenChange={(open) => {
+          if (!open) setPackagePickerService(null);
+        }}
+      >
+        <DialogContent className="rounded-3xl max-w-md p-0 border-none shadow-2xl bg-card text-foreground overflow-hidden">
+          {/* HEADER */}
+          <div className="bg-slate-50/80 dark:bg-slate-900/80 p-5 border-b border-border/50">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-sm flex items-center justify-center text-3xl shrink-0 overflow-hidden">
+                {packagePickerService?.imagen_url ? (
+                  <img
+                    src={packagePickerService.imagen_url}
+                    alt={packagePickerService.nombre}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{packagePickerService?.icono || "🧺"}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 text-[10px] font-black uppercase tracking-wider mb-1">
+                  <PackagePlus className="h-3 w-3" /> Paquete por Cantidad
+                </div>
+                <DialogTitle className="text-lg font-black font-display text-foreground leading-tight break-words">
+                  {packagePickerService?.nombre}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Tarifa base: <span className="font-bold text-foreground">{formatRD(packagePickerService?.precio || 0)}</span>
+                  {packagePickerService?.piezas_incluidas ? ` (Cubre hasta ${packagePickerService.piezas_incluidas} piezas)` : ""}
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* BODY */}
+          <div className="p-5 space-y-4">
+            {/* SELECCIÓN DE PIEZAS ADICIONALES */}
+            <div className="p-4 rounded-2xl bg-purple-50/60 dark:bg-purple-950/20 border border-purple-200/70 dark:border-purple-800/50 space-y-3 text-center">
+              <div className="text-center">
+                <span className="text-xs font-bold text-foreground block">
+                  ¿Trae piezas adicionales / excedente?
+                </span>
+                <span className="text-[11px] text-purple-700 dark:text-purple-300 font-semibold block mt-0.5">
+                  +{formatRD(packagePickerService?.precio_pieza_adicional || 0)} por cada pieza adicional
+                </span>
+              </div>
+
+              {/* STEPPER [-] [INPUT] [+] */}
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPackageExtraQty((q) => Math.max(0, q - 1))}
+                  className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-purple-200 dark:border-purple-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
+                  disabled={packageExtraQty <= 0}
+                  title="Disminuir adicionales"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+
+                <input
+                  type="number"
+                  min={0}
+                  max={999}
+                  value={packageExtraQty}
+                  onChange={(e) => {
+                    const v = parseInt(e.target.value, 10);
+                    setPackageExtraQty(isNaN(v) ? 0 : Math.max(0, v));
+                  }}
+                  className="w-20 h-10 text-center font-black text-lg text-foreground bg-white dark:bg-slate-800 rounded-xl border border-purple-200 dark:border-purple-800/80 shadow-xs focus:outline-none focus:ring-2 focus:ring-purple-500 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setPackageExtraQty((q) => q + 1)}
+                  className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-purple-200 dark:border-purple-800/80 cursor-pointer active:scale-95"
+                  title="Aumentar adicionales"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* QUICK PILLS */}
+              <div className="flex items-center justify-center gap-1.5 pt-1">
+                {[0, 1, 2, 3, 5, 10].map((num) => (
+                  <button
+                    key={num}
+                    type="button"
+                    onClick={() => setPackageExtraQty(num)}
+                    className={`h-6 px-2 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      packageExtraQty === num
+                        ? "bg-purple-600 text-white shadow-xs"
+                        : "bg-white/80 dark:bg-slate-800 border border-purple-200/80 dark:border-slate-700 text-purple-700 dark:text-purple-300 hover:bg-purple-100/60"
+                    }`}
+                  >
+                    {num === 0 ? "Sin extras" : `+${num}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* RESUMEN DE CÁLCULO */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Tarifa base ({packagePickerService?.piezas_incluidas || 0} pzs):</span>
+                <span className="font-bold text-foreground">{formatRD(packagePickerService?.precio || 0)}</span>
+              </div>
+              {packageExtraQty > 0 && (
+                <div className="flex justify-between text-purple-600 dark:text-purple-400 font-medium">
+                  <span>Excedente ({packageExtraQty} pzs × {formatRD(packagePickerService?.precio_pieza_adicional || 0)}):</span>
+                  <span className="font-bold">+{formatRD(packageExtraQty * (packagePickerService?.precio_pieza_adicional || 0))}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-black text-sm text-foreground">
+                <span>Total a cobrar:</span>
+                <span className="text-base text-primary font-display">
+                  {formatRD(
+                    (packagePickerService?.precio || 0) +
+                      packageExtraQty * (packagePickerService?.precio_pieza_adicional || 0)
+                  )}
+                </span>
+              </div>
+            </div>
+
+            {/* BOTÓN AGREGAR */}
+            <Button
+              type="button"
+              onClick={() => {
+                if (!packagePickerService) return;
+                const s = packagePickerService;
+                const extraPrice = s.precio_pieza_adicional || 0;
+
+                // 1. Agregar el servicio base
+                setServiciosSel((arr) => (arr.includes(s.nombre) ? arr : [...arr, s.nombre]));
+                setDesgloseServiceName(s.nombre);
+                setIndexDesglose(-1);
+
+                // 2. Si hay piezas adicionales, agregarlas como desglose bajo el servicio
+                if (packageExtraQty > 0) {
+                  const desc = packageExtraQty === 1 ? "↳ Pieza adicional" : "↳ Piezas adicionales";
+                  addItemDesglose({
+                    descripcion: desc,
+                    cantidad: packageExtraQty,
+                    precio_unitario: extraPrice,
+                    es_libra: false,
+                    is_exento: !!s.is_exento,
+                    servicio_origen: s.nombre,
+                  });
+                }
+
+                toast.success(
+                  packageExtraQty > 0
+                    ? `${s.nombre} con ${packageExtraQty} piezas adicionales agregado ✨`
+                    : `${s.nombre} agregado ✨`,
+                  { duration: 2500 }
+                );
+                setPackagePickerService(null);
+              }}
+              className="w-full h-11 rounded-2xl bg-primary hover:bg-primary/90 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
+              <span>
+                Agregar a la Orden —{" "}
+                {formatRD(
+                  (packagePickerService?.precio || 0) +
+                    packageExtraQty * (packagePickerService?.precio_pieza_adicional || 0)
+                )}
+              </span>
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de Cobro de Servicio Por Libra */}
+      <Dialog
+        open={!!weightPickerService}
+        onOpenChange={(open) => {
+          if (!open) setWeightPickerService(null);
+        }}
+      >
+        <DialogContent className="rounded-3xl max-w-md p-0 border-none shadow-2xl bg-card text-foreground overflow-hidden">
+          {/* HEADER */}
+          <div className="bg-slate-50/80 dark:bg-slate-900/80 p-5 border-b border-border/50">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 rounded-2xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 shadow-sm flex items-center justify-center text-3xl shrink-0 overflow-hidden">
+                {weightPickerService?.imagen_url ? (
+                  <img
+                    src={weightPickerService.imagen_url}
+                    alt={weightPickerService.nombre}
+                    className="h-full w-full object-cover"
+                  />
+                ) : (
+                  <span>{weightPickerService?.icono || "🧺"}</span>
+                )}
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-[10px] font-black uppercase tracking-wider mb-1">
+                  <Scale className="h-3 w-3" /> Cobro por Libra
+                </div>
+                <DialogTitle className="text-lg font-black font-display text-foreground leading-tight break-words">
+                  {weightPickerService?.nombre}
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground mt-0.5">
+                  Tarifa: <span className="font-bold text-foreground">{formatRD(weightPickerService?.precio || 0)}</span> / lb
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* BODY */}
+          <div className="p-5 space-y-4">
+            {/* SELECCIÓN DE LIBRAS */}
+            <div className="p-4 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/50 space-y-3 text-center">
+              <div className="text-center">
+                <span className="text-xs font-bold text-foreground block">
+                  ¿Cuántas libras pesa la carga?
+                </span>
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold block mt-0.5">
+                  Ingresa el peso exacto en libras (lb)
+                </span>
+              </div>
+
+              {/* STEPPER [-] [INPUT] [+] */}
+              <div className="flex items-center justify-center gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setWeightQty((q) => Math.max(0.5, +(Math.max(0, q - 1)).toFixed(2)))}
+                  className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-emerald-200 dark:border-emerald-800/80 cursor-pointer active:scale-95 disabled:opacity-40"
+                  disabled={weightQty <= 0.5}
+                  title="Disminuir libras"
+                >
+                  <Minus className="h-4 w-4" />
+                </button>
+
+                <div className="relative flex items-center">
+                  <input
+                    type="number"
+                    step="0.1"
+                    min={0.1}
+                    max={9999}
+                    value={weightQty || ""}
+                    onChange={(e) => {
+                      const v = parseFloat(e.target.value);
+                      setWeightQty(isNaN(v) ? 0 : v);
+                    }}
+                    className="w-28 h-10 text-center font-black text-xl text-foreground bg-white dark:bg-slate-800 rounded-xl border border-emerald-200 dark:border-emerald-800/80 shadow-xs focus:outline-none focus:ring-2 focus:ring-emerald-500 pr-6 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                    autoFocus
+                  />
+                  <span className="absolute right-2.5 text-xs font-black text-emerald-700 dark:text-emerald-300 pointer-events-none">
+                    lb
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setWeightQty((q) => +(q + 1).toFixed(2))}
+                  className="h-10 w-10 rounded-xl bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-foreground flex items-center justify-center font-bold transition-all shadow-xs border border-emerald-200 dark:border-emerald-800/80 cursor-pointer active:scale-95"
+                  title="Aumentar libras"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+              </div>
+
+              {/* QUICK PILLS */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 pt-1">
+                {[5, 10, 15, 20, 25, 30].map((lbs) => (
+                  <button
+                    key={lbs}
+                    type="button"
+                    onClick={() => setWeightQty(lbs)}
+                    className={`h-6 px-2.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
+                      weightQty === lbs
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white/80 dark:bg-slate-800 border border-emerald-200/80 dark:border-slate-700 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/60"
+                    }`}
+                  >
+                    {lbs} lb
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* RESUMEN DE CÁLCULO */}
+            <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 space-y-1.5 text-xs">
+              <div className="flex justify-between text-muted-foreground">
+                <span>Tarifa por libra:</span>
+                <span className="font-bold text-foreground">{formatRD(weightPickerService?.precio || 0)}/lb</span>
+              </div>
+              <div className="flex justify-between text-muted-foreground">
+                <span>Peso registrado:</span>
+                <span className="font-bold text-emerald-600 dark:text-emerald-400">{weightQty} lb</span>
+              </div>
+              <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-slate-800 font-black text-sm text-foreground">
+                <span>Total a cobrar:</span>
+                <span className="text-base text-emerald-600 dark:text-emerald-400 font-display">
+                  {formatRD((weightPickerService?.precio || 0) * (weightQty || 0))}
+                </span>
+              </div>
+            </div>
+
+            {/* BOTÓN AGREGAR */}
+            <Button
+              type="button"
+              disabled={!weightQty || weightQty <= 0}
+              onClick={() => {
+                if (!weightPickerService) return;
+                const s = weightPickerService;
+                const pricePerLb = s.precio || 0;
+
+                // 1. Agregar el servicio a seleccionados
+                setServiciosSel((arr) => (arr.includes(s.nombre) ? arr : [...arr, s.nombre]));
+                setDesgloseServiceName(s.nombre);
+                setIndexDesglose(-1);
+
+                // 2. Agregar ítem de ropa por libra con el peso exacto
+                addItemDesglose({
+                  descripcion: "↳ Ropa por libra",
+                  cantidad: weightQty,
+                  precio_unitario: pricePerLb,
+                  es_libra: true,
+                  is_exento: !!s.is_exento,
+                  servicio_origen: s.nombre,
+                });
+
+                toast.success(
+                  `${s.nombre} (${weightQty} lb) agregado ✨`,
+                  { duration: 2500 }
+                );
+                setWeightPickerService(null);
+              }}
+              className="w-full h-11 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-sm flex items-center justify-center gap-2 shadow-md cursor-pointer transition-all active:scale-[0.98]"
+            >
+              <Plus className="h-4 w-4" />
+              <span>
+                Agregar a la Orden — {formatRD((weightPickerService?.precio || 0) * (weightQty || 0))}
+              </span>
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -5956,8 +6790,9 @@ function getMarbeteColorStyle(colorName?: string) {
                       type="button"
                       onClick={() => {
                         if (ultimo.marbete_color) {
+                          const targetId = activeStripId || marbetesList[0]?.id;
                           setMarbetesList((prev) =>
-                            prev.map((it) => (it.id === activeStrip.id ? { ...it, color: ultimo.marbete_color! } : it))
+                            prev.map((it) => (it.id === targetId ? { ...it, color: ultimo.marbete_color! } : it))
                           );
                         }
                       }}
@@ -7271,8 +8106,11 @@ function AddItemDialog({
                         {it.icono || "👕"}
                       </div>
                     )}
-                    <div>
-                      <div className="text-sm font-bold leading-tight line-clamp-1">
+                    <div className="w-full text-center">
+                      <div
+                        className={`min-h-[2.5rem] flex items-center justify-center font-bold line-clamp-3 px-0.5 break-words ${getAdaptiveTitleStyle(it.nombre)}`}
+                        title={it.nombre}
+                      >
                         {it.nombre}
                       </div>
                       {it.por_libra && (
@@ -7571,24 +8409,49 @@ function DiscountPOSDialog({
   discount,
   setDiscount,
   empleado,
+  promociones = [],
+  selectedPromo,
+  setSelectedPromo,
+  hasPromocionesModule = true,
 }: {
   open: boolean;
   onOpenChange: (o: boolean) => void;
   discount: number;
   setDiscount: (d: number) => void;
   empleado?: Empleado;
+  promociones?: Promocion[];
+  selectedPromo?: Promocion | null;
+  setSelectedPromo?: (p: Promocion | null) => void;
+  hasPromocionesModule?: boolean;
 }) {
+  const [activeTab, setActiveTab] = useState<"promos" | "manual">("promos");
   const [val, setVal] = useState(discount > 0 ? String(discount) : "");
+  const [couponInput, setCouponInput] = useState("");
 
   const maxLimit = empleado?.rol === "ADMIN" ? 100 : (empleado?.max_descuento_porcentaje ?? 100);
 
   useEffect(() => {
     if (open) {
       setVal(discount > 0 ? String(discount) : "");
+      setCouponInput("");
+      if (hasPromocionesModule && promociones && promociones.some((p) => p.activo)) {
+        setActiveTab("promos");
+      } else {
+        setActiveTab("manual");
+      }
     }
-  }, [open, discount]);
+  }, [open, discount, promociones, hasPromocionesModule]);
 
-  function apply() {
+  const activePromos = useMemo(() => {
+    const currentDay = new Date().getDay();
+    return promociones.filter((p) => {
+      if (!p.activo) return false;
+      if (p.dias_semana && p.dias_semana.length > 0 && !p.dias_semana.includes(currentDay)) return false;
+      return true;
+    });
+  }, [promociones]);
+
+  function applyManual() {
     const num = parseFloat(val) || 0;
     if (num < 0 || num > 100) {
       toast.warning("El porcentaje de descuento debe estar entre 0% y 100%");
@@ -7598,66 +8461,250 @@ function DiscountPOSDialog({
       toast.error(`Límite permitido: ${maxLimit}%`);
       return;
     }
+    if (setSelectedPromo) setSelectedPromo(null);
     setDiscount(num);
+    toast.success(`Descuento de ${num}% aplicado`);
+    onOpenChange(false);
+  }
+
+  function handleSelectPromo(p: Promocion) {
+    if (setDiscount) setDiscount(0);
+    if (setSelectedPromo) setSelectedPromo(p);
+    toast.success(`Promoción "${p.nombre}" aplicada`);
+    onOpenChange(false);
+  }
+
+  function handleApplyCoupon() {
+    if (!couponInput.trim()) return;
+    const match = promociones.find(
+      (p) => p.activo && p.codigo_cupon?.toLowerCase() === couponInput.trim().toLowerCase()
+    );
+    if (!match) {
+      toast.error("Cupón no válido o inactivo");
+      return;
+    }
+    if (setDiscount) setDiscount(0);
+    if (setSelectedPromo) setSelectedPromo(match);
+    toast.success(`¡Cupón "${match.codigo_cupon}" aplicado exitosamente!`);
+    onOpenChange(false);
+  }
+
+  function handleClear() {
+    if (setDiscount) setDiscount(0);
+    if (setSelectedPromo) setSelectedPromo(null);
+    setVal("");
+    setCouponInput("");
+    toast.info("Descuentos y promociones removidos");
     onOpenChange(false);
   }
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[400px] rounded-3xl p-6">
-        <DialogHeader>
+      <DialogContent className="max-w-[460px] rounded-3xl p-6 overflow-hidden">
+        <DialogHeader className="text-left pb-1">
           <DialogTitle className="text-xl font-display font-bold flex items-center gap-2">
-            <Percent className="h-6 w-6 text-amber-500" />
-            Aplicar Descuento
+            {hasPromocionesModule ? (
+              <>
+                <Sparkles className="h-5 w-5 text-emerald-600" />
+                <span>Descuentos y Promociones</span>
+              </>
+            ) : (
+              <>
+                <Percent className="h-5 w-5 text-amber-500" />
+                <span>Descuento Manual</span>
+              </>
+            )}
           </DialogTitle>
-          <DialogDescription className="sr-only">
-            Ingresa el porcentaje del descuento que deseas aplicar.
+          <DialogDescription className="text-xs text-muted-foreground">
+            {hasPromocionesModule
+              ? "Aplica una promoción activa del día, introduce un cupón o ingresa un descuento manual."
+              : "Ingresa un porcentaje de descuento para aplicar a la orden actual."}
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4 py-4">
-          <div className="relative h-24">
-            <Input
-              className="!h-full pr-16 pl-6 !text-5xl font-black font-display bg-accent/5 border-2 border-primary/20 focus-visible:ring-primary/30 rounded-3xl text-center"
-              value={val}
-              onChange={(e) => {
-                const text = e.target.value.replace(/[^0-9.]/g, "");
-                setVal(text);
-              }}
-              placeholder="0"
-              autoFocus
-              type="text"
-              inputMode="decimal"
-            />
-            <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">
-              %
-            </span>
+
+        {/* TAB SWITCHER (Solo si tiene módulo de promociones) */}
+        {hasPromocionesModule && (
+          <div className="flex items-center gap-1 bg-slate-100 dark:bg-slate-800 p-1 rounded-xl mt-1">
+            <button
+              type="button"
+              onClick={() => setActiveTab("promos")}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === "promos"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5 text-emerald-600" />
+              <span>Promociones del Día ({activePromos.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("manual")}
+              className={`flex-1 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center justify-center gap-1.5 ${
+                activeTab === "manual"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              <Percent className="h-3.5 w-3.5 text-amber-500" />
+              <span>Manual (%)</span>
+            </button>
           </div>
-          <p className="text-xs text-muted-foreground text-center">
-            El descuento se aplicará al total de la orden.
-            {maxLimit < 100 && (
-              <span className="block mt-1.5 font-bold text-amber-600 dark:text-amber-400">
-                Límite permitido: {maxLimit}%
-              </span>
+        )}
+
+        {activeTab === "promos" ? (
+          <div className="space-y-3 pt-2 max-h-[50vh] overflow-y-auto pr-1">
+            {/* CANJEAR CUPÓN */}
+            <div className="flex items-center gap-2 p-2 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-border/60">
+              <Input
+                placeholder="CÓDIGO DE CUPÓN"
+                value={couponInput}
+                onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                className="h-8.5 text-xs font-mono uppercase font-bold rounded-xl"
+              />
+              <Button
+                type="button"
+                onClick={handleApplyCoupon}
+                className="h-8.5 px-3 rounded-xl text-xs font-black bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer shrink-0"
+              >
+                Canjear
+              </Button>
+            </div>
+
+            {/* LISTA DE PROMOS ACTIVAS */}
+            {activePromos.length === 0 ? (
+              <div className="py-6 text-center text-xs text-muted-foreground">
+                <p>No hay promociones automáticas activas para hoy.</p>
+                <p className="mt-1 text-[11px]">Puedes aplicar un cupón o ingresar un porcentaje manual.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {activePromos.map((p) => {
+                  const isCurrent = selectedPromo?.id === p.id;
+                  const isPct = p.tipo_descuento === "PORCENTAJE";
+                  const tag = isPct ? `${p.valor_descuento}% OFF` : `-${formatRD(p.valor_descuento)}`;
+
+                  return (
+                    <div
+                      key={p.id}
+                      className={`p-3 rounded-2xl border transition-all flex items-center justify-between gap-3 ${
+                        isCurrent
+                          ? "border-emerald-500 bg-emerald-50/50 dark:bg-emerald-950/20 shadow-xs"
+                          : "border-border/60 hover:border-emerald-500/30 bg-card"
+                      }`}
+                    >
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-display font-black text-xs text-foreground">
+                            {p.nombre}
+                          </span>
+                          <span className="px-2 py-0.5 rounded-lg text-[10px] font-black bg-emerald-600 text-white">
+                            {tag}
+                          </span>
+                        </div>
+                        {p.descripcion && (
+                          <p className="text-[11px] text-muted-foreground mt-0.5 line-clamp-1">
+                            {p.descripcion}
+                          </p>
+                        )}
+                        <div className="text-[10px] text-muted-foreground font-semibold mt-1 flex items-center gap-1.5">
+                          {p.tipo_aplicacion === "TODA_LA_ORDEN" && <span>Toda la orden</span>}
+                          {p.tipo_aplicacion === "POR_CATEGORIA" && (
+                            <span>Categorías: {(p.categorias || []).join(", ")}</span>
+                          )}
+                          {p.tipo_aplicacion === "POR_SERVICIO" && (
+                            <span>Servicios: {(p.servicios || []).join(", ")}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={isCurrent ? "outline" : "default"}
+                        onClick={() => (isCurrent ? handleClear() : handleSelectPromo(p))}
+                        className={`h-8 px-3 rounded-xl text-xs font-black cursor-pointer shrink-0 ${
+                          isCurrent
+                            ? "border-emerald-500 text-emerald-700 dark:text-emerald-300 bg-emerald-100/50"
+                            : "bg-emerald-600 hover:bg-emerald-700 text-white"
+                        }`}
+                      >
+                        {isCurrent ? "Activa ✓" : "Aplicar"}
+                      </Button>
+                    </div>
+                  );
+                })}
+              </div>
             )}
-          </p>
-        </div>
-        <DialogFooter className="gap-2">
-          <Button
-            variant="outline"
-            onClick={() => {
-              setDiscount(0);
-              onOpenChange(false);
-            }}
-            className="flex-1 h-11 rounded-md border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold"
-          >
-            Quitar Desc.
-          </Button>
-          <Button
-            onClick={apply}
-            className="flex-1 h-11 rounded-md bg-primary text-white font-bold shadow-glow border-none"
-          >
-            Aplicar
-          </Button>
+          </div>
+        ) : (
+          <div className="space-y-4 py-4">
+            <div className="relative h-24">
+              <Input
+                className="!h-full pr-16 pl-6 !text-5xl font-black font-display bg-accent/5 border-2 border-primary/20 focus-visible:ring-primary/30 rounded-3xl text-center"
+                value={val}
+                onChange={(e) => {
+                  const text = e.target.value.replace(/[^0-9.]/g, "");
+                  setVal(text);
+                }}
+                placeholder="0"
+                autoFocus
+                type="text"
+                inputMode="decimal"
+              />
+              <span className="absolute right-6 top-1/2 -translate-y-1/2 font-black text-2xl text-muted-foreground/30">
+                %
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              El descuento porcentual se aplicará al total de la orden.
+              {maxLimit < 100 && (
+                <span className="block mt-1.5 font-bold text-amber-600 dark:text-amber-400">
+                  Límite permitido: {maxLimit}%
+                </span>
+              )}
+            </p>
+            {!hasPromocionesModule && (
+              <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200 dark:border-slate-800 text-[11px] text-muted-foreground flex items-center justify-between">
+                <span className="flex items-center gap-1.5 font-medium">
+                  <Sparkles className="h-3.5 w-3.5 text-emerald-500" />
+                  Módulo de Promociones y Cupones
+                </span>
+                <Badge variant="outline" className="text-[9.5px] font-bold border-emerald-300 text-emerald-700 dark:text-emerald-300">
+                  Plan Pro
+                </Badge>
+              </div>
+            )}
+          </div>
+        )}
+
+        <DialogFooter className="gap-2 border-t border-border/60 pt-3">
+          {(discount > 0 || selectedPromo) && (
+            <Button
+              variant="outline"
+              onClick={handleClear}
+              className="flex-1 h-10 rounded-xl border-rose-200 dark:border-rose-800 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 font-bold text-xs cursor-pointer"
+            >
+              Quitar Descuento
+            </Button>
+          )}
+
+          {activeTab === "manual" ? (
+            <Button
+              onClick={applyManual}
+              className="flex-1 h-10 rounded-xl bg-primary text-white font-black text-xs shadow-glow border-none cursor-pointer"
+            >
+              Aplicar % Manual
+            </Button>
+          ) : (
+            <Button
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="flex-1 h-10 rounded-xl text-xs font-bold cursor-pointer"
+            >
+              Cerrar
+            </Button>
+          )}
         </DialogFooter>
       </DialogContent>
     </Dialog>

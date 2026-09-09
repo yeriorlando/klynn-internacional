@@ -38,6 +38,7 @@ export interface Plan {
     procesos?: boolean;
     estanteria?: boolean;
     pos_offline?: boolean;
+    promociones?: boolean;
   };
   destacado?: boolean;
   es_especial?: boolean;
@@ -229,6 +230,7 @@ export interface TenantConfig {
     procesos?: boolean;
     estanteria?: boolean;
     pos_offline?: boolean;
+    promociones?: boolean;
   };
   habilitar_control_marbetes?: boolean;
   ultimo_marbete_color?: string;
@@ -429,6 +431,8 @@ export interface Orden {
   marbete_piezas?: number;
   marbete_secuencia?: number;
   marbetes?: MarbeteItem[];
+  promocion_id?: string;
+  promocion_nombre?: string;
 }
 
 export interface MarbeteItem {
@@ -436,6 +440,31 @@ export interface MarbeteItem {
   color: string;
   piezas: number;
   secuencia: number | string;
+}
+
+export interface Promocion {
+  id: string;
+  tenant_id: string;
+  nombre: string;
+  descripcion?: string;
+  tipo_descuento: "PORCENTAJE" | "MONTO_FIJO";
+  valor_descuento: number;
+  tipo_aplicacion: "TODA_LA_ORDEN" | "POR_CATEGORIA" | "POR_SERVICIO" | "POR_PRENDA";
+  categorias?: string[];
+  servicios?: string[];
+  prendas?: string[];
+  dias_semana: number[]; // 0 = Dom, 1 = Lun, ..., 6 = Sáb
+  fecha_inicio?: string;
+  fecha_fin?: string;
+  min_piezas?: number;
+  min_subtotal?: number;
+  codigo_cupon?: string;
+  es_automatica: boolean;
+  activo: boolean;
+  veces_usada: number;
+  total_descontado: number;
+  creado_en: string;
+  actualizado_en?: string;
 }
 
 // ============ ECF Types ============
@@ -598,7 +627,7 @@ export interface CatalogoItem {
   nombre: string;
   descripcion?: string;
   precio: number;
-  precios_servicios?: Record<string, number>;
+  precios_servicios?: Record<string, any>;
   por_libra?: boolean;
   activo: boolean;
   is_exento?: boolean;
@@ -623,6 +652,9 @@ export interface Servicio {
   es_muestra?: boolean;
   permitir_desglose?: boolean;
   permitir_editar_precio?: boolean;
+  permite_piezas_adicionales?: boolean;
+  piezas_incluidas?: number;
+  precio_pieza_adicional?: number;
 }
 
 export interface InvitacionCodigo {
@@ -676,6 +708,7 @@ export const PLANS: Plan[] = [
       procesos: true,
       estanteria: true,
       pos_offline: false,
+      promociones: false,
     },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
@@ -697,6 +730,7 @@ export const PLANS: Plan[] = [
       procesos: true,
       estanteria: true,
       pos_offline: true,
+      promociones: true,
     },
     destacado: true,
     precio_sucursal_adicional: 1200,
@@ -719,6 +753,7 @@ export const PLANS: Plan[] = [
       procesos: true,
       estanteria: true,
       pos_offline: true,
+      promociones: true,
     },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
@@ -761,7 +796,8 @@ export function isModuleEnabled(
     | "logistica"
     | "procesos"
     | "estanteria"
-    | "pos_offline",
+    | "pos_offline"
+    | "promociones",
   plan?: Plan,
 ): boolean {
   if (!tenant || tenant.id === "__loading__") return true;
@@ -783,6 +819,11 @@ export function isModuleEnabled(
   if (moduleKey === "pos_offline") {
     return activePlan?.modulos?.pos_offline !== undefined
       ? !!activePlan.modulos.pos_offline
+      : false;
+  }
+  if (moduleKey === "promociones") {
+    return activePlan?.modulos?.promociones !== undefined
+      ? !!activePlan.modulos.promociones
       : false;
   }
   return !!activePlan?.modulos?.[moduleKey];
@@ -1090,7 +1131,7 @@ export async function getPlans(): Promise<Plan[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
     if (!error && data && data.length > 0) {
       const localStored = read<Plan[] | null>(KEY.plans, null) || [];
-      const mapped = data.map((p) => {
+      const mapped = data.map((p: any) => {
         const localMatch = localStored.find((lp) => lp.id === p.id);
         const staticMatch = PLANS.find((sp) => sp.id === p.id);
 
@@ -1144,6 +1185,12 @@ export async function getPlans(): Promise<Plan[]> {
                 : localMatch?.modulos?.pos_offline !== undefined
                   ? !!localMatch.modulos.pos_offline
                   : (staticMatch?.modulos?.pos_offline ?? false),
+            promociones:
+              p.promociones !== undefined && p.promociones !== null
+                ? !!p.promociones
+                : localMatch?.modulos?.promociones !== undefined
+                  ? !!localMatch.modulos.promociones
+                  : (staticMatch?.modulos?.promociones ?? false),
           },
           limite_whatsapp_mes:
             p.limite_whatsapp_mes ??
@@ -2446,6 +2493,8 @@ export async function sendWeeklySummaryTest(
     failed: Array.isArray(data?.failed) ? data.failed : [],
   };
 }
+
+
 
 // ============ Empleados (Supabase) ============
 export async function getEmpleados(tenant_id?: string): Promise<Empleado[]> {
@@ -4119,6 +4168,7 @@ export async function savePlan(p: Plan) {
       procesos: !!p.modulos?.procesos,
       estanteria: !!p.modulos?.estanteria,
       pos_offline: !!p.modulos?.pos_offline,
+      promociones: !!p.modulos?.promociones,
       limite_whatsapp_mes: p.limite_whatsapp_mes,
       destacado: !!p.destacado,
       es_especial: !!p.es_especial,
@@ -5919,5 +5969,143 @@ export async function saveMetaServicio(
     }
   } catch (e) {
     console.warn("Error guardando meta en tenant.config:", e);
+  }
+}
+
+// ============ PROMOCIONES ============
+
+export async function getPromociones(tenantId: string): Promise<Promocion[]> {
+  if (!tenantId || tenantId === "__loading__") return [];
+
+  const localKey = `klynn_promociones_${tenantId}`;
+  try {
+    const { data, error } = await supabase
+      .from("promociones")
+      .select("*")
+      .eq("tenant_id", tenantId)
+      .order("creado_en", { ascending: false });
+
+    if (error) {
+      // Si la tabla aún no se ha creado o da error, usar fallback de localStorage
+      console.warn("getPromociones fallback:", error.message);
+      const cached = localStorage.getItem(localKey);
+      return cached ? JSON.parse(cached) : [];
+    }
+
+    if (data) {
+      localStorage.setItem(localKey, JSON.stringify(data));
+      return data as Promocion[];
+    }
+  } catch (e) {
+    console.warn("getPromociones exception, using local cache:", e);
+    const cached = localStorage.getItem(localKey);
+    return cached ? JSON.parse(cached) : [];
+  }
+  return [];
+}
+
+export async function savePromocion(p: Partial<Promocion> & { tenant_id: string; nombre: string }): Promise<Promocion> {
+  const isNew = !p.id;
+  const promo: Promocion = {
+    id: p.id || uid(),
+    tenant_id: p.tenant_id,
+    nombre: p.nombre,
+    descripcion: p.descripcion || "",
+    tipo_descuento: p.tipo_descuento || "PORCENTAJE",
+    valor_descuento: Number(p.valor_descuento || 0),
+    tipo_aplicacion: p.tipo_aplicacion || "TODA_LA_ORDEN",
+    categorias: p.categorias || [],
+    servicios: p.servicios || [],
+    prendas: p.prendas || [],
+    dias_semana: p.dias_semana && p.dias_semana.length > 0 ? p.dias_semana : [0, 1, 2, 3, 4, 5, 6],
+    fecha_inicio: p.fecha_inicio || undefined,
+    fecha_fin: p.fecha_fin || undefined,
+    min_piezas: Number(p.min_piezas || 0),
+    min_subtotal: Number(p.min_subtotal || 0),
+    codigo_cupon: p.codigo_cupon ? p.codigo_cupon.trim().toUpperCase() : undefined,
+    es_automatica: p.es_automatica ?? true,
+    activo: p.activo ?? true,
+    veces_usada: p.veces_usada || 0,
+    total_descontado: p.total_descontado || 0,
+    creado_en: p.creado_en || new Date().toISOString(),
+    actualizado_en: new Date().toISOString(),
+  };
+
+  const localKey = `klynn_promociones_${promo.tenant_id}`;
+
+  try {
+    const { data, error } = await supabase
+      .from("promociones")
+      .upsert(promo)
+      .select()
+      .single();
+
+    if (!error && data) {
+      return data as Promocion;
+    }
+    if (error) {
+      console.warn("savePromocion supabase error, fallback to local:", error.message);
+    }
+  } catch (e) {
+    console.warn("savePromocion exception, saving locally:", e);
+  }
+
+  // Fallback local
+  const current = await getPromociones(promo.tenant_id);
+  const updated = isNew
+    ? [promo, ...current.filter((x) => x.id !== promo.id)]
+    : current.map((x) => (x.id === promo.id ? promo : x));
+  localStorage.setItem(localKey, JSON.stringify(updated));
+  return promo;
+}
+
+export async function togglePromocionActiva(id: string, tenantId: string, activo: boolean): Promise<void> {
+  const localKey = `klynn_promociones_${tenantId}`;
+  try {
+    await supabase.from("promociones").update({ activo, actualizado_en: new Date().toISOString() }).eq("id", id);
+  } catch (e) {
+    console.warn("togglePromocionActiva error:", e);
+  }
+
+  const current = await getPromociones(tenantId);
+  const updated = current.map((p) => (p.id === id ? { ...p, activo } : p));
+  localStorage.setItem(localKey, JSON.stringify(updated));
+}
+
+export async function deletePromocion(id: string, tenantId: string): Promise<void> {
+  const localKey = `klynn_promociones_${tenantId}`;
+  try {
+    await supabase.from("promociones").delete().eq("id", id);
+  } catch (e) {
+    console.warn("deletePromocion error:", e);
+  }
+
+  const current = await getPromociones(tenantId);
+  const updated = current.filter((p) => p.id !== id);
+  localStorage.setItem(localKey, JSON.stringify(updated));
+}
+
+export async function registrarUsoPromocion(id: string, tenantId: string, montoDescontado: number): Promise<void> {
+  if (!id || !tenantId) return;
+  try {
+    const current = await getPromociones(tenantId);
+    const promo = current.find((p) => p.id === id);
+    if (!promo) return;
+
+    const nuevasVeces = (promo.veces_usada || 0) + 1;
+    const nuevoTotal = +(Number(promo.total_descontado || 0) + Number(montoDescontado || 0)).toFixed(2);
+
+    await supabase
+      .from("promociones")
+      .update({ veces_usada: nuevasVeces, total_descontado: nuevoTotal })
+      .eq("id", id);
+
+    const localKey = `klynn_promociones_${tenantId}`;
+    const updated = current.map((p) =>
+      p.id === id ? { ...p, veces_usada: nuevasVeces, total_descontado: nuevoTotal } : p
+    );
+    localStorage.setItem(localKey, JSON.stringify(updated));
+  } catch (e) {
+    console.warn("registrarUsoPromocion error:", e);
   }
 }

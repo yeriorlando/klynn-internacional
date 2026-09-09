@@ -33,13 +33,14 @@ export interface SaasInvoiceItem {
 }
 
 const ALL_MODULES_LIST = [
-  { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-  { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-  { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-  { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-  { key: "logistica", label: "Envío a domicilio" },
   { key: "procesos", label: "Tablero de Procesos" },
   { key: "estanteria", label: "Estantería virtual" },
+  { key: "promociones", label: "Promociones y Cupones" },
+  { key: "logistica", label: "Envío a domicilio" },
+  { key: "pos_offline", label: "Modo Offline" },
+  { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+  { key: "whatsapp", label: "Mensajería WhatsApp" },
+  { key: "multisucursal", label: "Sucursal Adicional" },
 ];
 
 const BASE_FEATURES = [
@@ -558,20 +559,13 @@ export function HistorialPagosModal({ open, onOpenChange, tenant, plans, isAdmin
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 pt-1">
                               {/* 1. Módulos activos del Plan */}
-                              {activePlanModules.map(({ label, extra }, idx) => (
+                              {activePlanModules.map(({ label }, idx) => (
                                 <div
                                   key={`mod-${idx}`}
                                   className="flex items-center gap-2 text-[11px] text-slate-800 font-medium leading-tight"
                                 >
                                   <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
-                                  <span className="flex items-center gap-1.5 flex-wrap">
-                                    <span className="font-semibold">{label}</span>
-                                    {extra && (
-                                      <span className="text-[9.5px] font-normal text-amber-800 bg-amber-50/80 px-1.5 py-0.5 rounded border border-amber-200/70">
-                                        {extra}
-                                      </span>
-                                    )}
-                                  </span>
+                                  <span className="font-semibold">{label}</span>
                                 </div>
                               ))}
 

@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { compressImage } from "@/lib/compressImage";
 import { useMemo, useState, useEffect } from "react";
 import {
@@ -111,6 +111,14 @@ const LAUNDRY_ICONS = [
   { char: "🧴", label: "Suavizante" },
 ];
 
+function getCatalogTitleClass(name: string): string {
+  const len = (name || "").trim().length;
+  if (len > 26) return "text-xs sm:text-[13px] leading-tight";
+  if (len > 15) return "text-[13px] sm:text-sm leading-snug";
+  if (len > 10) return "text-sm sm:text-base leading-snug";
+  return "text-base sm:text-lg leading-snug";
+}
+
 export const Route = createFileRoute("/t/$slug/catalogo")({
   component: CatalogoPage,
 });
@@ -134,19 +142,41 @@ function CatalogoPage() {
 
   // Sincronización automática desactivada, manejada por DB Triggers
 
-  const [tab, setTab] = useState<string>("prendas");
+  const location = useLocation();
+  const navigate = useNavigate();
 
-  useEffect(() => {
+  const [tab, setTab] = useState<string>(() => {
     if (typeof window !== "undefined") {
       const urlTab = new URLSearchParams(window.location.search).get("tab");
-      if (urlTab && (urlTab === "prendas" || urlTab === "servicios")) {
-        setTab(urlTab);
-      }
+      if (urlTab === "prendas" || urlTab === "servicios") return urlTab;
     }
-  }, []);
+    return "prendas";
+  });
+
+  // Escuchar cambios de navegación del router (ej. clics en la barra lateral "Prendas" o "Servicios")
+  useEffect(() => {
+    let urlTab: string | null = null;
+    if (typeof location.search === "object" && location.search !== null) {
+      urlTab = (location.search as any).tab;
+    }
+    if (!urlTab && typeof window !== "undefined") {
+      urlTab = new URLSearchParams(window.location.search).get("tab");
+    }
+    if (urlTab === "prendas" || urlTab === "servicios") {
+      setTab(urlTab);
+    }
+  }, [location.search, (location as any).href]);
 
   const handleTabChange = (val: string) => {
     setTab(val);
+    try {
+      navigate({
+        search: (prev: any) => ({ ...prev, tab: val }),
+        replace: true,
+      } as any);
+    } catch {
+      // Fallback
+    }
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
       url.searchParams.set("tab", val);
@@ -300,8 +330,8 @@ function CatalogoPage() {
                       >
                         <div>
                           {/* Top Header: Prominent Garment Image & Full Title */}
-                          <div className="flex items-start gap-3.5">
-                            <div className="h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden text-3xl sm:text-4xl shadow-xs group-hover:scale-105 transition-transform duration-300">
+                          <div className="flex items-start gap-3">
+                            <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden text-2xl sm:text-3xl shadow-xs group-hover:scale-105 transition-transform duration-300">
                               {it.imagen_url ? (
                                 <img
                                   src={it.imagen_url}
@@ -313,7 +343,10 @@ function CatalogoPage() {
                               )}
                             </div>
                             <div className="min-w-0 flex-1">
-                              <h4 className="font-display font-black text-base sm:text-lg text-foreground tracking-tight leading-snug line-clamp-2" title={it.nombre}>
+                              <h4
+                                className={`font-display font-black text-foreground tracking-tight break-words [overflow-wrap:anywhere] line-clamp-3 ${getCatalogTitleClass(it.nombre)}`}
+                                title={it.nombre}
+                              >
                                 {it.nombre}
                               </h4>
                               {it.descripcion ? (
@@ -490,8 +523,8 @@ function CatalogoPage() {
               >
                 <div>
                   {/* Top Header: Prominent Service Image & Full Title */}
-                  <div className="flex items-start gap-3.5">
-                    <div className="h-16 w-16 sm:h-18 sm:w-18 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden text-3xl sm:text-4xl shadow-xs group-hover:scale-105 transition-transform duration-300">
+                  <div className="flex items-start gap-3">
+                    <div className="h-14 w-14 sm:h-16 sm:w-16 rounded-2xl bg-slate-100 dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 flex items-center justify-center shrink-0 overflow-hidden text-2xl sm:text-3xl shadow-xs group-hover:scale-105 transition-transform duration-300">
                       {s.imagen_url ? (
                         <img
                           src={s.imagen_url}
@@ -503,7 +536,10 @@ function CatalogoPage() {
                       )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <h4 className="font-display font-black text-base sm:text-lg text-foreground tracking-tight leading-snug line-clamp-2" title={s.nombre}>
+                      <h4
+                        className={`font-display font-black text-foreground tracking-tight break-words [overflow-wrap:anywhere] line-clamp-3 ${getCatalogTitleClass(s.nombre)}`}
+                        title={s.nombre}
+                      >
                         {s.nombre}
                       </h4>
                       {s.descripcion ? (
@@ -534,6 +570,14 @@ function CatalogoPage() {
                             Por Libra
                           </Badge>
                         )}
+                        {s.permite_piezas_adicionales && (
+                          <Badge
+                            variant="outline"
+                            className="text-[9px] h-4 px-1.5 bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/30 font-bold"
+                          >
+                            {s.piezas_incluidas ? `${s.piezas_incluidas} pzs · ` : ""}Extra +{formatRD(s.precio_pieza_adicional || 0)}
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -549,6 +593,10 @@ function CatalogoPage() {
                           {formatRD(s.precio)}
                           {s.por_libra ? (
                             <span className="text-sm font-semibold text-muted-foreground ml-1">/lb</span>
+                          ) : s.permite_piezas_adicionales && (s.piezas_incluidas || 0) > 0 ? (
+                            <span className="text-xs font-semibold text-purple-600 dark:text-purple-400 ml-1.5">
+                              (Base: {s.piezas_incluidas} pzs)
+                            </span>
                           ) : null}
                         </>
                       ) : (
@@ -737,7 +785,7 @@ function ItemDialog({
   const activeServicesCount = useMemo(() => {
     if (!f.precios_servicios || typeof f.precios_servicios !== "object") return 0;
     return Object.keys(f.precios_servicios).filter(
-      (k) => (f.precios_servicios?.[k] ?? 0) > 0 && !(k.length > 20 && k.includes("-")),
+      (k) => !k.startsWith("__") && (f.precios_servicios?.[k] ?? 0) > 0 && !(k.length > 20 && k.includes("-")),
     ).length;
   }, [f.precios_servicios]);
 
@@ -788,9 +836,13 @@ function ItemDialog({
     try {
       setIsSubmitting(true);
       // Limpiar precios de servicios vacíos o 0 y normalizar nombres
-      const cleanPreciosServicios: Record<string, number> = {};
+      const cleanPreciosServicios: Record<string, any> = {};
+      const rawPermitir = (f.precios_servicios as any)?.__permitir_cantidad || {};
+      const cleanPermitir: Record<string, boolean> = {};
+
       if (f.precios_servicios) {
         Object.entries(f.precios_servicios).forEach(([key, val]) => {
+          if (key.startsWith("__")) return;
           const num = Number(val);
           if (num > 0) {
             const srvObj = serviciosList.find(
@@ -801,8 +853,14 @@ function ItemDialog({
               return;
             }
             cleanPreciosServicios[name] = num;
+            if (rawPermitir[key] || (srvObj && rawPermitir[srvObj.id]) || (srvObj && rawPermitir[srvObj.nombre])) {
+              cleanPermitir[name] = true;
+            }
           }
         });
+      }
+      if (Object.keys(cleanPermitir).length > 0) {
+        cleanPreciosServicios.__permitir_cantidad = cleanPermitir;
       }
 
       const basePrecio =
@@ -1024,10 +1082,15 @@ function ItemDialog({
                 {activeServicesCount > 0 ? (
                   <div className="flex flex-wrap gap-2 pt-1 max-h-36 overflow-y-auto custom-scrollbar">
                     {Object.entries(f.precios_servicios || {})
-                      .filter(([k, val]) => Number(val) > 0 && !(k.length > 20 && k.includes("-")))
+                      .filter(([k, val]) => !k.startsWith("__") && Number(val) > 0 && !(k.length > 20 && k.includes("-")))
                       .map(([srvName, val]) => {
                         const srvObj = serviciosList.find(
                           (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName,
+                        );
+                        const allowsQty = Boolean(
+                          (f.precios_servicios as any)?.__permitir_cantidad?.[srvName] ||
+                          (srvObj && (f.precios_servicios as any)?.__permitir_cantidad?.[srvObj.id]) ||
+                          (srvObj && (f.precios_servicios as any)?.__permitir_cantidad?.[srvObj.nombre])
                         );
                         return (
                           <div
@@ -1045,6 +1108,11 @@ function ItemDialog({
                             <span className="font-display font-black text-xs px-2 py-0.5 rounded-lg bg-primary/10 text-primary border border-primary/15">
                               {formatRD(Number(val))}
                             </span>
+                            {allowsQty && (
+                              <span className="text-[10px] font-black px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20" title="Selector de cantidad habilitado en caja">
+                                ± Qty
+                              </span>
+                            )}
                             <button
                               type="button"
                               onClick={() => {
@@ -1052,6 +1120,14 @@ function ItemDialog({
                                   const updated = { ...(prev.precios_servicios || {}) };
                                   delete updated[srvName];
                                   if (srvObj) delete updated[srvObj.id];
+                                  const updatedPermitir = { ...((updated as any).__permitir_cantidad || {}) };
+                                  delete updatedPermitir[srvName];
+                                  if (srvObj) delete updatedPermitir[srvObj.id];
+                                  if (Object.keys(updatedPermitir).length > 0) {
+                                    (updated as any).__permitir_cantidad = updatedPermitir;
+                                  } else {
+                                    delete (updated as any).__permitir_cantidad;
+                                  }
                                   return { ...prev, precios_servicios: updated };
                                 });
                               }}
@@ -1549,6 +1625,14 @@ function ItemDialog({
                             delete updated[service.id];
                             if (!checked) {
                               delete updated[service.nombre];
+                              const updatedPermitir = { ...((updated as any).__permitir_cantidad || {}) };
+                              delete updatedPermitir[service.nombre];
+                              delete updatedPermitir[service.id];
+                              if (Object.keys(updatedPermitir).length > 0) {
+                                (updated as any).__permitir_cantidad = updatedPermitir;
+                              } else {
+                                delete (updated as any).__permitir_cantidad;
+                              }
                             } else {
                               updated[service.nombre] =
                                 Number(service.precio) > 0
@@ -1598,6 +1682,53 @@ function ItemDialog({
                             autoFocus={isAssigned && !currentVal}
                           />
                         </div>
+                      </div>
+                    )}
+
+                    {/* Opción de Selector de Cantidad / Piezas adicionales en caja */}
+                    {isAssigned && (
+                      <div className="bg-slate-50/80 dark:bg-slate-900/60 border-t border-slate-200/80 dark:border-slate-800/80 px-3.5 py-2.5 flex items-center justify-between gap-3 animate-in fade-in duration-150">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <div className="h-6 w-6 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center text-[11px] font-black border border-emerald-500/20 shrink-0">
+                            ±
+                          </div>
+                          <div className="min-w-0">
+                            <span className="text-xs font-bold text-foreground block truncate">
+                              Permitir selector de cantidad en caja
+                            </span>
+                            <span className="text-[10px] text-muted-foreground block truncate">
+                              Muestra controles <span className="font-bold text-emerald-600 dark:text-emerald-400">[-] 1 [+]</span> para piezas adicionales
+                            </span>
+                          </div>
+                        </div>
+                        <Switch
+                          checked={Boolean(
+                            (f.precios_servicios as any)?.__permitir_cantidad?.[service.nombre] ??
+                            (f.precios_servicios as any)?.__permitir_cantidad?.[service.id]
+                          )}
+                          onCheckedChange={(checked) => {
+                            setF((prev) => {
+                              const currentPermitir = {
+                                ...((prev.precios_servicios as any)?.__permitir_cantidad || {}),
+                              };
+                              if (checked) {
+                                currentPermitir[service.nombre] = true;
+                                currentPermitir[service.id] = true;
+                              } else {
+                                delete currentPermitir[service.nombre];
+                                delete currentPermitir[service.id];
+                              }
+                              return {
+                                ...prev,
+                                precios_servicios: {
+                                  ...(prev.precios_servicios || {}),
+                                  __permitir_cantidad: currentPermitir,
+                                },
+                              };
+                            });
+                          }}
+                          className="data-[state=checked]:bg-emerald-600 shrink-0"
+                        />
                       </div>
                     )}
                   </div>
@@ -1671,6 +1802,9 @@ function ServDialog({
               es_muestra: false,
               permitir_desglose: false,
               permitir_editar_precio: false,
+              permite_piezas_adicionales: false,
+              piezas_incluidas: 10,
+              precio_pieza_adicional: 50,
             },
       );
       setShowDesc(Boolean(initial?.descripcion));
@@ -1742,6 +1876,9 @@ function ServDialog({
         is_exento: !!f.is_exento,
         permitir_desglose: !!f.permitir_desglose,
         permitir_editar_precio: !!f.permitir_editar_precio,
+        permite_piezas_adicionales: !!f.permite_piezas_adicionales,
+        piezas_incluidas: f.permite_piezas_adicionales ? (Number(f.piezas_incluidas) || 0) : 0,
+        precio_pieza_adicional: f.permite_piezas_adicionales ? (Number(f.precio_pieza_adicional) || 0) : 0,
       };
       await saveServicio(s);
       toast.success(
@@ -1995,6 +2132,90 @@ function ServDialog({
                     />
                   </label>
                 </div>
+              </div>
+
+              {/* BLOQUE 3: PAQUETES CON PIEZAS ADICIONALES */}
+              <div className="space-y-3.5 p-4 rounded-2xl bg-slate-50/60 dark:bg-slate-900/40 border border-slate-200/80 dark:border-slate-800">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="h-8 w-8 rounded-xl bg-purple-500/10 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20 shadow-2xs">
+                      <PackagePlus className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-black uppercase tracking-wider text-foreground block">
+                        Tarifa de Paquete con Piezas Adicionales
+                      </span>
+                      <span className="text-[11px] text-muted-foreground block mt-0.5">
+                        Para paquetes (ej. Hamper, 10/15/20 piezas) con recargo por pieza excedente
+                      </span>
+                    </div>
+                  </div>
+                  <Switch
+                    checked={!!f.permite_piezas_adicionales}
+                    onCheckedChange={(v) => {
+                      setF({
+                        ...f,
+                        permite_piezas_adicionales: v,
+                        precio_pieza_adicional: v ? (f.precio_pieza_adicional || 50) : 0,
+                        piezas_incluidas: v ? (f.piezas_incluidas || 10) : 0,
+                      });
+                    }}
+                    className="data-[state=checked]:bg-primary shrink-0"
+                  />
+                </div>
+
+                {f.permite_piezas_adicionales && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 pt-3 border-t border-slate-200/80 dark:border-slate-800 animate-in fade-in duration-200">
+                    {/* PIEZAS INCLUIDAS */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="service-piezas-incluidas" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Layers className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                        Piezas base incluidas
+                      </Label>
+                      <Input
+                        id="service-piezas-incluidas"
+                        type="number"
+                        min={1}
+                        max={9999}
+                        value={f.piezas_incluidas ?? 10}
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10);
+                          setF({ ...f, piezas_incluidas: isNaN(val) ? 0 : Math.max(1, val) });
+                        }}
+                        className="h-10 rounded-xl bg-white dark:bg-slate-900 font-black text-sm border-slate-300 dark:border-slate-700 shadow-2xs text-center"
+                        placeholder="10"
+                      />
+                      <p className="text-[10px] text-muted-foreground">Cantidad de piezas que cubre el precio base</p>
+                    </div>
+
+                    {/* PRECIO PIEZA ADICIONAL */}
+                    <div className="space-y-1.5">
+                      <Label htmlFor="service-precio-adicional" className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Receipt className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                        Precio por pieza adicional
+                      </Label>
+                      <div className="relative">
+                        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
+                          RD$
+                        </span>
+                        <Input
+                          id="service-precio-adicional"
+                          type="number"
+                          min={0}
+                          step="any"
+                          value={f.precio_pieza_adicional ?? 50}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value);
+                            setF({ ...f, precio_pieza_adicional: isNaN(val) ? 0 : Math.max(0, val) });
+                          }}
+                          className="h-10 rounded-xl bg-white dark:bg-slate-900 pl-11 pr-3 font-black text-foreground text-sm border-slate-300 dark:border-slate-700 shadow-2xs text-right"
+                          placeholder="50.00"
+                        />
+                      </div>
+                      <p className="text-[10px] text-muted-foreground">Costo por cada pieza extra que traiga el cliente</p>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
           ) : (

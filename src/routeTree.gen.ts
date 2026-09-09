@@ -30,6 +30,7 @@ import { Route as TSlugRouteImport } from './routes/t.$slug'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as TSlugIndexRouteImport } from './routes/t.$slug.index'
 import { Route as TSlugReportesRouteImport } from './routes/t.$slug.reportes'
+import { Route as TSlugPromocionesRouteImport } from './routes/t.$slug.promociones'
 import { Route as TSlugProcesosRouteImport } from './routes/t.$slug.procesos'
 import { Route as TSlugPersonalRouteImport } from './routes/t.$slug.personal'
 import { Route as TSlugOrdenesRouteImport } from './routes/t.$slug.ordenes'
@@ -155,6 +156,11 @@ const TSlugIndexRoute = TSlugIndexRouteImport.update({
 const TSlugReportesRoute = TSlugReportesRouteImport.update({
   id: '/reportes',
   path: '/reportes',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugPromocionesRoute = TSlugPromocionesRouteImport.update({
+  id: '/promociones',
+  path: '/promociones',
   getParentRoute: () => TSlugRoute,
 } as any)
 const TSlugProcesosRoute = TSlugProcesosRouteImport.update({
@@ -286,6 +292,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/ordenes': typeof TSlugOrdenesRoute
   '/t/$slug/personal': typeof TSlugPersonalRoute
   '/t/$slug/procesos': typeof TSlugProcesosRoute
+  '/t/$slug/promociones': typeof TSlugPromocionesRoute
   '/t/$slug/reportes': typeof TSlugReportesRoute
   '/t/$slug/': typeof TSlugIndexRoute
 }
@@ -326,6 +333,7 @@ export interface FileRoutesByTo {
   '/t/$slug/ordenes': typeof TSlugOrdenesRoute
   '/t/$slug/personal': typeof TSlugPersonalRoute
   '/t/$slug/procesos': typeof TSlugProcesosRoute
+  '/t/$slug/promociones': typeof TSlugPromocionesRoute
   '/t/$slug/reportes': typeof TSlugReportesRoute
   '/t/$slug': typeof TSlugIndexRoute
 }
@@ -368,6 +376,7 @@ export interface FileRoutesById {
   '/t/$slug/ordenes': typeof TSlugOrdenesRoute
   '/t/$slug/personal': typeof TSlugPersonalRoute
   '/t/$slug/procesos': typeof TSlugProcesosRoute
+  '/t/$slug/promociones': typeof TSlugPromocionesRoute
   '/t/$slug/reportes': typeof TSlugReportesRoute
   '/t/$slug/': typeof TSlugIndexRoute
 }
@@ -411,6 +420,7 @@ export interface FileRouteTypes {
     | '/t/$slug/ordenes'
     | '/t/$slug/personal'
     | '/t/$slug/procesos'
+    | '/t/$slug/promociones'
     | '/t/$slug/reportes'
     | '/t/$slug/'
   fileRoutesByTo: FileRoutesByTo
@@ -451,6 +461,7 @@ export interface FileRouteTypes {
     | '/t/$slug/ordenes'
     | '/t/$slug/personal'
     | '/t/$slug/procesos'
+    | '/t/$slug/promociones'
     | '/t/$slug/reportes'
     | '/t/$slug'
   id:
@@ -492,6 +503,7 @@ export interface FileRouteTypes {
     | '/t/$slug/ordenes'
     | '/t/$slug/personal'
     | '/t/$slug/procesos'
+    | '/t/$slug/promociones'
     | '/t/$slug/reportes'
     | '/t/$slug/'
   fileRoutesById: FileRoutesById
@@ -667,6 +679,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugReportesRouteImport
       parentRoute: typeof TSlugRoute
     }
+    '/t/$slug/promociones': {
+      id: '/t/$slug/promociones'
+      path: '/promociones'
+      fullPath: '/t/$slug/promociones'
+      preLoaderRoute: typeof TSlugPromocionesRouteImport
+      parentRoute: typeof TSlugRoute
+    }
     '/t/$slug/procesos': {
       id: '/t/$slug/procesos'
       path: '/procesos'
@@ -815,6 +834,7 @@ interface TSlugRouteChildren {
   TSlugOrdenesRoute: typeof TSlugOrdenesRoute
   TSlugPersonalRoute: typeof TSlugPersonalRoute
   TSlugProcesosRoute: typeof TSlugProcesosRoute
+  TSlugPromocionesRoute: typeof TSlugPromocionesRoute
   TSlugReportesRoute: typeof TSlugReportesRoute
   TSlugIndexRoute: typeof TSlugIndexRoute
 }
@@ -838,6 +858,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugOrdenesRoute: TSlugOrdenesRoute,
   TSlugPersonalRoute: TSlugPersonalRoute,
   TSlugProcesosRoute: TSlugProcesosRoute,
+  TSlugPromocionesRoute: TSlugPromocionesRoute,
   TSlugReportesRoute: TSlugReportesRoute,
   TSlugIndexRoute: TSlugIndexRoute,
 }

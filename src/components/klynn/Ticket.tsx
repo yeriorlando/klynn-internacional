@@ -165,7 +165,27 @@ export function Ticket({
   }
 
   const srvListSafe = serviciosList || [];
-  const totalPrendas = (orden.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0);
+  
+  // Conteo de prendas: incluye ítems directos y piezas base de paquetes si no se desglosaron individualmente
+  let piezasBasePaquetes = 0;
+  (orden.servicios || []).forEach((sName) => {
+    const srv = srvListSafe.find((s) => s.nombre === sName);
+    if (srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0) {
+      const tienePrendasIndividuales = (orden.items || []).some(
+        (it) =>
+          it.servicio_origen === sName &&
+          !it.descripcion.toLowerCase().includes("pieza adicional") &&
+          !it.descripcion.toLowerCase().includes("piezas adicionales")
+      );
+      if (!tienePrendasIndividuales) {
+        piezasBasePaquetes += srv.piezas_incluidas || 0;
+      }
+    }
+  });
+
+  const totalPrendas = (orden.items || [])
+    .filter((it) => !it.descripcion.toLowerCase().startsWith("servicio:"))
+    .reduce((acc, it) => acc + (it.es_libra ? 1 : it.cantidad), 0) + piezasBasePaquetes;
 
   // =========================================================================
   // ★ FORMATO DEDICADO PARA COPIA DE PRODUCCIÓN / USO INTERNO (TALLER) ★
@@ -279,10 +299,16 @@ export function Ticket({
                     : it.descripcion.toLowerCase().includes(sName.toLowerCase()) || orden.servicios?.length === 1
                 );
 
+                const srv = srvListSafe.find((s) => s.nombre === sName);
                 return (
                   <div key={'prod-srv-' + i} className="mb-1">
                     <div className="font-bold text-[10.5px] text-black uppercase">
                       ★ {sName}
+                      {srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0 && (
+                        <span className="font-semibold text-black/70 text-[9px] lowercase ml-1">
+                          (cubre {srv.piezas_incluidas} pzs)
+                        </span>
+                      )}
                     </div>
                     {misPrendas.map((it, dIdx) => (
                       <div key={'prod-item-' + dIdx} className="pl-1.5 text-[9.5px]">
@@ -542,7 +568,14 @@ export function Ticket({
                     {p > 0 && (
                       <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
                         <div className="flex-1 min-w-0 pr-1">
-                          <div className="font-bold text-[10.5px]">Servicio {sName}</div>
+                          <div className="font-bold text-[10.5px]">
+                            Servicio {sName}
+                            {srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0 && (
+                              <span className="font-semibold text-black/70 text-[9.5px] ml-1">
+                                (Base {srv.piezas_incluidas} {srv.piezas_incluidas === 1 ? "pza" : "pzs"})
+                              </span>
+                            )}
+                          </div>
                           <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(p)}</div>
                         </div>
                         {mostrarColumnaItbis && (
@@ -564,9 +597,9 @@ export function Ticket({
                         let valor = baseTotal;
                         if (orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
                           if (isItbisIncluidoEnEstaOrden) {
-                            itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
+                            itemItbis = baseTotal - (baseTotal / (1 + (cfg?.itbis_porcentaje || 18) / 100));
                           } else {
-                            itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
+                            itemItbis = baseTotal * ((cfg?.itbis_porcentaje || 18) / 100);
                           }
                         }
 
@@ -579,6 +612,11 @@ export function Ticket({
                               <div className="font-semibold text-black text-[10.5px] leading-tight break-words">
                                 {cantPrefix}{cleanDesc}{it.es_libra ? ` (${it.cantidad}lb)` : ""}
                               </div>
+                              {(it.precio_unitario || 0) > 0 && (
+                                <div className="text-[9px] text-black/80 font-semibold tabular-nums">
+                                  {it.cantidad} × {formatNumber(it.precio_unitario)}
+                                </div>
+                              )}
                               {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
                               {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                             </div>
@@ -625,9 +663,9 @@ export function Ticket({
                       let valor = baseTotal;
                       if (orden.itbis > 0) {
                         if (isItbisIncluidoEnEstaOrden) {
-                          itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
+                          itemItbis = baseTotal - (baseTotal / (1 + (cfg?.itbis_porcentaje || 18) / 100));
                         } else {
-                          itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
+                          itemItbis = baseTotal * ((cfg?.itbis_porcentaje || 18) / 100);
                         }
                       }
                       return (
@@ -694,7 +732,7 @@ export function Ticket({
           <div className="flex justify-between items-center gap-2">
             <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Percent className="h-3.5 w-3.5 shrink-0 text-black" />
-              <span>Descuento</span>
+              <span>{orden.promocion_nombre ? `Promo (${orden.promocion_nombre})` : "Descuento"}</span>
             </div>
             <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">-{formatRD(orden.descuento).replace("DOP", "RD$")}</span>
           </div>

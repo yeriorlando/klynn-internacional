@@ -3,8 +3,17 @@ import {
   getClientes, getOrdenes, getCatalogo, getServicios, 
   getCajaAbierta, getGastos, getEmpleados, getMovimientos,
   getECFConfig, getCajas, getECFDocuments, getPlans, 
-  getGlobalConfig, getECFSequences, getMetasServicios 
+  getGlobalConfig, getECFSequences, getMetasServicios,
+  getPromociones 
 } from "@/lib/storage";
+
+export function usePromociones(tenantId: string) {
+  return useQuery({
+    queryKey: ['promociones', tenantId],
+    queryFn: () => getPromociones(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
 
 export function useMetasServicios(tenantId: string) {
   return useQuery({

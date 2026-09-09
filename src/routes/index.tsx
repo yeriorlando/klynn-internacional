@@ -1574,14 +1574,12 @@ function LandingPage() {
                       </div>
                       <div className="space-y-2.5">
                         {[
-                          { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-                          { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-                          { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-                          { key: "logistica", label: "Envío a domicilio" },
                           { key: "procesos", label: "Tablero de Procesos" },
                           { key: "estanteria", label: "Estantería virtual" },
-                        ].map(({ key, label, extra }) => {
+                          { key: "promociones", label: "Promociones y Cupones" },
+                          { key: "logistica", label: "Envío a domicilio" },
+                          { key: "pos_offline", label: "Modo Offline" },
+                        ].map(({ key, label }) => {
                           const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                           return (
                             <div 
@@ -1604,27 +1602,33 @@ function LandingPage() {
                                   <path d="m9 9 6 6" />
                                 </svg>
                               )}
-                              <span className="flex items-center flex-wrap gap-1">
-                                <span>{label}</span>
-                                {extra && (
-                                  <span className={`text-[10px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
-                                    {extra}
-                                  </span>
-                                )}
-                                {key === "whatsapp" && v && (plan.limite_whatsapp_mes || 0) > 0 && (
-                                  <span className="text-[10px] font-normal text-muted-foreground ml-0.5">
-                                    ({plan.limite_whatsapp_mes.toLocaleString("es-DO")} msg/mes)
-                                  </span>
-                                )}
-                                {key === "multisucursal" && v && (
-                                  <span className="text-[9px] font-bold text-primary ml-0.5 bg-primary/10 px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                                    Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
-                                  </span>
-                                )}
-                              </span>
+                              <span>{label}</span>
                             </div>
                           );
                         })}
+                      </div>
+
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-3.5 pt-3 border-t border-border/60 mb-2.5">
+                        Complementos Opcionales
+                      </div>
+                      <div className="space-y-2.5">
+                        {[
+                          { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                          { key: "whatsapp", label: "Mensajería WhatsApp" },
+                          { key: "multisucursal", label: "Sucursal Adicional" },
+                        ].map(({ key, label }) => (
+                          <div 
+                            key={key} 
+                            className="flex items-center gap-2.5 font-semibold text-slate-700 dark:text-slate-300"
+                          >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0">
+                              <circle cx="12" cy="12" r="10" />
+                              <path d="M12 8v8" />
+                              <path d="M8 12h8" />
+                            </svg>
+                            <span>{label}</span>
+                          </div>
+                        ))}
                       </div>
                     </div>
 
@@ -1765,59 +1769,72 @@ function LandingPage() {
                     {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
                       
-                      {/* Desglose de Módulos */}
-                      <div>
-                        <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                          MÓDULOS HABILITADOS
+                      {/* Desglose de Módulos Habilitados y Complementos */}
+                      <div className="space-y-3">
+                        <div>
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            MÓDULOS HABILITADOS
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                              { key: "procesos", label: "Tablero de Procesos" },
+                              { key: "estanteria", label: "Estantería virtual" },
+                              { key: "promociones", label: "Promociones y Cupones" },
+                              { key: "logistica", label: "Envío a domicilio" },
+                              { key: "pos_offline", label: "Modo Offline" },
+                            ].map(({ key, label }) => {
+                              const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
+                              return (
+                                <div 
+                                  key={key} 
+                                  className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                    v 
+                                      ? "text-green-700 dark:text-green-400" 
+                                      : "text-slate-400 line-through opacity-70"
+                                  }`}
+                                >
+                                  {v ? (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m9 12 2 2 4-4" />
+                                    </svg>
+                                  ) : (
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                      <circle cx="12" cy="12" r="10" />
+                                      <path d="m15 9-6 6" />
+                                      <path d="m9 9 6 6" />
+                                    </svg>
+                                  )}
+                                  <span>{label}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
-                          {[
-                            { key: "whatsapp", label: "Mensajería WhatsApp", extra: "(Costo adicional)" },
-                            { key: "facturacion_fiscal", label: "Facturación Electrónica", extra: "(Costo adicional)" },
-                            { key: "multisucursal", label: "Multisucursal", extra: "(Costo adicional)" },
-                            { key: "pos_offline", label: "Modo Offline", extra: "(Factura sin conexión)" },
-                            { key: "logistica", label: "Envío a domicilio" },
-                            { key: "procesos", label: "Tablero de Procesos" },
-                            { key: "estanteria", label: "Estantería virtual" },
-                          ].map(({ key, label, extra }) => {
-                            const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
-                            return (
+
+                        <div className="pt-2 border-t border-border/40">
+                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                            COMPLEMENTOS OPCIONALES
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            {[
+                              { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                              { key: "whatsapp", label: "Mensajería WhatsApp" },
+                              { key: "multisucursal", label: "Sucursal Adicional" },
+                            ].map(({ key, label }) => (
                               <div 
                                 key={key} 
-                                className={`flex items-center gap-1.5 text-[11px] font-semibold ${
-                                  v 
-                                    ? "text-green-700 dark:text-green-400" 
-                                    : "text-slate-400 line-through opacity-70"
-                                }`}
+                                className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300"
                               >
-                                {v ? (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="m9 12 2 2 4-4" />
-                                  </svg>
-                                ) : (
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
-                                    <circle cx="12" cy="12" r="10" />
-                                    <path d="m15 9-6 6" />
-                                    <path d="m9 9 6 6" />
-                                  </svg>
-                                )}
-                                <span className="flex items-center flex-wrap gap-1">
-                                  <span>{label}</span>
-                                  {extra && (
-                                    <span className={`text-[9px] font-normal ${v ? "text-amber-700 dark:text-amber-400" : "text-slate-400"}`}>
-                                      {extra}
-                                    </span>
-                                  )}
-                                  {key === "multisucursal" && v && (
-                                    <span className="text-[8.5px] font-bold text-primary ml-0.5 bg-primary/10 px-1 py-0.2 rounded uppercase tracking-wider">
-                                      Hasta {1 + (plan.limite_sucursales_adicionales || 0)}
-                                    </span>
-                                  )}
-                                </span>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0">
+                                  <circle cx="12" cy="12" r="10" />
+                                  <path d="M12 8v8" />
+                                  <path d="M8 12h8" />
+                                </svg>
+                                <span>{label}</span>
                               </div>
-                            );
-                          })}
+                            ))}
+                          </div>
                         </div>
                       </div>
 

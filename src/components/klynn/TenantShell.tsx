@@ -148,6 +148,7 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
+  { to: `/t/${slug}/promociones`, label: "Promociones", icon: Sparkles, permission: "catalogo" },
   { to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
   { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
@@ -347,6 +348,7 @@ export function TenantShell() {
   const [hasProcesos, setHasProcesos] = useState<boolean>(true);
   const [hasFiscal, setHasFiscal] = useState<boolean>(true);
   const [hasEstanteria, setHasEstanteria] = useState<boolean>(true);
+  const [hasPromociones, setHasPromociones] = useState<boolean>(true);
 
   // NOTIFICACIONES GENERALES
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
@@ -365,6 +367,7 @@ export function TenantShell() {
       setHasProcesos(isModuleEnabled(user.tenant, "procesos", plan));
       setHasFiscal(isModuleEnabled(user.tenant, "facturacion_fiscal", plan));
       setHasEstanteria(isModuleEnabled(user.tenant, "estanteria", plan));
+      setHasPromociones(isModuleEnabled(user.tenant, "promociones", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
@@ -1346,6 +1349,7 @@ export function TenantShell() {
           hasProcesos={hasProcesos}
           hasFiscal={hasFiscal}
           hasEstanteria={hasEstanteria}
+          hasPromociones={hasPromociones}
         />
       </aside>
 
@@ -1371,6 +1375,7 @@ export function TenantShell() {
               hasProcesos={hasProcesos}
               hasFiscal={hasFiscal}
               hasEstanteria={hasEstanteria}
+              hasPromociones={hasPromociones}
             />
           </aside>
         </div>
@@ -1804,6 +1809,7 @@ function SidebarContent({
   hasProcesos,
   hasFiscal,
   hasEstanteria,
+  hasPromociones,
 }: {
   tenant: {
     id: string;
@@ -1826,6 +1832,7 @@ function SidebarContent({
   hasProcesos: boolean;
   hasFiscal: boolean;
   hasEstanteria: boolean;
+  hasPromociones: boolean;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
@@ -1866,6 +1873,7 @@ function SidebarContent({
         "logistica",
         "catalogo-prendas",
         "catalogo-servicios",
+        "promociones",
         "clientes",
         "configuracion",
       ]),
@@ -2019,7 +2027,13 @@ function SidebarContent({
             label: "Servicios",
             icon: LayoutGrid,
             permission: "catalogo",
-            hasArrow: true,
+          },
+          {
+            id: "promociones",
+            to: `/t/${slug}/promociones`,
+            label: "Promociones",
+            icon: Sparkles,
+            permission: "catalogo",
           },
         ],
       },
@@ -2061,11 +2075,12 @@ function SidebarContent({
         if (!hasProcesos) items = items.filter((i) => i.permission !== "procesos");
         if (!hasEstanteria) items = items.filter((i) => !i.to.endsWith("/estanteria"));
         if (!hasFiscal) items = items.filter((i) => !i.to.endsWith("/fiscal"));
+        if (!hasPromociones) items = items.filter((i) => !i.to.endsWith("/promociones"));
         items = items.filter((i) => !i.permission || can(empleado, i.permission));
         return { ...cat, items };
       })
       .filter((cat) => cat.items.length > 0);
-  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal, hasEstanteria]);
+  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal, hasEstanteria, hasPromociones]);
 
   return (
     <>
