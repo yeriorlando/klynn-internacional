@@ -899,21 +899,42 @@ function NuevaOrdenPage() {
       if (p.min_piezas && p.min_piezas > 0 && totalPiezasCalculadas < p.min_piezas) continue;
       if (p.min_subtotal && p.min_subtotal > 0 && currentSubtotal < p.min_subtotal) continue;
 
-      if (p.tipo_aplicacion === "POR_CATEGORIA") {
-        const cats = (p.categorias || []).map((c) => c.toLowerCase());
-        const hasMatch = items.some((it) => {
-          const catItem = catalogoMap.get(it.descripcion);
-          return cats.includes((catItem?.categoria || "").toLowerCase());
-        });
-        if (!hasMatch) continue;
-      } else if (p.tipo_aplicacion === "POR_SERVICIO") {
-        const srvs = (p.servicios || []).map((s) => s.toLowerCase());
-        const hasMatch = items.some((it) => srvs.includes((it.servicio_origen || "").toLowerCase()));
-        if (!hasMatch) continue;
-      } else if (p.tipo_aplicacion === "POR_PRENDA") {
-        const prendas = (p.prendas || []).map((pr) => pr.toLowerCase());
-        const hasMatch = items.some((it) => prendas.includes(it.descripcion.toLowerCase()));
-        if (!hasMatch) continue;
+      if (p.tipo_descuento === "CANTIDAD_NXM") {
+        const nxmReq = Number(p.nxm_compra || 3);
+        let eligibleCount = 0;
+        if (p.tipo_aplicacion === "TODA_LA_ORDEN") {
+          eligibleCount = items.reduce((acc, it) => acc + it.cantidad, 0);
+        } else if (p.tipo_aplicacion === "POR_CATEGORIA") {
+          const cats = (p.categorias || []).map((c) => c.toLowerCase());
+          eligibleCount = items.filter((it) => {
+            const catItem = catalogoMap.get(it.descripcion);
+            return cats.includes((catItem?.categoria || "").toLowerCase());
+          }).reduce((acc, it) => acc + it.cantidad, 0);
+        } else if (p.tipo_aplicacion === "POR_SERVICIO") {
+          const srvs = (p.servicios || []).map((s) => s.toLowerCase());
+          eligibleCount = items.filter((it) => srvs.includes((it.servicio_origen || "").toLowerCase())).reduce((acc, it) => acc + it.cantidad, 0);
+        } else if (p.tipo_aplicacion === "POR_PRENDA") {
+          const prendas = (p.prendas || []).map((pr) => pr.toLowerCase());
+          eligibleCount = items.filter((it) => prendas.includes(it.descripcion.toLowerCase())).reduce((acc, it) => acc + it.cantidad, 0);
+        }
+        if (eligibleCount < nxmReq) continue;
+      } else {
+        if (p.tipo_aplicacion === "POR_CATEGORIA") {
+          const cats = (p.categorias || []).map((c) => c.toLowerCase());
+          const hasMatch = items.some((it) => {
+            const catItem = catalogoMap.get(it.descripcion);
+            return cats.includes((catItem?.categoria || "").toLowerCase());
+          });
+          if (!hasMatch) continue;
+        } else if (p.tipo_aplicacion === "POR_SERVICIO") {
+          const srvs = (p.servicios || []).map((s) => s.toLowerCase());
+          const hasMatch = items.some((it) => srvs.includes((it.servicio_origen || "").toLowerCase()));
+          if (!hasMatch) continue;
+        } else if (p.tipo_aplicacion === "POR_PRENDA") {
+          const prendas = (p.prendas || []).map((pr) => pr.toLowerCase());
+          const hasMatch = items.some((it) => prendas.includes(it.descripcion.toLowerCase()));
+          if (!hasMatch) continue;
+        }
       }
 
       setSelectedPromo(p);
@@ -1800,6 +1821,76 @@ function getMarbeteColorStyle(colorName?: string) {
     }
     if (selectedPromo.min_subtotal && selectedPromo.min_subtotal > 0 && subtotalBase < selectedPromo.min_subtotal) {
       return { valida: false, monto: 0, motivo: `Mín. ${formatRD(selectedPromo.min_subtotal)} requerido` };
+    }
+
+    if (selectedPromo.tipo_descuento === "CANTIDAD_NXM") {
+      const nxmCompra = Number(selectedPromo.nxm_compra || 3);
+      const nxmGratis = Number(selectedPromo.nxm_gratis || 1);
+      const nxmPct = (selectedPromo.nxm_porcentaje !== undefined ? selectedPromo.nxm_porcentaje : 100) / 100;
+
+      const eligiblePrices: number[] = [];
+      if (selectedPromo.tipo_aplicacion === "TODA_LA_ORDEN") {
+        for (const it of items) {
+          for (let i = 0; i < it.cantidad; i++) {
+            eligiblePrices.push(it.precio_unitario || 0);
+          }
+        }
+      } else if (selectedPromo.tipo_aplicacion === "POR_CATEGORIA") {
+        const cats = (selectedPromo.categorias || []).map((c) => c.toLowerCase());
+        for (const it of items) {
+          const catItem = catalogoMap.get(it.descripcion);
+          const itemCat = (catItem?.categoria || "").toLowerCase();
+          if (cats.includes(itemCat)) {
+            for (let i = 0; i < it.cantidad; i++) {
+              eligiblePrices.push(it.precio_unitario || 0);
+            }
+          }
+        }
+      } else if (selectedPromo.tipo_aplicacion === "POR_SERVICIO") {
+        const srvs = (selectedPromo.servicios || []).map((s) => s.toLowerCase());
+        for (const it of items) {
+          const srvOrigen = (it.servicio_origen || "").toLowerCase();
+          if (srvs.includes(srvOrigen)) {
+            for (let i = 0; i < it.cantidad; i++) {
+              eligiblePrices.push(it.precio_unitario || 0);
+            }
+          }
+        }
+      } else if (selectedPromo.tipo_aplicacion === "POR_PRENDA") {
+        const prendas = (selectedPromo.prendas || []).map((p) => p.toLowerCase());
+        for (const it of items) {
+          if (prendas.includes(it.descripcion.toLowerCase())) {
+            for (let i = 0; i < it.cantidad; i++) {
+              eligiblePrices.push(it.precio_unitario || 0);
+            }
+          }
+        }
+      }
+
+      if (eligiblePrices.length < nxmCompra) {
+        return {
+          valida: false,
+          monto: 0,
+          motivo: `Mínimo ${nxmCompra} prendas requeridas (tienes ${eligiblePrices.length})`,
+        };
+      }
+
+      // Ordenar de menor a mayor precio para bonificar las prendas de menor valor
+      eligiblePrices.sort((a, b) => a - b);
+
+      const veces = Math.floor(eligiblePrices.length / nxmCompra);
+      const prendasADescontar = veces * nxmGratis;
+
+      let descuentoNxM = 0;
+      for (let i = 0; i < Math.min(prendasADescontar, eligiblePrices.length); i++) {
+        descuentoNxM += eligiblePrices[i] * nxmPct;
+      }
+
+      return {
+        valida: true,
+        monto: +descuentoNxM.toFixed(2),
+        motivo: `${veces * nxmGratis} ${veces * nxmGratis === 1 ? "prenda bonificada" : "prendas bonificadas"}`,
+      };
     }
 
     let base = 0;
@@ -8765,7 +8856,12 @@ function DiscountPOSDialog({
                 {activePromos.map((p) => {
                   const isCurrent = selectedPromo?.id === p.id;
                   const isPct = p.tipo_descuento === "PORCENTAJE";
-                  const tag = isPct ? `${p.valor_descuento}% OFF` : `-${formatRD(p.valor_descuento)}`;
+                  const isNxM = p.tipo_descuento === "CANTIDAD_NXM";
+                  const tag = isNxM
+                    ? `${p.nxm_compra || 3}x${(p.nxm_compra || 3) - (p.nxm_gratis || 1)}${(p.nxm_porcentaje ?? 100) < 100 ? ` (${p.nxm_porcentaje}%)` : " (1 gratis)"}`
+                    : isPct
+                      ? `${p.valor_descuento}% OFF`
+                      : `-${formatRD(p.valor_descuento)}`;
 
                   return (
                     <div
@@ -8794,6 +8890,9 @@ function DiscountPOSDialog({
                           {p.tipo_aplicacion === "TODA_LA_ORDEN" && <span>Toda la orden</span>}
                           {p.tipo_aplicacion === "POR_CATEGORIA" && (
                             <span>Categorías: {(p.categorias || []).join(", ")}</span>
+                          )}
+                          {p.tipo_aplicacion === "POR_PRENDA" && (
+                            <span>Prendas: {(p.prendas || []).join(", ")}</span>
                           )}
                           {p.tipo_aplicacion === "POR_SERVICIO" && (
                             <span>Servicios: {(p.servicios || []).join(", ")}</span>

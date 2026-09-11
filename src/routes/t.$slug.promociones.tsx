@@ -23,6 +23,7 @@ import {
   SlidersHorizontal,
   Flame,
   Lock,
+  Gift,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -102,8 +103,11 @@ function PromocionesPage() {
   // Form State
   const [nombre, setNombre] = useState("");
   const [descripcion, setDescripcion] = useState("");
-  const [tipoDescuento, setTipoDescuento] = useState<"PORCENTAJE" | "MONTO_FIJO">("PORCENTAJE");
+  const [tipoDescuento, setTipoDescuento] = useState<"PORCENTAJE" | "MONTO_FIJO" | "CANTIDAD_NXM">("PORCENTAJE");
   const [valorDescuento, setValorDescuento] = useState<number>(15);
+  const [nxmCompra, setNxmCompra] = useState<number>(3);
+  const [nxmGratis, setNxmGratis] = useState<number>(1);
+  const [nxmPorcentaje, setNxmPorcentaje] = useState<number>(100);
   const [tipoAplicacion, setTipoAplicacion] = useState<
     "TODA_LA_ORDEN" | "POR_CATEGORIA" | "POR_SERVICIO" | "POR_PRENDA"
   >("TODA_LA_ORDEN");
@@ -129,6 +133,20 @@ function PromocionesPage() {
       }
     });
     return Array.from(set).sort();
+  }, [catalogo]);
+
+  // Extraer prendas únicas del catálogo
+  const prendasDisponibles = useMemo(() => {
+    const map = new Map<string, { nombre: string; categoria?: string }>();
+    catalogo.forEach((c) => {
+      if (c.nombre && c.nombre.trim() && !map.has(c.nombre.trim())) {
+        map.set(c.nombre.trim(), {
+          nombre: c.nombre.trim(),
+          categoria: c.categoria?.trim(),
+        });
+      }
+    });
+    return Array.from(map.values()).sort((a, b) => a.nombre.localeCompare(b.nombre));
   }, [catalogo]);
 
   // Métricas
@@ -160,6 +178,9 @@ function PromocionesPage() {
     setDescripcion("");
     setTipoDescuento("PORCENTAJE");
     setValorDescuento(15);
+    setNxmCompra(3);
+    setNxmGratis(1);
+    setNxmPorcentaje(100);
     setTipoAplicacion("TODA_LA_ORDEN");
     setCategoriasSel([]);
     setServiciosSel([]);
@@ -181,7 +202,10 @@ function PromocionesPage() {
     setNombre(p.nombre);
     setDescripcion(p.descripcion || "");
     setTipoDescuento(p.tipo_descuento);
-    setValorDescuento(p.valor_descuento);
+    setValorDescuento(p.valor_descuento || 0);
+    setNxmCompra(p.nxm_compra || 3);
+    setNxmGratis(p.nxm_gratis || 1);
+    setNxmPorcentaje(p.nxm_porcentaje !== undefined ? p.nxm_porcentaje : 100);
     setTipoAplicacion(p.tipo_aplicacion);
     setCategoriasSel(p.categorias || []);
     setServiciosSel(p.servicios || []);
@@ -211,13 +235,23 @@ function PromocionesPage() {
       setFormStep(1);
       return;
     }
-    if (valorDescuento <= 0) {
+    if (tipoDescuento !== "CANTIDAD_NXM" && valorDescuento <= 0) {
       toast.error("El valor del descuento debe ser mayor a 0");
+      setFormStep(1);
+      return;
+    }
+    if (tipoDescuento === "CANTIDAD_NXM" && (nxmCompra < 2 || nxmGratis < 1)) {
+      toast.error("Configura al menos 2 prendas requeridas y 1 prenda bonificada");
       setFormStep(1);
       return;
     }
     if (tipoAplicacion === "POR_CATEGORIA" && categoriasSel.length === 0) {
       toast.error("Selecciona al menos una categoría");
+      setFormStep(2);
+      return;
+    }
+    if (tipoAplicacion === "POR_PRENDA" && prendasSel.length === 0) {
+      toast.error("Selecciona al menos una prenda del catálogo");
       setFormStep(2);
       return;
     }
@@ -234,7 +268,10 @@ function PromocionesPage() {
         nombre: nombre.trim(),
         descripcion: descripcion.trim(),
         tipo_descuento: tipoDescuento,
-        valor_descuento: Number(valorDescuento),
+        valor_descuento: tipoDescuento === "CANTIDAD_NXM" ? 0 : Number(valorDescuento),
+        nxm_compra: tipoDescuento === "CANTIDAD_NXM" ? Number(nxmCompra) : undefined,
+        nxm_gratis: tipoDescuento === "CANTIDAD_NXM" ? Number(nxmGratis) : undefined,
+        nxm_porcentaje: tipoDescuento === "CANTIDAD_NXM" ? Number(nxmPorcentaje) : undefined,
         tipo_aplicacion: tipoAplicacion,
         categorias: tipoAplicacion === "POR_CATEGORIA" ? categoriasSel : [],
         servicios: tipoAplicacion === "POR_SERVICIO" ? serviciosSel : [],
@@ -443,7 +480,12 @@ function PromocionesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredPromos.map((promo) => {
             const isPorcentaje = promo.tipo_descuento === "PORCENTAJE";
-            const benefitText = isPorcentaje ? `${promo.valor_descuento}% OFF` : `-${formatRD(promo.valor_descuento)}`;
+            const isNxM = promo.tipo_descuento === "CANTIDAD_NXM";
+            const benefitText = isNxM
+              ? `${promo.nxm_compra || 3}x${(promo.nxm_compra || 3) - (promo.nxm_gratis || 1)}${(promo.nxm_porcentaje ?? 100) < 100 ? ` (${promo.nxm_porcentaje}% en la ${promo.nxm_compra || 3}ra)` : ` (${promo.nxm_gratis || 1} gratis)`}`
+              : isPorcentaje
+                ? `${promo.valor_descuento}% OFF`
+                : `-${formatRD(promo.valor_descuento)}`;
 
             return (
               <Card
@@ -461,11 +503,11 @@ function PromocionesPage() {
                       <span
                         className={`inline-flex items-center gap-1 px-3 py-1 rounded-xl text-xs font-black shadow-xs ${
                           promo.activo
-                            ? "bg-emerald-600 text-white"
+                            ? isNxM ? "bg-purple-600 text-white" : "bg-emerald-600 text-white"
                             : "bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
                         }`}
                       >
-                        <Percent className="h-3 w-3" />
+                        {isNxM ? <Gift className="h-3 w-3" /> : <Percent className="h-3 w-3" />}
                         {benefitText}
                       </span>
 
@@ -519,6 +561,22 @@ function PromocionesPage() {
                               className="text-[10px] font-bold bg-violet-50 dark:bg-violet-950/40 text-violet-700 dark:text-violet-300 border-violet-200"
                             >
                               {cat}
+                            </Badge>
+                          ))}
+                        </div>
+                      )}
+
+                      {promo.tipo_aplicacion === "POR_PRENDA" && (
+                        <div className="flex items-center gap-1 flex-wrap">
+                          <span className="text-[10px] text-muted-foreground font-semibold">Prendas:</span>
+                          {(promo.prendas || []).map((pr) => (
+                            <Badge
+                              key={pr}
+                              variant="outline"
+                              className="text-[10px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border-amber-200"
+                            >
+                              <Shirt className="h-2.5 w-2.5 mr-0.5" />
+                              {pr}
                             </Badge>
                           ))}
                         </div>
@@ -626,14 +684,14 @@ function PromocionesPage() {
           </DialogHeader>
 
           {/* STEP TABS */}
-          <div className="flex items-center gap-1 border-b border-border pb-2">
+          <div className="flex items-center justify-center gap-2 border-b border-border pb-2.5">
             <button
               type="button"
               onClick={() => setFormStep(1)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 formStep === 1
                   ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/60"
               }`}
             >
               1. Descuento
@@ -641,10 +699,10 @@ function PromocionesPage() {
             <button
               type="button"
               onClick={() => setFormStep(2)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 formStep === 2
                   ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/60"
               }`}
             >
               2. ¿A qué aplica?
@@ -652,10 +710,10 @@ function PromocionesPage() {
             <button
               type="button"
               onClick={() => setFormStep(3)}
-              className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                 formStep === 3
                   ? "bg-emerald-600 text-white shadow-xs"
-                  : "text-muted-foreground hover:text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-slate-100 dark:hover:bg-slate-800/60"
               }`}
             >
               3. Días y Condiciones
@@ -688,14 +746,14 @@ function PromocionesPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-2.5 pt-0.5">
+                <div className="space-y-2.5 pt-0.5">
                   <div>
                     <Label className="text-[11px] font-bold">Tipo de beneficio</Label>
-                    <div className="grid grid-cols-2 gap-1.5 mt-1">
+                    <div className="grid grid-cols-3 gap-1.5 mt-1">
                       <button
                         type="button"
                         onClick={() => setTipoDescuento("PORCENTAJE")}
-                        className={`h-8 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-all border cursor-pointer ${
+                        className={`h-8 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 transition-all border cursor-pointer ${
                           tipoDescuento === "PORCENTAJE"
                             ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                             : "bg-card border-border/70 text-muted-foreground hover:text-foreground"
@@ -707,7 +765,7 @@ function PromocionesPage() {
                       <button
                         type="button"
                         onClick={() => setTipoDescuento("MONTO_FIJO")}
-                        className={`h-8 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition-all border cursor-pointer ${
+                        className={`h-8 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 transition-all border cursor-pointer ${
                           tipoDescuento === "MONTO_FIJO"
                             ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                             : "bg-card border-border/70 text-muted-foreground hover:text-foreground"
@@ -715,27 +773,156 @@ function PromocionesPage() {
                       >
                         <span>Monto Fijo</span>
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setTipoDescuento("CANTIDAD_NXM")}
+                        className={`h-8 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1 transition-all border cursor-pointer ${
+                          tipoDescuento === "CANTIDAD_NXM"
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-card border-border/70 text-muted-foreground hover:text-foreground"
+                        }`}
+                      >
+                        <Gift className="h-3 w-3" />
+                        <span>NxM / Gratis</span>
+                      </button>
                     </div>
                   </div>
 
-                  <div>
-                    <Label className="text-[11px] font-bold">
-                      {tipoDescuento === "PORCENTAJE" ? "Porcentaje de descuento *" : "Monto a descontar (RD$) *"}
-                    </Label>
-                    <div className="relative mt-1">
-                      <Input
-                        type="number"
-                        min="1"
-                        max={tipoDescuento === "PORCENTAJE" ? 100 : 99999}
-                        value={valorDescuento || ""}
-                        onChange={(e) => setValorDescuento(parseFloat(e.target.value) || 0)}
-                        className="h-8.5 rounded-lg text-xs font-black pr-10 text-center bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                      />
-                      <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[11px] font-black text-muted-foreground">
-                        {tipoDescuento === "PORCENTAJE" ? "%" : "RD$"}
-                      </span>
+                  {tipoDescuento === "CANTIDAD_NXM" ? (
+                    <div className="p-3 rounded-xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/80 dark:border-emerald-800/60 space-y-2.5 animate-in fade-in duration-200">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <Label className="text-[10.5px] font-bold text-slate-700 dark:text-slate-300">
+                            Prendas requeridas *
+                          </Label>
+                          <Input
+                            type="number"
+                            min="2"
+                            max="50"
+                            value={nxmCompra}
+                            onChange={(e) => setNxmCompra(Math.max(2, parseInt(e.target.value) || 2))}
+                            className="h-8 rounded-lg text-xs font-black text-center bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 mt-1"
+                          />
+                          <span className="text-[9.5px] text-muted-foreground block text-center mt-0.5">Ej: 3 (3x2)</span>
+                        </div>
+
+                        <div>
+                          <Label className="text-[10.5px] font-bold text-slate-700 dark:text-slate-300">
+                            Prendas bonificadas *
+                          </Label>
+                          <Input
+                            type="number"
+                            min="1"
+                            max={nxmCompra - 1}
+                            value={nxmGratis}
+                            onChange={(e) => setNxmGratis(Math.max(1, Math.min(nxmCompra - 1, parseInt(e.target.value) || 1)))}
+                            className="h-8 rounded-lg text-xs font-black text-center bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 mt-1"
+                          />
+                          <span className="text-[9.5px] text-muted-foreground block text-center mt-0.5">Ej: 1 gratis</span>
+                        </div>
+
+                        <div>
+                          <Label className="text-[10.5px] font-bold text-slate-700 dark:text-slate-300">
+                            % Descuento *
+                          </Label>
+                          <div className="relative mt-1">
+                            <Input
+                              type="number"
+                              min="1"
+                              max="100"
+                              value={nxmPorcentaje}
+                              onChange={(e) => setNxmPorcentaje(Math.min(100, Math.max(1, parseInt(e.target.value) || 100)))}
+                              className="h-8 rounded-lg text-xs font-black text-center bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 pr-5"
+                            />
+                            <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-black text-muted-foreground">%</span>
+                          </div>
+                          <span className="text-[9.5px] text-muted-foreground block text-center mt-0.5">100% = Gratis</span>
+                        </div>
+                      </div>
+
+                      <div className="rounded-lg bg-white/80 dark:bg-slate-900/80 p-2 border border-emerald-200/50 dark:border-emerald-900/50 text-[10.5px] text-emerald-800 dark:text-emerald-300 flex items-start gap-1.5">
+                        <Sparkles className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-600" />
+                        <span>
+                          <strong>Dinámica:</strong> Por cada <strong>{nxmCompra}</strong> prendas elegibles en la orden, se bonifica <strong>{nxmGratis}</strong> {nxmGratis === 1 ? "prenda" : "prendas"} de menor valor con un <strong>{nxmPorcentaje}%</strong> de descuento {nxmPorcentaje === 100 ? "(Gratis)" : ""}.
+                        </span>
+                      </div>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-border/70 space-y-2.5">
+                      <div className="flex items-center justify-between gap-3">
+                        <div className="min-w-0 flex-1">
+                          <Label className="text-xs font-bold text-foreground block">
+                            {tipoDescuento === "PORCENTAJE" ? "Porcentaje de descuento *" : "Monto a descontar *"}
+                          </Label>
+                          <span className="text-[10.5px] text-muted-foreground block mt-0.5 leading-tight">
+                            {tipoDescuento === "PORCENTAJE"
+                              ? "Porcentaje a rebajar del total o de las prendas seleccionadas"
+                              : "Monto fijo en pesos (RD$) a descontar de la orden"}
+                          </span>
+                        </div>
+
+                        {/* Input compacto y bien proporcionado */}
+                        <div className="relative w-36 shrink-0">
+                          {tipoDescuento === "MONTO_FIJO" && (
+                            <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
+                              RD$
+                            </span>
+                          )}
+                          <Input
+                            type="number"
+                            min="1"
+                            max={tipoDescuento === "PORCENTAJE" ? 100 : 99999}
+                            value={valorDescuento || ""}
+                            onChange={(e) => setValorDescuento(parseFloat(e.target.value) || 0)}
+                            className={`h-9 rounded-xl text-sm font-black text-center bg-white dark:bg-slate-950 border-slate-200 dark:border-slate-800 shadow-2xs focus-visible:ring-emerald-500 ${
+                              tipoDescuento === "MONTO_FIJO" ? "pl-11 pr-2.5" : "pr-7 pl-2.5"
+                            }`}
+                          />
+                          {tipoDescuento === "PORCENTAJE" && (
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground">
+                              %
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Botones de sugerencias rápidas */}
+                      <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-border/50">
+                        <span className="text-[10px] font-bold text-muted-foreground mr-1">Sugeridos:</span>
+                        {tipoDescuento === "PORCENTAJE" ? (
+                          [5, 10, 15, 20, 25, 30, 50].map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setValorDescuento(val)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                                valorDescuento === val
+                                  ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                                  : "bg-white dark:bg-slate-950 border-border/60 text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              {val}%
+                            </button>
+                          ))
+                        ) : (
+                          [25, 50, 100, 150, 200, 500].map((val) => (
+                            <button
+                              key={val}
+                              type="button"
+                              onClick={() => setValorDescuento(val)}
+                              className={`px-2 py-0.5 rounded-lg text-[10px] font-bold transition-all cursor-pointer border ${
+                                valorDescuento === val
+                                  ? "bg-emerald-600 text-white border-emerald-600 shadow-2xs"
+                                  : "bg-white dark:bg-slate-950 border-border/60 text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
+                              }`}
+                            >
+                              RD$ {val}
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-border/50 flex items-center justify-between">
@@ -757,7 +944,7 @@ function PromocionesPage() {
                   <Label className="text-[11px] font-bold block mb-1.5 text-foreground">
                     Selecciona el alcance de la promoción
                   </Label>
-                  <div className="grid grid-cols-3 gap-2">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                     {/* TODA LA ORDEN */}
                     <button
                       type="button"
@@ -833,7 +1020,47 @@ function PromocionesPage() {
                           Por Categoría
                         </div>
                         <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
-                          Ej. Edredones, Camisas...
+                          Ej. Camisas, Edredones...
+                        </div>
+                      </div>
+                    </button>
+
+                    {/* POR PRENDA */}
+                    <button
+                      type="button"
+                      onClick={() => setTipoAplicacion("POR_PRENDA")}
+                      className={`p-2.5 rounded-2xl text-left border-2 transition-all cursor-pointer flex flex-col justify-between min-h-[88px] ${
+                        tipoAplicacion === "POR_PRENDA"
+                          ? "border-emerald-600 bg-emerald-50/70 dark:bg-emerald-950/30 shadow-xs ring-2 ring-emerald-500/20"
+                          : "border-slate-200 dark:border-slate-800 bg-card hover:bg-slate-50 dark:hover:bg-slate-900/60 hover:border-slate-300 dark:hover:border-slate-700"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between w-full">
+                        <div
+                          className={`h-7 w-7 rounded-xl flex items-center justify-center transition-colors ${
+                            tipoAplicacion === "POR_PRENDA"
+                              ? "bg-emerald-600 text-white shadow-xs"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400"
+                          }`}
+                        >
+                          <Shirt className="h-3.5 w-3.5" />
+                        </div>
+                        <span
+                          className={`h-4 w-4 rounded-full flex items-center justify-center transition-all ${
+                            tipoAplicacion === "POR_PRENDA"
+                              ? "bg-emerald-600 text-white"
+                              : "border-2 border-slate-300 dark:border-slate-600"
+                          }`}
+                        >
+                          {tipoAplicacion === "POR_PRENDA" && <Check className="h-2.5 w-2.5 stroke-[3]" />}
+                        </span>
+                      </div>
+                      <div className="mt-2">
+                        <div className="font-display font-black text-xs text-foreground tracking-tight">
+                          Por Prenda
+                        </div>
+                        <div className="text-[10px] text-muted-foreground mt-0.5 leading-tight">
+                          Prendas específicas
                         </div>
                       </div>
                     </button>
@@ -966,6 +1193,120 @@ function PromocionesPage() {
                         {categoriasDisponibles.filter((cat) => cat.toLowerCase().includes(searchScopeItem.toLowerCase())).length === 0 && (
                           <p className="text-[11px] text-muted-foreground py-2 w-full text-center">
                             No se encontraron categorías con "{searchScopeItem}"
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* SELECTOR DE PRENDAS */}
+                {tipoAplicacion === "POR_PRENDA" && (
+                  <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/80 border border-border/70 space-y-2.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <Label className="text-[11px] font-bold text-foreground flex items-center gap-1.5">
+                        <span>Prendas que participan en la promoción</span>
+                        <span className="text-[10px] font-black text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded-md">
+                          {prendasSel.length} sel.
+                        </span>
+                      </Label>
+                      <div className="flex items-center gap-2 text-[10px]">
+                        <button
+                          type="button"
+                          onClick={() => setPrendasSel(prendasDisponibles.map((p) => p.nombre))}
+                          className="text-emerald-600 hover:underline font-bold cursor-pointer"
+                        >
+                          Seleccionar todas
+                        </button>
+                        {prendasSel.length > 0 && (
+                          <>
+                            <span>·</span>
+                            <button
+                              type="button"
+                              onClick={() => setPrendasSel([])}
+                              className="text-rose-500 hover:underline font-bold cursor-pointer"
+                            >
+                              Limpiar
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* BARRA DE BÚSQUEDA DE PRENDAS */}
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Buscar prenda por nombre o categoría..."
+                        value={searchScopeItem}
+                        onChange={(e) => setSearchScopeItem(e.target.value)}
+                        className="h-8 pl-8 pr-7 text-xs rounded-xl bg-white dark:bg-slate-900 border-border/70"
+                      />
+                      {searchScopeItem && (
+                        <button
+                          type="button"
+                          onClick={() => setSearchScopeItem("")}
+                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-foreground text-xs font-bold cursor-pointer"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+
+                    {prendasDisponibles.length === 0 ? (
+                      <p className="text-[11px] text-muted-foreground py-2 text-center">
+                        No hay prendas registradas en el catálogo.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 max-h-48 overflow-y-auto pr-1">
+                        {prendasDisponibles
+                          .filter(
+                            (p) =>
+                              p.nombre.toLowerCase().includes(searchScopeItem.toLowerCase()) ||
+                              (p.categoria && p.categoria.toLowerCase().includes(searchScopeItem.toLowerCase())),
+                          )
+                          .map((p) => {
+                            const isSel = prendasSel.includes(p.nombre);
+                            return (
+                              <button
+                                key={p.nombre}
+                                type="button"
+                                onClick={() =>
+                                  setPrendasSel((prev) =>
+                                    prev.includes(p.nombre)
+                                      ? prev.filter((item) => item !== p.nombre)
+                                      : [...prev, p.nombre],
+                                  )
+                                }
+                                className={`h-7 px-2.5 rounded-xl text-[11px] font-bold transition-all cursor-pointer border flex items-center gap-1.5 ${
+                                  isSel
+                                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs scale-102"
+                                    : "bg-card border-border/70 text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
+                                }`}
+                              >
+                                {isSel && <Check className="h-3 w-3 stroke-[3]" />}
+                                <span>{p.nombre}</span>
+                                {p.categoria && (
+                                  <span
+                                    className={`text-[9px] px-1 py-0.5 rounded font-normal opacity-75 ${
+                                      isSel
+                                        ? "bg-white/25 text-white"
+                                        : "bg-slate-100 dark:bg-slate-800 text-muted-foreground"
+                                    }`}
+                                  >
+                                    {p.categoria}
+                                  </span>
+                                )}
+                              </button>
+                            );
+                          })}
+                        {prendasDisponibles.filter(
+                          (p) =>
+                            p.nombre.toLowerCase().includes(searchScopeItem.toLowerCase()) ||
+                            (p.categoria && p.categoria.toLowerCase().includes(searchScopeItem.toLowerCase())),
+                        ).length === 0 && (
+                          <p className="text-[11px] text-muted-foreground py-2 w-full text-center">
+                            No se encontraron prendas con "{searchScopeItem}"
                           </p>
                         )}
                       </div>

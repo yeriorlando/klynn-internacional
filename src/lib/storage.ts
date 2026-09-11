@@ -172,6 +172,7 @@ export interface TenantConfig {
   modo_facturacion?: "electronica" | "tradicional";
   itbis_incluido: boolean;
   itbis_porcentaje: number;
+  mostrar_columna_itbis?: boolean;
   formato_ticket: "57mm" | "80mm";
   impresora_tipo?: "usb" | "bluetooth" | "serial" | "sistema";
   impresora_perfil?: "basica" | "estandar" | "completa";
@@ -449,8 +450,11 @@ export interface Promocion {
   tenant_id: string;
   nombre: string;
   descripcion?: string;
-  tipo_descuento: "PORCENTAJE" | "MONTO_FIJO";
+  tipo_descuento: "PORCENTAJE" | "MONTO_FIJO" | "CANTIDAD_NXM";
   valor_descuento: number;
+  nxm_compra?: number; // Cantidad de prendas que debe traer (ej. 3 para 3x2)
+  nxm_gratis?: number; // Cantidad de prendas bonificadas (ej. 1)
+  nxm_porcentaje?: number; // Porcentaje de descuento en prenda bonificada (default 100% = gratis)
   tipo_aplicacion: "TODA_LA_ORDEN" | "POR_CATEGORIA" | "POR_SERVICIO" | "POR_PRENDA";
   categorias?: string[];
   servicios?: string[];
@@ -835,6 +839,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   nombre_sucursal: "Sucursal principal",
   itbis_incluido: false,
   itbis_porcentaje: 18,
+  mostrar_columna_itbis: true,
   formato_ticket: "80mm",
   impresora_tipo: "usb",
   impresora_perfil: "basica",
@@ -6024,6 +6029,9 @@ export async function savePromocion(p: Partial<Promocion> & { tenant_id: string;
     descripcion: p.descripcion || "",
     tipo_descuento: p.tipo_descuento || "PORCENTAJE",
     valor_descuento: Number(p.valor_descuento || 0),
+    nxm_compra: p.nxm_compra ? Number(p.nxm_compra) : undefined,
+    nxm_gratis: p.nxm_gratis ? Number(p.nxm_gratis) : undefined,
+    nxm_porcentaje: p.nxm_porcentaje !== undefined ? Number(p.nxm_porcentaje) : undefined,
     tipo_aplicacion: p.tipo_aplicacion || "TODA_LA_ORDEN",
     categorias: p.categorias || [],
     servicios: p.servicios || [],

@@ -152,7 +152,6 @@ function DashboardPage() {
   const { data: plans = [] } = usePlans();
 
   const [currentPage, setCurrentPage] = useState(1);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -172,18 +171,6 @@ function DashboardPage() {
       }
     }
   }, [user?.tenant?.id, queryClient]);
-
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handleOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest(".action-menu-container")) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [openMenuId]);
 
   const [view, setView] = useState<Orden | null>(null);
   const [cobrarOrden, setCobrarOrden] = useState<Orden | null>(null);
@@ -975,62 +962,61 @@ function DashboardPage() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center">
                         <div className="action-menu-container order-actions action-menu">
-                          <button
-                            type="button"
-                            onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)}
-                            className={openMenuId === o.id ? "is-open" : ""}
-                            title="Opciones de la orden"
-                          >
-                            <MoreVertical />
-                          </button>
-                          {openMenuId === o.id && (
-                            <div
-                              className="action-menu-popover"
-                              onMouseLeave={() => setOpenMenuId(null)}
-                            >
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
                               <button
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  setView(o);
-                                }}
+                                type="button"
+                                title="Opciones de la orden"
+                                className="cursor-pointer"
                               >
-                                <Eye /> Ver Detalles
+                                <MoreVertical />
                               </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              side="bottom"
+                              sideOffset={6}
+                              collisionPadding={14}
+                              className="w-56 p-1.5 rounded-2xl shadow-2xl border border-border bg-card z-50 text-foreground"
+                            >
+                              <DropdownMenuItem
+                                onClick={() => setView(o)}
+                                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
+                              >
+                                <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span>Ver Detalles</span>
+                              </DropdownMenuItem>
 
                               {o.saldo > 0 && o.estado !== "ANULADA" && (
-                                <button
-                                  onClick={() => {
-                                    setOpenMenuId(null);
-                                    setCobrarOrden(o);
-                                  }}
-                                  className="text-emerald-600 dark:text-emerald-400"
+                                <DropdownMenuItem
+                                  onClick={() => setCobrarOrden(o)}
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 focus:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
                                 >
-                                  <DollarSign /> Cobrar Orden
-                                </button>
+                                  <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
+                                  <span>Cobrar Orden</span>
+                                </DropdownMenuItem>
                               )}
 
-                              <button
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  setShowPrint(o);
-                                }}
+                              <DropdownMenuItem
+                                onClick={() => setShowPrint(o)}
+                                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
                               >
-                                <Printer /> Imprimir Ticket
-                              </button>
+                                <Printer className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span>Imprimir Ticket</span>
+                              </DropdownMenuItem>
 
-                              <button
-                                onClick={() => {
-                                  setOpenMenuId(null);
-                                  setShowDownloadA4(o);
-                                }}
+                              <DropdownMenuItem
+                                onClick={() => setShowDownloadA4(o)}
+                                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
                               >
-                                <DownloadCloud /> Ver Factura A4
-                              </button>
-                            </div>
-                          )}
+                                <DownloadCloud className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span>Ver Factura A4</span>
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </td>

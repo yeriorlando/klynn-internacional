@@ -157,6 +157,64 @@ serve(async (req) => {
         }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
       }
 
+      // Si la instancia ya existía, comprobar su estado real
+      const stateRes = await fetch(`${serverUrl}/instance/connectionState/${instanceName}`, {
+        method: 'GET',
+        headers,
+      }).catch(() => null)
+      const stateData = await stateRes?.json().catch(() => ({}))
+      const currentState = stateData?.instance?.state || 'close'
+
+      // Si ya está abierta, no hace falta generar QR ni recrear
+      if (currentState === 'open') {
+        return new Response(JSON.stringify({
+          ok: true,
+          created: false,
+          state: 'open',
+          qrcode: null,
+          code: null,
+        }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }
+
+      // Si la instancia existe pero NO está en 'open' (estado 'close' o 'connecting' residual/zombi),
+      // purgamos la sesión vieja para que WhatsApp no rechace el emparejamiento con llaves inválidas.
+      try {
+        let delOk = false
+        const delRes = await fetch(`${serverUrl}/instance/delete/${instanceName}`, {
+          method: 'DELETE',
+          headers,
+        })
+        delOk = delRes.ok
+        if (!delOk) {
+          // Intentar un restart para forzar liberación del socket y reintentar delete
+          await fetch(`${serverUrl}/instance/restart/${instanceName}`, { method: 'POST', headers }).catch(() => ({}))
+          await fetch(`${serverUrl}/instance/delete/${instanceName}`, { method: 'DELETE', headers }).catch(() => ({}))
+        }
+
+        // Recrear la instancia 100% limpia con llaves frescas de Baileys
+        const recreateRes = await fetch(`${serverUrl}/instance/create`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            instanceName,
+            qrcode: true,
+            integration: 'WHATSAPP-BAILEYS',
+          }),
+        })
+        const recreateData = await recreateRes.json().catch(() => ({}))
+        if (recreateData?.qrcode?.base64) {
+          return new Response(JSON.stringify({
+            ok: true,
+            created: true,
+            state: 'connecting',
+            qrcode: recreateData.qrcode.base64,
+            code: recreateData.qrcode.code,
+          }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+        }
+      } catch (cleanErr) {
+        console.error('Error auto-recovering instance:', instanceName, cleanErr)
+      }
+
       const qrRes = await fetch(`${serverUrl}/instance/connect/${instanceName}`, {
         method: 'GET',
         headers,
@@ -229,17 +287,30 @@ serve(async (req) => {
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 
-    // 4. CERRAR SESIÓN / LOGOUT
+    // 4. CERRAR SESIÓN / LOGOUT / DESVINCULAR
     if (action === 'logout') {
-      const logoutRes = await fetch(`${serverUrl}/instance/logout/${instanceName}`, {
-        method: 'DELETE',
-        headers,
-      })
-      const logoutData = await logoutRes.json().catch(() => ({}))
+      try {
+        await fetch(`${serverUrl}/instance/logout/${instanceName}`, {
+          method: 'DELETE',
+          headers,
+        })
+      } catch (_) {}
+
+      // Eliminar la instancia para que el próximo escaneo sea 100% limpio
+      try {
+        const delRes = await fetch(`${serverUrl}/instance/delete/${instanceName}`, {
+          method: 'DELETE',
+          headers,
+        })
+        if (!delRes.ok) {
+          await fetch(`${serverUrl}/instance/restart/${instanceName}`, { method: 'POST', headers }).catch(() => ({}))
+          await fetch(`${serverUrl}/instance/delete/${instanceName}`, { method: 'DELETE', headers }).catch(() => ({}))
+        }
+      } catch (_) {}
 
       return new Response(JSON.stringify({
         ok: true,
-        data: logoutData,
+        message: 'Instancia desvinculada y limpiada correctamente',
       }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
     }
 

@@ -152,23 +152,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [filtroPendientes, setFiltroPendientes] = useState<"todos" | "RECIBIDA" | "EN_PROCESO" | "LISTA" | "EN_CAMINO">("todos");
   const [condonarOrden, setCondonarOrden] = useState<Orden | null>(null);
   const navigate = useNavigate();
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
   const [conveyorOrden, setConveyorOrden] = useState<Orden | null>(null);
   const [conveyorUbicacion, setConveyorUbicacion] = useState("");
   const [savingConveyor, setSavingConveyor] = useState(false);
   const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
-
-  useEffect(() => {
-    if (!openMenuId) return;
-    const handleOutside = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      if (!target.closest('.action-menu-container')) {
-        setOpenMenuId(null);
-      }
-    };
-    document.addEventListener("mousedown", handleOutside);
-    return () => document.removeEventListener("mousedown", handleOutside);
-  }, [openMenuId]);
 
   const tenant = user?.tenant;
   const tenantId = tenant?.id || '';
@@ -1687,32 +1674,37 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-center" onClick={(e) => e.stopPropagation()}>
                       <div className="flex items-center justify-center">
                         <div className="action-menu-container order-actions action-menu">
-                          <button
-                            type="button"
-                            onClick={() => setOpenMenuId(openMenuId === o.id ? null : o.id)}
-                            className={openMenuId === o.id ? "is-open" : ""}
-                            title="Opciones de la orden"
-                          >
-                            <MoreVertical />
-                          </button>
-                          {openMenuId === o.id && (
-                            <div 
-                              className="action-menu-popover"
-                              onMouseLeave={() => setOpenMenuId(null)}
-                            >
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setView(o); }}
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                              <button
+                                type="button"
+                                title="Opciones de la orden"
+                                className="cursor-pointer"
                               >
-                                <Eye /> Ver Detalles
+                                <MoreVertical />
                               </button>
-                              
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent
+                              align="end"
+                              side="bottom"
+                              sideOffset={6}
+                              collisionPadding={14}
+                              className="w-56 p-1.5 rounded-2xl shadow-2xl border border-border bg-card z-50 text-foreground"
+                            >
+                              <DropdownMenuItem
+                                onClick={() => setView(o)}
+                                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
+                              >
+                                <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span>Ver Detalles</span>
+                              </DropdownMenuItem>
+
                               {o.estado === "LISTA" && (
-                                <button 
+                                <DropdownMenuItem
                                   onClick={async () => {
-                                    setOpenMenuId(null);
                                     const cli = clientes.find((c) => c.id === o.cliente_id);
                                     if (!cli) {
                                       toast.error("No se encontró la información del cliente");
@@ -1726,124 +1718,136 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                       toast.error(`No se pudo enviar: ${res.reason || "Error de red"}`);
                                     }
                                   }}
-                                  className="text-emerald-600 dark:text-emerald-400 font-bold"
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 focus:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
                                 >
-                                  <MessageCircle className="text-emerald-500" /> Notificar WhatsApp
-                                </button>
-                              )}
-                              
-                              {o.saldo > 0 && o.estado !== "ANULADA" && (
-                                <button 
-                                  onClick={() => { setOpenMenuId(null); setCobrarOrden(o); }}
-                                  className="text-emerald-600 dark:text-emerald-400"
-                                >
-                                  <DollarSign /> Cobrar Orden
-                                </button>
+                                  <MessageCircle className="h-4 w-4 text-emerald-500 shrink-0" />
+                                  <span>Notificar WhatsApp</span>
+                                </DropdownMenuItem>
                               )}
 
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setShowPrint(o); }}
+                              {o.saldo > 0 && o.estado !== "ANULADA" && (
+                                <DropdownMenuItem
+                                  onClick={() => setCobrarOrden(o)}
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:text-emerald-700 dark:hover:text-emerald-300 focus:text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
+                                >
+                                  <DollarSign className="h-4 w-4 text-emerald-500 shrink-0" />
+                                  <span>Cobrar Orden</span>
+                                </DropdownMenuItem>
+                              )}
+
+                              <DropdownMenuItem
+                                onClick={() => setShowPrint(o)}
+                                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
                               >
-                                <Printer /> Imprimir Ticket (Cliente)
-                              </button>
+                                <Printer className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span>Imprimir Ticket (Cliente)</span>
+                              </DropdownMenuItem>
 
                               {isTallerEnabled && (
-                                <button 
-                                  onClick={() => { setOpenMenuId(null); setShowPrintProduccion(o); }}
-                                  className="text-amber-700 dark:text-amber-300 font-semibold"
+                                <DropdownMenuItem
+                                  onClick={() => setShowPrintProduccion(o)}
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
                                 >
-                                  <Tag className="text-amber-600 dark:text-amber-400" /> Imprimir Ticket de Taller
-                                </button>
+                                  <Tag className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span>Imprimir Ticket de Taller</span>
+                                </DropdownMenuItem>
                               )}
 
                               {isMarquillasEnabled && (
-                                <button 
-                                  onClick={() => { setOpenMenuId(null); setShowPrintMarquillas(o); }}
-                                  className="text-blue-700 dark:text-blue-300 font-semibold"
+                                <DropdownMenuItem
+                                  onClick={() => setShowPrintMarquillas(o)}
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-blue-700 dark:text-blue-300 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl cursor-pointer transition-colors"
                                 >
-                                  <Tag className="text-blue-600 dark:text-blue-400" /> Imprimir Marquillas
-                                </button>
+                                  <Tag className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                  <span>Imprimir Marquillas</span>
+                                </DropdownMenuItem>
                               )}
 
                               {isConveyorEnabled && o.estado !== "ANULADA" && (
-                                <button
+                                <DropdownMenuItem
                                   onClick={() => {
-                                    setOpenMenuId(null);
                                     setEditingUbicacionOrden(o);
                                     setEditingUbicacionValue(o.ubicacion_ropa || "");
                                   }}
-                                  className="text-amber-700 dark:text-amber-300 font-semibold"
+                                  className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-700 dark:text-amber-300 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
                                 >
-                                  <MapPin className="text-amber-600 dark:text-amber-400" /> {o.ubicacion_ropa ? `Ubicación: ${o.ubicacion_ropa}` : "Asignar Ubicación"}
-                                </button>
+                                  <MapPin className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                  <span>{o.ubicacion_ropa ? `Ubicación: ${o.ubicacion_ropa}` : "Asignar Ubicación"}</span>
+                                </DropdownMenuItem>
                               )}
-                              
-                              <button 
-                                onClick={() => { setOpenMenuId(null); setShowDownloadA4(o); }}
+
+                              <DropdownMenuItem
+                                onClick={() => setShowDownloadA4(o)}
+                                className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold rounded-xl cursor-pointer hover:bg-accent focus:bg-accent transition-colors"
                               >
-                                <DownloadCloud /> Ver Factura A4
-                              </button>
+                                <DownloadCloud className="h-4 w-4 text-muted-foreground shrink-0" />
+                                <span>Ver Factura A4</span>
+                              </DropdownMenuItem>
 
                               {o.estado !== "ANULADA" && ecfConfig?.is_active && o.ncf?.startsWith("E") && (
                                 <>
-                                  <button
+                                  <DropdownMenuSeparator className="my-1 bg-border/60" />
+                                  <DropdownMenuItem
                                     onClick={() => {
-                                      setOpenMenuId(null);
                                       setCredito(o);
                                       setMontoCredito(0);
                                       setMotivoCredito("");
                                       setCodigoCredito("");
                                     }}
-                                    className="text-amber-600 dark:text-amber-400"
+                                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
                                   >
-                                    <ArrowDownCircle className="h-4 w-4" /> Nota de Crédito
-                                  </button>
-                                  <button 
-                                    onClick={() => { setOpenMenuId(null); setDebito(o); }}
+                                    <ArrowDownCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                                    <span>Nota de Crédito</span>
+                                  </DropdownMenuItem>
+                                  <DropdownMenuItem
+                                    onClick={() => setDebito(o)}
+                                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-950/30 rounded-xl cursor-pointer transition-colors"
                                   >
-                                    <ArrowUpCircle className="text-blue-600 dark:text-blue-400" /> Nota de Débito
-                                  </button>
+                                    <ArrowUpCircle className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                                    <span>Nota de Débito</span>
+                                  </DropdownMenuItem>
                                 </>
                               )}
-   
-                                 {o.estado !== "ANULADA" && (isPendingECF || isRejectedECF) && (
-                                 <button
-                                   onClick={async () => {
-                                     setOpenMenuId(null);
-                                     toast.info(`Reintentando timbrado DGII para #${o.numero}...`);
-                                     try {
-                                       await ensureFreshSupabaseSession();
-                                       const cliente = clientes.find((x) => x.id === o.cliente_id) || (o.cliente_id ? await getClienteById(o.cliente_id) : null);
-                                       const ordenLimpia: Orden = {
-                                         ...o,
-                                         id: `${o.id}:retry:${Date.now()}`,
-                                         ncf: undefined,
-                                         ecf_status: "PENDING_OFFLINE_TRANSMISSION",
-                                       };
-                                       const res = await emitirECF(
-                                         ordenLimpia,
-                                         cliente,
-                                         ecfConfig?.pronesoft_tenant_id,
-                                         tenant.config,
-                                         tenant,
-                                         o.tipo_ecf || "E32"
-                                       );
-                                       const legalStatus = String(res.legal_status || res.document?.legal_status || "").toUpperCase();
-                                       const accepted = Boolean(res.encf) && !/RECHAZ|ERROR|INVALID/.test(legalStatus);
-                                       const updated = {
-                                         ...o,
-                                         ncf: res.encf,
-                                         tipo_ecf: o.tipo_ecf || "E32",
-                                         ecf_status: accepted ? "ACCEPTED" : "REJECTED",
-                                         ecf_id: res.document?.id,
-                                         ecf_qr: res.stamp_url || (res.document as any)?.document_stamp_url || "",
-                                         ecf_security_code: res.security_code || "",
-                                         ecf_signature_date: (res.document as any)?.signature_date || new Date().toISOString(),
-                                       };
-                                       await saveOrden(updated);
-                                       await queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
-                                       await queryClient.refetchQueries({ queryKey: ["ordenes", tenantId] });
-                                       if (accepted) {
+
+                              {o.estado !== "ANULADA" && (isPendingECF || isRejectedECF) && (
+                                <>
+                                  <DropdownMenuSeparator className="my-1 bg-border/60" />
+                                  <DropdownMenuItem
+                                    onClick={async () => {
+                                      toast.info(`Reintentando timbrado DGII para #${o.numero}...`);
+                                      try {
+                                        await ensureFreshSupabaseSession();
+                                        const cliente = clientes.find((x) => x.id === o.cliente_id) || (o.cliente_id ? await getClienteById(o.cliente_id) : null);
+                                        const ordenLimpia: Orden = {
+                                          ...o,
+                                          id: `${o.id}:retry:${Date.now()}`,
+                                          ncf: undefined,
+                                          ecf_status: "PENDING_OFFLINE_TRANSMISSION",
+                                        };
+                                        const res = await emitirECF(
+                                          ordenLimpia,
+                                          cliente,
+                                          ecfConfig?.pronesoft_tenant_id,
+                                          tenant.config,
+                                          tenant,
+                                          o.tipo_ecf || "E32"
+                                        );
+                                        const legalStatus = String(res.legal_status || res.document?.legal_status || "").toUpperCase();
+                                        const accepted = Boolean(res.encf) && !/RECHAZ|ERROR|INVALID/.test(legalStatus);
+                                        const updated = {
+                                          ...o,
+                                          ncf: res.encf,
+                                          tipo_ecf: o.tipo_ecf || "E32",
+                                          ecf_status: accepted ? "ACCEPTED" : "REJECTED",
+                                          ecf_id: res.document?.id,
+                                          ecf_qr: res.stamp_url || (res.document as any)?.document_stamp_url || "",
+                                          ecf_security_code: res.security_code || "",
+                                          ecf_signature_date: (res.document as any)?.signature_date || new Date().toISOString(),
+                                        };
+                                        await saveOrden(updated);
+                                        await queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+                                        await queryClient.refetchQueries({ queryKey: ["ordenes", tenantId] });
+                                        if (accepted) {
                                           toast.success(`Comprobante ${res.encf} emitido y aceptado por DGII ✓`);
                                         } else {
                                           const rawDgii = res.document?.dgii_response as any;
@@ -1860,36 +1864,41 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                             duration: 10000,
                                           });
                                         }
-                                     } catch (err: any) {
-                                       toast.error(`Error al retransmitir e-CF: ${err?.message || "Error desconocido"}`);
-                                     }
-                                   }}
-                                   className="text-emerald-600 dark:text-emerald-400 font-bold"
-                                 >
-                                   <RefreshCw className="h-4 w-4" /> Reintentar Timbrado DGII
-                                 </button>
-                               )}
-
-                               {o.estado !== "ANULADA" && (
-                                <>
-                                  {o.saldo > 0 && isAuthorized && (
-                                    <button 
-                                      onClick={() => { setOpenMenuId(null); setCondonarOrden(o); }}
-                                      className="text-amber-600 dark:text-amber-400"
-                                    >
-                                      <AlertTriangle /> Condonar Deuda
-                                    </button>
-                                  )}
-                                  <button 
-                                    onClick={() => { setOpenMenuId(null); setAnular(o); }}
-                                    className="danger"
+                                      } catch (err: any) {
+                                        toast.error(`Error al retransmitir e-CF: ${err?.message || "Error desconocido"}`);
+                                      }
+                                    }}
+                                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-bold text-emerald-600 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 rounded-xl cursor-pointer transition-colors"
                                   >
-                                    <XCircle /> Anular Orden
-                                  </button>
+                                    <RefreshCw className="h-4 w-4 text-emerald-500 shrink-0" />
+                                    <span>Reintentar Timbrado DGII</span>
+                                  </DropdownMenuItem>
                                 </>
                               )}
-                            </div>
-                          )}
+
+                              {o.estado !== "ANULADA" && (
+                                <>
+                                  <DropdownMenuSeparator className="my-1 bg-border/60" />
+                                  {o.saldo > 0 && isAuthorized && (
+                                    <DropdownMenuItem
+                                      onClick={() => setCondonarOrden(o)}
+                                      className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 rounded-xl cursor-pointer transition-colors"
+                                    >
+                                      <AlertTriangle className="h-4 w-4 text-amber-500 shrink-0" />
+                                      <span>Condonar Deuda</span>
+                                    </DropdownMenuItem>
+                                  )}
+                                  <DropdownMenuItem
+                                    onClick={() => setAnular(o)}
+                                    className="flex items-center gap-2.5 px-3 py-2 text-xs font-semibold text-destructive hover:bg-destructive/10 focus:bg-destructive/10 focus:text-destructive rounded-xl cursor-pointer transition-colors"
+                                  >
+                                    <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                                    <span>Anular Orden</span>
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </div>
                     </td>
@@ -3543,76 +3552,90 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
             </div>
           )}
 
-          <table className="w-full text-left border-collapse mb-8">
-            <thead>
-              <tr className="border-b-2 border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
-                <th className="py-4 px-2 w-16">Cant.</th>
-                <th className="py-4 px-2">Descripción</th>
-                <th className="py-4 px-2 text-right">Precio Unit.</th>
-                <th className="py-4 px-2 text-right">ITBIS</th>
-                <th className="py-4 px-2 text-right">Subtotal</th>
-              </tr>
-            </thead>
-            <tbody className="text-sm">
-              {(() => {
-                const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
-                  (orden.servicios?.map(s => srvList.find(x => x.nombre === s)?.precio || 0).reduce((a,b) => a+b, 0) || 0);
-                const isItbisIncluidoEnEstaOrden = cfg?.ncf_facturacion_activa && orden.itbis > 0 
-                  ? (subtotalBruto - orden.subtotal > 1) 
-                  : !!cfg?.itbis_incluido;
-                return (
-                  <>
-                    {orden.items.map((it, i) => {
-                      let baseTotal = it.cantidad * it.precio_unitario;
-                      let itemItbis = 0;
-                      let valor = baseTotal;
-                      if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
-                        if (isItbisIncluidoEnEstaOrden) {
-                          itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
-                        } else {
-                          itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
-                          valor = baseTotal + itemItbis;
-                        }
-                      }
-                      return (
-                        <tr key={i} className="border-b border-slate-100">
-                          <td className="py-4 px-2 font-bold text-slate-500">{it.cantidad}</td>
-                          <td className="py-4 px-2 font-medium">{it.descripcion}</td>
-                          <td className="py-4 px-2 text-right text-slate-500">{formatRD(it.precio_unitario)}</td>
-                          <td className="py-4 px-2 text-right text-slate-500">{itemItbis > 0 ? formatRD(itemItbis) : "—"}</td>
-                          <td className="py-4 px-2 text-right font-bold text-slate-900">{formatRD(valor)}</td>
-                        </tr>
-                      );
-                    })}
-                    {orden.servicios?.map((sName, i) => {
-                      const srv = srvList.find(s => s.nombre === sName);
-                      const p = srv ? srv.precio : 0;
-                      let baseTotal = p;
-                      let itemItbis = 0;
-                      let valor = baseTotal;
-                      if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
-                        if (isItbisIncluidoEnEstaOrden) {
-                          itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
-                        } else {
-                          itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
-                          valor = baseTotal + itemItbis;
-                        }
-                      }
-                      return (
-                        <tr key={'s'+i} className="border-b border-slate-100">
-                          <td className="py-4 px-2 font-bold text-slate-500">1</td>
-                          <td className="py-4 px-2 font-medium">Servicio: {sName}</td>
-                          <td className="py-4 px-2 text-right text-slate-500">{formatRD(p)}</td>
-                          <td className="py-4 px-2 text-right text-slate-500">{p > 0 && itemItbis > 0 ? formatRD(itemItbis) : "—"}</td>
-                          <td className="py-4 px-2 text-right font-bold text-slate-900">{formatRD(p > 0 ? valor : 0)}</td>
-                        </tr>
-                      );
-                    })}
-                  </>
-                );
-              })()}
-            </tbody>
-          </table>
+          {(() => {
+            const mostrarColumnaItbis = Boolean(orden.itbis && orden.itbis > 0) && (cfg?.mostrar_columna_itbis ?? true);
+            return (
+              <table className="w-full text-left border-collapse mb-8">
+                <thead>
+                  <tr className="border-b-2 border-slate-200 text-[10px] font-black uppercase tracking-widest text-slate-400">
+                    <th className="py-4 px-2 w-16">Cant.</th>
+                    <th className="py-4 px-2">Descripción</th>
+                    <th className="py-4 px-2 text-right">Precio Unit.</th>
+                    {mostrarColumnaItbis && <th className="py-4 px-2 text-right">ITBIS</th>}
+                    <th className="py-4 px-2 text-right">Subtotal</th>
+                  </tr>
+                </thead>
+                <tbody className="text-sm">
+                  {(() => {
+                    const subtotalBruto = orden.items.reduce((acc, it) => acc + (it.cantidad * it.precio_unitario), 0) + 
+                      (orden.servicios?.map(s => srvList.find(x => x.nombre === s)?.precio || 0).reduce((a,b) => a+b, 0) || 0);
+                    const isItbisIncluidoEnEstaOrden = cfg?.ncf_facturacion_activa && orden.itbis > 0 
+                      ? (subtotalBruto - orden.subtotal > 1) 
+                      : !!cfg?.itbis_incluido;
+                    return (
+                      <>
+                        {orden.items.map((it, i) => {
+                          let baseTotal = it.cantidad * it.precio_unitario;
+                          let itemItbis = 0;
+                          let valor = baseTotal;
+                          if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
+                            if (isItbisIncluidoEnEstaOrden) {
+                              itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
+                              valor = mostrarColumnaItbis ? (baseTotal - itemItbis) : baseTotal;
+                            } else {
+                              itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
+                              valor = baseTotal;
+                            }
+                          }
+                          const unitNet = isItbisIncluidoEnEstaOrden && cfg?.ncf_facturacion_activa && orden.itbis > 0 && it.cantidad > 0 && mostrarColumnaItbis
+                            ? (valor / it.cantidad)
+                            : it.precio_unitario;
+
+                          return (
+                            <tr key={i} className="border-b border-slate-100">
+                              <td className="py-4 px-2 font-bold text-slate-500">{it.cantidad}</td>
+                              <td className="py-4 px-2 font-medium">{it.descripcion}</td>
+                              <td className="py-4 px-2 text-right text-slate-500">{formatRD(unitNet)}</td>
+                              {mostrarColumnaItbis && <td className="py-4 px-2 text-right text-slate-500">{itemItbis > 0 ? formatRD(itemItbis) : "—"}</td>}
+                              <td className="py-4 px-2 text-right font-bold text-slate-900">{formatRD(valor)}</td>
+                            </tr>
+                          );
+                        })}
+                        {orden.servicios?.map((sName, i) => {
+                          const srv = srvList.find(s => s.nombre === sName);
+                          const p = srv ? srv.precio : 0;
+                          let baseTotal = p;
+                          let itemItbis = 0;
+                          let valor = baseTotal;
+                          if (cfg?.ncf_facturacion_activa && orden.itbis > 0) {
+                            if (isItbisIncluidoEnEstaOrden) {
+                              itemItbis = baseTotal - (baseTotal / (1 + (cfg.itbis_porcentaje || 18) / 100));
+                              valor = mostrarColumnaItbis ? (baseTotal - itemItbis) : baseTotal;
+                            } else {
+                              itemItbis = baseTotal * ((cfg.itbis_porcentaje || 18) / 100);
+                              valor = baseTotal;
+                            }
+                          }
+                          const unitNet = isItbisIncluidoEnEstaOrden && cfg?.ncf_facturacion_activa && orden.itbis > 0 && mostrarColumnaItbis
+                            ? valor
+                            : p;
+                          return (
+                            <tr key={'s'+i} className="border-b border-slate-100">
+                              <td className="py-4 px-2 font-bold text-slate-500">1</td>
+                              <td className="py-4 px-2 font-medium">Servicio: {sName}</td>
+                              <td className="py-4 px-2 text-right text-slate-500">{formatRD(unitNet)}</td>
+                              {mostrarColumnaItbis && <td className="py-4 px-2 text-right text-slate-500">{p > 0 && itemItbis > 0 ? formatRD(itemItbis) : "—"}</td>}
+                              <td className="py-4 px-2 text-right font-bold text-slate-900">{formatRD(p > 0 ? valor : 0)}</td>
+                            </tr>
+                          );
+                        })}
+                      </>
+                    );
+                  })()}
+                </tbody>
+              </table>
+            );
+          })()}
 
           {orden.estado === "ANULADA" && (
             <div className="mt-4 mb-8 p-6 border-2 border-destructive/20 bg-destructive/5 rounded-2xl text-center animate-in fade-in slide-in-from-top-4 duration-500">

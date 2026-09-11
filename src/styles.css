@@ -433,10 +433,14 @@ body.pos-mode .main-header {
 /* Hover e Indicador de Abierto en el Botón */
 .order-actions.action-menu > button:hover,
 .order-actions.action-menu.is-open > button,
+.order-actions.action-menu > button[data-state="open"],
 .order-actions .action-menu > button:hover,
 .order-actions .action-menu.is-open > button,
+.order-actions .action-menu > button[data-state="open"],
 .action-menu > button:hover,
-.action-menu.is-open > button {
+.action-menu.is-open > button,
+.action-menu > button[data-state="open"],
+.action-menu button[data-state="open"] {
   border-color: #1B4B73;
   color: #ffffff !important;
   background: #1B4B73 !important;
@@ -446,10 +450,14 @@ body.pos-mode .main-header {
 
 .dark .order-actions.action-menu > button:hover,
 .dark .order-actions.action-menu.is-open > button,
+.dark .order-actions.action-menu > button[data-state="open"],
 .dark .order-actions .action-menu > button:hover,
 .dark .order-actions .action-menu.is-open > button,
+.dark .order-actions .action-menu > button[data-state="open"],
 .dark .action-menu > button:hover,
-.dark .action-menu.is-open > button {
+.dark .action-menu.is-open > button,
+.dark .action-menu > button[data-state="open"],
+.dark .action-menu button[data-state="open"] {
   border-color: #38bdf8;
   color: #0f172a !important;
   background: #38bdf8 !important;

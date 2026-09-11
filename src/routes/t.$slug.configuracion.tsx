@@ -48,7 +48,7 @@ import {
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
-  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine, Download
+  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine, Download, BadgePercent
 } from "lucide-react";
 import {
   encodeEscPos,
@@ -4463,7 +4463,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
             </div>
           </div>
           
-          <div className="grid gap-5 md:grid-cols-2">
+          <div className="grid gap-4 md:grid-cols-3">
             <Field label="ITBIS (%)" icon={Percent}>
               <Input 
                 className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
@@ -4483,12 +4483,34 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                 </div>
                 <div>
                   <span className="text-xs font-bold text-foreground block">Precios incluyen ITBIS</span>
-                  <p className="text-[11px] text-muted-foreground mt-0.5">Desglosar internamente el impuesto del total.</p>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Desglosar internamente el impuesto.</p>
                 </div>
               </div>
               <Switch 
                 checked={Boolean(cfg.itbis_incluido)} 
                 onCheckedChange={(v) => updateCfg({ itbis_incluido: v })} 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+
+            <div 
+              onClick={() => updateCfg({ mostrar_columna_itbis: !(cfg.mostrar_columna_itbis ?? true) })}
+              className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <BadgePercent className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-foreground block">Columna ITBIS en Ticket</span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {(cfg.mostrar_columna_itbis ?? true) ? "Mostrar columna de ITBIS" : "Ocultar columna de ITBIS"}
+                  </p>
+                </div>
+              </div>
+              <Switch 
+                checked={cfg.mostrar_columna_itbis ?? true} 
+                onCheckedChange={(v) => updateCfg({ mostrar_columna_itbis: v })} 
                 onClick={(e) => e.stopPropagation()}
               />
             </div>

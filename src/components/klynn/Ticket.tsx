@@ -94,8 +94,8 @@ export function Ticket({
   const vuelto = pagoRecibido && pagoRecibido > orden.total ? pagoRecibido - orden.total : 0;
 
   const hasFiscalModule = isModuleEnabled(tenant, "facturacion_fiscal");
-  // Se muestra la columna y fila de ITBIS si la orden tiene ITBIS cobrado (preservando órdenes históricas)
-  const mostrarColumnaItbis = Boolean(orden.itbis && orden.itbis > 0);
+  // Se muestra la columna y fila de ITBIS si la orden tiene ITBIS cobrado y la configuración lo permite
+  const mostrarColumnaItbis = Boolean(orden.itbis && orden.itbis > 0) && (cfg?.mostrar_columna_itbis ?? true);
 
   // Detección de comprobante electrónico (e-CF): respeta órdenes históricas ya emitidas
   const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
@@ -565,29 +565,43 @@ export function Ticket({
                     </div>
 
                     {/* Fila del servicio si tiene precio directo */}
-                    {p > 0 && (
-                      <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
-                        <div className="flex-1 min-w-0 pr-1">
-                          <div className="font-bold text-[10.5px]">
-                            Servicio {sName}
-                            {srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0 && (
-                              <span className="font-semibold text-black/70 text-[9.5px] ml-1">
-                                (Base {srv.piezas_incluidas} {srv.piezas_incluidas === 1 ? "pza" : "pzs"})
-                              </span>
-                            )}
+                    {p > 0 && (() => {
+                      let srvItbis = 0;
+                      let srvValor = p;
+                      if (orden.itbis > 0) {
+                        if (isItbisIncluidoEnEstaOrden) {
+                          srvItbis = p - (p / (1 + (cfg?.itbis_porcentaje || 18) / 100));
+                          srvValor = mostrarColumnaItbis ? (p - srvItbis) : p;
+                        } else {
+                          srvItbis = p * ((cfg?.itbis_porcentaje || 18) / 100);
+                        }
+                      }
+                      const srvUnit = isItbisIncluidoEnEstaOrden && orden.itbis > 0 && mostrarColumnaItbis ? srvValor : p;
+
+                      return (
+                        <div className="flex justify-between items-start py-1 border-b border-dotted border-black/30 font-medium">
+                          <div className="flex-1 min-w-0 pr-1">
+                            <div className="font-bold text-[10.5px]">
+                              Servicio {sName}
+                              {srv?.permite_piezas_adicionales && (srv?.piezas_incluidas || 0) > 0 && (
+                                <span className="font-semibold text-black/70 text-[9.5px] ml-1">
+                                  (Base {srv.piezas_incluidas} {srv.piezas_incluidas === 1 ? "pza" : "pzs"})
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(srvUnit)}</div>
                           </div>
-                          <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">1 × {formatNumber(p)}</div>
-                        </div>
-                        {mostrarColumnaItbis && (
-                          <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
-                            {orden.itbis > 0 ? formatNumber(p * ((cfg?.itbis_porcentaje || 18) / 100)) : "0.00"}
+                          {mostrarColumnaItbis && (
+                            <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">
+                              {orden.itbis > 0 ? formatNumber(srvItbis) : "0.00"}
+                            </div>
+                          )}
+                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>
+                            {formatNumber(srvValor)}
                           </div>
-                        )}
-                        <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>
-                          {formatNumber(p)}
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Desgloses de prendas debajo del servicio */}
                     <div className="divide-y divide-dotted divide-black/30">
@@ -598,10 +612,15 @@ export function Ticket({
                         if (orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
                           if (isItbisIncluidoEnEstaOrden) {
                             itemItbis = baseTotal - (baseTotal / (1 + (cfg?.itbis_porcentaje || 18) / 100));
+                            valor = mostrarColumnaItbis ? (baseTotal - itemItbis) : baseTotal;
                           } else {
                             itemItbis = baseTotal * ((cfg?.itbis_porcentaje || 18) / 100);
                           }
                         }
+
+                        const unitPriceDisplay = isItbisIncluidoEnEstaOrden && orden.itbis > 0 && !it.is_exento && it.cantidad > 0 && mostrarColumnaItbis
+                          ? (valor / it.cantidad)
+                          : (it.precio_unitario || 0);
 
                         const cleanDesc = it.descripcion.replace(/^↳\s*/, "");
                         const cantPrefix = it.cantidad > 1 ? `${it.cantidad}x ` : "";
@@ -614,7 +633,7 @@ export function Ticket({
                               </div>
                               {(it.precio_unitario || 0) > 0 && (
                                 <div className="text-[9px] text-black/80 font-semibold tabular-nums">
-                                  {it.cantidad} × {formatNumber(it.precio_unitario)}
+                                  {it.cantidad} × {formatNumber(unitPriceDisplay)}
                                 </div>
                               )}
                               {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
@@ -661,13 +680,19 @@ export function Ticket({
                       let baseTotal = it.cantidad * it.precio_unitario;
                       let itemItbis = 0;
                       let valor = baseTotal;
-                      if (orden.itbis > 0) {
+                      if (orden.itbis > 0 && !it.is_exento && baseTotal > 0) {
                         if (isItbisIncluidoEnEstaOrden) {
                           itemItbis = baseTotal - (baseTotal / (1 + (cfg?.itbis_porcentaje || 18) / 100));
+                          valor = mostrarColumnaItbis ? (baseTotal - itemItbis) : baseTotal;
                         } else {
                           itemItbis = baseTotal * ((cfg?.itbis_porcentaje || 18) / 100);
                         }
                       }
+
+                      const unitPriceDisplay = isItbisIncluidoEnEstaOrden && orden.itbis > 0 && !it.is_exento && it.cantidad > 0 && mostrarColumnaItbis
+                        ? (valor / it.cantidad)
+                        : (it.precio_unitario || 0);
+
                       return (
                         <div key={'suelto'+i} className="flex justify-between items-start py-1">
                           <div className="flex-1 min-w-0 pr-1">
@@ -675,14 +700,16 @@ export function Ticket({
                             {it.servicio_origen && (
                               <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
                             )}
-                            <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatNumber(it.precio_unitario)}</div>
+                            {(it.precio_unitario || 0) > 0 && (
+                              <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatNumber(unitPriceDisplay)}</div>
+                            )}
                             {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>
                           {mostrarColumnaItbis && (
                             <div className="w-[20%] text-right font-semibold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10px]">{itemItbis > 0 ? formatNumber(itemItbis) : "0.00"}</div>
                           )}
-                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>{formatNumber(valor)}</div>
+                          <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 font-bold pt-0.5 tabular-nums tracking-tight whitespace-nowrap text-[10.5px]`}>{baseTotal > 0 ? formatNumber(valor) : "—"}</div>
                         </div>
                       );
                     })}
@@ -718,7 +745,7 @@ export function Ticket({
           <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
         </div>
 
-        {mostrarColumnaItbis && orden.itbis > 0 && (
+        {orden.itbis > 0 && (
           <div className="flex justify-between items-center gap-2">
             <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Landmark className="h-3.5 w-3.5 shrink-0 text-black" />
