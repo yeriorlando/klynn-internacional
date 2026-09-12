@@ -270,8 +270,7 @@ function ConversationsPage() {
 
   const isDarkTheme = typeof document !== 'undefined' && document.documentElement.classList.contains('dark');
   const wa = tenant?.config?.whatsapp;
-  const { data: globalCfg } = useGlobalConfig();
-  const engine = globalCfg?.whatsapp_engine || "klynn_connect";
+  const engine = wa?.provider || globalCfg?.whatsapp_engine || "klynn_connect";
   const isKlynnConnect = engine === "klynn_connect";
 
   const getProxiedUrl = (url: string, msgId?: string) => {

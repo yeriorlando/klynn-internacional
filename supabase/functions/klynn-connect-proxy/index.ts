@@ -119,6 +119,8 @@ serve(async (req) => {
           instanceName,
           qrcode: true,
           integration: 'WHATSAPP-BAILEYS',
+          rejectCall: false,
+          msgRetryCounterCache: true,
         }),
       })
 
@@ -145,6 +147,25 @@ serve(async (req) => {
         })
       } catch (err) {
         console.error('Error auto-setting webhook for instance:', instanceName, err)
+      }
+
+      // Configuración de protección anti-ban en Evolution API
+      try {
+        await fetch(`${serverUrl}/settings/set/${instanceName}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            rejectCall: false,
+            msgRetryCounterCache: true,
+            groupsIgnore: true,
+            alwaysOnline: false,
+            readMessages: true,
+            readStatus: false,
+            syncFullHistory: false,
+          }),
+        }).catch(() => {})
+      } catch (err) {
+        console.error('Error auto-setting anti-ban settings for instance:', instanceName, err)
       }
 
       if (createData?.qrcode?.base64) {
@@ -199,9 +220,29 @@ serve(async (req) => {
             instanceName,
             qrcode: true,
             integration: 'WHATSAPP-BAILEYS',
+            rejectCall: false,
+            msgRetryCounterCache: true,
           }),
         })
         const recreateData = await recreateRes.json().catch(() => ({}))
+
+        // Configuración de protección anti-ban
+        try {
+          await fetch(`${serverUrl}/settings/set/${instanceName}`, {
+            method: 'POST',
+            headers,
+            body: JSON.stringify({
+              rejectCall: false,
+              msgRetryCounterCache: true,
+              groupsIgnore: true,
+              alwaysOnline: false,
+              readMessages: true,
+              readStatus: false,
+              syncFullHistory: false,
+            }),
+          }).catch(() => {})
+        } catch (_) {}
+
         if (recreateData?.qrcode?.base64) {
           return new Response(JSON.stringify({
             ok: true,
@@ -316,7 +357,7 @@ serve(async (req) => {
 
     // 5. ENVIAR MENSAJE DE TEXTO
     if (action === 'send_message') {
-      const { number, text } = body
+      const { number, text, delay } = body
       if (!number || !text) {
         return new Response(JSON.stringify({ ok: false, error: 'Falta number o text' }), {
           status: 400,
@@ -326,12 +367,31 @@ serve(async (req) => {
 
       const cleanNumber = String(number).replace(/\D/g, '')
 
+      // Anti-ban: Simulación de tipeo humano con delay y presencia 'composing'
+      const simulatedDelay = typeof delay === 'number' && delay >= 0
+        ? delay
+        : Math.floor(1200 + Math.random() * 800)
+
+      try {
+        // Enviar presencia de 'composing' de forma no bloqueante a Evolution API
+        fetch(`${serverUrl}/chat/sendPresence/${instanceName}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            presence: 'composing',
+            delay: simulatedDelay,
+          }),
+        }).catch(() => {})
+      } catch (_) {}
+
       const sendRes = await fetch(`${serverUrl}/message/sendText/${instanceName}`, {
         method: 'POST',
         headers,
         body: JSON.stringify({
           number: cleanNumber,
           text: text,
+          delay: simulatedDelay,
+          linkPreview: false,
         }),
       })
 
@@ -350,8 +410,23 @@ serve(async (req) => {
 
     // 6. ENVIAR MEDIA (IMAGEN, AUDIO, PDF, DOCUMENTO)
     if (action === 'send_media') {
-      const { number, mediaUrl, mediaType, caption, fileName } = body
+      const { number, mediaUrl, mediaType, caption, fileName, delay } = body
       const cleanNumber = String(number).replace(/\D/g, '')
+
+      const simulatedDelay = typeof delay === 'number' && delay >= 0
+        ? delay
+        : Math.floor(1500 + Math.random() * 1000)
+
+      try {
+        fetch(`${serverUrl}/chat/sendPresence/${instanceName}`, {
+          method: 'POST',
+          headers,
+          body: JSON.stringify({
+            presence: mediaType === 'audio' ? 'recording' : 'composing',
+            delay: simulatedDelay,
+          }),
+        }).catch(() => {})
+      } catch (_) {}
 
       let cleanMedia = mediaUrl || ''
       if (typeof cleanMedia === 'string' && cleanMedia.includes(';base64,')) {
@@ -365,6 +440,7 @@ serve(async (req) => {
           body: JSON.stringify({
             number: cleanNumber,
             audio: cleanMedia,
+            delay: simulatedDelay,
           }),
         })
         const sendData = await sendRes.json().catch(() => ({}))
@@ -395,6 +471,7 @@ serve(async (req) => {
           mediatype: mediatype,
           caption: caption || '',
           fileName: fileName || (mediatype === 'document' ? 'documento.pdf' : 'imagen.png'),
+          delay: simulatedDelay,
         }),
       })
       const sendData = await sendRes.json().catch(() => ({}))

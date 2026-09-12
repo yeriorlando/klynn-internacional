@@ -48,7 +48,8 @@ import {
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
   FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
-  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine, Download, BadgePercent
+  Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine, Download, BadgePercent,
+  ChevronDown, ChevronUp
 } from "lucide-react";
 import {
   encodeEscPos,
@@ -3065,7 +3066,6 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   const { data: plans = [] } = usePlans();
   const { data: globalCfg } = useGlobalConfig();
   const engine = globalCfg?.whatsapp_engine || "klynn_connect";
-  const isKlynnConnect = engine === "klynn_connect";
   const instanceName = wa.instance || getKlynnConnectInstanceName(tenant);
 
   const [draft, setDraft] = useState<WhatsAppConfig>(() => {
@@ -3084,6 +3084,11 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
       plantilla_sin_retirar: wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar,
     };
   });
+
+  const currentProvider = draft.provider || engine || "klynn_connect";
+  const isKlynnConnect = currentProvider === "klynn_connect";
+  const isMetaCloud = currentProvider === "meta_cloud";
+  const isWASender = currentProvider === "wasender";
 
   const [testPhone, setTestPhone] = useState(tenant.telefono || "");
   const [sending, setSending] = useState(false);
@@ -3275,6 +3280,241 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     };
   }, []);
 
+  // Estados y Handlers Meta Cloud API Oficial
+  const [testingMeta, setTestingMeta] = useState(false);
+  const [showManualMeta, setShowManualMeta] = useState(false);
+  const [connectingMeta, setConnectingMeta] = useState(false);
+  const embeddedInfoRef = useRef<{ phone_number_id?: string; waba_id?: string }>({});
+
+  useEffect(() => {
+    const handleMsg = (event: MessageEvent) => {
+      if (typeof event.origin === "string" && !event.origin.includes("facebook.com")) return;
+      try {
+        const data = typeof event.data === "string" ? JSON.parse(event.data) : event.data;
+        console.log("[Meta Embedded Signup event]:", data);
+        if (data?.type === "WA_EMBEDDED_SIGNUP") {
+          if (data.event === "FINISH") {
+            const { phone_number_id, waba_id } = data.data || {};
+            if (phone_number_id || waba_id) {
+              embeddedInfoRef.current = { phone_number_id, waba_id };
+            }
+          }
+        }
+      } catch (_) {}
+    };
+    window.addEventListener("message", handleMsg);
+    return () => window.removeEventListener("message", handleMsg);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const appId = globalCfg?.meta_app_id || import.meta.env.VITE_META_APP_ID;
+    if (!appId) return;
+
+    if ((window as any).FB) {
+      try {
+        (window as any).FB.init({
+          appId,
+          cookie: true,
+          xfbml: true,
+          version: "v21.0",
+        });
+      } catch (_) {}
+      return;
+    }
+
+    (window as any).fbAsyncInit = function () {
+      (window as any).FB.init({
+        appId,
+        cookie: true,
+        xfbml: true,
+        version: "v21.0",
+      });
+    };
+
+    if (!document.getElementById("facebook-jssdk")) {
+      const js = document.createElement("script");
+      js.id = "facebook-jssdk";
+      js.src = "https://connect.facebook.net/es_LA/sdk.js";
+      document.body.appendChild(js);
+    }
+  }, [globalCfg?.meta_app_id]);
+
+  const handleMetaEmbeddedSignup = () => {
+    const appId = globalCfg?.meta_app_id || import.meta.env.VITE_META_APP_ID;
+    const configId = globalCfg?.meta_config_id || import.meta.env.VITE_META_CONFIG_ID;
+
+    if (!appId) {
+      toast.info("Configura el Meta App ID en el panel de Superadmin (/admin) o ingresa tus credenciales directas de Meta abajo.");
+      setShowManualMeta(true);
+      return;
+    }
+
+    if (!(window as any).FB) {
+      toast.error("El SDK de Facebook aún no ha cargado en tu navegador. Intenta en unos segundos o usa la vinculación manual abajo.");
+      return;
+    }
+
+    // Asegurar que FB esté inicializado
+    try {
+      (window as any).FB.init({
+        appId,
+        cookie: true,
+        xfbml: false,
+        version: "v21.0",
+      });
+    } catch (_) {}
+
+    setConnectingMeta(true);
+
+    // Timer de seguridad: si el popup fue bloqueado por el navegador o no abre en 7 segundos
+    const timer = setTimeout(() => {
+      setConnectingMeta(false);
+      toast.error("No se abrió la ventana de Meta. Revisa si tu navegador (Brave/Chrome) bloqueó la ventana emergente en la barra de URL o usa las credenciales manuales abajo.", { duration: 9000 });
+    }, 7000);
+
+    try {
+      (window as any).FB.login(
+        (response: any) => {
+          clearTimeout(timer);
+          console.log("[Meta Embedded Signup] FB.login response:", response);
+          (async () => {
+            try {
+              const authCode = response.authResponse?.code;
+              if (!authCode) {
+                setConnectingMeta(false);
+                toast.info("Registro de Meta cancelado");
+                return;
+              }
+
+              const secret = globalCfg?.meta_app_secret || import.meta.env.VITE_META_APP_SECRET || "";
+              if (!secret) {
+                toast.error("Falta configurar la Clave Secreta de Meta (App Secret) en /admin. Configúrala y vuelve a intentar.", { id: "meta-signup", duration: 6000 });
+                setConnectingMeta(false);
+                return;
+              }
+
+              toast.loading("Procesando conexión con Meta...", { id: "meta-signup" });
+
+              const phoneIdCandidate = embeddedInfoRef.current.phone_number_id || draft.meta_phone_number_id || "";
+              const wabaIdCandidate = embeddedInfoRef.current.waba_id || draft.meta_waba_id || "";
+
+              const res = await fetch(`https://api.klynn.com.do/functions/v1/meta-cloud-proxy?action=exchange_code`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  code: authCode,
+                  app_id: appId,
+                  app_secret: secret,
+                  phone_number_id: phoneIdCandidate,
+                  waba_id: wabaIdCandidate,
+                }),
+              });
+
+              const data = await res.json().catch(() => ({}));
+
+              if (data.ok && data.access_token) {
+                const phoneId = data.phone_number_id || phoneIdCandidate;
+                const wabaId = data.waba_id || wabaIdCandidate;
+                const displayPhone = data.phone || "";
+                const verifiedName = data.verified_name || "";
+
+                const updated: WhatsAppConfig = {
+                  ...draft,
+                  provider: "meta_cloud",
+                  meta_access_token: data.access_token,
+                  meta_phone_number_id: phoneId,
+                  meta_waba_id: wabaId,
+                  meta_phone_number: displayPhone || draft.meta_phone_number || "",
+                  meta_verified_name: verifiedName || draft.meta_verified_name || tenant.nombre,
+                  meta_status: "connected",
+                  enabled: true,
+                };
+                setDraft(updated);
+                saveWA(updated);
+                toast.success("¡WhatsApp Oficial de Meta conectado con éxito! 🎉", { id: "meta-signup" });
+              } else {
+                toast.error(data.error || "No se pudo completar el registro con Meta", { id: "meta-signup" });
+              }
+            } catch (err: any) {
+              console.error("[Meta Signup error]:", err);
+              toast.error(err.message || "Error al conectar con Meta", { id: "meta-signup" });
+            } finally {
+              setConnectingMeta(false);
+            }
+          })();
+        },
+        {
+          config_id: configId,
+          response_type: "code",
+          override_default_response_type: true,
+          extras: {
+            setup: {},
+            sessionInfoVersion: "3",
+          },
+        }
+      );
+    } catch (err: any) {
+      clearTimeout(timer);
+      setConnectingMeta(false);
+      console.error("[FB.login error]:", err);
+      toast.error("Error al abrir Facebook: " + (err?.message || err));
+    }
+  };
+
+  const handleVerifyManualMeta = async () => {
+    if (!draft.meta_phone_number_id || !draft.meta_access_token) {
+      toast.error("Ingresa el Phone Number ID y el Access Token de Meta");
+      return;
+    }
+    setTestingMeta(true);
+    try {
+      const res = await fetch(`https://api.klynn.com.do/functions/v1/meta-cloud-proxy?action=test_connection`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone_number_id: draft.meta_phone_number_id,
+          access_token: draft.meta_access_token,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || !data.ok) {
+        toast.error(data.error || "Credenciales de Meta inválidas o expiradas");
+      } else {
+        const updated: WhatsAppConfig = {
+          ...draft,
+          provider: "meta_cloud",
+          meta_status: "connected",
+          meta_phone_number: data.phone || draft.meta_phone_number || draft.meta_phone_number_id,
+          meta_verified_name: data.verified_name || draft.meta_verified_name,
+          enabled: true,
+        };
+        setDraft(updated);
+        saveWA(updated);
+        toast.success(`¡Conectado exitosamente con Meta Cloud! ${data.phone ? `Número: ${data.phone}` : ""}`);
+      }
+    } catch (e: any) {
+      toast.error(e.message || "Error al verificar conexión con Meta");
+    } finally {
+      setTestingMeta(false);
+    }
+  };
+
+  const handleDisconnectMeta = () => {
+    const updated: WhatsAppConfig = {
+      ...draft,
+      meta_status: "disconnected",
+      meta_access_token: "",
+      meta_phone_number_id: "",
+      meta_waba_id: "",
+      meta_phone_number: "",
+      meta_verified_name: "",
+    };
+    setDraft(updated);
+    saveWA(updated);
+    toast.success("WhatsApp Meta Cloud desvinculado");
+  };
+
   async function probar() {
     if (!testPhone) {
       toast.error("Ingresa un número para enviar la prueba");
@@ -3282,14 +3522,19 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     }
     setSending(true);
     saveWA(draft);
+    const currentTenant = { ...tenant, config: { ...tenant.config, whatsapp: draft } };
     const r = await sendTestWhatsAppMessage(
-      tenant,
+      currentTenant,
       testPhone,
       `*Prueba de Conexión Klynn*\n\n¡Hola! Tu WhatsApp ha sido configurado correctamente en *${tenant.nombre}*. Ya puedes enviar recibos y avisos automáticos a tus clientes.`
     );
     setSending(false);
-    if (r.ok) toast.success("¡Mensaje de prueba enviado con éxito! ✓");
-    else toast.error("Error al enviar: " + (r.reason || "desconocido"));
+    if (r.ok) {
+      toast.success("¡Mensaje de prueba enviado con éxito! ✓");
+    } else {
+      const msg = typeof r.reason === "string" ? r.reason : "Error al procesar el envío";
+      toast.error(msg);
+    }
   }
 
   if (!enabled) {
@@ -3371,23 +3616,153 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
               </div>
               <div>
                 <h3 className="font-display font-bold text-lg text-foreground leading-tight">
-                  {isKlynnConnect ? "Klynn Connect — WhatsApp" : "Notificaciones por WhatsApp"}
+                  Notificaciones por WhatsApp
                 </h3>
                 <p className="text-xs text-muted-foreground mt-0.5">
-                  {isKlynnConnect 
-                    ? "Conexión nativa e instantánea para enviar tickets y avisos a tus clientes desde tu celular."
-                    : "Envía avisos automáticos a tus clientes desde tu propio número con WASenderAPI."}
+                  Elige cómo enviar tickets, recibos y avisos automáticos a tus clientes.
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-3 self-end sm:self-center">
               <span className="text-xs font-bold text-muted-foreground">Activar Notificaciones</span>
-              <Switch checked={draft.enabled} onCheckedChange={(v) => setDraft({ ...draft, enabled: v })} />
+              <Switch checked={draft.enabled} onCheckedChange={(v) => {
+                const updated = { ...draft, enabled: v };
+                setDraft(updated);
+                saveWA(updated);
+              }} />
+            </div>
+          </div>
+
+          {/* Selector de Método de Conexión */}
+          <div className="space-y-2.5">
+            <label className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Método de Conexión / Motor de Envío
+            </label>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              {/* Opción 1: Klynn Connect */}
+              <div 
+                onClick={() => {
+                  const updated: WhatsAppConfig = { ...draft, provider: "klynn_connect" };
+                  setDraft(updated);
+                  saveWA(updated);
+                }}
+                className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  currentProvider === "klynn_connect"
+                    ? "border-emerald-500 bg-emerald-50/30 dark:bg-emerald-950/20 shadow-xs"
+                    : "border-border/70 hover:border-slate-300 dark:hover:border-slate-700 bg-card"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center font-bold">
+                      <QrCode className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs md:text-sm font-bold text-foreground flex items-center gap-1.5">
+                        Klynn Connect
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
+                          Código QR
+                        </Badge>
+                      </h4>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="wa_provider"
+                    checked={currentProvider === "klynn_connect"}
+                    onChange={() => {}}
+                    className="accent-emerald-600 mt-1 cursor-pointer"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                  Conexión directa escaneando el código QR con tu celular. Sin costo por mensaje.
+                </p>
+              </div>
+
+              {/* Opción 2: Meta Cloud API Oficial */}
+              <div 
+                onClick={() => {
+                  const updated: WhatsAppConfig = { ...draft, provider: "meta_cloud" };
+                  setDraft(updated);
+                  saveWA(updated);
+                }}
+                className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  currentProvider === "meta_cloud"
+                    ? "border-blue-500 bg-blue-50/30 dark:bg-blue-950/20 shadow-xs"
+                    : "border-border/70 hover:border-slate-300 dark:hover:border-slate-700 bg-card"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
+                      <Globe className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs md:text-sm font-bold text-foreground flex items-center gap-1.5">
+                        Meta Cloud API
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-300 font-bold">
+                          Oficial • 0% Baneo
+                        </Badge>
+                      </h4>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="wa_provider"
+                    checked={currentProvider === "meta_cloud"}
+                    onChange={() => {}}
+                    className="accent-blue-600 mt-1 cursor-pointer"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                  WhatsApp Oficial de Meta en 1 clic. Cero riesgo de bloqueo y facturación directa con Meta.
+                </p>
+              </div>
+
+              {/* Opción 3: WASenderAPI */}
+              <div 
+                onClick={() => {
+                  const updated: WhatsAppConfig = { ...draft, provider: "wasender" };
+                  setDraft(updated);
+                  saveWA(updated);
+                }}
+                className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
+                  currentProvider === "wasender"
+                    ? "border-slate-600 bg-slate-50/50 dark:bg-slate-900/30 shadow-xs"
+                    : "border-border/70 hover:border-slate-300 dark:hover:border-slate-700 bg-card"
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-slate-500/15 text-slate-600 dark:text-slate-400 flex items-center justify-center font-bold">
+                      <Server className="h-4 w-4" />
+                    </div>
+                    <div>
+                      <h4 className="text-xs md:text-sm font-bold text-foreground flex items-center gap-1.5">
+                        WASenderAPI
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300">
+                          Externo
+                        </Badge>
+                      </h4>
+                    </div>
+                  </div>
+                  <input
+                    type="radio"
+                    name="wa_provider"
+                    checked={currentProvider === "wasender"}
+                    onChange={() => {}}
+                    className="accent-slate-600 mt-1 cursor-pointer"
+                  />
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
+                  Conexión mediante instancia externa de wasenderapi.com con tu propio API Token.
+                </p>
+              </div>
             </div>
           </div>
 
           {/* CUADRO DE CONEXIÓN KLYNN CONNECT */}
-          {isKlynnConnect ? (
+          {isKlynnConnect && (
             <div className="space-y-4">
               {kcStatus === "checking" ? (
                 <div className="p-5 sm:p-6 rounded-2xl border border-border/70 bg-muted/20 flex items-center gap-4">
@@ -3491,8 +3866,343 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                   </Button>
                 </div>
               )}
+
+              {/* Escudo Anti-Baneo y Buenas Prácticas */}
+              <div className="p-4 sm:p-5 rounded-2xl border border-emerald-500/20 bg-gradient-to-r from-emerald-50/50 via-emerald-50/20 to-transparent dark:from-emerald-950/25 dark:via-emerald-950/10 dark:to-transparent space-y-3">
+                <div className="flex items-start gap-3.5">
+                  <div className="h-9 w-9 rounded-xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 mt-0.5 border border-emerald-500/20">
+                    <ShieldCheck className="h-5 w-5" />
+                  </div>
+                  <div className="space-y-1 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h4 className="text-sm font-bold text-foreground">
+                        Escudo Anti-Baneo Klynn Connect Activo
+                      </h4>
+                      <Badge variant="outline" className="bg-emerald-100/80 text-emerald-800 dark:bg-emerald-900/60 dark:text-emerald-300 border-emerald-300 text-[10px] font-bold">
+                        <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1 animate-pulse" />
+                        Protección Inteligente
+                      </Badge>
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Tus envíos están blindados con <strong>simulación de presencia humana (tipeo natural)</strong>, <strong>delays variables anti-detección</strong> y <strong>mensajes dinámicos con NCF</strong> para evitar que WhatsApp clasifique tu cuenta como bot de spam.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="grid gap-2 sm:grid-cols-2 text-[11px] text-muted-foreground border-t border-emerald-500/10 pt-2.5">
+                  <div className="flex items-start gap-2">
+                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                    <span><strong>Usa tu número oficial habitual:</strong> Evita conectar chips nuevos sin historial de chats previos.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                    <span><strong>Invitación a agendar:</strong> Tus tickets invitan al cliente a guardar tu contacto, desactivando el botón de reportar.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                    <span><strong>100% Transaccional:</strong> No envíes cadenas de promociones o publicidad no solicitada desde este número.</span>
+                  </div>
+                  <div className="flex items-start gap-2">
+                    <span className="text-emerald-500 font-bold shrink-0">✓</span>
+                    <span><strong>Espaciado inteligente:</strong> Los avisos masivos de ropa lista y sin retirar se envían con pausas humanas seguras.</span>
+                  </div>
+                </div>
+              </div>
             </div>
-          ) : (
+          )}
+
+          {/* CUADRO DE CONEXIÓN META CLOUD API (OFICIAL) */}
+          {isMetaCloud && (
+            <div className="space-y-5">
+              {draft.meta_status === "connected" && draft.meta_access_token ? (
+                /* Estado Conectado Oficial Meta */
+                <div className="p-6 rounded-2xl border border-blue-500/30 bg-blue-50/20 dark:bg-blue-950/20 space-y-4 shadow-sm">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <div className="h-12 w-12 rounded-2xl bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center border border-blue-500/20 shadow-xs shrink-0">
+                        <Globe className="h-6 w-6" />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline" className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 text-[10px] font-bold px-2 py-0.5 uppercase tracking-wide">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block mr-1.5 animate-pulse" />
+                            Meta WhatsApp Conectado
+                          </Badge>
+                          <Badge variant="outline" className="bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border-blue-200 text-[10px] font-bold">
+                            0% Riesgo de Baneo
+                          </Badge>
+                        </div>
+                        <h4 className="text-base font-bold text-foreground mt-1">
+                          {draft.meta_verified_name || tenant.nombre}
+                        </h4>
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          Línea verificada: <span className="font-mono font-bold text-foreground">{draft.meta_phone_number || draft.meta_phone_number_id}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="rounded-xl h-9 text-xs font-bold border-border hover:bg-muted cursor-pointer"
+                        disabled={testingMeta}
+                        onClick={handleVerifyManualMeta}
+                      >
+                        {testingMeta ? (
+                          <>
+                            <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" />
+                            Verificando...
+                          </>
+                        ) : (
+                          <>
+                            <RefreshCw className="h-3.5 w-3.5 mr-1.5" />
+                            Comprobar Estado
+                          </>
+                        )}
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="rounded-xl h-9 text-xs font-bold text-red-600 hover:bg-red-50 dark:hover:bg-red-950/50 cursor-pointer"
+                        onClick={handleDisconnectMeta}
+                      >
+                        <Unlink className="h-3.5 w-3.5 mr-1.5" />
+                        Desvincular
+                      </Button>
+                    </div>
+                  </div>
+
+                  <div className="grid sm:grid-cols-2 gap-3 pt-2 text-xs border-t border-blue-500/20 text-muted-foreground">
+                    <div className="bg-background/60 p-3 rounded-xl border border-border/50">
+                      <span className="font-bold text-foreground block text-[11px] uppercase tracking-wider mb-0.5">Phone Number ID</span>
+                      <span className="font-mono text-xs select-all text-foreground">{draft.meta_phone_number_id || "Vinculado automáticamente"}</span>
+                    </div>
+                    <div className="bg-background/60 p-3 rounded-xl border border-border/50">
+                      <span className="font-bold text-foreground block text-[11px] uppercase tracking-wider mb-0.5">WABA ID (Cuenta Comercial)</span>
+                      <span className="font-mono text-xs select-all text-foreground">{draft.meta_waba_id || "Registrado en Meta Business"}</span>
+                    </div>
+                  </div>
+
+                  {/* Facturación Directa Note */}
+                  <div className="p-3.5 rounded-xl bg-blue-50/60 dark:bg-blue-950/40 border border-blue-200/70 dark:border-blue-900/60 text-xs text-blue-900 dark:text-blue-200 flex items-start gap-2.5">
+                    <ShieldCheck className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <strong className="block font-bold">Facturación Directa de Meta Activa (Opción 1)</strong>
+                      <p className="text-[11.5px] leading-relaxed text-blue-800 dark:text-blue-300">
+                        Tienes <strong>1,000 conversaciones de servicio al cliente al mes gratuitas</strong> provistas por Meta. Los cargos por conversaciones adicionales se cobran directamente a la tarjeta de crédito de tu Facebook Business Manager. Klynn no aplica ningún recargo adicional.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Estado Desconectado - Embedded Signup + Manual */
+                <div className="space-y-4">
+                  <div className="p-6 md:p-8 rounded-2xl border border-blue-500/20 bg-gradient-to-br from-blue-50/50 via-background to-indigo-50/30 dark:from-blue-950/20 dark:via-background dark:to-indigo-950/20 space-y-6 shadow-sm">
+                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                      <div className="space-y-1.5 max-w-xl">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 font-bold text-[10px]">
+                            RECOMENDADO PARA EMPRESAS
+                          </Badge>
+                          <Badge variant="outline" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 font-bold text-[10px]">
+                            0% RIESGO DE BANEO
+                          </Badge>
+                        </div>
+                        <h4 className="text-lg md:text-xl font-bold text-foreground">
+                          Conectar WhatsApp Oficial con Meta Cloud API
+                        </h4>
+                        <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
+                          Vincula tu número directamente a los servidores de WhatsApp Cloud API. Envía recibos digitales y avisos de entrega con máxima entregabilidad y sin riesgo de bloqueos.
+                        </p>
+                      </div>
+
+                      {/* BOTÓN EMBEDDED SIGNUP (FACEBOOK LOGIN 1-CLIC) */}
+                      <div className="shrink-0 flex flex-col items-start md:items-end gap-2">
+                        <Button
+                          type="button"
+                          onClick={handleMetaEmbeddedSignup}
+                          disabled={connectingMeta}
+                          className="bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold h-12 px-6 rounded-xl shadow-md flex items-center gap-2.5 cursor-pointer text-sm"
+                        >
+                          {connectingMeta ? (
+                            <>
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <span>Conectando con Facebook...</span>
+                            </>
+                          ) : (
+                            <>
+                              <svg className="h-4 w-4 fill-white" viewBox="0 0 24 24">
+                                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                              </svg>
+                              <span>Conectar con Facebook</span>
+                            </>
+                          )}
+                        </Button>
+                        <span className="text-[11px] text-muted-foreground">
+                          Configuración en 1 Clic (Embedded Signup)
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Explicación de Cobro Directo de Meta */}
+                    <div className="p-4 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs space-y-1.5">
+                      <div className="flex items-center gap-2 font-bold text-blue-900 dark:text-blue-200">
+                        <CreditCard className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+                        <span>Facturación Directa de Meta (Opción 1)</span>
+                      </div>
+                      <p className="text-muted-foreground text-[11.5px] leading-relaxed">
+                        Meta te otorga <strong>1,000 conversaciones de servicio al cliente al mes sin costo</strong>. Si superas esa cuota, Meta cobrará los centavos correspondientes directamente a tu tarjeta de crédito registrada en tu cuenta de Facebook / Meta Business. Klynn no cobra intermediación ni recargos por mensaje.
+                      </p>
+                    </div>
+
+                    {/* Opción Manual Alternativa */}
+                    <div className="border-t border-border/60 pt-4">
+                      <button
+                        type="button"
+                        onClick={() => setShowManualMeta(!showManualMeta)}
+                        className="text-xs font-bold text-primary hover:underline flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Key className="h-3.5 w-3.5" />
+                        <span>{showManualMeta ? "Ocultar configuración manual de credenciales" : "¿Prefieres configurar credenciales de Meta Developers manualmente?"}</span>
+                        {showManualMeta ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                      </button>
+
+                      {showManualMeta && (
+                        <div className="mt-4 p-5 rounded-xl border border-border/80 bg-background space-y-4 animate-in fade-in duration-200">
+                          {/* Datos para configurar Webhook en developers.facebook.com */}
+                          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Globe className="h-4 w-4 text-[#1B4B73] dark:text-[#38bdf8]" />
+                              <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                                Datos requeridos para el Webhook en developers.facebook.com
+                              </span>
+                            </div>
+                            <p className="text-[11.5px] text-muted-foreground leading-relaxed">
+                              En tu panel de Meta Developers (<strong>WhatsApp &gt; Configuración de producción &gt; Configurar Webhooks</strong>), copia y pega estos dos valores:
+                            </p>
+
+                            <div className="grid gap-3 md:grid-cols-2 pt-1">
+                              <div className="space-y-1.5">
+                                <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                  URL de devolución de llamada
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    readOnly
+                                    value="https://api.klynn.com.do/functions/v1/meta-cloud-proxy"
+                                    className="h-9 text-xs font-mono bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white text-slate-700 dark:text-slate-300"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText("https://api.klynn.com.do/functions/v1/meta-cloud-proxy");
+                                      toast.success("URL de devolución de llamada copiada");
+                                    }}
+                                    className="h-9 px-3 shrink-0 rounded-lg cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 font-bold"
+                                  >
+                                    <Copy className="h-3.5 w-3.5 mr-1" />
+                                    <span className="text-xs">Copiar</span>
+                                  </Button>
+                                </div>
+                              </div>
+
+                              <div className="space-y-1.5">
+                                <Label className="text-[11px] font-bold text-slate-600 dark:text-slate-300">
+                                  Token de verificación
+                                </Label>
+                                <div className="flex items-center gap-2">
+                                  <Input
+                                    readOnly
+                                    value="klynn_webhook_secret"
+                                    className="h-9 text-xs font-mono bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white text-slate-700 dark:text-slate-300"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => {
+                                      navigator.clipboard.writeText("klynn_webhook_secret");
+                                      toast.success("Token de verificación copiado");
+                                    }}
+                                    className="h-9 px-3 shrink-0 rounded-lg cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 font-bold"
+                                  >
+                                    <Copy className="h-3.5 w-3.5 mr-1" />
+                                    <span className="text-xs">Copiar</span>
+                                  </Button>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-muted-foreground pt-1">
+                            Ingresa las credenciales de tu aplicación en <strong>developers.facebook.com</strong>:
+                          </div>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <Field label="Phone Number ID" hint="Identificador de número en WhatsApp Cloud API" icon={Smartphone}>
+                              <Input
+                                className={`${FIELD} pl-10.5 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white`}
+                                placeholder="Ej: 104829105829104"
+                                value={draft.meta_phone_number_id || ""}
+                                onChange={(e) => setDraft({ ...draft, meta_phone_number_id: e.target.value })}
+                              />
+                            </Field>
+
+                            <Field label="WhatsApp Business Account ID (WABA ID)" hint="Opcional" icon={Building2}>
+                              <Input
+                                className={`${FIELD} pl-10.5 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white`}
+                                placeholder="Ej: 204918291029102"
+                                value={draft.meta_waba_id || ""}
+                                onChange={(e) => setDraft({ ...draft, meta_waba_id: e.target.value })}
+                              />
+                            </Field>
+
+                            <Field label="Token de Acceso Permanente (System User Token)" hint="Generado en Meta Business Suite con permiso whatsapp_business_messaging" icon={Key} span>
+                              <Input
+                                type="password"
+                                className={`${FIELD} pl-10.5 rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white`}
+                                placeholder="EAAB..."
+                                value={draft.meta_access_token || ""}
+                                onChange={(e) => setDraft({ ...draft, meta_access_token: e.target.value })}
+                              />
+                            </Field>
+                          </div>
+
+                          <div className="flex justify-end gap-3 pt-2">
+                            <Button
+                              type="button"
+                              onClick={handleVerifyManualMeta}
+                              disabled={testingMeta}
+                              className="rounded-xl font-bold h-10 px-5 bg-blue-600 hover:bg-blue-700 text-white cursor-pointer shadow-xs"
+                            >
+                              {testingMeta ? (
+                                <>
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin mr-2" />
+                                  Verificando con Meta...
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle2 className="h-3.5 w-3.5 mr-2" />
+                                  Verificar y Vincular
+                                </>
+                              )}
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Campos de Conexión Manual WASenderAPI */}
+          {isWASender && (
             /* Campos de Conexión Manual WASenderAPI */
             <div className="space-y-5">
               <div className="grid gap-5 md:grid-cols-2">

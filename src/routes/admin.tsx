@@ -170,6 +170,7 @@ function AdminPage() {
   const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
   const [openPlan, setOpenPlan] = useState(false);
   const [openBank, setOpenBank] = useState(false);
+  const [openMetaConfig, setOpenMetaConfig] = useState(false);
 
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [tenantForInvoices, setTenantForInvoices] = useState<Tenant | null>(null);
@@ -2957,8 +2958,16 @@ function AdminPage() {
                     <div className="h-10 w-10 rounded-xl bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20 shadow-2xs group-hover:scale-105 transition-transform">
                       <MessageCircle className="h-5 w-5" />
                     </div>
-                    <Badge variant="outline" className={`text-[10px] font-bold px-2 py-0.5 ${(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300' : 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border-blue-300'}`}>
-                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect' ? "⚡ Klynn Connect" : "☁️ WASender"}
+                    <Badge variant="outline" className={`text-[10px] font-bold px-2 py-0.5 ${
+                      (globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
+                        ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300'
+                        : ((globalConfig.whatsapp_engine as string) === 'meta_cloud'
+                          ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border-blue-300'
+                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300')
+                    }`}>
+                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
+                        ? "⚡ Klynn Connect"
+                        : ((globalConfig.whatsapp_engine as string) === 'meta_cloud' ? "🌐 Meta Cloud" : "☁️ WASender")}
                     </Badge>
                   </div>
 
@@ -2969,13 +2978,15 @@ function AdminPage() {
                     <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
                       {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
                         ? "Conexión nativa con código QR en wa.klynn.com.do para envío de tickets, recibos y avisos automáticos sin costo por mensaje."
-                        : "Envío mediante API en la nube con API Key e ID de instancia personalizada."}
+                        : ((globalConfig.whatsapp_engine as string) === 'meta_cloud'
+                          ? "API Oficial de Meta WhatsApp Cloud con 0% riesgo de baneo, conexión en 1 clic y facturación directa con Meta."
+                          : "Envío mediante API en la nube con API Key e ID de instancia personalizada.")}
                     </p>
                   </div>
                 </div>
 
                 <div className="pt-4 mt-4 border-t border-border/50 space-y-2.5">
-                  <div className="grid grid-cols-2 gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/50">
+                  <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-xl border border-border/50">
                     <button
                       type="button"
                       onClick={async () => {
@@ -2985,13 +2996,30 @@ function AdminPage() {
                         await saveGlobalConfig(updated);
                         toast.success("⚡ Klynn Connect activado como motor WhatsApp");
                       }}
-                      className={`text-[11px] font-bold py-1.5 px-2 rounded-lg transition-all cursor-pointer text-center ${
+                      className={`text-[10px] font-bold py-1.5 px-1 rounded-lg transition-all cursor-pointer text-center ${
                         (globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      ⚡ Klynn Connect
+                      ⚡ Klynn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        if (globalConfig.whatsapp_engine === 'meta_cloud') return;
+                        const updated = { ...globalConfig, whatsapp_engine: 'meta_cloud' as const };
+                        setGlobalConfig(updated);
+                        await saveGlobalConfig(updated);
+                        toast.success("🌐 Meta Cloud API activado como motor WhatsApp");
+                      }}
+                      className={`text-[10px] font-bold py-1.5 px-1 rounded-lg transition-all cursor-pointer text-center ${
+                        globalConfig.whatsapp_engine === 'meta_cloud'
+                          ? 'bg-blue-600 text-white shadow-xs'
+                          : 'text-muted-foreground hover:text-foreground'
+                      }`}
+                    >
+                      🌐 Meta
                     </button>
                     <button
                       type="button"
@@ -3002,15 +3030,26 @@ function AdminPage() {
                         await saveGlobalConfig(updated);
                         toast.success("☁️ WASenderAPI activado como motor WhatsApp");
                       }}
-                      className={`text-[11px] font-bold py-1.5 px-2 rounded-lg transition-all cursor-pointer text-center ${
+                      className={`text-[10px] font-bold py-1.5 px-1 rounded-lg transition-all cursor-pointer text-center ${
                         globalConfig.whatsapp_engine === 'wasender'
-                          ? 'bg-blue-600 text-white shadow-xs'
+                          ? 'bg-slate-700 text-white shadow-xs'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      ☁️ WASenderAPI
+                      ☁️ WASender
                     </button>
                   </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setOpenMetaConfig(true)}
+                    className="w-full text-[11px] h-8 rounded-xl font-bold border-border/80 hover:bg-muted/80 flex items-center justify-center gap-1.5 cursor-pointer"
+                  >
+                    <Globe className="h-3.5 w-3.5 text-blue-600" />
+                    <span>Configurar Meta App ID</span>
+                  </Button>
                 </div>
               </Card>
 
@@ -3948,6 +3987,7 @@ function AdminPage() {
       />
       <PlanDialog open={openPlan} onOpenChange={setOpenPlan} initial={editingPlan} onSaved={() => { setTick((r) => r + 1); setOpenPlan(false); }} />
       <BankDetailsDialog open={openBank} onOpenChange={setOpenBank} config={globalConfig} onSaved={() => { setTick((r) => r + 1); setOpenBank(false); }} />
+      <MetaConfigDialog open={openMetaConfig} onOpenChange={setOpenMetaConfig} config={globalConfig} onSaved={() => { setTick((r) => r + 1); setOpenMetaConfig(false); }} />
       <LicenciaDialog open={openLicenciaModal} onOpenChange={setOpenLicenciaModal} initial={editingLicencia} onSaved={() => { setTick(r => r + 1); setOpenLicenciaModal(false); }} />
 
       <AlertDialog open={!!deleteLicencia} onOpenChange={(o) => !o && setDeleteLicencia(null)}>
@@ -4871,6 +4911,107 @@ function BankDetailsDialog({ open, onOpenChange, config, onSaved }: {
             Cancelar
           </Button>
           <Button onClick={submit} className="bg-primary text-white rounded-xl font-bold shadow-md">Guardar Datos</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function MetaConfigDialog({ open, onOpenChange, config, onSaved }: {
+  open: boolean; onOpenChange: (o: boolean) => void; config: GlobalConfig; onSaved: () => void;
+}) {
+  const [appId, setAppId] = useState(config.meta_app_id || "");
+  const [configId, setConfigId] = useState(config.meta_config_id || "");
+  const [appSecret, setAppSecret] = useState(config.meta_app_secret || "");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setAppId(config.meta_app_id || "");
+      setConfigId(config.meta_config_id || "");
+      setAppSecret(config.meta_app_secret || "");
+    }
+  }, [open, config]);
+
+  async function submit() {
+    setSaving(true);
+    try {
+      const next = { 
+        ...config, 
+        meta_app_id: appId.trim(), 
+        meta_config_id: configId.trim(),
+        meta_app_secret: appSecret.trim()
+      };
+      await saveGlobalConfig(next);
+      toast.success("Credenciales de Meta App guardadas con éxito");
+      onSaved();
+    } catch (e: any) {
+      toast.error(e.message || "Error al guardar configuración de Meta");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-card">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Globe className="h-5 w-5 text-blue-600" /> WhatsApp Meta Cloud API
+          </DialogTitle>
+          <p className="text-xs text-muted-foreground">
+            Configuración global de tu aplicación de Meta para habilitar el botón "Conectar con Facebook" (Embedded Signup) en todas las lavanderías.
+          </p>
+        </DialogHeader>
+        <div className="grid gap-4 py-4">
+          <div className="space-y-2">
+            <Label className="text-xs font-bold">Meta App ID</Label>
+            <Input 
+              value={appId} 
+              onChange={(e) => setAppId(e.target.value)} 
+              placeholder="Ej: 145982019482019" 
+              className="rounded-xl h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white" 
+            />
+            <p className="text-[11px] text-muted-foreground">ID de la aplicación en developers.facebook.com</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-bold">Clave Secreta de la App (App Secret)</Label>
+            <Input 
+              type="password"
+              value={appSecret} 
+              onChange={(e) => setAppSecret(e.target.value)} 
+              placeholder="Ej: a94f8e7b..." 
+              className="rounded-xl h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white" 
+            />
+            <p className="text-[11px] text-muted-foreground">Clave secreta en Configuración básica de tu app (se usa para intercambiar el token de acceso)</p>
+          </div>
+          <div className="space-y-2">
+            <Label className="text-xs font-bold">Configuration ID (Embedded Signup)</Label>
+            <Input 
+              value={configId} 
+              onChange={(e) => setConfigId(e.target.value)} 
+              placeholder="Ej: 928374910293847" 
+              className="rounded-xl h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white" 
+            />
+            <p className="text-[11px] text-muted-foreground">ID de la configuración de inicio de sesión de Facebook para empresas.</p>
+          </div>
+        </div>
+        <DialogFooter>
+          <Button
+            type="button"
+            onClick={() => onOpenChange(false)}
+            variant="outline"
+            className="rounded-xl h-10 px-4 font-bold cursor-pointer"
+          >
+            Cancelar
+          </Button>
+          <Button 
+            onClick={submit} 
+            disabled={saving}
+            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md cursor-pointer"
+          >
+            {saving ? "Guardando..." : "Guardar Meta App"}
+          </Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>

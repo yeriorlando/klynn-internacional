@@ -230,9 +230,9 @@ function DashboardPage() {
         if (res.ok) enviados++;
         else errores++;
 
-        // Pausa anti-spam humanizada (2.5s - 3.5s) entre cada mensaje
+        // Pausa anti-spam humanizada con variación natural (6.5s - 11s) para proteger el número contra baneos de WhatsApp
         if (i < ordenesSinRetirar.length - 1) {
-          await delay(2500 + Math.random() * 1000);
+          await delay(6500 + Math.floor(Math.random() * 4500));
         }
       }
     }

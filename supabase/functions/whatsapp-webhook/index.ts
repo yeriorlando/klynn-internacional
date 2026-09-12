@@ -314,19 +314,22 @@ serve(async (req) => {
                     .select('bank_details')
                     .eq('id', 1)
                     .maybeSingle();
-                const activeProvider = globalConfig?.bank_details?.whatsapp_engine || 'klynn_connect';
+                const globalEngine = globalConfig?.bank_details?.whatsapp_engine || 'klynn_connect';
+                const tenantProvider = wa?.provider || globalEngine;
                 const incomingProvider = isWasender ? 'wasender' : 'klynn_connect';
 
-                // Solo el proveedor seleccionado en /admin puede alimentar la bandeja.
-                // Esto evita que dos webhooks activos inserten el mismo mensaje.
-                if (incomingProvider !== activeProvider) {
-                    console.log(`[whatsapp-webhook] Evento de ${incomingProvider} ignorado; proveedor activo: ${activeProvider}`);
+                // Si el tenant está usando este proveedor (o si el evento es de klynn_connect y el tenant no ha fijado wasender), lo procesamos
+                const isAllowedForTenant = (tenantProvider === incomingProvider) || 
+                    (incomingProvider === 'klynn_connect' && tenantProvider !== 'wasender');
+
+                if (!isAllowedForTenant) {
+                    console.log(`[whatsapp-webhook] Evento de ${incomingProvider} ignorado para tenant ${tenantId}; proveedor activo: ${tenantProvider}`);
                     return new Response('Inactive WhatsApp provider ignored.', { status: 200 });
                 }
 
-                const isKlynnConnectOpen = Boolean(wa?.enabled && wa?.klynn_connect_status === 'open');
+                const isKlynnConnectOpen = Boolean(wa?.enabled !== false && (wa?.klynn_connect_status === 'open' || wa?.is_connected || wa?.connected));
                 const isWasenderConnected = Boolean(wa?.enabled && wa?.is_connected);
-                const isActiveProviderConnected = activeProvider === 'klynn_connect'
+                const isActiveProviderConnected = incomingProvider === 'klynn_connect'
                     ? isKlynnConnectOpen
                     : isWasenderConnected;
 

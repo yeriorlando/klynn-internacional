@@ -3,7 +3,7 @@ import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAp
 
 type Evento = "creada" | "lista" | "en_camino" | "entregada" | "sin_retirar";
 
-export type WhatsAppProvider = "klynn_connect" | "wasender";
+export type WhatsAppProvider = "klynn_connect" | "meta_cloud" | "wasender";
 
 export type WhatsAppSendRequest = {
   text?: string;
@@ -31,8 +31,8 @@ function normalizePhoneRD(tel: string): string {
 
 /**
  * Único punto de salida para WhatsApp en el cliente.
- * El proveedor activo de /admin es la fuente de verdad y la pestaña WhatsApp
- * refleja esa misma selección. Nunca se decide el proveedor en el componente.
+ * El tenant puede tener su propio proveedor (ej. Meta Cloud API Oficial)
+ * o seguir la selección global de /admin (Klynn Connect / WASender).
  */
 export async function sendWhatsAppMessage(
   tenant: Tenant,
@@ -40,8 +40,8 @@ export async function sendWhatsAppMessage(
   request: WhatsAppSendRequest,
 ): Promise<WhatsAppSendResult> {
   const globalCfg = await getGlobalConfig();
-  const provider: WhatsAppProvider = globalCfg.whatsapp_engine || "klynn_connect";
   const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
+  const provider: WhatsAppProvider = wa.provider || globalCfg.whatsapp_engine || "klynn_connect";
   const phone = normalizePhoneRD(destPhone);
 
   if (!wa?.enabled) return { ok: false, provider, reason: "WhatsApp deshabilitado" };
@@ -70,15 +70,28 @@ export async function sendWhatsAppMessage(
             caption: request.caption || request.text || "",
             server_url: globalCfg.klynn_connect_url || "https://wa.klynn.com.do",
             api_key: globalCfg.klynn_connect_apikey,
+            delay: Math.floor(1200 + Math.random() * 800), // Simulación humana anti-ban
           }),
         },
       );
       const data = await res.json().catch(() => ({}));
       if (!res.ok || data.ok === false) {
+        let errStr = `Error en Klynn Connect (HTTP ${res.status})`;
+        if (typeof data.error === "string") {
+          errStr = data.error;
+        } else if (Array.isArray(data.error) && data.error[0]?.exists === false) {
+          errStr = "El número no tiene una cuenta de WhatsApp activa";
+        } else if (typeof data.error?.message === "string") {
+          errStr = data.error.message;
+        } else if (typeof data.message === "string") {
+          errStr = data.message;
+        } else if (data.error) {
+          errStr = typeof data.error === "object" ? JSON.stringify(data.error) : String(data.error);
+        }
         return {
           ok: false,
           provider,
-          reason: data.error || data.message || `HTTP ${res.status}`,
+          reason: errStr,
           data,
         };
       }
@@ -86,6 +99,45 @@ export async function sendWhatsAppMessage(
         ok: true,
         provider,
         messageId: data.data?.key?.id || data.key?.id || data.id,
+        data,
+      };
+    }
+
+    if (provider === "meta_cloud") {
+      const phoneNumberId = wa.meta_phone_number_id;
+      const accessToken = wa.meta_access_token;
+      if (!phoneNumberId || !accessToken) {
+        return { ok: false, provider, reason: "Credenciales de WhatsApp Meta Cloud no configuradas" };
+      }
+
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const res = await fetch(`${supabaseUrl}/functions/v1/meta-cloud-proxy?action=send_message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          phone_number_id: phoneNumberId,
+          access_token: accessToken,
+          to: phone,
+          text: request.text,
+          mediaUrl: request.mediaUrl,
+          mediaType: request.mediaType,
+          caption: request.caption || request.text || "",
+          fileName: request.fileName,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) {
+        return {
+          ok: false,
+          provider,
+          reason: data.error || data.message || `Error en Meta Cloud API (HTTP ${res.status})`,
+          data,
+        };
+      }
+      return {
+        ok: true,
+        provider,
+        messageId: data.messageId || data.messages?.[0]?.id || data.id,
         data,
       };
     }
@@ -348,10 +400,16 @@ export async function notificarWhatsApp(
     ticket_nota: tenant.config?.ticket_nota || "",
   });
 
+  let mensajeFinal = mensaje;
+  // Anti-ban: Incentivar al cliente a registrar el número para que WhatsApp oculte el botón de 'Reportar / Bloquear'
+  if (evento === "creada" && !mensajeFinal.toLowerCase().includes("guarda nuestro")) {
+    mensajeFinal += "\n\n💡 _Por favor guarda nuestro número en tus contactos para recibir avisos de tu ropa._";
+  }
+
   const phone = normalizePhoneRD(cliente.telefono);
 
   try {
-    const result = await sendWhatsAppMessage(tenant, phone, { text: mensaje });
+    const result = await sendWhatsAppMessage(tenant, phone, { text: mensajeFinal });
     if (!result.ok) return { ok: false, reason: result.reason };
     
     // 2. Incrementar contador en caso de éxito

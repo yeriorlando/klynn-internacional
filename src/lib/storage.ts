@@ -74,9 +74,12 @@ export interface GlobalConfig {
   defaultPlanId: PlanId;
   bankDetails?: BankDetails;
   requireEmployeeOtp?: boolean;
-  whatsapp_engine?: "klynn_connect" | "wasender";
+  whatsapp_engine?: "klynn_connect" | "meta_cloud" | "wasender";
   klynn_connect_url?: string;
   klynn_connect_apikey?: string;
+  meta_app_id?: string;
+  meta_config_id?: string;
+  meta_app_secret?: string;
   fiscal_environment_policy?: "per_tenant" | "TesteCF" | "CerteCF" | "eCF";
   standby_sync_frequency?: "1h" | "2h" | "4h" | "6h" | "12h" | "24h";
   standby_last_sync_at?: string;
@@ -266,11 +269,17 @@ export interface WhatsAppConfig {
   api_key: string;
   instance: string; // nombre de instancia WapiSender o Klynn Connect
   base_url?: string; // por defecto https://wasenderapi.com o https://wa.klynn.com.do
-  provider?: "klynn_connect" | "wasender";
+  provider?: "klynn_connect" | "meta_cloud" | "wasender";
   klynn_connect_status?: "open" | "close" | "connecting" | "disconnected";
   klynn_connect_phone?: string;
   klynn_connect_profile_pic?: string;
   klynn_connect_profile_name?: string;
+  meta_phone_number_id?: string;
+  meta_waba_id?: string;
+  meta_access_token?: string;
+  meta_phone_number?: string;
+  meta_verified_name?: string;
+  meta_status?: "connected" | "disconnected" | "expired";
   notif_orden_creada: boolean;
   notif_orden_lista: boolean;
   notif_orden_entregada: boolean;
@@ -927,9 +936,11 @@ export const DEFAULT_CONFIG: TenantConfig = {
 ✅ *Estado:* {estado}
 
 {ticket_pie}
-{ticket_nota}`,
+{ticket_nota}
+
+💡 _Por favor guarda nuestro contacto para recibir las alertas y el estatus de tus prendas._`,
     plantilla_lista:
-      "Hola 👋, {cliente} ✨, tu orden {numero} de:\n\n{detalle}\n\nEn {lavanderia} ya está LISTA para retirar. ¡Te esperamos!",
+      "Hola 👋, {cliente} ✨, tu orden {numero} de:\n\n{detalle}\n\nEn {lavanderia} ya está LISTA para retirar. ¡Te esperamos!\n\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._",
     plantilla_entregada:
       "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
     plantilla_sin_retirar:
@@ -2153,6 +2164,8 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   whatsapp_engine: "klynn_connect",
   klynn_connect_url: "https://wa.klynn.com.do",
   klynn_connect_apikey: "klynn_evolution_secret_key_2026",
+  meta_app_id: "",
+  meta_config_id: "",
   fiscal_environment_policy: "per_tenant",
   standby_sync_frequency: "2h",
   standby_last_sync_status: "OK",
@@ -2193,6 +2206,18 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
           bank?.klynn_connect_apikey ??
           (data as any)?.klynn_connect_apikey ??
           DEFAULT_GLOBAL_CONFIG.klynn_connect_apikey,
+        meta_app_id:
+          bank?.meta_app_id ??
+          (data as any)?.meta_app_id ??
+          DEFAULT_GLOBAL_CONFIG.meta_app_id,
+        meta_config_id:
+          bank?.meta_config_id ??
+          (data as any)?.meta_config_id ??
+          DEFAULT_GLOBAL_CONFIG.meta_config_id,
+        meta_app_secret:
+          bank?.meta_app_secret ??
+          (data as any)?.meta_app_secret ??
+          "",
         fiscal_environment_policy:
           (data as any)?.fiscal_environment_policy ??
           DEFAULT_GLOBAL_CONFIG.fiscal_environment_policy,
@@ -2227,6 +2252,9 @@ export async function saveGlobalConfig(config: GlobalConfig) {
       whatsapp_engine: config.whatsapp_engine || "klynn_connect",
       klynn_connect_url: config.klynn_connect_url || "https://wa.klynn.com.do",
       klynn_connect_apikey: config.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+      meta_app_id: config.meta_app_id || "",
+      meta_config_id: config.meta_config_id || "",
+      meta_app_secret: config.meta_app_secret || "",
       standby_sync_frequency: config.standby_sync_frequency || "2h",
       standby_last_sync_at: config.standby_last_sync_at,
       standby_last_sync_duration: config.standby_last_sync_duration || "14s",
