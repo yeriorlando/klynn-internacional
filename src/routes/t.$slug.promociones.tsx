@@ -205,7 +205,7 @@ function PromocionesPage() {
     setValorDescuento(p.valor_descuento || 0);
     setNxmCompra(p.nxm_compra || 3);
     setNxmGratis(p.nxm_gratis || 1);
-    setNxmPorcentaje(p.nxm_porcentaje !== undefined ? p.nxm_porcentaje : 100);
+    setNxmPorcentaje(p.nxm_porcentaje !== undefined && p.nxm_porcentaje !== null ? p.nxm_porcentaje : 100);
     setTipoAplicacion(p.tipo_aplicacion);
     setCategoriasSel(p.categorias || []);
     setServiciosSel(p.servicios || []);

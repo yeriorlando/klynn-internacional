@@ -9,8 +9,11 @@ CREATE TABLE IF NOT EXISTS public.promociones (
   tenant_id UUID NOT NULL REFERENCES public.tenants(id) ON DELETE CASCADE,
   nombre TEXT NOT NULL,
   descripcion TEXT,
-  tipo_descuento TEXT NOT NULL DEFAULT 'PORCENTAJE', -- 'PORCENTAJE' | 'MONTO_FIJO'
-  valor_descuento NUMERIC(10, 2) NOT NULL CHECK (valor_descuento >= 0),
+  tipo_descuento TEXT NOT NULL DEFAULT 'PORCENTAJE', -- 'PORCENTAJE' | 'MONTO_FIJO' | 'CANTIDAD_NXM'
+  valor_descuento NUMERIC(10, 2) NOT NULL DEFAULT 0 CHECK (valor_descuento >= 0),
+  nxm_compra INTEGER DEFAULT 3,                      -- Cantidad que compra (ej: 3 en 3x2)
+  nxm_gratis INTEGER DEFAULT 1,                      -- Cantidad bonificada (ej: 1 en 3x2)
+  nxm_porcentaje INTEGER DEFAULT 100,                -- % de descuento en prenda bonificada (100% = gratis)
   tipo_aplicacion TEXT NOT NULL DEFAULT 'TODA_LA_ORDEN', -- 'TODA_LA_ORDEN' | 'POR_CATEGORIA' | 'POR_SERVICIO' | 'POR_PRENDA'
   categorias TEXT[] DEFAULT '{}', -- Categorías del catálogo a las que aplica
   servicios TEXT[] DEFAULT '{}', -- Servicios a los que aplica

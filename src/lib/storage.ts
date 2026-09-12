@@ -452,9 +452,9 @@ export interface Promocion {
   descripcion?: string;
   tipo_descuento: "PORCENTAJE" | "MONTO_FIJO" | "CANTIDAD_NXM";
   valor_descuento: number;
-  nxm_compra?: number; // Cantidad de prendas que debe traer (ej. 3 para 3x2)
-  nxm_gratis?: number; // Cantidad de prendas bonificadas (ej. 1)
-  nxm_porcentaje?: number; // Porcentaje de descuento en prenda bonificada (default 100% = gratis)
+  nxm_compra?: number | null; // Cantidad de prendas que debe traer (ej. 3 para 3x2)
+  nxm_gratis?: number | null; // Cantidad de prendas bonificadas (ej. 1)
+  nxm_porcentaje?: number | null; // Porcentaje de descuento en prenda bonificada (default 100% = gratis)
   tipo_aplicacion: "TODA_LA_ORDEN" | "POR_CATEGORIA" | "POR_SERVICIO" | "POR_PRENDA";
   categorias?: string[];
   servicios?: string[];
@@ -6029,9 +6029,9 @@ export async function savePromocion(p: Partial<Promocion> & { tenant_id: string;
     descripcion: p.descripcion || "",
     tipo_descuento: p.tipo_descuento || "PORCENTAJE",
     valor_descuento: Number(p.valor_descuento || 0),
-    nxm_compra: p.nxm_compra ? Number(p.nxm_compra) : undefined,
-    nxm_gratis: p.nxm_gratis ? Number(p.nxm_gratis) : undefined,
-    nxm_porcentaje: p.nxm_porcentaje !== undefined ? Number(p.nxm_porcentaje) : undefined,
+    nxm_compra: p.nxm_compra !== undefined && p.nxm_compra !== null ? Number(p.nxm_compra) : null,
+    nxm_gratis: p.nxm_gratis !== undefined && p.nxm_gratis !== null ? Number(p.nxm_gratis) : null,
+    nxm_porcentaje: p.nxm_porcentaje !== undefined && p.nxm_porcentaje !== null ? Number(p.nxm_porcentaje) : null,
     tipo_aplicacion: p.tipo_aplicacion || "TODA_LA_ORDEN",
     categorias: p.categorias || [],
     servicios: p.servicios || [],
