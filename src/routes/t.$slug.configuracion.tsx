@@ -3155,14 +3155,10 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     }
   }, [isKlynnConnect, enabled, instanceName]);
 
-  // Iniciar vinculación y abrir modal QR
-  async function handleStartConnect() {
-    setLoadingQr(true);
-    setQrCodeBase64(null);
-    setQrModalOpen(true);
-
+  // Función auxiliar para obtener el QR rápidamente
+  async function fetchQrCode(): Promise<string | null> {
     try {
-      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
+      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=get_qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -3172,15 +3168,53 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         }),
       });
       const data = await res.json().catch(() => ({}));
-      if (data.ok) {
-        if (data.state === "open") {
-          setKcStatus("open");
-          setQrModalOpen(false);
-          toast.success("¡WhatsApp ya se encuentra conectado!");
-          return;
-        }
-        if (data.qrcode) {
-          setQrCodeBase64(data.qrcode.startsWith("data:") ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
+      if (data.ok && data.qrcode) {
+        return data.qrcode.startsWith("data:") ? data.qrcode : `data:image/png;base64,${data.qrcode}`;
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // Iniciar vinculación y abrir modal QR
+  async function handleStartConnect() {
+    setLoadingQr(true);
+    setQrCodeBase64(null);
+    setQrModalOpen(true);
+
+    try {
+      // 1. Intentar obtener el código QR de inmediato (rápido, ~500ms)
+      const quickQr = await fetchQrCode();
+      if (quickQr) {
+        setQrCodeBase64(quickQr);
+        setLoadingQr(false);
+      } else {
+        // 2. Si la instancia aún no emitió QR, asegurar creación/conexión
+        const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instance_name: instanceName,
+            server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+            api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+          }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (data.ok) {
+          if (data.state === "open") {
+            setKcStatus("open");
+            setQrModalOpen(false);
+            toast.success("¡WhatsApp ya se encuentra conectado!");
+            return;
+          }
+          if (data.qrcode) {
+            setQrCodeBase64(data.qrcode.startsWith("data:") ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
+          } else {
+            // Reintentar get_qr de inmediato tras inicializar
+            const retryQr = await fetchQrCode();
+            if (retryQr) {
+              setQrCodeBase64(retryQr);
+            }
+          }
         }
       }
     } catch (err) {
@@ -3209,6 +3243,16 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         const nextWa = { ...draft, enabled: true, instance: instanceName, klynn_connect_status: "open" as const };
         setDraft(nextWa);
         saveWA(nextWa);
+      } else {
+        // Si el modal sigue abierto pero aún no se ha dibujado el QR, reintentar silenciosamente
+        setQrCodeBase64((current) => {
+          if (!current) {
+            fetchQrCode().then((newQr) => {
+              if (newQr) setQrCodeBase64(newQr);
+            });
+          }
+          return current;
+        });
       }
     }, 2500);
   }
@@ -3217,18 +3261,21 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   async function handleRefreshQr() {
     setLoadingQr(true);
     try {
-      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=get_qr`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          instance_name: instanceName,
-          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
-          api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
-        }),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (data.ok && data.qrcode) {
-        setQrCodeBase64(data.qrcode.startsWith("data:") ? data.qrcode : `data:image/png;base64,${data.qrcode}`);
+      let qr = await fetchQrCode();
+      if (!qr) {
+        await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            instance_name: instanceName,
+            server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+            api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
+          }),
+        }).catch(() => ({}));
+        qr = await fetchQrCode();
+      }
+      if (qr) {
+        setQrCodeBase64(qr);
         toast.success("Código QR actualizado");
       }
     } catch (e) {
@@ -4409,8 +4456,8 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                 />
               ) : (
                 <div className="flex flex-col items-center justify-center space-y-2 py-8">
-                  <AlertTriangle className="h-7 w-7 text-amber-500" />
-                  <span className="text-[11px] text-muted-foreground font-medium">Esperando QR...</span>
+                  <Loader2 className="h-7 w-7 animate-spin text-emerald-600" />
+                  <span className="text-[11px] text-muted-foreground font-medium">Cargando QR...</span>
                 </div>
               )}
             </div>

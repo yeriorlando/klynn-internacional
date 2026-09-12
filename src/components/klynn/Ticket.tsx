@@ -784,6 +784,12 @@ export function Ticket({
           </div>
           <span className="font-black text-[14.5px] tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.total).replace("DOP", "RD$")}</span>
         </div>
+
+        {orden.descuento > 0 && (
+          <div className="mt-1.5 py-1 px-2 border border-dashed border-black rounded text-center text-[10.5px] font-bold leading-tight">
+            ¡Te ahorraste {formatRD(orden.descuento).replace("DOP", "RD$")} en esta orden!
+          </div>
+        )}
       </div>
 
       <Sep />

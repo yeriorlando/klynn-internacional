@@ -362,6 +362,23 @@ export async function notificarWhatsApp(
     templatePrepared = templatePrepared.replace(/^[^\n]*\bVencimiento:[^\n]*\n?/gim, "");
   }
 
+  const tieneDescuento = Boolean(orden.descuento && orden.descuento > 0);
+  const promoNombre = orden.promocion_nombre || "Descuento especial";
+  const descMonto = tieneDescuento ? formatRD(orden.descuento).replace("DOP", "RD$") : "RD$0.00";
+  const promoLinea = tieneDescuento ? `*Promo (${promoNombre}):* -${descMonto}\n` : "";
+  const promoAhorro = tieneDescuento ? `\n*¡Te ahorraste ${descMonto} en esta orden!*` : "";
+
+  if (tieneDescuento) {
+    // Si la plantilla no incluye explícitamente {descuento} o {promocion}, inyectar antes y después de TOTAL
+    if (!templatePrepared.includes("{descuento}") && !templatePrepared.includes("{promocion}")) {
+      if (templatePrepared.includes("*TOTAL:*")) {
+        templatePrepared = templatePrepared.replace(/([^\n]*\*TOTAL:\*[^\n]*)/, `${promoLinea}$1${promoAhorro}`);
+      } else if (templatePrepared.includes("{total}")) {
+        templatePrepared = templatePrepared.replace(/([^\n]*\{total\}[^\n]*)/, `${promoLinea}$1${promoAhorro}`);
+      }
+    }
+  }
+
   const diasAlmacenado = calcularDiasEnAlmacen(orden.creado_en);
 
   const mensaje = render(templatePrepared, {
@@ -384,6 +401,10 @@ export async function notificarWhatsApp(
     servicios: serviciosStr,
     detalle: detalleStr || "Ninguno",
     subtotal: formatRD(orden.subtotal || 0).replace("DOP", "RD$"),
+    descuento: descMonto,
+    promocion: promoNombre,
+    promocion_linea: promoLinea,
+    promocion_ahorro: promoAhorro,
     itbis: formatRD(orden.itbis || 0).replace("DOP", "RD$"),
     total: formatRD(orden.total || 0).replace("DOP", "RD$"),
     metodo_pago: orden.metodo_pago || "EFECTIVO",

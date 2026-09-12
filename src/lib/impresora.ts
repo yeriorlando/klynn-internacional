@@ -653,7 +653,13 @@ export function encodeEscPos(
 
     // TOTALES
     writeLine(formatRow("Subtotal:", `RD$${orden.subtotal.toFixed(2)}`, columns));
-    writeLine(formatRow(`ITBIS (${config.itbis_porcentaje ?? 18}%):`, `RD$${orden.itbis.toFixed(2)}`, columns));
+    if (orden.descuento && orden.descuento > 0) {
+      const promoLabel = orden.promocion_nombre ? `Promo (${orden.promocion_nombre}):` : "Descuento:";
+      writeLine(formatRow(promoLabel, `-RD$${orden.descuento.toFixed(2)}`, columns));
+    }
+    if (orden.itbis && orden.itbis > 0) {
+      writeLine(formatRow(`ITBIS (${config.itbis_porcentaje ?? 18}%):`, `RD$${orden.itbis.toFixed(2)}`, columns));
+    }
     if (perfil !== "basica") {
       bytes.push(...BOLD_ON);
       bytes.push(...FONT_DOUBLE);
@@ -662,6 +668,17 @@ export function encodeEscPos(
       bytes.push(...BOLD_OFF);
     } else {
       writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns));
+    }
+
+    // Mensaje de ahorro por promoción
+    if (orden.descuento && orden.descuento > 0) {
+      writeLine("-".repeat(columns));
+      bytes.push(...ALIGN_CENTER);
+      bytes.push(...BOLD_ON);
+      const ahorroTexto = `¡TE AHORRASTE RD$${orden.descuento.toFixed(2)} EN ESTA ORDEN!`;
+      writeLine(cleanText(ahorroTexto));
+      bytes.push(...BOLD_OFF);
+      bytes.push(...ALIGN_LEFT);
     }
     writeLine("-".repeat(columns));
 
