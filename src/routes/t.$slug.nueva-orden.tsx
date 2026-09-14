@@ -175,6 +175,14 @@ const OPCIONES_CREDITO = [
 ];
 
 
+// Normaliza nombres de prendas eliminando prefijos de tratamiento/desglose visual y sufijos
+function cleanItemName(desc: string): string {
+  return (desc || "")
+    .replace(/^↳\s*/, "")
+    .replace(/\s*\([^)]*\)$/, "")
+    .trim();
+}
+
 // ==================== COLOR SELECTOR & ITEM NOTES ====================
 
 const PRESET_COLORS = [
@@ -771,6 +779,7 @@ function NuevaOrdenPage() {
     const map = new Map<string, CatalogoItem>();
     for (const item of catalogo) {
       map.set(item.nombre, item);
+      map.set(item.nombre.toLowerCase(), item);
     }
     return map;
   }, [catalogo]);
@@ -887,7 +896,7 @@ function NuevaOrdenPage() {
     const todayStr = new Date().toISOString().split("T")[0];
 
     const automaticas = promocionesData.filter(
-      (p) => p.activo && p.es_automatica && !p.codigo_cupon
+      (p) => p.activo && p.es_automatica
     );
 
     const currentSubtotal = items.reduce((acc, it) => acc + it.cantidad * it.precio_unitario, 0);
@@ -907,22 +916,27 @@ function NuevaOrdenPage() {
         } else if (p.tipo_aplicacion === "POR_CATEGORIA") {
           const cats = (p.categorias || []).map((c) => c.toLowerCase());
           eligibleCount = items.filter((it) => {
-            const catItem = catalogoMap.get(it.descripcion);
+            const raw = cleanItemName(it.descripcion);
+            const catItem = catalogoMap.get(raw) || catalogoMap.get(raw.toLowerCase());
             return cats.includes((catItem?.categoria || "").toLowerCase());
           }).reduce((acc, it) => acc + it.cantidad, 0);
         } else if (p.tipo_aplicacion === "POR_SERVICIO") {
           const srvs = (p.servicios || []).map((s) => s.toLowerCase());
           eligibleCount = items.filter((it) => srvs.includes((it.servicio_origen || "").toLowerCase())).reduce((acc, it) => acc + it.cantidad, 0);
         } else if (p.tipo_aplicacion === "POR_PRENDA") {
-          const prendas = (p.prendas || []).map((pr) => pr.toLowerCase());
-          eligibleCount = items.filter((it) => prendas.includes(it.descripcion.toLowerCase())).reduce((acc, it) => acc + it.cantidad, 0);
+          const prendas = (p.prendas || []).map((pr) => pr.toLowerCase().trim());
+          eligibleCount = items.filter((it) => {
+            const raw = cleanItemName(it.descripcion).toLowerCase();
+            return prendas.includes(raw);
+          }).reduce((acc, it) => acc + it.cantidad, 0);
         }
         if (eligibleCount < nxmReq) continue;
       } else {
         if (p.tipo_aplicacion === "POR_CATEGORIA") {
           const cats = (p.categorias || []).map((c) => c.toLowerCase());
           const hasMatch = items.some((it) => {
-            const catItem = catalogoMap.get(it.descripcion);
+            const raw = cleanItemName(it.descripcion);
+            const catItem = catalogoMap.get(raw) || catalogoMap.get(raw.toLowerCase());
             return cats.includes((catItem?.categoria || "").toLowerCase());
           });
           if (!hasMatch) continue;
@@ -931,8 +945,11 @@ function NuevaOrdenPage() {
           const hasMatch = items.some((it) => srvs.includes((it.servicio_origen || "").toLowerCase()));
           if (!hasMatch) continue;
         } else if (p.tipo_aplicacion === "POR_PRENDA") {
-          const prendas = (p.prendas || []).map((pr) => pr.toLowerCase());
-          const hasMatch = items.some((it) => prendas.includes(it.descripcion.toLowerCase()));
+          const prendas = (p.prendas || []).map((pr) => pr.toLowerCase().trim());
+          const hasMatch = items.some((it) => {
+            const raw = cleanItemName(it.descripcion).toLowerCase();
+            return prendas.includes(raw);
+          });
           if (!hasMatch) continue;
         }
       }
@@ -1338,7 +1355,7 @@ function getMarbeteColorStyle(colorName?: string) {
   const itemCountsMap = useMemo(() => {
     const map: Record<string, number> = {};
     for (const it of items) {
-      const rawName = it.descripcion.replace("↳ ", "").replace(/\s*\([^)]*\)$/, "").trim();
+      const rawName = cleanItemName(it.descripcion);
       map[rawName] = (map[rawName] || 0) + it.cantidad;
     }
     return map;
@@ -1826,7 +1843,7 @@ function getMarbeteColorStyle(colorName?: string) {
     if (selectedPromo.tipo_descuento === "CANTIDAD_NXM") {
       const nxmCompra = Number(selectedPromo.nxm_compra || 3);
       const nxmGratis = Number(selectedPromo.nxm_gratis || 1);
-      const nxmPct = (selectedPromo.nxm_porcentaje !== undefined ? selectedPromo.nxm_porcentaje : 100) / 100;
+      const nxmPct = (selectedPromo.nxm_porcentaje !== undefined && selectedPromo.nxm_porcentaje !== null ? selectedPromo.nxm_porcentaje : 100) / 100;
 
       const eligiblePrices: number[] = [];
       if (selectedPromo.tipo_aplicacion === "TODA_LA_ORDEN") {
@@ -1838,7 +1855,8 @@ function getMarbeteColorStyle(colorName?: string) {
       } else if (selectedPromo.tipo_aplicacion === "POR_CATEGORIA") {
         const cats = (selectedPromo.categorias || []).map((c) => c.toLowerCase());
         for (const it of items) {
-          const catItem = catalogoMap.get(it.descripcion);
+          const raw = cleanItemName(it.descripcion);
+          const catItem = catalogoMap.get(raw) || catalogoMap.get(raw.toLowerCase());
           const itemCat = (catItem?.categoria || "").toLowerCase();
           if (cats.includes(itemCat)) {
             for (let i = 0; i < it.cantidad; i++) {
@@ -1857,9 +1875,10 @@ function getMarbeteColorStyle(colorName?: string) {
           }
         }
       } else if (selectedPromo.tipo_aplicacion === "POR_PRENDA") {
-        const prendas = (selectedPromo.prendas || []).map((p) => p.toLowerCase());
+        const prendas = (selectedPromo.prendas || []).map((p) => p.toLowerCase().trim());
         for (const it of items) {
-          if (prendas.includes(it.descripcion.toLowerCase())) {
+          const raw = cleanItemName(it.descripcion).toLowerCase();
+          if (prendas.includes(raw)) {
             for (let i = 0; i < it.cantidad; i++) {
               eligiblePrices.push(it.precio_unitario || 0);
             }
@@ -1899,7 +1918,8 @@ function getMarbeteColorStyle(colorName?: string) {
     } else if (selectedPromo.tipo_aplicacion === "POR_CATEGORIA") {
       const cats = (selectedPromo.categorias || []).map((c) => c.toLowerCase());
       for (const it of items) {
-        const catItem = catalogoMap.get(it.descripcion);
+        const raw = cleanItemName(it.descripcion);
+        const catItem = catalogoMap.get(raw) || catalogoMap.get(raw.toLowerCase());
         const itemCat = (catItem?.categoria || "").toLowerCase();
         if (cats.includes(itemCat)) {
           base += it.cantidad * it.precio_unitario;
@@ -1914,9 +1934,10 @@ function getMarbeteColorStyle(colorName?: string) {
         }
       }
     } else if (selectedPromo.tipo_aplicacion === "POR_PRENDA") {
-      const prendas = (selectedPromo.prendas || []).map((p) => p.toLowerCase());
+      const prendas = (selectedPromo.prendas || []).map((p) => p.toLowerCase().trim());
       for (const it of items) {
-        if (prendas.includes(it.descripcion.toLowerCase())) {
+        const raw = cleanItemName(it.descripcion).toLowerCase();
+        if (prendas.includes(raw)) {
           base += it.cantidad * it.precio_unitario;
         }
       }
@@ -1948,7 +1969,13 @@ function getMarbeteColorStyle(colorName?: string) {
   function addItem(it: OrdenItem) {
     setItems((arr) => {
       const idx = arr.findIndex(
-        (x) => x.descripcion === it.descripcion && x.precio_unitario === it.precio_unitario,
+        (x) =>
+          x.descripcion === it.descripcion &&
+          x.precio_unitario === it.precio_unitario &&
+          !x.color &&
+          !it.color &&
+          !x.notas &&
+          !it.notas,
       );
       if (idx > -1) {
         return arr.map((item, i) =>
@@ -1976,7 +2003,11 @@ function getMarbeteColorStyle(colorName?: string) {
         (x) =>
           x.descripcion === itemWithService.descripcion &&
           x.precio_unitario === itemWithService.precio_unitario &&
-          x.servicio_origen === itemWithService.servicio_origen,
+          x.servicio_origen === itemWithService.servicio_origen &&
+          !x.color &&
+          !itemWithService.color &&
+          !x.notas &&
+          !itemWithService.notas,
       );
       if (idx > -1) {
         return arr.map((item, i) =>
@@ -2324,7 +2355,7 @@ function getMarbeteColorStyle(colorName?: string) {
         numero,
         cliente_id: targetCliente.id,
         empleado_id: empleado.id,
-        servicios: serviciosSel,
+        servicios: Array.from(new Set(serviciosSel)),
         servicios_precios: serviciosSel.reduce(
           (acc, sName) => {
             const prendasConPrecio = items.filter(
@@ -3322,35 +3353,59 @@ function getMarbeteColorStyle(colorName?: string) {
                                         return;
                                       }
 
-                                      // 4. Prenda estándar (1 tratamiento o precio base) en SERVICIOS_PRIMERO con servicio previo:
-                                      const lastService = serviciosSel.length > 0 ? serviciosSel[serviciosSel.length - 1] : "";
-                                      if (cfg?.pos_modalidad_operativa === "SERVICIOS_PRIMERO" && lastService && enableServicios) {
-                                        const srvObj = serviciosData.find(s => s.nombre.toLowerCase() === lastService.toLowerCase() || s.id === lastService);
-                                        const matchedPrice = (lastService && item.precios_servicios?.[lastService] !== undefined)
-                                          ? Number(item.precios_servicios[lastService])
-                                          : (srvObj && item.precios_servicios?.[srvObj.id] !== undefined)
-                                            ? Number(item.precios_servicios[srvObj.id])
-                                            : (item.precio || 0);
+                                      // 4. Prenda con EXACTAMENTE 1 tratamiento -> Auto-asignar el tratamiento y servicio (1 solo clic inteligente)
+                                      if (srvPrices.length === 1) {
+                                        const [srvKey, srvPrice] = srvPrices[0];
+                                        const finalPrice = Number(srvPrice);
+                                        const srvObj = serviciosData.find(
+                                          (s) => s.id === srvKey || s.nombre.toLowerCase() === srvKey.toLowerCase()
+                                        );
+                                        const canonicalServiceName = srvObj ? srvObj.nombre : srvKey;
+                                        const targetService = desgloseServiceName || canonicalServiceName;
 
-                                        addItemDesglose({
-                                          descripcion: `↳ ${item.nombre}`,
-                                          cantidad: 1,
-                                          precio_unitario: matchedPrice,
-                                          es_libra: item.por_libra || false,
-                                          is_exento: !!item.is_exento,
-                                          servicio_origen: lastService,
+                                        setServiciosSel((prev) => {
+                                          if (!prev.some((x) => x.toLowerCase() === targetService.toLowerCase())) {
+                                            return [...prev, targetService];
+                                          }
+                                          return prev;
                                         });
+
+                                        setItems((arr) => {
+                                          const itemDesc = `↳ ${item.nombre}`;
+                                          const idx = arr.findIndex(
+                                            (x) =>
+                                              x.descripcion === itemDesc &&
+                                              x.precio_unitario === finalPrice &&
+                                              (x.servicio_origen || "").toLowerCase() === targetService.toLowerCase() &&
+                                              !x.color &&
+                                              !x.notas,
+                                          );
+                                          if (idx > -1) {
+                                            return arr.map((it, i) =>
+                                              i === idx ? { ...it, cantidad: it.cantidad + 1 } : it,
+                                            );
+                                          }
+                                          return [
+                                            ...arr,
+                                            {
+                                              descripcion: itemDesc,
+                                              cantidad: 1,
+                                              precio_unitario: finalPrice,
+                                              servicio_origen: targetService,
+                                              es_libra: item.por_libra || false,
+                                              is_exento: !!item.is_exento,
+                                            },
+                                          ];
+                                        });
+                                        toast.success(`${item.nombre} agregado a ${targetService} ✨`);
                                         return;
                                       }
 
-                                      // 5. En modo FLEXIBLE (o PRENDAS_CON_SERVICIOS):
-                                      // La prenda tiene precio directo (ej. GORRA RD$110.00, CARTERA PEQUEÑA RD$300.00).
-                                      // Se factura DIRECTAMENTE como prenda, SIN crear cajas de servicio fantasma arriba y SIN ↳.
-                                      const directPrice = srvPrices.length === 1 ? Number(srvPrices[0][1]) : (item.precio || 0);
+                                      // 5. Prenda SIN tratamientos: se añade la prenda sola sin más (precio directo/base)
                                       addItem({
                                         descripcion: item.nombre,
                                         cantidad: 1,
-                                        precio_unitario: directPrice,
+                                        precio_unitario: item.precio || 0,
                                         es_libra: item.por_libra || false,
                                         is_exento: !!item.is_exento,
                                       });
@@ -3386,12 +3441,10 @@ function getMarbeteColorStyle(colorName?: string) {
                                       <div className="mt-1 text-sm sm:text-base font-display font-extrabold text-primary tracking-tight">
                                         {cfg?.pos_modalidad_operativa === "SOLO_PRENDAS" ? (
                                           formatRD(item.precio)
-                                        ) : srvPrices.length > 1 ? (
+                                        ) : srvPrices.length > 0 ? (
                                           <span className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                                            {srvPrices.length} servicios
+                                            {srvPrices.length === 1 ? "1 servicio" : `${srvPrices.length} servicios`}
                                           </span>
-                                        ) : srvPrices.length === 1 ? (
-                                          formatRD(Number(srvPrices[0][1]))
                                         ) : (
                                           formatRD(item.precio)
                                         )}
@@ -3815,7 +3868,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                         />
                                       )}
                                       <Palette className="h-3.5 w-3.5 shrink-0" />
-                                      <span>Color / Nota</span>
+                                      <span>{it.color || "Color / Nota"}</span>
                                     </button>
                                   </div>
 
@@ -3981,7 +4034,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   />
                                 )}
                                 <Palette className="h-3.5 w-3.5 shrink-0" />
-                                <span>Color / Nota</span>
+                                <span>{it.color || "Color / Nota"}</span>
                               </button>
                             </div>
 
@@ -4864,7 +4917,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   />
                                 )}
                                 <Palette className="h-3.5 w-3.5 shrink-0" />
-                                <span>{it.color || it.notas ? "Color / Nota" : "+ Color / Nota"}</span>
+                                <span>{it.color || (it.notas ? "Color / Nota" : "+ Color / Nota")}</span>
                               </button>
                             </div>
                             <div className="text-xs text-muted-foreground">
@@ -6143,7 +6196,9 @@ function getMarbeteColorStyle(colorName?: string) {
                     (x) =>
                       x.descripcion === itemDesc &&
                       x.precio_unitario === finalPrice &&
-                      (x.servicio_origen || "").toLowerCase() === targetService.toLowerCase(),
+                      (x.servicio_origen || "").toLowerCase() === targetService.toLowerCase() &&
+                      !x.color &&
+                      !x.notas,
                   );
                   if (idx > -1) {
                     return arr.map((item, i) =>
@@ -7391,6 +7446,47 @@ function getMarbeteColorStyle(colorName?: string) {
             </p>
           </DialogHeader>
 
+          {/* Si la prenda tiene cantidad > 1, permitir separarla en piezas individuales para distintos colores */}
+          {editingItemIndex !== null && items[editingItemIndex] && items[editingItemIndex].cantidad > 1 && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl flex items-center justify-between gap-3 my-2">
+              <div className="text-xs">
+                <div className="font-bold text-amber-800 dark:text-amber-300 flex items-center gap-1.5">
+                  <Split className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-400" />
+                  Prenda múltiple ({items[editingItemIndex].cantidad} piezas)
+                </div>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 mt-0.5">
+                  ¿Son de distintos colores? Divídelas en prendas individuales para asignar un color a cada una.
+                </p>
+              </div>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="shrink-0 rounded-xl text-xs font-bold border-amber-500/40 text-amber-900 hover:bg-amber-500/20 dark:text-amber-200 dark:border-amber-600"
+                onClick={() => {
+                  const currentItem = items[editingItemIndex];
+                  const count = currentItem.cantidad;
+                  const newItems: OrdenItem[] = Array.from({ length: count }, (_, idx) => ({
+                    ...currentItem,
+                    cantidad: 1,
+                    color: idx === 0 ? itemEditColor || currentItem.color : undefined,
+                    color_hex: idx === 0 ? itemEditColorHex || currentItem.color_hex : undefined,
+                    notas: idx === 0 ? itemEditNota || currentItem.notas : undefined,
+                  }));
+                  setItems((prev) => {
+                    const copy = [...prev];
+                    copy.splice(editingItemIndex, 1, ...newItems);
+                    return copy;
+                  });
+                  setShowItemDetailModal(false);
+                  toast.success(`Se separó en ${count} prendas individuales para configurar sus colores ✨`);
+                }}
+              >
+                Separar prendas
+              </Button>
+            </div>
+          )}
+
           <div className="space-y-4 my-2">
             {/* Selector de Color */}
             <div>
@@ -8225,7 +8321,7 @@ function AddItemDialog({
       });
       return;
     }
-    const existingIdx = items.findIndex((x) => x.descripcion === it.nombre);
+    const existingIdx = items.findIndex((x) => x.descripcion === it.nombre && !x.color && !x.notas);
     if (existingIdx > -1) {
       onUpdateQty(existingIdx, 1);
     } else {

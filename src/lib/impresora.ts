@@ -507,7 +507,8 @@ export function encodeEscPos(
     const itemsDesglosados = orden.items.filter(it => it.descripcion.startsWith("↳"));
 
     if (orden.servicios && orden.servicios.length > 0) {
-      orden.servicios.forEach((sName) => {
+      const uniqueServicios = Array.from(new Set(orden.servicios));
+      uniqueServicios.forEach((sName) => {
         bytes.push(...BOLD_ON);
         writeLine(cleanText(`[ ${sName.toUpperCase()} ]`));
         bytes.push(...BOLD_OFF);
@@ -617,7 +618,8 @@ export function encodeEscPos(
 
     // Renderizar servicios asociados con sus desgloses
     if (orden.servicios && orden.servicios.length > 0) {
-      orden.servicios.forEach((sName) => {
+      const uniqueServicios = Array.from(new Set(orden.servicios));
+      uniqueServicios.forEach((sName) => {
         const srv = serviciosList.find((x) => x.nombre === sName);
         const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
         if (p > 0) {
@@ -632,14 +634,18 @@ export function encodeEscPos(
         misPrendas.forEach(it => {
           const sub = it.cantidad * it.precio_unitario;
           const subStr = sub > 0 ? `RD$${sub.toFixed(2)}` : "---";
-          writeLine(formatRow(`  ${it.cantidad}x ${it.descripcion.replace(/^↳\s*/, "")}`, subStr, columns));
+          const desc = it.descripcion.replace(/^↳\s*/, "");
+          writeLine(formatRow(`  ${it.cantidad}x ${desc}`, subStr, columns));
+          if (it.color) {
+            writeLine(cleanText(`    Color: ${it.color}`));
+          }
         });
       });
     }
 
     // Renderizar prendas sueltas
     itemsSueltos.forEach((it) => {
-      const cantDesc = `${it.cantidad}x ${it.descripcion}${it.color ? ` [${it.color}]` : ""}`;
+      const cantDesc = `${it.cantidad}x ${it.descripcion}`;
       const sub = it.cantidad * it.precio_unitario;
       const subStr = `RD$${sub.toFixed(2)}`;
       if (cantDesc.length + subStr.length + 1 > columns) {
@@ -647,6 +653,9 @@ export function encodeEscPos(
         writeLine(formatRow("", subStr, columns));
       } else {
         writeLine(formatRow(cantDesc, subStr, columns));
+      }
+      if (it.color) {
+        writeLine(cleanText(`  Color: ${it.color}`));
       }
     });
     writeLine("=".repeat(columns));
@@ -1318,7 +1327,7 @@ export function encodeMarquillasEscPos(
 
     const cleanDesc = it.descripcion.replace(/^↳\s*/, "");
     const qty = it.es_libra ? 1 : Math.max(1, Math.floor(it.cantidad || 1));
-    const srvName = it.servicio_origen || (orden.servicios && orden.servicios.length > 0 ? orden.servicios.join(", ") : "Lavanderia");
+    const srvName = it.servicio_origen || (orden.servicios && orden.servicios.length > 0 ? Array.from(new Set(orden.servicios)).join(", ") : "Lavanderia");
 
     for (let k = 1; k <= qty; k++) {
       garments.push({
@@ -1343,7 +1352,7 @@ export function encodeMarquillasEscPos(
       desc: "Orden General",
       subIdx: 1,
       subTotal: 1,
-      servicio: (orden.servicios && orden.servicios.length > 0) ? orden.servicios.join(", ") : "Servicio"
+      servicio: (orden.servicios && orden.servicios.length > 0) ? Array.from(new Set(orden.servicios)).join(", ") : "Servicio"
     });
   }
 

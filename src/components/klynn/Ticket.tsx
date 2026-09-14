@@ -291,7 +291,7 @@ export function Ticket({
               <span>SERVICIOS Y PRENDAS:</span>
             </div>
             <div className="space-y-0.5 pl-2">
-              {orden.servicios?.map((sName, i) => {
+              {Array.from(new Set(orden.servicios || [])).map((sName, i) => {
                 const itemsDesglosados = (orden.items || []).filter((it) => it.descripcion.startsWith("↳"));
                 const misPrendas = itemsDesglosados.filter((it) =>
                   it.servicio_origen
@@ -315,6 +315,11 @@ export function Ticket({
                         <span className="font-medium text-black">
                           • {it.cantidad} × {it.descripcion.replace(/^↳\s*/, "")}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
                         </span>
+                        {it.color && (
+                          <div className="text-[8.5px] font-bold text-black pl-1.5">
+                            Color: {it.color}
+                          </div>
+                        )}
                         {it.notas && (
                           <div className="text-[8.5px] font-bold text-black italic pl-1.5">
                             ⚠️ Nota: {it.notas}
@@ -333,6 +338,11 @@ export function Ticket({
                     <span className="font-medium text-black">
                       • {it.cantidad} × {it.descripcion}{it.es_libra ? ` (${it.cantidad} lb)` : ""}
                     </span>
+                    {it.color && (
+                      <div className="text-[8.5px] font-bold text-black pl-1.5">
+                        Color: {it.color}
+                      </div>
+                    )}
                     {it.notas && (
                       <div className="text-[8.5px] font-bold text-black italic pl-1.5">
                         ⚠️ Nota: {it.notas}
@@ -522,7 +532,7 @@ export function Ticket({
           return (
             <>
               {/* Servicios con caja de servicio redondeada */}
-              {orden.servicios?.map((sName, i) => {
+              {Array.from(new Set(orden.servicios || [])).map((sName, i) => {
                 const srv = srvListSafe.find(s => s.nombre === sName);
                 const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
                 
@@ -636,7 +646,7 @@ export function Ticket({
                                   {it.cantidad} × {formatNumber(unitPriceDisplay)}
                                 </div>
                               )}
-                              {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
+                              {it.color && <div className="text-[9px] text-black/90 font-bold">Color: {it.color}</div>}
                               {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                             </div>
                             {mostrarColumnaItbis && (
@@ -703,7 +713,7 @@ export function Ticket({
                             {(it.precio_unitario || 0) > 0 && (
                               <div className="text-[9.5px] text-black/80 font-semibold tabular-nums">{it.cantidad} × {formatNumber(unitPriceDisplay)}</div>
                             )}
-                            {it.color && <div className="text-[9px] text-black/80 font-medium">Color: {it.color}</div>}
+                            {it.color && <div className="text-[9px] text-black/90 font-bold">Color: {it.color}</div>}
                             {it.notas && <div className="text-[9px] italic leading-tight text-black/80 font-normal">Nota: {it.notas}</div>}
                           </div>
                           {mostrarColumnaItbis && (
