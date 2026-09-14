@@ -21,6 +21,7 @@ certs/
 *.xlsx
 Fichas_Tecnicas*
 scripts/
+docs/
 
 # Production
 dist
