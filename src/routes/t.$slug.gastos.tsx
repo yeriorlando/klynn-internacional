@@ -31,6 +31,12 @@ import {
   ShoppingBag,
   ArrowRight,
   TrendingDown,
+  TrendingUp,
+  Scale,
+  ArrowLeftRight,
+  ArrowUpRight,
+  ArrowDownRight,
+  Minus,
   Info,
   Filter,
   LayoutGrid,
@@ -51,8 +57,8 @@ import {
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
-import { createPortal } from "react-dom";
 import { exportToCsv } from "@/lib/export";
+import { exportGastosComparativaToExcel, exportGastosListToExcel } from "@/lib/excel-gastos";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -296,6 +302,67 @@ function getGastoMetodoVisual(metodo: string) {
   };
 }
 
+// Indicador visual de comparación contra el mes anterior (MoM)
+function MoMIndicator({
+  diff,
+  pct,
+  hasData,
+  theme = "default"
+}: {
+  diff: number;
+  pct: number;
+  hasData: boolean;
+  theme?: "solid-blue" | "rose" | "amber" | "indigo" | "default";
+}) {
+  if (!hasData) {
+    return (
+      <span className={cn(
+        "inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0",
+        theme === "solid-blue" ? "bg-white/15 text-white/80" : "bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400"
+      )}>
+        <Minus className="h-3 w-3" /> Sin datos ant.
+      </span>
+    );
+  }
+
+  const isSavings = diff < 0;
+  const isIncrease = diff > 0;
+  const isFlat = diff === 0;
+
+  const formattedPct = `${isIncrease ? "+" : ""}${pct.toFixed(1)}%`;
+
+  let badgeClasses = "";
+  if (theme === "solid-blue") {
+    if (isSavings) {
+      badgeClasses = "bg-emerald-500/25 text-emerald-200 border border-emerald-400/40";
+    } else if (isIncrease) {
+      badgeClasses = "bg-rose-500/25 text-rose-200 border border-rose-400/40";
+    } else {
+      badgeClasses = "bg-white/20 text-white/90";
+    }
+  } else {
+    if (isSavings) {
+      badgeClasses = "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800";
+    } else if (isIncrease) {
+      badgeClasses = "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800";
+    } else {
+      badgeClasses = "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200 dark:border-slate-700";
+    }
+  }
+
+  return (
+    <span 
+      className={cn("inline-flex items-center gap-1 text-[10px] sm:text-[11px] font-black px-2 py-0.5 rounded-full shrink-0 shadow-2xs whitespace-nowrap", badgeClasses)}
+      title={isSavings ? `Ahorro de ${formatRD(Math.abs(diff))} vs mes anterior` : isIncrease ? `Incremento de ${formatRD(diff)} vs mes anterior` : "Gasto idéntico al mes anterior"}
+    >
+      {isSavings && <TrendingDown className="h-3 w-3 shrink-0 text-emerald-500 dark:text-emerald-400" />}
+      {isIncrease && <TrendingUp className="h-3 w-3 shrink-0 text-rose-500 dark:text-rose-400" />}
+      {isFlat && <Minus className="h-3 w-3 shrink-0 text-slate-400" />}
+      <span>{formattedPct} vs mes ant.</span>
+    </span>
+  );
+}
+
 function GastosPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
@@ -308,6 +375,7 @@ function GastosPage() {
 
   const [showGastoModal, setShowGastoModal] = useState(false);
   const [showCompraModal, setShowCompraModal] = useState(false);
+  const [showCompararModal, setShowCompararModal] = useState(false);
   const [recibidos, setRecibidos] = useState<ECFDocumentRecibido[]>([]);
   const [activeTab, setActiveTab] = useState("manual");
   const [isPrinting, setIsPrinting] = useState(false);
@@ -445,6 +513,65 @@ function GastosPage() {
     return { name: top[0], amount: top[1], pct };
   }, [porCategoria]);
 
+  // Comparativa MoM (Mes seleccionado o actual vs Mes inmediatamente anterior)
+  const momComparison = useMemo(() => {
+    const now = new Date();
+    let refYear = now.getFullYear();
+    let refMonth = now.getMonth();
+
+    if (dateFilter === "month_select") {
+      refYear = selectedYear;
+      refMonth = selectedMonth;
+    }
+
+    const curYearMonth = `${refYear}-${String(refMonth + 1).padStart(2, "0")}`;
+
+    // Mes inmediatamente anterior
+    const prevDate = new Date(refYear, refMonth - 1, 1);
+    const prevYearMonth = `${prevDate.getFullYear()}-${String(prevDate.getMonth() + 1).padStart(2, "0")}`;
+
+    // 1. Total Egresos Globales
+    const curTotal = gastos.filter(g => (g.fecha || "").startsWith(curYearMonth)).reduce((s, g) => s + (g.monto || 0), 0);
+    const prevTotal = gastos.filter(g => (g.fecha || "").startsWith(prevYearMonth)).reduce((s, g) => s + (g.monto || 0), 0);
+    const totalDiff = curTotal - prevTotal;
+    const totalPct = prevTotal === 0 ? (curTotal > 0 ? 100 : 0) : ((curTotal - prevTotal) / prevTotal) * 100;
+
+    // 2. Gastos Operativos (Manuales)
+    const curManual = manualGastos.filter(g => (g.fecha || "").startsWith(curYearMonth)).reduce((s, g) => s + (g.monto || 0), 0);
+    const prevManual = manualGastos.filter(g => (g.fecha || "").startsWith(prevYearMonth)).reduce((s, g) => s + (g.monto || 0), 0);
+    const manualDiff = curManual - prevManual;
+    const manualPct = prevManual === 0 ? (curManual > 0 ? 100 : 0) : ((curManual - prevManual) / prevManual) * 100;
+
+    // 3. Caja Chica
+    const curCaja = cajaChicaGastos.filter(g => (g.fecha || "").startsWith(curYearMonth)).reduce((s, g) => s + (g.monto || 0), 0);
+    const prevCaja = cajaChicaGastos.filter(g => (g.fecha || "").startsWith(prevYearMonth)).reduce((s, g) => s + (g.monto || 0), 0);
+    const cajaDiff = curCaja - prevCaja;
+    const cajaPct = prevCaja === 0 ? (curCaja > 0 ? 100 : 0) : ((curCaja - prevCaja) / prevCaja) * 100;
+
+    // 4. Mayor Categoría
+    const catName = topCategoria.name;
+    const hasTopCat = catName && catName !== "Sin egresos";
+    const curCat = hasTopCat
+      ? gastos.filter(g => (g.fecha || "").startsWith(curYearMonth) && g.categoria === catName).reduce((s, g) => s + (g.monto || 0), 0)
+      : 0;
+    const prevCat = hasTopCat
+      ? gastos.filter(g => (g.fecha || "").startsWith(prevYearMonth) && g.categoria === catName).reduce((s, g) => s + (g.monto || 0), 0)
+      : 0;
+    const catDiff = curCat - prevCat;
+    const catPct = prevCat === 0 ? (curCat > 0 ? 100 : 0) : ((curCat - prevCat) / prevCat) * 100;
+
+    return {
+      curYearMonth,
+      prevYearMonth,
+      curMonthName: MESES_NOMBRES[refMonth],
+      prevMonthName: MESES_NOMBRES[prevDate.getMonth()],
+      total: { cur: curTotal, prev: prevTotal, diff: totalDiff, pct: totalPct, hasData: curTotal > 0 || prevTotal > 0 },
+      manual: { cur: curManual, prev: prevManual, diff: manualDiff, pct: manualPct, hasData: curManual > 0 || prevManual > 0 },
+      caja: { cur: curCaja, prev: prevCaja, diff: cajaDiff, pct: cajaPct, hasData: curCaja > 0 || prevCaja > 0 },
+      cat: { name: catName, cur: curCat, prev: prevCat, diff: catDiff, pct: catPct, hasData: curCat > 0 || prevCat > 0 },
+    };
+  }, [gastos, manualGastos, cajaChicaGastos, topCategoria, dateFilter, selectedMonth, selectedYear]);
+
   const exportData = useMemo(() => {
     if (activeTab === "caja-chica") {
       return {
@@ -483,18 +610,19 @@ function GastosPage() {
       onValueChange={(t) => { setActiveTab(t); setSelectedCategory("all"); }} 
       className="space-y-6 pb-12 animate-in fade-in-50 duration-300 w-full"
     >
-      {/* HEADER DE PÁGINA CON PESTAÑAS /ADMIN INTEGRADAS */}
-      <div className="flex flex-col 2xl:flex-row 2xl:items-center justify-between gap-3.5 sm:gap-4">
-        {/* Título, Contador & Tabs */}
-        <div className="flex flex-wrap items-center gap-3.5 sm:gap-5">
-          <div>
-            <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">Gastos</h1>
-            <p className="text-xs text-muted-foreground mt-0.5 font-medium">
-              {activeTab === "manual" ? manualGastos.length : cajaChicaGastos.length} egresos registrados
-            </p>
-          </div>
+      {/* HEADER DE PÁGINA: TÍTULO ARRIBA CENTRADO Y TODOS LOS BOTONES ALINEADOS DEBAJO */}
+      <div className="flex flex-col items-center justify-center gap-3.5 sm:gap-4 w-full">
+        {/* Título y Contador Centrado */}
+        <div className="text-center">
+          <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">Gastos</h1>
+          <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+            {activeTab === "manual" ? manualGastos.length : cajaChicaGastos.length} egresos registrados
+          </p>
+        </div>
 
-          {/* PESTAÑAS ESTILO /ADMIN (STANDALONE BUTTONS CON COLORES DIFERENCIADOS) */}
+        {/* Todos los Botones Alineados Debajo */}
+        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 w-full">
+          {/* PESTAÑAS (Gastos Manuales & Caja Chica) */}
           <TabsList className="flex items-center gap-2 bg-transparent p-0 border-none h-auto justify-start overflow-x-auto scrollbar-none">
             {/* Gastos Manuales (Azul Añil / Primary) */}
             <TabsTrigger 
@@ -528,68 +656,93 @@ function GastosPage() {
               </span>
             </TabsTrigger>
           </TabsList>
-        </div>
 
-        {/* Acciones Rápidas */}
-        <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap sm:flex-nowrap shrink-0">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                type="button"
-                className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-              >
-                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Exportar</span>
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
-              <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => exportToCsv(exportData.filename, exportData.columns, exportData.data)}
-              >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (CSV)
-              </DropdownMenuItem>
-              <DropdownMenuItem 
-                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => setIsPrinting(true)}
-              >
-                <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
+          {/* Separador vertical sutil entre tabs y acciones */}
+          <div className="hidden sm:block h-6 w-px bg-border/80 mx-1 shrink-0" />
 
-          <Button 
-            type="button"
-            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
-            onClick={() => setIsPrinting(true)}
-          >
-            <Printer className="h-4 w-4 text-white shrink-0" />
-            <span>Imprimir</span>
-          </Button>
+          {/* Acciones Rápidas */}
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  type="button"
+                  className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                >
+                  <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                  <span>Exportar</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
+                <DropdownMenuItem 
+                  className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
+                  onClick={() => {
+                    try {
+                      exportGastosListToExcel(
+                        activeTab === "caja-chica" ? cajaChicaGastos : manualGastos,
+                        activeTab,
+                        user?.tenant?.nombre || "Klynn"
+                      );
+                      toast.success("Gastos exportados a Excel (.xlsx) exitosamente");
+                    } catch (err) {
+                      console.error("Error al exportar gastos:", err);
+                      toast.error("Error al exportar a Excel");
+                    }
+                  }}
+                >
+                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (.xlsx)
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
+                  onClick={() => setIsPrinting(true)}
+                >
+                  <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
 
-          {/* Botón 1: NUEVA COMPRA (E41 - Proveedores Informales con Retención) */}
-          <Button 
-            type="button"
-            onClick={() => setShowCompraModal(true)} 
-            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-600 cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-          >
-            <ShoppingBag className="h-4 w-4 text-white shrink-0" />
-            <span>Nueva Compra</span>
-          </Button>
+            <Button 
+              type="button"
+              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
+              onClick={() => setIsPrinting(true)}
+            >
+              <Printer className="h-4 w-4 text-white shrink-0" />
+              <span>Imprimir</span>
+            </Button>
 
-          {/* Botón 2: NUEVO GASTO (E43 - Gastos Menores / Control Interno) */}
-          <Button 
-            type="button"
-            onClick={() => setShowGastoModal(true)} 
-            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-          >
-            <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
-            <span>Nuevo Gasto</span>
-          </Button>
+            {/* Botón 0: COMPARAR PERÍODOS (LADO A LADO) */}
+            <Button 
+              type="button"
+              onClick={() => setShowCompararModal(true)} 
+              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700/80 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+            >
+              <Scale className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Comparar Períodos</span>
+            </Button>
+
+            {/* Botón 1: NUEVA COMPRA (E41 - Proveedores Informales con Retención) */}
+            <Button 
+              type="button"
+              onClick={() => setShowCompraModal(true)} 
+              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-600 cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+            >
+              <ShoppingBag className="h-4 w-4 text-white shrink-0" />
+              <span>Nueva Compra</span>
+            </Button>
+
+            {/* Botón 2: NUEVO GASTO (E43 - Gastos Menores / Control Interno) */}
+            <Button 
+              type="button"
+              onClick={() => setShowGastoModal(true)} 
+              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+            >
+              <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
+              <span>Nuevo Gasto</span>
+            </Button>
+          </div>
         </div>
       </div>
 
-      {/* 4 EXECUTIVE KPI CARDS (EXACTO ESTILO /CAJA) */}
+      {/* 4 EXECUTIVE KPI CARDS (EXACTO ESTILO /CAJA CON COMPARATIVA MOM) */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         {/* 1. Total Egresos Globales (Variant: Solid Azul Añil #1B4B73) */}
         <Card className="p-4 sm:p-4.5 rounded-2xl bg-[#1B4B73] text-white shadow-md border-0 flex flex-col justify-between">
@@ -600,8 +753,16 @@ function GastosPage() {
           <div className="my-1.5 font-display font-black tracking-tight text-white text-xl sm:text-2xl truncate" title={formatRD(totalEgresosGlobal)}>
             {formatRD(totalEgresosGlobal)}
           </div>
-          <div className="text-xs sm:text-[13px] font-semibold truncate text-white/90">
-            {gastos.length} Operaciones registradas
+          <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-white/10 mt-1">
+            <span className="text-xs sm:text-[13px] font-semibold truncate text-white/90">
+              {gastos.length} Operaciones
+            </span>
+            <MoMIndicator 
+              diff={momComparison.total.diff} 
+              pct={momComparison.total.pct} 
+              hasData={momComparison.total.hasData} 
+              theme="solid-blue" 
+            />
           </div>
         </Card>
 
@@ -614,8 +775,16 @@ function GastosPage() {
           <div className="my-1.5 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl truncate" title={formatRD(totalManuales)}>
             {formatRD(totalManuales)}
           </div>
-          <div className="text-xs sm:text-[13px] font-bold truncate text-rose-800 dark:text-rose-300">
-            {manualGastos.length} Egresos directos
+          <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-rose-500/15 mt-1">
+            <span className="text-xs sm:text-[13px] font-bold truncate text-rose-800 dark:text-rose-300">
+              {manualGastos.length} Egresos directos
+            </span>
+            <MoMIndicator 
+              diff={momComparison.manual.diff} 
+              pct={momComparison.manual.pct} 
+              hasData={momComparison.manual.hasData} 
+              theme="rose" 
+            />
           </div>
         </Card>
 
@@ -628,8 +797,16 @@ function GastosPage() {
           <div className="my-1.5 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl truncate" title={formatRD(totalCajaChica)}>
             {formatRD(totalCajaChica)}
           </div>
-          <div className="text-xs sm:text-[13px] font-bold truncate text-amber-800 dark:text-amber-300">
-            {cajaChicaGastos.length} Compras menores
+          <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-amber-500/15 mt-1">
+            <span className="text-xs sm:text-[13px] font-bold truncate text-amber-800 dark:text-amber-300">
+              {cajaChicaGastos.length} Compras menores
+            </span>
+            <MoMIndicator 
+              diff={momComparison.caja.diff} 
+              pct={momComparison.caja.pct} 
+              hasData={momComparison.caja.hasData} 
+              theme="amber" 
+            />
           </div>
         </Card>
 
@@ -642,8 +819,16 @@ function GastosPage() {
           <div className="my-1.5 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl truncate capitalize" title={topCategoria.name}>
             {topCategoria.name}
           </div>
-          <div className="text-xs sm:text-[13px] font-bold truncate text-indigo-800 dark:text-indigo-300">
-            {formatRD(topCategoria.amount)} ({topCategoria.pct}%)
+          <div className="flex items-center justify-between gap-1.5 flex-wrap pt-1.5 border-t border-indigo-500/15 mt-1">
+            <span className="text-xs sm:text-[13px] font-bold truncate text-indigo-800 dark:text-indigo-300">
+              {formatRD(topCategoria.amount)} ({topCategoria.pct}%)
+            </span>
+            <MoMIndicator 
+              diff={momComparison.cat.diff} 
+              pct={momComparison.cat.pct} 
+              hasData={momComparison.cat.hasData} 
+              theme="indigo" 
+            />
           </div>
         </Card>
       </div>
@@ -834,7 +1019,7 @@ function GastosPage() {
                         type="date"
                         value={customStartDate}
                         onChange={(e) => setCustomStartDate(e.target.value)}
-                        className="h-9 rounded-xl bg-background border border-border/80 text-xs font-medium"
+                        className="h-9 rounded-xl bg-white dark:bg-slate-950 border border-border/80 text-xs font-medium"
                       />
                     </div>
                     <div>
@@ -843,7 +1028,7 @@ function GastosPage() {
                         type="date"
                         value={customEndDate}
                         onChange={(e) => setCustomEndDate(e.target.value)}
-                        className="h-9 rounded-xl bg-background border border-border/80 text-xs font-medium"
+                        className="h-9 rounded-xl bg-white dark:bg-slate-950 border border-border/80 text-xs font-medium"
                       />
                     </div>
                   </div>
@@ -1158,6 +1343,14 @@ function GastosPage() {
         tenantId={user.tenant.id}
         empleadoId={user.empleado.id}
         onDone={() => { refresh(); setShowCompraModal(false); }}
+      />
+
+      {/* MODAL 3: COMPARAR PERÍODOS (LADO A LADO) */}
+      <CompararPeriodosModal
+        open={showCompararModal}
+        onOpenChange={setShowCompararModal}
+        gastos={gastos}
+        tenantNombre={user.tenant.nombre}
       />
 
       {/* PORTAL DE IMPRESIÓN */}
@@ -2364,3 +2557,899 @@ function GastosPrintPortal({
     document.body
   );
 }
+
+// ==========================================
+// MODAL 3: COMPARAR PERÍODOS DE GASTOS (MULTI-PERÍODO LADO A LADO)
+// ==========================================
+interface PeriodConfig {
+  id: string; // "A", "B", "C", "D"
+  label: string;
+  type: "month" | "year";
+  month: number;
+  year: number;
+}
+
+const PERIOD_THEMES: Record<string, {
+  badgeBg: string;
+  badgeText: string;
+  cardBg: string;
+  cardBorder: string;
+  dotBg: string;
+  pillClass: string;
+  barColor: string;
+}> = {
+  A: {
+    badgeBg: "bg-[#1B4B73] text-white",
+    badgeText: "text-[#1B4B73] dark:text-sky-300",
+    cardBg: "bg-blue-50/60 dark:bg-blue-950/30",
+    cardBorder: "border-blue-200/80 dark:border-blue-800/60",
+    dotBg: "bg-[#1B4B73] dark:bg-sky-400",
+    pillClass: "bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950 dark:text-blue-200",
+    barColor: "bg-[#1B4B73] dark:bg-sky-400",
+  },
+  B: {
+    badgeBg: "bg-indigo-600 text-white",
+    badgeText: "text-indigo-700 dark:text-indigo-300",
+    cardBg: "bg-indigo-50/60 dark:bg-indigo-950/30",
+    cardBorder: "border-indigo-200/80 dark:border-indigo-800/60",
+    dotBg: "bg-indigo-600 dark:bg-indigo-400",
+    pillClass: "bg-indigo-100 text-indigo-800 border-indigo-200 dark:bg-indigo-950 dark:text-indigo-200",
+    barColor: "bg-indigo-500 dark:bg-indigo-400",
+  },
+  C: {
+    badgeBg: "bg-emerald-600 text-white",
+    badgeText: "text-emerald-700 dark:text-emerald-300",
+    cardBg: "bg-emerald-50/60 dark:bg-emerald-950/30",
+    cardBorder: "border-emerald-200/80 dark:border-emerald-800/60",
+    dotBg: "bg-emerald-600 dark:bg-emerald-400",
+    pillClass: "bg-emerald-100 text-emerald-800 border-emerald-200 dark:bg-emerald-950 dark:text-emerald-200",
+    barColor: "bg-emerald-500 dark:bg-emerald-400",
+  },
+  D: {
+    badgeBg: "bg-amber-600 text-white",
+    badgeText: "text-amber-700 dark:text-amber-300",
+    cardBg: "bg-amber-50/60 dark:bg-amber-950/30",
+    cardBorder: "border-amber-200/80 dark:border-amber-800/60",
+    dotBg: "bg-amber-600 dark:bg-amber-400",
+    pillClass: "bg-amber-100 text-amber-800 border-amber-200 dark:bg-amber-950 dark:text-amber-200",
+    barColor: "bg-amber-500 dark:bg-amber-400",
+  },
+};
+
+function CompararPeriodosModal({
+  open,
+  onOpenChange,
+  gastos,
+  tenantNombre,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  gastos: Gasto[];
+  tenantNombre?: string;
+}) {
+  const now = useMemo(() => new Date(), []);
+  
+  // Lista de períodos dinámicos a comparar (A, B, y opcionalmente C y D)
+  const [periods, setPeriods] = useState<PeriodConfig[]>([
+    {
+      id: "A",
+      label: "Período Base (A)",
+      type: "month",
+      month: now.getMonth(),
+      year: now.getFullYear(),
+    },
+    {
+      id: "B",
+      label: "Período Comparativo (B)",
+      type: "month",
+      month: now.getMonth() === 0 ? 11 : now.getMonth() - 1,
+      year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(),
+    }
+  ]);
+
+  // Filtros internos
+  const [scopeFilter, setScopeFilter] = useState<"all" | "manual" | "caja_chica">("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortBy, setSortBy] = useState<"diff_desc" | "diff_asc" | "amount_a" | "amount_b" | "name">("diff_desc");
+
+  // Actualizar un campo de un período
+  const handleUpdatePeriod = (id: string, field: keyof PeriodConfig, value: any) => {
+    setPeriods(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
+  };
+
+  // Añadir un nuevo período comparativo (hasta 4)
+  const handleAddPeriod = () => {
+    if (periods.length >= 4) {
+      toast.error("Puedes comparar hasta 4 períodos al mismo tiempo.");
+      return;
+    }
+    const nextLetters = ["C", "D"];
+    const nextIndex = periods.length - 2;
+    const nextId = nextLetters[nextIndex] || `P${periods.length + 1}`;
+    const offsetMonths = periods.length;
+    const refDate = new Date(now.getFullYear(), now.getMonth() - offsetMonths, 1);
+
+    setPeriods(prev => [
+      ...prev,
+      {
+        id: nextId,
+        label: `Período Comparativo (${nextId})`,
+        type: "month",
+        month: refDate.getMonth(),
+        year: refDate.getFullYear(),
+      }
+    ]);
+    toast.success(`Se añadió el Período ${nextId} a la comparativa`);
+  };
+
+  // Eliminar un período comparativo adicional
+  const handleRemovePeriod = (idToRemove: string) => {
+    if (periods.length <= 2) {
+      toast.error("Debes mantener al menos 2 períodos para comparar.");
+      return;
+    }
+    setPeriods(prev => prev.filter(p => p.id !== idToRemove));
+    toast.info(`Período removido`);
+  };
+
+  // Presets Rápidos
+  const applyPresetMesActualVsAnterior = () => {
+    setPeriods([
+      {
+        id: "A",
+        label: "Período Base (A)",
+        type: "month",
+        month: now.getMonth(),
+        year: now.getFullYear(),
+      },
+      {
+        id: "B",
+        label: "Período Comparativo (B)",
+        type: "month",
+        month: now.getMonth() === 0 ? 11 : now.getMonth() - 1,
+        year: now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear(),
+      }
+    ]);
+  };
+
+  const applyPresetUltimos3Meses = () => {
+    const d1 = new Date(now.getFullYear(), now.getMonth(), 1);
+    const d2 = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const d3 = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+
+    setPeriods([
+      {
+        id: "A",
+        label: "Período Base (A)",
+        type: "month",
+        month: d1.getMonth(),
+        year: d1.getFullYear(),
+      },
+      {
+        id: "B",
+        label: "Período Comparativo (B)",
+        type: "month",
+        month: d2.getMonth(),
+        year: d2.getFullYear(),
+      },
+      {
+        id: "C",
+        label: "Período Comparativo (C)",
+        type: "month",
+        month: d3.getMonth(),
+        year: d3.getFullYear(),
+      }
+    ]);
+    toast.success("Se cargaron los últimos 3 meses consecutivos");
+  };
+
+  const applyPresetMismoMesAnioAnterior = () => {
+    setPeriods([
+      {
+        id: "A",
+        label: "Período Base (A)",
+        type: "month",
+        month: now.getMonth(),
+        year: now.getFullYear(),
+      },
+      {
+        id: "B",
+        label: "Período Comparativo (B)",
+        type: "month",
+        month: now.getMonth(),
+        year: now.getFullYear() - 1,
+      }
+    ]);
+  };
+
+  const applyPresetEsteAnioVsAnterior = () => {
+    setPeriods([
+      {
+        id: "A",
+        label: "Período Base (A)",
+        type: "year",
+        month: now.getMonth(),
+        year: now.getFullYear(),
+      },
+      {
+        id: "B",
+        label: "Período Comparativo (B)",
+        type: "year",
+        month: now.getMonth(),
+        year: now.getFullYear() - 1,
+      }
+    ]);
+  };
+
+  // Filtrado según ámbito (Todos, Operativos, Caja Chica)
+  const scopedGastos = useMemo(() => {
+    if (scopeFilter === "manual") return gastos.filter(g => !g.is_caja_chica);
+    if (scopeFilter === "caja_chica") return gastos.filter(g => g.is_caja_chica);
+    return gastos;
+  }, [gastos, scopeFilter]);
+
+  // Cálculos por cada período activo
+  const periodResults = useMemo(() => {
+    return periods.map(p => {
+      const prefix = p.type === "month" 
+        ? `${p.year}-${String(p.month + 1).padStart(2, "0")}` 
+        : `${p.year}`;
+      const list = scopedGastos.filter(g => (g.fecha || "").startsWith(prefix));
+      const total = list.reduce((s, g) => s + (g.monto || 0), 0);
+      const displayLabel = p.type === "month" ? `${MESES_NOMBRES[p.month]} ${p.year}` : `Año ${p.year}`;
+
+      const catMap: Record<string, { total: number; count: number }> = {};
+      list.forEach(g => {
+        const cat = g.categoria || "Sin categoría";
+        if (!catMap[cat]) catMap[cat] = { total: 0, count: 0 };
+        catMap[cat].total += g.monto || 0;
+        catMap[cat].count += 1;
+      });
+
+      return {
+        ...p,
+        prefix,
+        displayLabel,
+        list,
+        total,
+        count: list.length,
+        catMap,
+      };
+    });
+  }, [periods, scopedGastos]);
+
+  // Totales de referencia de A y B
+  const periodA = periodResults[0] || null;
+  const periodB = periodResults[1] || null;
+  const totalA = periodA?.total || 0;
+  const totalB = periodB?.total || 0;
+  const diffTotalAB = totalA - totalB;
+  const pctTotalAB = totalB === 0 ? (totalA > 0 ? 100 : 0) : ((totalA - totalB) / totalB) * 100;
+
+  // Desglose consolidado por categoría
+  const breakdown = useMemo(() => {
+    const allCategories = Array.from(new Set(
+      periodResults.flatMap(p => Object.keys(p.catMap))
+    ));
+
+    const items = allCategories.map(cat => {
+      const amounts: Record<string, number> = {};
+      const counts: Record<string, number> = {};
+      const shares: Record<string, number> = {};
+
+      periodResults.forEach(p => {
+        const d = p.catMap[cat] || { total: 0, count: 0 };
+        amounts[p.id] = d.total;
+        counts[p.id] = d.count;
+        shares[p.id] = p.total > 0 ? (d.total / p.total) * 100 : 0;
+      });
+
+      const amountA = amounts["A"] || 0;
+      const amountB = amounts["B"] || 0;
+      const diffAB = amountA - amountB;
+      const pctAB = amountB === 0 
+        ? (amountA > 0 ? 100 : 0) 
+        : ((amountA - amountB) / amountB) * 100;
+
+      return {
+        categoria: cat,
+        amounts,
+        counts,
+        shares,
+        amountA,
+        amountB,
+        diffAB,
+        pctAB,
+      };
+    });
+
+    // Búsqueda por texto
+    let filtered = items;
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      filtered = filtered.filter(it => it.categoria.toLowerCase().includes(q));
+    }
+
+    // Ordenación
+    filtered.sort((a, b) => {
+      if (sortBy === "diff_desc") return Math.abs(b.diffAB) - Math.abs(a.diffAB);
+      if (sortBy === "diff_asc") return a.diffAB - b.diffAB;
+      if (sortBy === "amount_a") return b.amountA - a.amountA;
+      if (sortBy === "amount_b") return b.amountB - a.amountB;
+      if (sortBy === "name") return a.categoria.localeCompare(b.categoria);
+      return 0;
+    });
+
+    return filtered;
+  }, [periodResults, searchQuery, sortBy]);
+
+  // Categorías de mayor impacto
+  const insights = useMemo(() => {
+    if (breakdown.length === 0) return null;
+    const sortedByDiffDesc = [...breakdown].sort((a, b) => b.diffAB - a.diffAB);
+    const topIncrease = sortedByDiffDesc[0]?.diffAB > 0 ? sortedByDiffDesc[0] : null;
+
+    const sortedByDiffAsc = [...breakdown].sort((a, b) => a.diffAB - b.diffAB);
+    const topSavings = sortedByDiffAsc[0]?.diffAB < 0 ? sortedByDiffAsc[0] : null;
+
+    return { topIncrease, topSavings };
+  }, [breakdown]);
+
+  // Exportar a Excel (.xlsx) con diseño, formato y estilos ejecutivos
+  const handleExportExcel = () => {
+    try {
+      exportGastosComparativaToExcel({
+        tenantName: tenantNombre || "Klynn",
+        scopeFilter,
+        periods,
+        periodResults,
+        breakdown,
+        diffTotalAB,
+        pctTotalAB,
+        insights,
+      });
+      toast.success("Comparativa exportada a Excel (.xlsx) con diseño exitosamente");
+    } catch (err) {
+      console.error("Error al exportar comparativa a Excel:", err);
+      toast.error("Error al generar el archivo Excel");
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-4xl sm:max-w-6xl w-[95vw] max-h-[92vh] flex flex-col p-0 rounded-2xl overflow-hidden bg-background shadow-2xl border border-border">
+        {/* ENCABEZADO */}
+        <DialogHeader className="px-5 sm:px-6 pt-5 pb-4 border-b border-border/80 bg-muted/30 shrink-0">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="p-2.5 rounded-xl bg-[#1B4B73] text-white shadow-xs">
+                <Scale className="h-5 w-5 text-[#F0B900]" />
+              </div>
+              <div>
+                <DialogTitle className="text-lg sm:text-xl font-display font-black text-foreground tracking-tight">
+                  Comparativa de Períodos de Gastos
+                </DialogTitle>
+                <DialogDescription className="text-xs sm:text-sm text-muted-foreground">
+                  Compara dos o más meses o años lado a lado para evaluar variaciones, incrementos y ahorros.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
+
+          {/* PRESETS RÁPIDOS CON COLORES DIFERENCIADOS */}
+          <div className="flex items-center gap-2 pt-3 overflow-x-auto custom-scrollbar">
+            <span className="text-[11px] font-black text-muted-foreground shrink-0 uppercase tracking-wider">
+              Accesos Rápidos:
+            </span>
+            <button
+              type="button"
+              onClick={applyPresetMesActualVsAnterior}
+              className="px-3 py-1 rounded-xl text-xs font-bold bg-blue-100/80 hover:bg-blue-200/90 text-blue-900 border border-blue-300/80 dark:bg-blue-950/60 dark:text-blue-200 dark:border-blue-800 shadow-2xs transition-all cursor-pointer shrink-0"
+            >
+              Mes Actual vs Mes Anterior
+            </button>
+            <button
+              type="button"
+              onClick={applyPresetUltimos3Meses}
+              className="px-3 py-1 rounded-xl text-xs font-bold bg-teal-100/80 hover:bg-teal-200/90 text-teal-900 border border-teal-300/80 dark:bg-teal-950/60 dark:text-teal-200 dark:border-teal-800 shadow-2xs transition-all cursor-pointer shrink-0"
+            >
+              Últimos 3 Meses
+            </button>
+            <button
+              type="button"
+              onClick={applyPresetMismoMesAnioAnterior}
+              className="px-3 py-1 rounded-xl text-xs font-bold bg-purple-100/80 hover:bg-purple-200/90 text-purple-900 border border-purple-300/80 dark:bg-purple-950/60 dark:text-purple-200 dark:border-purple-800 shadow-2xs transition-all cursor-pointer shrink-0"
+            >
+              Mismo Mes Año Anterior (YoY)
+            </button>
+            <button
+              type="button"
+              onClick={applyPresetEsteAnioVsAnterior}
+              className="px-3 py-1 rounded-xl text-xs font-bold bg-emerald-100/80 hover:bg-emerald-200/90 text-emerald-900 border border-emerald-300/80 dark:bg-emerald-950/60 dark:text-emerald-200 dark:border-emerald-800 shadow-2xs transition-all cursor-pointer shrink-0"
+            >
+              Este Año vs Año Anterior
+            </button>
+          </div>
+        </DialogHeader>
+
+        {/* CONTENIDO DESPLAZABLE */}
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5 custom-scrollbar">
+          {/* CONFIGURACIÓN DE PERÍODOS (3 COLUMNAS HORIZONTALES SIN ENVOLVIMIENTO) */}
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border shadow-xs space-y-3">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-black uppercase tracking-wider text-foreground flex items-center gap-1.5">
+                <CalendarDays className="h-4 w-4 text-[#1B4B73] dark:text-sky-400" />
+                Períodos Seleccionados para la Comparativa ({periods.length}/4)
+              </span>
+
+              {/* Botón para añadir otro período */}
+              {periods.length < 4 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAddPeriod}
+                  className="h-8 px-3 rounded-xl font-black text-xs border-dashed border-[#1B4B73]/60 hover:bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-300 cursor-pointer shadow-2xs transition-all active:scale-95"
+                >
+                  <Plus className="h-3.5 w-3.5 mr-1 text-[#F0B900]" />
+                  <span>Añadir Otro Mes ({periods.length === 2 ? "Período C" : "Período D"})</span>
+                </Button>
+              )}
+            </div>
+
+            {/* Tarjetas de cada período con 3 columnas estrictas */}
+            <div className="space-y-2.5">
+              {periods.map((period, idx) => {
+                const theme = PERIOD_THEMES[period.id] || PERIOD_THEMES.A;
+                const result = periodResults.find(r => r.id === period.id);
+
+                return (
+                  <div 
+                    key={period.id}
+                    className={cn(
+                      "p-3 rounded-xl border transition-all",
+                      theme.cardBg,
+                      theme.cardBorder
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2">
+                        <span className={cn("w-5 h-5 rounded-md text-white flex items-center justify-center text-[11px] font-black", theme.badgeBg)}>
+                          {period.id}
+                        </span>
+                        <span className={cn("text-xs font-black uppercase tracking-wider", theme.badgeText)}>
+                          {period.label}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <Badge variant="outline" className={cn("text-[10px] font-bold", theme.pillClass)}>
+                          {result?.displayLabel || ""}
+                        </Badge>
+                        {periods.length > 2 && period.id !== "A" && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePeriod(period.id)}
+                            className="p-1 rounded-lg hover:bg-rose-100 dark:hover:bg-rose-950 text-rose-500 transition-colors cursor-pointer"
+                            title="Eliminar este período"
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* 3 COLUMNAS ESTRICTAS EN UNA SOLA FILA: TIPO, MES Y AÑO */}
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      {/* Columna 1: Tipo */}
+                      <div>
+                        <Select 
+                          value={period.type} 
+                          onValueChange={(v: "month" | "year") => handleUpdatePeriod(period.id, "type", v)}
+                        >
+                          <SelectTrigger className="h-9 text-xs font-bold bg-white dark:bg-slate-950 border-border">
+                            <SelectValue placeholder="Tipo de Período" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="month">Mes Completo</SelectItem>
+                            <SelectItem value="year">Año Completo</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Columna 2: Mes */}
+                      <div>
+                        <Select 
+                          value={String(period.month)} 
+                          onValueChange={(v) => handleUpdatePeriod(period.id, "month", Number(v))}
+                          disabled={period.type === "year"}
+                        >
+                          <SelectTrigger className="h-9 text-xs font-bold bg-white dark:bg-slate-950 border-border disabled:opacity-50">
+                            <SelectValue placeholder="Mes" />
+                          </SelectTrigger>
+                          <SelectContent className="max-h-60">
+                            {MESES_NOMBRES.map((m, mIdx) => (
+                              <SelectItem key={mIdx} value={String(mIdx)}>
+                                {m}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      {/* Columna 3: Año */}
+                      <div>
+                        <Select 
+                          value={String(period.year)} 
+                          onValueChange={(v) => handleUpdatePeriod(period.id, "year", Number(v))}
+                        >
+                          <SelectTrigger className="h-9 text-xs font-bold bg-white dark:bg-slate-950 border-border">
+                            <SelectValue placeholder="Año" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ANIOS_DISPONIBLES.map((y) => (
+                              <SelectItem key={y} value={String(y)}>
+                                {y}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* TARJETAS DE IMPACTO Y RESUMEN DE CADA PERÍODO */}
+          <div className={cn(
+            "grid gap-3",
+            periods.length === 2 ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : periods.length === 3 ? "grid-cols-1 sm:grid-cols-3" : "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4"
+          )}>
+            {periodResults.map((pr) => {
+              const theme = PERIOD_THEMES[pr.id] || PERIOD_THEMES.A;
+              return (
+                <Card key={pr.id} className={cn("p-3.5 rounded-2xl border shadow-2xs", theme.cardBg, theme.cardBorder)}>
+                  <div className="text-[11px] font-black uppercase tracking-wider flex items-center justify-between">
+                    <span className={theme.badgeText}>Total {pr.id} ({pr.displayLabel})</span>
+                    <span className={cn("w-2 h-2 rounded-full", theme.dotBg)} />
+                  </div>
+                  <div className="my-1 text-xl font-display font-black text-foreground truncate" title={formatRD(pr.total)}>
+                    {formatRD(pr.total)}
+                  </div>
+                  <div className="text-xs text-muted-foreground font-semibold truncate">
+                    {pr.count} egresos registrados
+                  </div>
+                </Card>
+              );
+            })}
+
+            {/* Variación Neta (A vs B) cuando son 2 períodos */}
+            {periods.length === 2 && (
+              <>
+                <Card className={cn(
+                  "p-3.5 rounded-2xl border shadow-2xs",
+                  diffTotalAB < 0 
+                    ? "bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-800/60" 
+                    : diffTotalAB > 0 
+                      ? "bg-rose-50/70 dark:bg-rose-950/20 border-rose-200 dark:border-rose-800/60" 
+                      : "bg-slate-50 dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                )}>
+                  <div className="text-[11px] font-black uppercase tracking-wider flex items-center justify-between">
+                    <span className={diffTotalAB < 0 ? "text-emerald-800 dark:text-emerald-300" : diffTotalAB > 0 ? "text-rose-800 dark:text-rose-300" : "text-muted-foreground"}>
+                      Variación Neta (A vs B)
+                    </span>
+                    {diffTotalAB < 0 && <TrendingDown className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />}
+                    {diffTotalAB > 0 && <TrendingUp className="h-4 w-4 text-rose-600 dark:text-rose-400" />}
+                    {diffTotalAB === 0 && <Minus className="h-4 w-4 text-muted-foreground" />}
+                  </div>
+                  <div className={cn(
+                    "my-1 text-xl font-display font-black truncate",
+                    diffTotalAB < 0 ? "text-emerald-700 dark:text-emerald-300" : diffTotalAB > 0 ? "text-rose-700 dark:text-rose-300" : "text-foreground"
+                  )}>
+                    {diffTotalAB > 0 ? `+${formatRD(diffTotalAB)}` : formatRD(diffTotalAB)}
+                  </div>
+                  <div className="text-xs font-bold truncate">
+                    {diffTotalAB < 0 ? (
+                      <span className="text-emerald-700 dark:text-emerald-400">
+                        Ahorro de {Math.abs(pctTotalAB).toFixed(1)}% vs B
+                      </span>
+                    ) : diffTotalAB > 0 ? (
+                      <span className="text-rose-700 dark:text-rose-400">
+                        Incremento de +{pctTotalAB.toFixed(1)}% vs B
+                      </span>
+                    ) : (
+                      <span className="text-muted-foreground">Sin variación (0%)</span>
+                    )}
+                  </div>
+                </Card>
+
+                {/* Categoría con Mayor Cambio */}
+                <Card className="p-3.5 rounded-2xl bg-surface border border-border shadow-2xs">
+                  <div className="text-[11px] font-black uppercase tracking-wider text-muted-foreground flex items-center justify-between">
+                    <span>Mayor Impacto</span>
+                    <Sparkles className="h-4 w-4 text-amber-500" />
+                  </div>
+                  {insights?.topIncrease ? (
+                    <div>
+                      <div className="my-1 text-base font-display font-black text-rose-600 dark:text-rose-400 truncate capitalize" title={insights.topIncrease.categoria}>
+                        ▲ {insights.topIncrease.categoria}
+                      </div>
+                      <div className="text-xs font-bold text-muted-foreground truncate">
+                        +{formatRD(insights.topIncrease.diffAB)} (+{insights.topIncrease.pctAB.toFixed(0)}%)
+                      </div>
+                    </div>
+                  ) : insights?.topSavings ? (
+                    <div>
+                      <div className="my-1 text-base font-display font-black text-emerald-600 dark:text-emerald-400 truncate capitalize" title={insights.topSavings.categoria}>
+                        ▼ {insights.topSavings.categoria}
+                      </div>
+                      <div className="text-xs font-bold text-muted-foreground truncate">
+                        {formatRD(insights.topSavings.diffAB)} ({insights.topSavings.pctAB.toFixed(0)}%)
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="my-1 text-base font-display font-bold text-muted-foreground truncate">
+                        Sin cambios
+                      </div>
+                      <div className="text-xs text-muted-foreground">Mismos valores</div>
+                    </div>
+                  )}
+                </Card>
+              </>
+            )}
+          </div>
+
+          {/* FILTROS Y CONTROLES DE LA TABLA (CON FONDOS DIFERENCIADOS EN PESTAÑAS) */}
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 pt-1">
+            <div className="flex items-center gap-1.5 text-xs font-bold flex-wrap">
+              <button
+                type="button"
+                onClick={() => setScopeFilter("all")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl border font-bold transition-all cursor-pointer shadow-2xs",
+                  scopeFilter === "all" 
+                    ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-xs" 
+                    : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700"
+                )}
+              >
+                Todos ({gastos.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("manual")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl border font-bold transition-all cursor-pointer shadow-2xs",
+                  scopeFilter === "manual" 
+                    ? "bg-rose-600 text-white border-rose-600 shadow-xs" 
+                    : "bg-rose-50 hover:bg-rose-100/90 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-900/60"
+                )}
+              >
+                Operativos
+              </button>
+              <button
+                type="button"
+                onClick={() => setScopeFilter("caja_chica")}
+                className={cn(
+                  "px-3.5 py-1.5 rounded-xl border font-bold transition-all cursor-pointer shadow-2xs",
+                  scopeFilter === "caja_chica" 
+                    ? "bg-amber-600 text-white border-amber-600 shadow-xs" 
+                    : "bg-amber-50 hover:bg-amber-100/90 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/60"
+                )}
+              >
+                Caja Chica
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <div className="relative flex-1 sm:w-56">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+                <Input
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Buscar categoría..."
+                  className="pl-8 h-9 text-xs rounded-xl bg-white dark:bg-slate-950 border-border"
+                />
+              </div>
+
+              <Select value={sortBy} onValueChange={(v: any) => setSortBy(v)}>
+                <SelectTrigger className="h-9 w-36 text-xs font-bold rounded-xl bg-white dark:bg-slate-950">
+                  <SelectValue placeholder="Ordenar" />
+                </SelectTrigger>
+                <SelectContent align="end">
+                  <SelectItem value="diff_desc">Mayor Diferencia</SelectItem>
+                  <SelectItem value="amount_a">Mayor en A</SelectItem>
+                  <SelectItem value="amount_b">Mayor en B</SelectItem>
+                  <SelectItem value="name">Alfabético</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          {/* TABLA COMPARATIVA MULTI-PERÍODO */}
+          <div className="rounded-2xl border border-border/80 overflow-hidden bg-surface shadow-xs">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead className="border-b border-border bg-muted/40 text-[10px] font-black uppercase tracking-wider text-muted-foreground">
+                  <tr>
+                    <th className="px-4 py-3 text-left">Categoría</th>
+                    
+                    {/* Encabezado dinámico por cada período */}
+                    {periodResults.map(p => {
+                      const theme = PERIOD_THEMES[p.id] || PERIOD_THEMES.A;
+                      return (
+                        <th key={p.id} className="px-4 py-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span className={cn("w-2 h-2 rounded-full", theme.dotBg)} />
+                            <span>{p.id}: {p.displayLabel}</span>
+                          </div>
+                        </th>
+                      );
+                    })}
+
+                    {periods.length === 2 && (
+                      <>
+                        <th className="px-4 py-3 text-right">Diferencia (A - B)</th>
+                        <th className="px-4 py-3 text-center">Variación</th>
+                      </>
+                    )}
+
+                    <th className="px-4 py-3 text-center w-28 sm:w-36">Proporción Visual</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/50">
+                  {breakdown.length === 0 ? (
+                    <tr>
+                      <td colSpan={periods.length + 3} className="px-4 py-12 text-center text-muted-foreground italic">
+                        No se encontraron egresos en los períodos seleccionados.
+                      </td>
+                    </tr>
+                  ) : (
+                    breakdown.map((row) => {
+                      const visual = getGastoCategoriaVisual(row.categoria);
+                      const Icon = visual.icon;
+                      const maxRow = Math.max(...periodResults.map(p => row.amounts[p.id] || 0), 1);
+                      const isSavings = row.diffAB < 0;
+                      const isIncrease = row.diffAB > 0;
+
+                      return (
+                        <tr key={row.categoria} className="hover:bg-muted/20 transition-colors">
+                          {/* Categoría */}
+                          <td className="px-4 py-3 whitespace-nowrap">
+                            <div className="flex items-center gap-2">
+                              <span className={cn("p-1.5 rounded-lg border", visual.bgLight, visual.border)}>
+                                <Icon className={cn("h-3.5 w-3.5", visual.text)} />
+                              </span>
+                              <div>
+                                <span className="font-bold text-foreground capitalize block">
+                                  {visual.label}
+                                </span>
+                                <span className="text-[10px] text-muted-foreground">
+                                  {periodResults.map(p => `${row.counts[p.id] || 0} en ${p.id}`).join(" · ")}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          {/* Columnas de cada período */}
+                          {periodResults.map(p => {
+                            const amt = row.amounts[p.id] || 0;
+                            const sh = row.shares[p.id] || 0;
+                            return (
+                              <td key={p.id} className="px-4 py-3 text-right whitespace-nowrap">
+                                <div className="font-bold text-foreground font-mono">
+                                  {formatRD(amt)}
+                                </div>
+                                <div className="text-[10px] text-muted-foreground font-semibold">
+                                  {sh.toFixed(1)}% de {p.id}
+                                </div>
+                              </td>
+                            );
+                          })}
+
+                          {/* Comparativa cuando son 2 períodos */}
+                          {periods.length === 2 && (
+                            <>
+                              {/* Diferencia (A - B) */}
+                              <td className="px-4 py-3 text-right whitespace-nowrap font-mono">
+                                <span className={cn(
+                                  "font-bold",
+                                  isSavings ? "text-emerald-600 dark:text-emerald-400" : isIncrease ? "text-rose-600 dark:text-rose-400" : "text-muted-foreground"
+                                )}>
+                                  {isIncrease ? `+${formatRD(row.diffAB)}` : formatRD(row.diffAB)}
+                                </span>
+                              </td>
+
+                              {/* Variación (%) */}
+                              <td className="px-4 py-3 text-center whitespace-nowrap">
+                                {row.amountB === 0 && row.amountA > 0 ? (
+                                  <Badge variant="outline" className="text-[10px] font-bold bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300">
+                                    Nuevo (+100%)
+                                  </Badge>
+                                ) : row.amountA === 0 && row.amountB > 0 ? (
+                                  <Badge variant="outline" className="text-[10px] font-bold bg-slate-100 text-slate-700 border-slate-300 dark:bg-slate-800 dark:text-slate-300">
+                                    Sin gasto (-100%)
+                                  </Badge>
+                                ) : (
+                                  <span className={cn(
+                                    "inline-flex items-center gap-1 text-[11px] font-black px-2 py-0.5 rounded-full",
+                                    isSavings 
+                                      ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800" 
+                                      : isIncrease 
+                                        ? "bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-800" 
+                                        : "bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-400 border border-slate-200"
+                                  )}>
+                                    {isSavings && <TrendingDown className="h-3 w-3" />}
+                                    {isIncrease && <TrendingUp className="h-3 w-3" />}
+                                    {row.diffAB === 0 && <Minus className="h-3 w-3" />}
+                                    <span>{isIncrease ? "+" : ""}{row.pctAB.toFixed(1)}%</span>
+                                  </span>
+                                )}
+                              </td>
+                            </>
+                          )}
+
+                          {/* Mini Barras Comparativas Proporcionales */}
+                          <td className="px-4 py-3">
+                            <div className="flex flex-col gap-1 w-24 sm:w-32 mx-auto">
+                              {periodResults.map(p => {
+                                const theme = PERIOD_THEMES[p.id] || PERIOD_THEMES.A;
+                                const amt = row.amounts[p.id] || 0;
+                                return (
+                                  <div key={p.id} className="flex items-center gap-1.5" title={`${p.id}: ${formatRD(amt)}`}>
+                                    <span className={cn("text-[9px] font-black w-2.5 shrink-0", theme.badgeText)}>{p.id}</span>
+                                    <div className="flex-1 bg-slate-100 dark:bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                      <div 
+                                        className={cn("h-full rounded-full transition-all", theme.barColor)} 
+                                        style={{ width: `${amt > 0 ? Math.max(5, Math.round((amt / maxRow) * 100)) : 0}%` }} 
+                                      />
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+
+        {/* PIE DEL MODAL */}
+        <DialogFooter className="px-5 sm:px-6 py-3.5 border-t border-border/80 bg-muted/20 shrink-0 flex flex-col sm:flex-row items-center justify-between sm:justify-between gap-2.5">
+          <div className="text-xs font-semibold text-muted-foreground">
+            Comparando <span className="font-bold text-foreground">{breakdown.length}</span> categorías en <span className="font-bold text-foreground">{periods.length} períodos</span>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
+            <Button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={breakdown.length === 0}
+              className="flex items-center gap-2 rounded-xl h-9 px-3.5 font-bold bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-600 shadow-xs cursor-pointer text-xs transition-all active:scale-95"
+            >
+              <FileSpreadsheet className="h-3.5 w-3.5 text-white" />
+              <span>Exportar Excel (.xlsx)</span>
+            </Button>
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="rounded-xl h-9 px-4 font-bold text-xs cursor-pointer"
+            >
+              Cerrar
+            </Button>
+          </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+

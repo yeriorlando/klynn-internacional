@@ -7,6 +7,7 @@ import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { exportToCsv } from "@/lib/export";
+import { exportOrdenesToExcel } from "@/lib/excel-ordenes";
 import { EstadoBadge } from "@/components/klynn/TenantShell";
 import { Ticket } from "@/components/klynn/Ticket";
 import { MarquillasTicket } from "@/components/klynn/MarquillasTicket";
@@ -1190,9 +1191,32 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
               <DropdownMenuItem 
                 className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                onClick={() => exportToCsv(exportData.filename, exportData.columns, exportData.data)}
+                onClick={() => {
+                  try {
+                    let filtroActivoDesc = "Todas las órdenes";
+                    const partes: string[] = [];
+                    if (filtroEstado !== "todos") partes.push(`Estado: ${filtroEstado}`);
+                    if (filtroEntrega !== "todas") partes.push(`Entrega: ${filtroEntrega}`);
+                    if (filtroUrgencia !== "todas") partes.push(`Prioridad: ${filtroUrgencia}`);
+                    if (filtroPago !== "todas") partes.push(`Pago: ${filtroPago}`);
+                    if (q.trim()) partes.push(`Búsqueda: "${q}"`);
+                    if (partes.length > 0) filtroActivoDesc = partes.join(" | ");
+
+                    exportOrdenesToExcel({
+                      ordenes: filt,
+                      clientes,
+                      tenantName: user?.tenant?.nombre || "Klynn Lavandería",
+                      isConveyorEnabled,
+                      filtroActivo: filtroActivoDesc,
+                    });
+                    toast.success("Órdenes exportadas a Excel (.xlsx) con diseño exitosamente");
+                  } catch (err) {
+                    console.error("Error al exportar órdenes a Excel:", err);
+                    toast.error("Error al exportar a Excel");
+                  }
+                }}
               >
-                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (CSV)
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (.xlsx)
               </DropdownMenuItem>
               <DropdownMenuItem 
                 className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 

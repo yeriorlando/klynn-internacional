@@ -111,11 +111,18 @@ import {
   DropdownMenu, 
   DropdownMenuContent, 
   DropdownMenuItem, 
-  DropdownMenuTrigger 
+  DropdownMenuTrigger,
+  DropdownMenuSeparator
 } from "@/components/ui/dropdown-menu";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { toast } from "sonner";
 import { exportToCsv } from "@/lib/export";
+import { 
+  exportReportePestanaToExcel, 
+  exportReporteMasterMultiPestanaToExcel, 
+  exportReporteLibrosSeparadosToExcel, 
+  TAB_BUILDERS_MAP 
+} from "@/lib/excel-reportes";
 
 const MESES_NOMBRES = [
   "Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio",
@@ -361,6 +368,10 @@ function ReportesPage() {
   const [prendaPage, setPrendaPage] = useState<number>(1);
   const PRENDA_PAGE_SIZE = 8;
   const [serviceSearch, setServiceSearch] = useState<string>("");
+  const [serviceFilter, setServiceFilter] = useState<string>("all");
+  const [selectedServiceForModal, setSelectedServiceForModal] = useState<any | null>(null);
+  const [selectedPrendaForModal, setSelectedPrendaForModal] = useState<any | null>(null);
+  const [serviceModalSearch, setServiceModalSearch] = useState<string>("");
   const [teamSearch, setTeamSearch] = useState<string>("");
   const [logisticaSearch, setLogisticaSearch] = useState<string>("" );
   const [auditoriaFilter, setAuditoriaFilter] = useState<"all" | "cobros" | "caja" | "gastos">("all");
@@ -631,9 +642,9 @@ function ReportesPage() {
   }, [dateFilter, selectedMonth, selectedYear, customStartDate, customEndDate]);
 
   // General & Deep Metrics Calculations
-  const stats = useMemo(() => {
-    if (!filteredData) return null;
-    const { ordenes, gastos, movimientos, cajas, clientes } = filteredData;
+  const computeStatsForData = (targetData: any) => {
+    if (!targetData) return null;
+    const { ordenes = [], gastos = [], movimientos = [], cajas = [], clientes = [] } = targetData;
 
     const ordenesValidas = ordenes.filter(o => o.estado !== "ANULADA");
     const totalVentas = ordenesValidas.reduce((s, o) => s + (o.total || 0), 0);
@@ -875,7 +886,7 @@ function ReportesPage() {
     const realAbonosMovs = movimientos.filter(m => m.concepto?.toLowerCase().includes("abono") || m.tipo === "ABONO");
     const totalAbonosCaja = realAbonosMovs.reduce((s, m) => s + m.monto, 0);
 
-    // Top Prendas & Servicios Enriquecidos con Catálogo (/catalogo)
+    // Top Prendas & Servicios Enriquecidos con Catálogo (/catalogo) y Cruce Operativo Bidireccional
     const garmentCounts: Record<string, { 
       count: number; 
       total: number; 
@@ -884,55 +895,12 @@ function ReportesPage() {
       categoria?: string;
       icono?: string | null;
       precio_base?: number;
+      servicios: Record<string, { count: number; total: number }>;
     }> = {};
 
     let totalPiezas = 0;
     let totalLibras = 0;
     let totalMontoPrendas = 0;
-
-    ordenesValidas.forEach(o => {
-      if (Array.isArray(o.items)) {
-        o.items.forEach((item: any) => {
-          const rawDesc = item.descripcion || "Prenda General";
-          // Limpiar prefijo de desglose si vino de un sub-servicio ("↳ ")
-          const desc = rawDesc.replace(/^↳\s*/, "").trim();
-          const qty = Number(item.cantidad) || 0;
-          const catMatch = inspectData?.catalogo?.find(c => 
-            c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
-          );
-          const priceUnit = Number(item.precio_unitario) > 0 
-            ? Number(item.precio_unitario) 
-            : (catMatch?.precio || 0);
-          const sub = priceUnit * qty;
-          
-          if (!garmentCounts[desc]) {
-            const isLibra = !!(item.es_libra || catMatch?.por_libra);
-            garmentCounts[desc] = { 
-              count: 0, 
-              total: 0, 
-              es_libra: isLibra,
-              imagen_url: catMatch?.imagen_url || null,
-              categoria: catMatch?.categoria || (isLibra ? "Lavandería por Libra" : "Prendas"),
-              icono: catMatch?.icono || null,
-              precio_base: catMatch?.precio || priceUnit || 0
-            };
-          }
-          garmentCounts[desc].count += qty;
-          garmentCounts[desc].total += sub;
-          totalMontoPrendas += sub;
-
-          if (garmentCounts[desc].es_libra || item.es_libra) {
-            totalLibras += qty;
-          } else {
-            totalPiezas += qty;
-          }
-        });
-      }
-    });
-
-    const topPrendas = Object.entries(garmentCounts)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.count - a.count);
 
     const serviceCounts: Record<string, { 
       count: number; 
@@ -941,9 +909,19 @@ function ReportesPage() {
       descripcion?: string;
       icono?: string | null;
       precio_base?: number;
+      totalPrendas: number;
+      prendas: Record<string, {
+        name: string;
+        count: number;
+        total: number;
+        categoria: string;
+        imagen_url?: string | null;
+        es_libra?: boolean;
+      }>;
     }> = {};
     let totalMontoServicios = 0;
 
+    // 1. Registrar servicios declarados a nivel de orden
     ordenesValidas.forEach(o => {
       if (Array.isArray(o.servicios)) {
         o.servicios.forEach((sName: string) => {
@@ -962,7 +940,9 @@ function ReportesPage() {
               imagen_url: srvMatch?.imagen_url || null,
               descripcion: srvMatch?.descripcion || "Servicio especializado de lavandería",
               icono: srvMatch?.icono || null,
-              precio_base: srvMatch?.precio || price || 0
+              precio_base: srvMatch?.precio || price || 0,
+              totalPrendas: 0,
+              prendas: {}
             };
           }
           serviceCounts[sName].count += 1;
@@ -972,8 +952,141 @@ function ReportesPage() {
       }
     });
 
+    // 2. Procesar prendas y vincularlas bidireccionalmente con sus servicios
+    ordenesValidas.forEach(o => {
+      const orderServices = (Array.isArray(o.servicios) && o.servicios.length > 0)
+        ? o.servicios
+        : [];
+
+      if (Array.isArray(o.items)) {
+        o.items.forEach((item: any) => {
+          const rawDesc = item.descripcion || "Prenda General";
+          // Limpiar prefijo de desglose si vino de un sub-servicio ("↳ ")
+          const desc = rawDesc.replace(/^↳\s*/, "").trim();
+          const qty = Number(item.cantidad) || 0;
+          const catMatch = inspectData?.catalogo?.find(c => 
+            c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
+          );
+          const priceUnit = Number(item.precio_unitario) > 0 
+            ? Number(item.precio_unitario) 
+            : (catMatch?.precio || 0);
+          const sub = priceUnit * qty;
+          const isLibra = !!(item.es_libra || catMatch?.por_libra);
+          const categoria = catMatch?.categoria || (isLibra ? "Lavandería por Libra" : "Prendas");
+          const imagen_url = catMatch?.imagen_url || null;
+          const icono = catMatch?.icono || null;
+          const precio_base = catMatch?.precio || priceUnit || 0;
+          
+          if (!garmentCounts[desc]) {
+            garmentCounts[desc] = { 
+              count: 0, 
+              total: 0, 
+              es_libra: isLibra,
+              imagen_url,
+              categoria,
+              icono,
+              precio_base,
+              servicios: {}
+            };
+          }
+          garmentCounts[desc].count += qty;
+          garmentCounts[desc].total += sub;
+          totalMontoPrendas += sub;
+
+          if (garmentCounts[desc].es_libra || item.es_libra) {
+            totalLibras += qty;
+          } else {
+            totalPiezas += qty;
+          }
+
+          // Resolver servicio(s) asociados a esta prenda
+          let itemServices: string[] = [];
+          if (item.servicio_origen && item.servicio_origen.trim()) {
+            itemServices = [item.servicio_origen.trim()];
+          } else if (orderServices.length > 0) {
+            itemServices = orderServices;
+          } else {
+            itemServices = ["Lavandería Estándar"];
+          }
+
+          itemServices.forEach(sName => {
+            // Asegurar que el servicio exista en serviceCounts
+            if (!serviceCounts[sName]) {
+              const srvMatch = inspectData?.servicios?.find(s => 
+                s.nombre?.toLowerCase().trim() === sName.toLowerCase().trim()
+              );
+              serviceCounts[sName] = { 
+                count: 0, 
+                total: 0, 
+                imagen_url: srvMatch?.imagen_url || null,
+                descripcion: srvMatch?.descripcion || "Servicio especializado de lavandería",
+                icono: srvMatch?.icono || null,
+                precio_base: srvMatch?.precio || 0,
+                totalPrendas: 0,
+                prendas: {}
+              };
+            }
+
+            // Registrar prenda en el servicio
+            serviceCounts[sName].totalPrendas += qty;
+            if (!serviceCounts[sName].prendas[desc]) {
+              serviceCounts[sName].prendas[desc] = {
+                name: desc,
+                count: 0,
+                total: 0,
+                categoria,
+                imagen_url,
+                es_libra: isLibra
+              };
+            }
+            serviceCounts[sName].prendas[desc].count += qty;
+            serviceCounts[sName].prendas[desc].total += sub;
+
+            // Registrar servicio en la prenda
+            if (!garmentCounts[desc].servicios[sName]) {
+              garmentCounts[desc].servicios[sName] = { count: 0, total: 0 };
+            }
+            garmentCounts[desc].servicios[sName].count += qty;
+            garmentCounts[desc].servicios[sName].total += sub;
+          });
+        });
+      }
+    });
+
+    const topPrendas = Object.entries(garmentCounts)
+      .map(([name, data]) => {
+        const rankingServicios = Object.entries(data.servicios || {})
+          .map(([sName, sData]) => ({
+            name: sName,
+            count: sData.count,
+            total: sData.total,
+            pct: data.count > 0 ? Math.round((sData.count / data.count) * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count);
+
+        return {
+          name,
+          ...data,
+          rankingServicios
+        };
+      })
+      .sort((a, b) => b.count - a.count);
+
     const topServicios = Object.entries(serviceCounts)
-      .map(([name, data]) => ({ name, ...data }))
+      .map(([name, data]) => {
+        const rankingPrendas = Object.values(data.prendas || {})
+          .map(p => ({
+            ...p,
+            pct: data.totalPrendas > 0 ? Math.round((p.count / data.totalPrendas) * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count);
+
+        return {
+          name,
+          ...data,
+          rankingPrendas
+        };
+      })
       .sort((a, b) => b.count - a.count);
 
     // Delivery & Logística (100% alineado con /logistica y búsqueda de cliente)
@@ -1330,18 +1443,35 @@ function ReportesPage() {
       feedItems,
       recientes: recientes || []
     };
+  };
+
+  const stats = useMemo(() => {
+    return computeStatsForData(filteredData);
   }, [filteredData, selectedInspectTenant, inspectData]);
 
-  // Listas filtradas y paginadas para Prendas
+  // Listas filtradas y paginadas para Prendas (Con soporte a filtro de Servicio)
   const filteredPrendas = useMemo(() => {
     if (!stats?.topPrendas) return [];
     const q = prendaSearch.toLowerCase().trim();
-    return stats.topPrendas.filter(p => {
-      const matchQuery = !q || p.name.toLowerCase().includes(q) || (p.categoria && p.categoria.toLowerCase().includes(q));
-      const matchCat = prendaCategory === "all" || p.categoria === prendaCategory;
-      return matchQuery && matchCat;
-    });
-  }, [stats?.topPrendas, prendaSearch, prendaCategory]);
+    return stats.topPrendas
+      .filter(p => {
+        const matchQuery = !q || p.name.toLowerCase().includes(q) || (p.categoria && p.categoria.toLowerCase().includes(q));
+        const matchCat = prendaCategory === "all" || p.categoria === prendaCategory;
+        const matchService = serviceFilter === "all" || (p.servicios && p.servicios[serviceFilter] && p.servicios[serviceFilter].count > 0);
+        return matchQuery && matchCat && matchService;
+      })
+      .map(p => {
+        if (serviceFilter === "all") return p;
+        const srvData = p.servicios?.[serviceFilter];
+        return {
+          ...p,
+          count: srvData ? srvData.count : p.count,
+          total: srvData ? srvData.total : p.total,
+          isFilteredByService: true,
+          filteredServiceName: serviceFilter
+        };
+      });
+  }, [stats?.topPrendas, prendaSearch, prendaCategory, serviceFilter]);
 
   const totalPrendaPages = Math.max(1, Math.ceil(filteredPrendas.length / PRENDA_PAGE_SIZE));
   const paginatedPrendas = useMemo(() => {
@@ -1349,20 +1479,23 @@ function ReportesPage() {
     return filteredPrendas.slice(start, start + PRENDA_PAGE_SIZE);
   }, [filteredPrendas, prendaPage]);
 
-  // Reiniciar página de prendas al buscar o cambiar categoría
+  // Reiniciar página de prendas al buscar, cambiar categoría o cambiar filtro de servicio
   useEffect(() => {
     setPrendaPage(1);
-  }, [prendaSearch, prendaCategory]);
+  }, [prendaSearch, prendaCategory, serviceFilter]);
 
-  // Categorías presentes en topPrendas
+  // Categorías presentes en topPrendas (respetando si hay filtro de servicio activo)
   const prendaCategories = useMemo(() => {
     if (!stats?.topPrendas) return [];
     const cats = new Set<string>();
     stats.topPrendas.forEach(p => {
+      if (serviceFilter !== "all" && (!p.servicios || !p.servicios[serviceFilter] || p.servicios[serviceFilter].count <= 0)) {
+        return;
+      }
       if (p.categoria) cats.add(p.categoria);
     });
     return Array.from(cats);
-  }, [stats?.topPrendas]);
+  }, [stats?.topPrendas, serviceFilter]);
 
   // Servicios filtrados por búsqueda
   const filteredTopServicios = useMemo(() => {
@@ -1394,6 +1527,97 @@ function ReportesPage() {
     const startIndex = (debtPage - 1) * DEBT_PAGE_SIZE;
     return filteredDeudores.slice(startIndex, startIndex + DEBT_PAGE_SIZE);
   }, [filteredDeudores, debtPage]);
+
+  // Mapa de Nombres Legibles de Pestañas para Exportación y UI
+  const TAB_LABELS_MAP: Record<string, string> = {
+    finanzas: "Finanzas & Caja",
+    deudas: "CXC (Cuentas por Cobrar)",
+    prendas: "Prendas & Servicios",
+    equipo: "Equipo de Trabajo",
+    logistica: "Logística y Delivery",
+    fiscal: "Facturación Fiscal (e-CF)",
+    whatsapp: "Avisos WhatsApp",
+    procesos: "Flujo de Procesos",
+    estanteria: "Estantería Virtual",
+    auditoria: "Auditoría & Caja",
+  };
+
+  // Exportador de Pestaña Activa a Excel
+  const handleExportPestana = (isAllHistory: boolean) => {
+    if (!selectedInspectTenant || !inspectData) return;
+    try {
+      const dataToExport = isAllHistory ? inspectData : (filteredData || inspectData);
+      const statsToExport = isAllHistory ? computeStatsForData(inspectData) : stats;
+      if (!statsToExport) return;
+
+      exportReportePestanaToExcel({
+        tabKey: activeTab,
+        stats: statsToExport,
+        data: dataToExport,
+        tenantName: selectedInspectTenant.nombre,
+        periodoLabel: activeFilterLabel,
+        isAllHistory,
+        rnc: selectedInspectTenant.rnc || undefined,
+      });
+      toast.success(
+        `Reporte de ${TAB_LABELS_MAP[activeTab] || activeTab} ${isAllHistory ? "(Histórico Total)" : `(${activeFilterLabel})`} exportado a Excel`
+      );
+    } catch (err) {
+      console.error("Error al exportar pestaña:", err);
+      toast.error("Error al generar el archivo Excel");
+    }
+  };
+
+  // Exportador de Libro Maestro Multi-Pestaña a Excel
+  const handleExportMaster = (isAllHistory: boolean) => {
+    if (!selectedInspectTenant || !inspectData) return;
+    try {
+      const dataToExport = isAllHistory ? inspectData : (filteredData || inspectData);
+      const statsToExport = isAllHistory ? computeStatsForData(inspectData) : stats;
+      if (!statsToExport) return;
+
+      exportReporteMasterMultiPestanaToExcel({
+        activeModules,
+        stats: statsToExport,
+        data: dataToExport,
+        tenantName: selectedInspectTenant.nombre,
+        periodoLabel: activeFilterLabel,
+        isAllHistory,
+        rnc: selectedInspectTenant.rnc || undefined,
+      });
+      toast.success(
+        `Libro Maestro Multi-Pestaña ${isAllHistory ? "(Histórico Total)" : `(${activeFilterLabel})`} exportado a Excel`
+      );
+    } catch (err) {
+      console.error("Error al exportar libro maestro:", err);
+      toast.error("Error al generar el archivo Excel");
+    }
+  };
+
+  // Descarga Masiva de Libros Separados (1 libro por pestaña)
+  const handleExportSeparados = async (isAllHistory: boolean) => {
+    if (!selectedInspectTenant || !inspectData) return;
+    try {
+      const dataToExport = isAllHistory ? inspectData : (filteredData || inspectData);
+      const statsToExport = isAllHistory ? computeStatsForData(inspectData) : stats;
+      if (!statsToExport) return;
+
+      toast.info("Generando y descargando libros independientes para cada pestaña...");
+      await exportReporteLibrosSeparadosToExcel({
+        activeModules,
+        stats: statsToExport,
+        data: dataToExport,
+        tenantName: selectedInspectTenant.nombre,
+        periodoLabel: activeFilterLabel,
+        isAllHistory,
+        rnc: selectedInspectTenant.rnc || undefined,
+      });
+      toast.success("¡Todos los libros de pestañas han sido descargados con éxito!");
+    } catch (err) {
+      console.error("Error al exportar libros separados:", err);
+      toast.error("Error al generar los libros separados");
+    }
+  };
 
   function handleManage(tenantId: string, slug: string) {
     setSession({ empleado_id: auth?.empleado.id || 'admin', tenant_id: tenantId, iniciado_en: new Date().toISOString() });
@@ -1687,38 +1911,134 @@ function ReportesPage() {
                     <span>Exportar</span>
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-52 rounded-2xl shadow-xl p-1.5">
-                  <DropdownMenuItem 
-                    className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                    onClick={() => {
-                      if (!stats || !inspectData) return;
-                      const rows = [
-                        ["Ingresos totales (Ventas)", formatRD(stats.totalVentas)],
-                        ["Gastos totales", formatRD(stats.totalGastos)],
-                        ["Rentabilidad neta", formatRD(stats.rentabilidad)],
-                        ["ITBIS generado", formatRD(stats.totalITBIS)],
-                        ["Ticket promedio", formatRD(stats.ticketPromedio)],
-                        ["Cuentas por cobrar (Deudas)", formatRD(stats.totalDeuda)],
-                        ["Abonos recibidos", formatRD(stats.totalAbonadoEnOrdenes + stats.totalAbonosCaja)],
-                        ["Prendas por pieza", `${stats.totalPiezas} piezas`],
-                        ["Prendas por libra", `${stats.totalLibras} libras`],
-                        ...stats.topServicios.map((s: any) => [`Servicio: ${s.name}`, `${s.count} órdenes (${formatRD(s.total)})`]),
-                        ...stats.topPrendas.map((p: any) => [`Prenda: ${p.name}`, `${p.count} cant. (${formatRD(p.total)})`]),
-                      ];
-                      exportToCsv(`Reporte_${selectedInspectTenant.slug}_${activeFilterLabel.replace(/\s+/g, "_")}`, ["Concepto / Indicador", "Valor Registrado"], rows);
-                      toast.success("Reporte exportado exitosamente");
-                    }}
-                  >
-                    <FileSpreadsheet className="h-4 w-4 text-emerald-600" />
-                    <span>Exportar CSV / Excel</span>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem 
-                    className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                    onClick={() => setIsPrinting(true)}
-                  >
-                    <Printer className="h-4 w-4 text-rose-600" />
-                    <span>Imprimir / PDF</span>
-                  </DropdownMenuItem>
+                <DropdownMenuContent align="end" className="w-80 rounded-2xl shadow-2xl p-2 bg-white dark:bg-slate-900 border border-border/80 text-foreground space-y-1">
+                  {/* Encabezado del Dropdown */}
+                  <div className="px-2.5 py-1.5 border-b border-border/50">
+                    <p className="text-[10px] font-black uppercase tracking-wider text-muted-foreground">Exportación Ejecutiva Excel</p>
+                    <p className="text-xs font-bold text-foreground truncate">
+                      Pestaña Activa: <span className="text-primary font-black">{TAB_LABELS_MAP[activeTab] || activeTab}</span>
+                    </p>
+                  </div>
+
+                  {/* Sección 1: Pestaña Activa */}
+                  <div className="pt-1">
+                    <p className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Pestaña Actual ({TAB_LABELS_MAP[activeTab] || activeTab})</p>
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-emerald-50 hover:text-emerald-900 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 transition-colors"
+                      onClick={() => handleExportPestana(false)}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">Exportar con filtro actual</span>
+                        <span className="text-[10px] text-muted-foreground font-normal truncate">({activeFilterLabel})</span>
+                      </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-emerald-50 hover:text-emerald-900 dark:hover:bg-emerald-950/50 dark:hover:text-emerald-300 transition-colors"
+                      onClick={() => handleExportPestana(true)}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">Exportar todo el histórico</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Sin restricción de fecha</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </div>
+
+                  <DropdownMenuSeparator className="my-1" />
+
+                  {/* Sección 2: Libro Maestro Multi-Pestaña */}
+                  <div>
+                    <p className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Todas las Pestañas (1 Libro Excel)</p>
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-900 dark:hover:bg-blue-950/50 dark:hover:text-blue-300 transition-colors"
+                      onClick={() => handleExportMaster(false)}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-[#1B4B73] shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">Libro Maestro Multi-Pestaña</span>
+                        <span className="text-[10px] text-muted-foreground font-normal truncate">Todas las áreas ({activeFilterLabel})</span>
+                      </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-blue-50 hover:text-blue-900 dark:hover:bg-blue-950/50 dark:hover:text-blue-300 transition-colors"
+                      onClick={() => handleExportMaster(true)}
+                    >
+                      <FileSpreadsheet className="h-4 w-4 text-[#1B4B73] shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">Todo el Histórico Multi-Pestaña</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Libro maestro completo sin filtro</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </div>
+
+                  <DropdownMenuSeparator className="my-1" />
+
+                  {/* Sección 3: Descarga de Libros Separados */}
+                  <div>
+                    <p className="px-2.5 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-slate-400">Descarga Masiva por Separado</p>
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-amber-50 hover:text-amber-900 dark:hover:bg-amber-950/50 dark:hover:text-amber-300 transition-colors"
+                      onClick={() => handleExportSeparados(false)}
+                    >
+                      <Download className="h-4 w-4 text-amber-600 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">Descargar Libros Separados (Filtro)</span>
+                        <span className="text-[10px] text-muted-foreground font-normal truncate">1 archivo .xlsx por pestaña</span>
+                      </div>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-2 px-2.5 rounded-xl text-xs font-bold hover:bg-amber-50 hover:text-amber-900 dark:hover:bg-amber-950/50 dark:hover:text-amber-300 transition-colors"
+                      onClick={() => handleExportSeparados(true)}
+                    >
+                      <Download className="h-4 w-4 text-amber-600 shrink-0" />
+                      <div className="flex flex-col min-w-0">
+                        <span className="truncate">Descargar Libros Separados (Histórico)</span>
+                        <span className="text-[10px] text-muted-foreground font-normal">Todos los datos históricos separados</span>
+                      </div>
+                    </DropdownMenuItem>
+                  </div>
+
+                  <DropdownMenuSeparator className="my-1" />
+
+                  {/* Opciones secundarias: CSV plano e Imprimir */}
+                  <div>
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-1.5 px-2.5 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white transition-colors"
+                      onClick={() => {
+                        if (!stats || !inspectData) return;
+                        const rows = [
+                          ["Ingresos totales (Ventas)", formatRD(stats.totalVentas)],
+                          ["Gastos totales", formatRD(stats.totalGastos)],
+                          ["Rentabilidad neta", formatRD(stats.rentabilidad)],
+                          ["ITBIS generado", formatRD(stats.totalITBIS)],
+                          ["Ticket promedio", formatRD(stats.ticketPromedio)],
+                          ["Cuentas por cobrar (Deudas)", formatRD(stats.totalDeuda)],
+                          ["Abonos recibidos", formatRD(stats.totalAbonadoEnOrdenes + stats.totalAbonosCaja)],
+                          ["Prendas por pieza", `${stats.totalPiezas} piezas`],
+                          ["Prendas por libra", `${stats.totalLibras} libras`],
+                          ...stats.topServicios.map((s: any) => [`Servicio: ${s.name}`, `${s.count} órdenes (${formatRD(s.total)})`]),
+                          ...stats.topPrendas.map((p: any) => [`Prenda: ${p.name}`, `${p.count} cant. (${formatRD(p.total)})`]),
+                        ];
+                        exportToCsv(`Reporte_${selectedInspectTenant?.slug || "klynn"}_${activeFilterLabel.replace(/\s+/g, "_")}`, ["Concepto / Indicador", "Valor Registrado"], rows);
+                        toast.success("CSV plano exportado exitosamente");
+                      }}
+                    >
+                      <FileSpreadsheet className="h-3.5 w-3.5 text-slate-500 shrink-0" />
+                      <span>Exportar CSV Plano</span>
+                    </DropdownMenuItem>
+
+                    <DropdownMenuItem
+                      className="gap-2.5 cursor-pointer py-1.5 px-2.5 rounded-xl text-xs font-bold text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/50 transition-colors"
+                      onClick={() => setIsPrinting(true)}
+                    >
+                      <Printer className="h-3.5 w-3.5 text-rose-600 shrink-0" />
+                      <span>Imprimir / Guardar PDF</span>
+                    </DropdownMenuItem>
+                  </div>
                 </DropdownMenuContent>
               </DropdownMenu>
 
@@ -2677,10 +2997,13 @@ function ReportesPage() {
                   {/* Badge de Modelo Predominante */}
                   {stats.totalPiezas + stats.totalLibras > 0 && (
                     <div className="self-start sm:self-auto">
-                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/60 dark:text-sky-300 border border-[#1B4B73]/20 shadow-2xs">
-                        <Sparkles className="h-3.5 w-3.5 text-[#F0B900]" />
-                        Predominante: {stats.totalPiezas >= stats.totalLibras ? "Por Piezas" : "Por Libras"}
-                      </span>
+                      <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-[#1B4B73] text-white border border-[#143755] shadow-xs tracking-wide">
+                        <Sparkles className="h-4 w-4 text-[#F0B900] fill-[#F0B900] shrink-0" />
+                        <span className="text-white/90">Predominante:</span>
+                        <span className="text-white font-black uppercase tracking-wider bg-white/20 px-2 py-0.5 rounded-md text-[11px]">
+                          {stats.totalPiezas >= stats.totalLibras ? "Por Piezas" : "Por Libras"}
+                        </span>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -2785,7 +3108,8 @@ function ReportesPage() {
               {/* SECCIÓN 1: PRENDAS DEL CATÁLOGO (GRID DE TARJETAS SUTILES) */}
               {/* ========================================================= */}
               <Card className="p-6 bg-surface border border-border/80 shadow-card rounded-3xl space-y-6">
-                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                {/* Header de Sección con Título y Switcher de Vistas */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
                   <div className="flex items-center gap-3">
                     <span className="p-2.5 rounded-2xl bg-indigo-100 dark:bg-indigo-950/70 text-indigo-600 dark:text-indigo-400 shrink-0">
                       <Shirt className="h-6 w-6" />
@@ -2796,72 +3120,102 @@ function ReportesPage() {
                     </div>
                   </div>
 
-                  {/* Selector de Vistas y Barra de Búsqueda */}
-                  <div className="flex flex-wrap items-center gap-2.5">
-                    {/* View Toggle Tabs (Tarjetas / Gráfico / Lista) */}
-                    <div className="inline-flex items-center p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 border border-slate-300/50 dark:border-slate-700/60">
+                  {/* Switcher de Vistas (Tarjetas / Gráfico / Lista) */}
+                  <div className="inline-flex items-center p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80 border border-slate-300/50 dark:border-slate-700/60 self-start sm:self-auto shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPrendaView("grid")}
+                      className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        prendaView === "grid"
+                          ? "bg-[#1B4B73] text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Vista en Tarjetas"
+                    >
+                      <LayoutGrid className="h-3.5 w-3.5" />
+                      <span>Tarjetas</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPrendaView("chart")}
+                      className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        prendaView === "chart"
+                          ? "bg-[#1B4B73] text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Vista en Gráfico"
+                    >
+                      <BarChart2 className="h-3.5 w-3.5" />
+                      <span>Gráfico</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setPrendaView("list")}
+                      className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
+                        prendaView === "list"
+                          ? "bg-[#1B4B73] text-white shadow-xs"
+                          : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                      }`}
+                      title="Vista en Lista / Tabla"
+                    >
+                      <List className="h-3.5 w-3.5" />
+                      <span>Lista</span>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Toolbar de Búsqueda y Filtros Perfectamente Alineados Horizontalmente */}
+                <div className="flex flex-col sm:flex-row items-center gap-3 w-full">
+                  {/* Barra de Búsqueda de Prendas (Flex-1) */}
+                  <div className="relative flex-1 w-full">
+                    <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      placeholder="Buscar prenda por nombre o categoría..."
+                      value={prendaSearch}
+                      onChange={(e) => setPrendaSearch(e.target.value)}
+                      className="pl-9.5 pr-8 h-10 rounded-xl bg-background border-border/70 text-xs shadow-2xs focus-visible:ring-primary/20 w-full font-medium"
+                    />
+                    {prendaSearch && (
                       <button
                         type="button"
-                        onClick={() => setPrendaView("grid")}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                          prendaView === "grid"
-                            ? "bg-[#1B4B73] text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                        title="Vista en Tarjetas"
+                        onClick={() => setPrendaSearch("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
+                        title="Limpiar búsqueda"
                       >
-                        <LayoutGrid className="h-3.5 w-3.5" />
-                        <span>Tarjetas</span>
+                        ✕
                       </button>
+                    )}
+                  </div>
 
-                      <button
-                        type="button"
-                        onClick={() => setPrendaView("chart")}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                          prendaView === "chart"
-                            ? "bg-[#1B4B73] text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                        title="Vista en Gráfico"
-                      >
-                        <BarChart2 className="h-3.5 w-3.5" />
-                        <span>Gráfico</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => setPrendaView("list")}
-                        className={`py-1.5 px-3 rounded-lg text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer ${
-                          prendaView === "list"
-                            ? "bg-[#1B4B73] text-white shadow-xs"
-                            : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-                        }`}
-                        title="Vista en Lista / Tabla"
-                      >
-                        <List className="h-3.5 w-3.5" />
-                        <span>Lista</span>
-                      </button>
-                    </div>
-
-                    {/* Barra de Búsqueda de Prendas */}
-                    <div className="relative w-full sm:w-64">
-                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                      <Input
-                        placeholder="Buscar por prenda o categoría..."
-                        value={prendaSearch}
-                        onChange={(e) => setPrendaSearch(e.target.value)}
-                        className="pl-9 pr-8 h-9.5 rounded-xl bg-background border-border/70 text-xs shadow-2xs focus-visible:ring-primary/20"
-                      />
-                      {prendaSearch && (
-                        <button
-                          type="button"
-                          onClick={() => setPrendaSearch("")}
-                          className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-1"
-                        >
-                          ×
-                        </button>
-                      )}
-                    </div>
+                  {/* Selector de Filtro por Servicio (Alineado a la par) */}
+                  <div className="w-full sm:w-64 shrink-0">
+                    <Select value={serviceFilter} onValueChange={setServiceFilter}>
+                      <SelectTrigger className="h-10 rounded-xl bg-background border-border/70 text-xs shadow-2xs font-semibold focus-visible:ring-primary/20 w-full">
+                        <div className="flex items-center gap-2 truncate text-left">
+                          <WashingMachine className="h-4 w-4 text-blue-600 dark:text-blue-400 shrink-0" />
+                          <span className="truncate">
+                            {serviceFilter === "all" ? "Todos los Servicios" : serviceFilter}
+                          </span>
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="rounded-2xl shadow-xl max-h-72">
+                        <SelectItem value="all" className="text-xs font-semibold cursor-pointer">
+                          Todos los Servicios ({stats.topServicios.length})
+                        </SelectItem>
+                        {stats.topServicios.map(s => (
+                          <SelectItem key={s.name} value={s.name} className="text-xs font-semibold cursor-pointer">
+                            <span className="flex items-center justify-between gap-3 w-full">
+                              <span className="truncate">{s.name}</span>
+                              <span className="text-[10px] text-muted-foreground font-bold bg-muted/60 px-1.5 py-0.5 rounded shrink-0">
+                                {s.totalPrendas || 0} pz
+                              </span>
+                            </span>
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
                   </div>
                 </div>
 
@@ -2899,6 +3253,34 @@ function ReportesPage() {
                   </div>
                 )}
 
+                {/* Banner Informativo de Filtro Activo por Servicio */}
+                {serviceFilter !== "all" && (
+                  <div className="flex items-center justify-between p-3 px-4 rounded-2xl bg-blue-50/90 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 text-xs shadow-2xs animate-in fade-in duration-200">
+                    <div className="flex items-center gap-2.5 text-blue-950 dark:text-blue-200 min-w-0">
+                      <span className="p-1.5 rounded-xl bg-blue-600 text-white shrink-0 shadow-xs">
+                        <WashingMachine className="h-4 w-4" />
+                      </span>
+                      <div className="min-w-0">
+                        <span className="font-medium block sm:inline">
+                          Prendas procesadas con el servicio: <strong className="font-extrabold text-blue-700 dark:text-blue-300">{serviceFilter}</strong>
+                        </span>
+                        <span className="text-[11px] text-blue-700/80 dark:text-blue-400/80 block">
+                          Cantidades y facturación calculadas exclusivamente para este servicio ({filteredPrendas.length} prendas)
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setServiceFilter("all")}
+                      className="px-2.5 py-1 rounded-xl bg-blue-100 hover:bg-blue-200 dark:bg-blue-900/80 dark:hover:bg-blue-800 text-blue-800 dark:text-blue-200 font-bold text-[11px] flex items-center gap-1 transition-colors cursor-pointer shrink-0 ml-2"
+                      title="Quitar filtro de servicio"
+                    >
+                      <span>Ver todas</span>
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                )}
+
                 {/* Visualización Según Vista Seleccionada (Tarjetas / Gráfico / Lista) */}
                 {paginatedPrendas.length > 0 ? (
                   (() => {
@@ -2929,11 +3311,22 @@ function ReportesPage() {
                                       )}
                                     </div>
                                     <div className="min-w-0">
-                                      <div className="flex items-center gap-2">
+                                      <div className="flex items-center gap-2 flex-wrap">
                                         <span className="font-bold text-sm text-foreground truncate">{p.name}</span>
                                         <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold">
                                           {p.categoria}
                                         </Badge>
+                                        {p.rankingServicios && p.rankingServicios.length > 0 && (
+                                          <button
+                                            type="button"
+                                            onClick={() => setSelectedPrendaForModal(p)}
+                                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[10px] font-bold border border-indigo-200/70 dark:border-indigo-800 transition-colors cursor-pointer"
+                                            title="Ver servicios aplicados a esta prenda"
+                                          >
+                                            <WashingMachine className="h-2.5 w-2.5" />
+                                            <span>{p.rankingServicios.length} {p.rankingServicios.length === 1 ? 'servicio' : 'servicios'}</span>
+                                          </button>
+                                        )}
                                       </div>
                                       <span className="text-[11px] text-muted-foreground">
                                         Catálogo: {formatRD(p.precio_base)}{p.es_libra ? '/lb' : ''}
@@ -2985,6 +3378,7 @@ function ReportesPage() {
                                 <th className="px-4 py-3 w-12 text-center">#</th>
                                 <th className="px-4 py-3">Prenda</th>
                                 <th className="px-4 py-3">Categoría</th>
+                                <th className="px-4 py-3 text-center">Servicios</th>
                                 <th className="px-4 py-3 text-center">Formato</th>
                                 <th className="px-4 py-3 text-right">Precio Base</th>
                                 <th className="px-4 py-3 text-center">Volumen</th>
@@ -3015,6 +3409,21 @@ function ReportesPage() {
                                       <Badge variant="outline" className="text-[10.5px] py-0.5 px-2 font-bold">
                                         {p.categoria}
                                       </Badge>
+                                    </td>
+                                    <td className="px-4 py-3 text-center">
+                                      {p.rankingServicios && p.rankingServicios.length > 0 ? (
+                                        <button
+                                          type="button"
+                                          onClick={() => setSelectedPrendaForModal(p)}
+                                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-indigo-50 dark:bg-indigo-950/70 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-700 dark:text-indigo-300 text-[11px] font-bold border border-indigo-200/70 dark:border-indigo-800 transition-colors cursor-pointer shadow-2xs"
+                                          title="Ver desglose de servicios aplicados a esta prenda"
+                                        >
+                                          <WashingMachine className="h-3 w-3" />
+                                          <span>{p.rankingServicios.length} {p.rankingServicios.length === 1 ? 'servicio' : 'servicios'}</span>
+                                        </button>
+                                      ) : (
+                                        <span className="text-[11px] text-muted-foreground">—</span>
+                                      )}
                                     </td>
                                     <td className="px-4 py-3 text-center">
                                       <span className="text-[11px] font-semibold text-muted-foreground">
@@ -3131,6 +3540,21 @@ function ReportesPage() {
                                     {pct}% del top
                                   </span>
                                 </div>
+
+                                {/* Botón / Chip de Servicios Aplicados */}
+                                {p.rankingServicios && p.rankingServicios.length > 0 && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setSelectedPrendaForModal(p)}
+                                    className="w-full mt-2.5 py-2 px-3 rounded-xl bg-[#1B4B73] hover:bg-[#143755] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                                    title="Ver desglose de servicios a los que se aplicó esta prenda"
+                                  >
+                                    <WashingMachine className="h-3.5 w-3.5 text-[#F0B900] shrink-0" />
+                                    <span>
+                                      {p.rankingServicios.length} {p.rankingServicios.length === 1 ? 'servicio aplicado' : 'servicios aplicados'}
+                                    </span>
+                                  </button>
+                                )}
                               </div>
                             </div>
                           );
@@ -3286,13 +3710,19 @@ function ReportesPage() {
                                 </div>
                               </div>
 
-                              {/* Badges de Frecuencia y Total */}
+                              {/* Badges de Frecuencia, Prendas y Total */}
                               <div className="pt-2 border-t border-border/50 space-y-2">
-                                <div className="flex items-center justify-between text-xs">
-                                  <span className="px-2.5 py-1 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] border border-blue-200/60 dark:border-blue-900/50">
-                                    {srv.count} órdenes
-                                  </span>
-                                  <span className="font-black font-display text-primary text-sm sm:text-base">
+                                <div className="flex items-center justify-between text-xs gap-2">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className="px-2 py-0.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-700 dark:text-blue-300 font-extrabold text-[11px] border border-blue-200/60 dark:border-blue-900/50">
+                                      {srv.count} órdenes
+                                    </span>
+                                    <span className="px-2 py-0.5 rounded-lg bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 font-extrabold text-[11px] border border-indigo-200/60 dark:border-indigo-900/50 flex items-center gap-1">
+                                      <Shirt className="h-3 w-3 shrink-0" />
+                                      {srv.totalPrendas || 0} prendas
+                                    </span>
+                                  </div>
+                                  <span className="font-black font-display text-primary text-sm sm:text-base shrink-0">
                                     {formatRD(srv.total)}
                                   </span>
                                 </div>
@@ -3310,6 +3740,20 @@ function ReportesPage() {
                                     <span>Promedio: <strong>{formatRD(ticketPromedioSrv)}</strong></span>
                                   </div>
                                 </div>
+
+                                {/* Botón para ver desglose de prendas aplicadas */}
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedServiceForModal(srv);
+                                    setServiceModalSearch("");
+                                  }}
+                                  className="w-full mt-2.5 py-2 px-3 rounded-xl bg-[#1B4B73] hover:bg-[#143755] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                                  title="Ver desglose de prendas tratadas con este servicio"
+                                >
+                                  <Shirt className="h-3.5 w-3.5 text-[#F0B900] shrink-0" />
+                                  <span>Ver prendas tratadas ({srv.rankingPrendas?.length || 0})</span>
+                                </button>
                               </div>
                             </div>
                           );
@@ -5338,6 +5782,350 @@ function ReportesPage() {
                 </div>
               </>
             )}
+          </DialogContent>
+        </Dialog>
+
+        {/* ========================================================================= */}
+        {/* MODAL DE DESGLOSE DE PRENDAS TRATADAS POR UN SERVICIO                     */}
+        {/* ========================================================================= */}
+        <Dialog 
+          open={!!selectedServiceForModal} 
+          onOpenChange={(open) => {
+            if (!open) {
+              setSelectedServiceForModal(null);
+              setServiceModalSearch("");
+            }
+          }}
+        >
+          <DialogContent className="rounded-3xl max-w-2xl p-0 gap-0 overflow-hidden border border-slate-200 shadow-2xl bg-white text-slate-900 max-h-[90vh] flex flex-col">
+            {selectedServiceForModal && (() => {
+              const srv = selectedServiceForModal;
+              const allPrendas = srv.rankingPrendas || [];
+              const q = serviceModalSearch.toLowerCase().trim();
+              const filteredList = allPrendas.filter((p: any) => 
+                !q || p.name.toLowerCase().includes(q) || (p.categoria && p.categoria.toLowerCase().includes(q))
+              );
+              const maxItemCount = Math.max(...allPrendas.map((p: any) => p.count), 1);
+
+              return (
+                <>
+                  {/* Header con estilo Klynn Cloud (Fondo Blanco) */}
+                  <div className="bg-white text-slate-900 p-5 sm:p-6 relative border-b border-slate-100 shrink-0">
+                    <div className="flex items-start justify-between gap-3 pr-8">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="h-12 w-12 rounded-2xl bg-[#1B4B73]/10 border border-[#1B4B73]/20 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                          {srv.imagen_url ? (
+                            <img src={srv.imagen_url} alt={srv.name} className="h-full w-full object-cover" />
+                          ) : (
+                            <WashingMachine className="h-6 w-6 text-[#1B4B73]" />
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <DialogTitle className="text-lg sm:text-xl font-display font-black text-slate-900 truncate">
+                              {srv.name}
+                            </DialogTitle>
+                            {srv.precio_base > 0 && (
+                              <Badge className="bg-[#1B4B73]/10 text-[#1B4B73] border-[#1B4B73]/20 text-[10px] font-bold">
+                                Base: {formatRD(srv.precio_base)}
+                              </Badge>
+                            )}
+                          </div>
+                          <DialogDescription className="text-xs text-slate-500 line-clamp-1 mt-0.5">
+                            {srv.descripcion || "Desglose de prendas procesadas con este servicio"}
+                          </DialogDescription>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Resumen Métricas Rápidas */}
+                    <div className="grid grid-cols-3 gap-2.5 mt-4 pt-3.5 border-t border-slate-100">
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Recaudado</span>
+                        <span className="font-display font-black text-sm sm:text-base text-emerald-600">
+                          {formatRD(srv.total)}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Órdenes</span>
+                        <span className="font-display font-black text-sm sm:text-base text-[#1B4B73]">
+                          {srv.count}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Prendas Procesadas</span>
+                        <span className="font-display font-black text-sm sm:text-base text-[#1B4B73] flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-[#F0B900] shrink-0" />
+                          <span>{srv.totalPrendas || 0} pz/lbs</span>
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Barra de Búsqueda Interna */}
+                  <div className="p-4 pb-3 border-b border-slate-100 bg-slate-50/60 shrink-0">
+                    <div className="relative flex items-center">
+                      <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                      <Input
+                        placeholder="Buscar prenda en este servicio..."
+                        value={serviceModalSearch}
+                        onChange={(e) => setServiceModalSearch(e.target.value)}
+                        className="pl-10 pr-9 h-10 rounded-xl text-xs bg-white text-slate-900 placeholder:text-slate-400 border border-slate-200/90 shadow-2xs focus-visible:ring-2 focus-visible:ring-[#1B4B73]/20 focus-visible:border-[#1B4B73] transition-all font-medium"
+                      />
+                      {serviceModalSearch && (
+                        <button
+                          type="button"
+                          onClick={() => setServiceModalSearch("")}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 rounded-full h-5 w-5 flex items-center justify-center text-sm transition-colors hover:bg-slate-100"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Listado / Tabla de Prendas */}
+                  <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1 max-h-[50vh] bg-white">
+                    {filteredList.length > 0 ? (
+                      filteredList.map((item: any, idx: number) => {
+                        const pctBar = Math.round((item.count / maxItemCount) * 100);
+                        return (
+                          <div
+                            key={item.name}
+                            className="p-3 rounded-2xl bg-white border border-slate-200/80 hover:border-[#1B4B73]/50 shadow-2xs transition-all space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-3 min-w-0">
+                                <span className="h-6 w-6 rounded-full bg-slate-100 flex items-center justify-center font-black text-xs text-[#1B4B73] shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <div className="h-9 w-9 rounded-xl bg-slate-100 overflow-hidden border border-slate-200/60 shrink-0 flex items-center justify-center">
+                                  {item.imagen_url ? (
+                                    <img src={item.imagen_url} alt={item.name} className="h-full w-full object-cover" />
+                                  ) : (
+                                    <Shirt className="h-4 w-4 text-[#1B4B73]" />
+                                  )}
+                                </div>
+                                <div className="min-w-0">
+                                  <div className="flex items-center gap-2">
+                                    <span className="font-bold text-sm text-slate-900 truncate">{item.name}</span>
+                                    <Badge variant="outline" className="text-[10px] py-0 px-1.5 font-bold border-slate-200 text-slate-600 bg-slate-50">
+                                      {item.categoria}
+                                    </Badge>
+                                  </div>
+                                  <span className="text-[11px] text-slate-500">
+                                    {item.es_libra ? 'Lavado por Libra' : 'Unidad individual'}
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="flex items-center gap-4 shrink-0 text-right">
+                                <div>
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Cantidad</span>
+                                  <span className="font-extrabold text-slate-900 text-xs sm:text-sm">
+                                    {item.count} {item.es_libra ? 'lbs' : 'pz'}
+                                  </span>
+                                </div>
+                                <div className="w-24 sm:w-28 text-right">
+                                  <span className="text-[10px] text-slate-500 uppercase font-bold block">Aporte</span>
+                                  <span className="font-black font-display text-emerald-600 text-xs sm:text-sm">
+                                    {formatRD(item.total)}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+
+                            {/* Barra de Proporción dentro del Servicio */}
+                            <div className="flex items-center gap-3 pt-1">
+                              <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-[#1B4B73] transition-all duration-500"
+                                  style={{ width: `${pctBar}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0 w-14 text-right">
+                                {item.pct}% del srv
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-10 text-center text-slate-500 space-y-2">
+                        <Shirt className="h-7 w-7 mx-auto text-slate-400" />
+                        <p className="text-xs font-bold">
+                          {serviceModalSearch ? "No hay prendas que coincidan con la búsqueda" : "No hay prendas registradas para este servicio en este período"}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer con Acciones Centradas */}
+                  <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-100 flex flex-wrap items-center justify-center shrink-0 gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const target = srv.name;
+                        setSelectedServiceForModal(null);
+                        setServiceModalSearch("");
+                        setServiceFilter(target);
+                        window.scrollTo({ top: 1100, behavior: "smooth" });
+                      }}
+                      className="px-5 py-2.5 rounded-xl bg-[#1B4B73] hover:bg-[#143755] text-white text-xs font-bold flex items-center justify-center gap-2 transition-all cursor-pointer shadow-xs active:scale-[0.98]"
+                    >
+                      <WashingMachine className="h-4 w-4 text-[#F0B900]" />
+                      <span>Filtrar catálogo principal con este servicio</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedServiceForModal(null);
+                        setServiceModalSearch("");
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
+          </DialogContent>
+        </Dialog>
+
+        {/* ========================================================================= */}
+        {/* MODAL DE DESGLOSE DE SERVICIOS APLICADOS A UNA PRENDA                     */}
+        {/* ========================================================================= */}
+        <Dialog 
+          open={!!selectedPrendaForModal} 
+          onOpenChange={(open) => !open && setSelectedPrendaForModal(null)}
+        >
+          <DialogContent className="rounded-3xl max-w-lg p-0 gap-0 overflow-hidden border border-slate-200 shadow-2xl bg-white text-slate-900 max-h-[85vh] flex flex-col">
+            {selectedPrendaForModal && (() => {
+              const p = selectedPrendaForModal;
+              const serviciosList = p.rankingServicios || [];
+              const maxSrvCount = Math.max(...serviciosList.map((s: any) => s.count), 1);
+
+              return (
+                <>
+                  {/* Header Prenda con Fondo Blanco */}
+                  <div className="bg-white text-slate-900 p-5 sm:p-6 relative border-b border-slate-100 shrink-0">
+                    <div className="flex items-start gap-3.5 pr-8">
+                      <div className="h-12 w-12 rounded-2xl bg-[#1B4B73]/10 border border-[#1B4B73]/20 flex items-center justify-center shrink-0 overflow-hidden shadow-2xs">
+                        {p.imagen_url ? (
+                          <img src={p.imagen_url} alt={p.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <Shirt className="h-6 w-6 text-[#1B4B73]" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <DialogTitle className="text-lg sm:text-xl font-display font-black text-slate-900 truncate">
+                            {p.name}
+                          </DialogTitle>
+                          <Badge className="bg-[#1B4B73]/10 text-[#1B4B73] border-[#1B4B73]/20 text-[10px] font-bold">
+                            {p.categoria}
+                          </Badge>
+                        </div>
+                        <DialogDescription className="text-xs text-slate-500 mt-0.5">
+                          Servicios a los que se ha destinado esta prenda en las órdenes
+                        </DialogDescription>
+                      </div>
+                    </div>
+
+                    {/* Resumen de la Prenda */}
+                    <div className="grid grid-cols-2 gap-2.5 mt-4 pt-3.5 border-t border-slate-100">
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Volumen Total</span>
+                        <span className="font-display font-black text-sm sm:text-base text-[#1B4B73] flex items-center gap-1.5">
+                          <span className="h-2 w-2 rounded-full bg-[#F0B900] shrink-0" />
+                          <span>{p.count} {p.es_libra ? 'libras' : 'piezas'}</span>
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-200/80 text-right">
+                        <span className="text-[10px] text-slate-500 uppercase font-bold block">Facturación Total</span>
+                        <span className="font-display font-black text-sm sm:text-base text-emerald-600">
+                          {formatRD(p.total)}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Listado de Servicios Aplicados */}
+                  <div className="p-4 sm:p-5 overflow-y-auto space-y-2.5 flex-1 max-h-[50vh] bg-white">
+                    <div className="flex items-center justify-between pb-1">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                        Servicios Registrados ({serviciosList.length})
+                      </span>
+                    </div>
+
+                    {serviciosList.length > 0 ? (
+                      serviciosList.map((srv: any, idx: number) => {
+                        const pctBar = Math.round((srv.count / maxSrvCount) * 100);
+                        return (
+                          <div
+                            key={srv.name}
+                            className="p-3 rounded-2xl bg-white border border-slate-200/80 hover:border-[#1B4B73]/50 shadow-2xs transition-all space-y-2"
+                          >
+                            <div className="flex items-center justify-between gap-3">
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <span className="h-6 w-6 rounded-full bg-[#1B4B73]/10 text-[#1B4B73] flex items-center justify-center font-black text-xs shrink-0">
+                                  #{idx + 1}
+                                </span>
+                                <div className="min-w-0">
+                                  <span className="font-bold text-sm text-slate-900 truncate block">{srv.name}</span>
+                                  <span className="text-[11px] text-slate-500 font-medium">
+                                    {srv.pct}% de las solicitudes de esta prenda
+                                  </span>
+                                </div>
+                              </div>
+
+                              <div className="text-right shrink-0">
+                                <span className="font-extrabold text-slate-900 text-xs sm:text-sm block">
+                                  {srv.count} {p.es_libra ? 'lbs' : 'pz'}
+                                </span>
+                                <span className="font-black font-display text-emerald-600 text-xs">
+                                  {formatRD(srv.total)}
+                                </span>
+                              </div>
+                            </div>
+
+                            {/* Barra de Proporción */}
+                            <div className="flex items-center gap-3 pt-1">
+                              <div className="flex-1 h-1.5 rounded-full bg-slate-100 overflow-hidden">
+                                <div
+                                  className="h-full rounded-full bg-[#1B4B73] transition-all duration-500"
+                                  style={{ width: `${pctBar}%` }}
+                                />
+                              </div>
+                              <span className="text-[10px] font-bold text-slate-500 shrink-0 w-14 text-right">
+                                {srv.pct}%
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div className="py-8 text-center text-slate-500 text-xs font-bold">
+                        Sin servicios detallados para esta prenda
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Footer Centrado */}
+                  <div className="p-3.5 sm:p-4 bg-slate-50 border-t border-slate-100 flex items-center justify-center shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setSelectedPrendaForModal(null)}
+                      className="px-6 py-2.5 rounded-xl bg-slate-200/80 hover:bg-slate-300 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
           </DialogContent>
         </Dialog>
       </main>

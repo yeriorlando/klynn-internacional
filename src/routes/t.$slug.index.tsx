@@ -65,6 +65,7 @@ import {
   MessageCircle,
   Loader2,
   Shirt,
+  Scale,
 } from "lucide-react";
 import {
   useOrdenes,
@@ -99,6 +100,7 @@ import {
   EstadoOrdenDialog,
 } from "@/components/klynn/OrdenesPage";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
+import { CompararVentasModal } from "@/components/klynn/CompararVentasModal";
 
 export const Route = createFileRoute("/t/$slug/")({
   component: DashboardPage,
@@ -182,6 +184,7 @@ function DashboardPage() {
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
   const [notificandoLote, setNotificandoLote] = useState(false);
+  const [showCompararVentasModal, setShowCompararVentasModal] = useState(false);
 
   const loading = loadingOrdenes || loadingCaja || loadingGastos || loadingClientes || loadingMovs;
 
@@ -637,29 +640,42 @@ function DashboardPage() {
               </p>
             </div>
 
-            {/* Time toggle pill */}
-            <div className="inline-flex items-center p-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold shrink-0 self-start sm:self-auto border border-slate-200/50 dark:border-slate-700/50">
-              <button
+            {/* Controles: Botón Comparar Períodos + Switch de Tiempo */}
+            <div className="flex items-center gap-2 self-start sm:self-auto flex-wrap">
+              {/* Botón: COMPARAR PERÍODOS (Color Azul Añil #1B4B73 Primario de Klynn) */}
+              <Button 
                 type="button"
-                onClick={() => setPeriodoChart("7D")}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "7D" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
+                onClick={() => setShowCompararVentasModal(true)} 
+                className="flex items-center gap-2 rounded-xl h-8 px-3.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs shrink-0"
               >
-                7D
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriodoChart("30D")}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "30D" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                30D
-              </button>
-              <button
-                type="button"
-                onClick={() => setPeriodoChart("TODO")}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${periodoChart === "TODO" ? "bg-white dark:bg-slate-700 text-foreground shadow-2xs" : "text-muted-foreground hover:text-foreground"}`}
-              >
-                Todo
-              </button>
+                <Scale className="h-3.5 w-3.5 text-[#F0B900] shrink-0" />
+                <span>Comparar Períodos</span>
+              </Button>
+
+              {/* Time toggle pill con fondo #1B4B73 para la pestaña activa */}
+              <div className="inline-flex items-center p-0.5 rounded-full bg-slate-100 dark:bg-slate-800 text-xs font-bold shrink-0 border border-slate-200/50 dark:border-slate-700/50">
+                <button
+                  type="button"
+                  onClick={() => setPeriodoChart("7D")}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${periodoChart === "7D" ? "bg-[#1B4B73] text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  7D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeriodoChart("30D")}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${periodoChart === "30D" ? "bg-[#1B4B73] text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  30D
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setPeriodoChart("TODO")}
+                  className={`px-3 py-1 rounded-full text-xs font-bold transition-all cursor-pointer ${periodoChart === "TODO" ? "bg-[#1B4B73] text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Todo
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1205,6 +1221,14 @@ function DashboardPage() {
         tenant={tenant}
         ordenesActivas={ordenes}
         ordenActualId={conveyorOrden?.id}
+      />
+
+      {/* Modal Comparar Ventas Multi-Período */}
+      <CompararVentasModal
+        open={showCompararVentasModal}
+        onOpenChange={setShowCompararVentasModal}
+        ordenes={ordenes}
+        tenantNombre={user?.tenant?.nombre || "Klynn Lavandería"}
       />
     </div>
   );

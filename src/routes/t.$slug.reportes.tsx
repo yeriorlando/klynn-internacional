@@ -5,6 +5,7 @@ import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { createPortal } from "react-dom";
 import { exportToCsv } from "@/lib/export";
+import { exportReportesRendimientoToExcel, exportFacturasEnviadasToExcel } from "@/lib/excel-reportes";
 import { 
   DropdownMenu, 
   DropdownMenuContent, 
@@ -42,6 +43,7 @@ import {
   Home,
   CheckCircle2,
   AlertCircle,
+  Loader2,
   Landmark
 } from "lucide-react";
 import { toast } from "sonner";
@@ -69,7 +71,8 @@ import {
   usePlans,
   useServicios,
   useCatalogo,
-  useECFDocuments
+  useECFDocuments,
+  useClientes
 } from "@/hooks/use-queries";
 
 export const Route = createFileRoute("/t/$slug/reportes")({ component: ReportesPage });
@@ -90,6 +93,7 @@ function ReportesPage() {
   const { data: serviciosData = [] } = useServicios(tenantId);
   const { data: catalogoData = [] } = useCatalogo(tenantId);
   const { data: rawEcfDocs = [] } = useECFDocuments(tenantId);
+  const { data: clientes = [] } = useClientes(tenantId);
 
   const [isPrinting, setIsPrinting] = useState(false);
   
@@ -227,47 +231,26 @@ function ReportesPage() {
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
       .slice(0, 10); // Límite de 10
 
-    // --- 1. Top de Prendas Más Solicitadas (Ropa) ---
-    const garmentCounts: Record<string, { count: number; total: number }> = {};
+    // --- 1. Top de Prendas Más Solicitadas (Ropa) y Cruce con Servicios ---
+    const garmentCounts: Record<string, { 
+      count: number; 
+      total: number;
+      es_libra?: boolean;
+      categoria?: string;
+      imagen_url?: string | null;
+      servicios: Record<string, { count: number; total: number }>;
+    }> = {};
     let totalPiezas = 0;
     let totalLibras = 0;
-    ordenes.forEach(o => {
-      if (o.estado === "ANULADA") return;
-      if (Array.isArray(o.items)) {
-        o.items.forEach((item: any) => {
-          const rawDesc = item.descripcion || "Otros";
-          const desc = rawDesc.replace(/^↳\s*/, "").trim();
-          const qty = Number(item.cantidad) || 0;
-          const catMatch = catalogoData.find(c => 
-            c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
-          );
-          const priceUnit = Number(item.precio_unitario) > 0 
-            ? Number(item.precio_unitario) 
-            : (catMatch?.precio || 0);
-          const sub = priceUnit * qty;
-
-          if (!garmentCounts[desc]) {
-            garmentCounts[desc] = { count: 0, total: 0 };
-          }
-          garmentCounts[desc].count += qty;
-          garmentCounts[desc].total += sub;
-
-          if (item.es_libra || catMatch?.por_libra) {
-            totalLibras += qty;
-          } else {
-            totalPiezas += qty;
-          }
-        });
-      }
-    });
-
-    const topPrendas = Object.entries(garmentCounts)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 10);
 
     // --- 1b. Top de Servicios Más Solicitados (Operaciones) ---
-    const serviceCounts: Record<string, { count: number; total: number }> = {};
+    const serviceCounts: Record<string, { 
+      count: number; 
+      total: number;
+      totalPrendas: number;
+      prendas: Record<string, { name: string; count: number; total: number; categoria?: string; imagen_url?: string | null; es_libra?: boolean }>;
+    }> = {};
+
     ordenes.forEach(o => {
       if (o.estado === "ANULADA") return;
       if (Array.isArray(o.servicios)) {
@@ -281,7 +264,7 @@ function ReportesPage() {
             : (srvMatch?.precio || 0);
 
           if (!serviceCounts[sName]) {
-            serviceCounts[sName] = { count: 0, total: 0 };
+            serviceCounts[sName] = { count: 0, total: 0, totalPrendas: 0, prendas: {} };
           }
           serviceCounts[sName].count += 1;
           serviceCounts[sName].total += price;
@@ -289,8 +272,107 @@ function ReportesPage() {
       }
     });
 
+    ordenes.forEach(o => {
+      if (o.estado === "ANULADA") return;
+      const orderServices = (Array.isArray(o.servicios) && o.servicios.length > 0) ? o.servicios : [];
+
+      if (Array.isArray(o.items)) {
+        o.items.forEach((item: any) => {
+          const rawDesc = item.descripcion || "Otros";
+          const desc = rawDesc.replace(/^↳\s*/, "").trim();
+          const qty = Number(item.cantidad) || 0;
+          const catMatch = catalogoData.find(c => 
+            c.nombre?.toLowerCase().trim() === desc.toLowerCase().trim()
+          );
+          const priceUnit = Number(item.precio_unitario) > 0 
+            ? Number(item.precio_unitario) 
+            : (catMatch?.precio || 0);
+          const sub = priceUnit * qty;
+          const isLibra = !!(item.es_libra || catMatch?.por_libra);
+          const categoria = catMatch?.categoria || (isLibra ? "Lavandería por Libra" : "Prendas");
+          const imagen_url = catMatch?.imagen_url || null;
+
+          if (!garmentCounts[desc]) {
+            garmentCounts[desc] = { 
+              count: 0, 
+              total: 0, 
+              es_libra: isLibra,
+              categoria,
+              imagen_url,
+              servicios: {} 
+            };
+          }
+          garmentCounts[desc].count += qty;
+          garmentCounts[desc].total += sub;
+
+          if (isLibra) {
+            totalLibras += qty;
+          } else {
+            totalPiezas += qty;
+          }
+
+          let itemServices: string[] = [];
+          if (item.servicio_origen && item.servicio_origen.trim()) {
+            itemServices = [item.servicio_origen.trim()];
+          } else if (orderServices.length > 0) {
+            itemServices = orderServices;
+          } else {
+            itemServices = ["Lavandería Estándar"];
+          }
+
+          itemServices.forEach(sName => {
+            if (!serviceCounts[sName]) {
+              serviceCounts[sName] = { count: 0, total: 0, totalPrendas: 0, prendas: {} };
+            }
+            serviceCounts[sName].totalPrendas += qty;
+            if (!serviceCounts[sName].prendas[desc]) {
+              serviceCounts[sName].prendas[desc] = {
+                name: desc,
+                count: 0,
+                total: 0,
+                categoria,
+                imagen_url,
+                es_libra: isLibra
+              };
+            }
+            serviceCounts[sName].prendas[desc].count += qty;
+            serviceCounts[sName].prendas[desc].total += sub;
+
+            if (!garmentCounts[desc].servicios[sName]) {
+              garmentCounts[desc].servicios[sName] = { count: 0, total: 0 };
+            }
+            garmentCounts[desc].servicios[sName].count += qty;
+            garmentCounts[desc].servicios[sName].total += sub;
+          });
+        });
+      }
+    });
+
+    const topPrendas = Object.entries(garmentCounts)
+      .map(([name, data]) => {
+        const rankingServicios = Object.entries(data.servicios || {})
+          .map(([sName, sData]) => ({
+            name: sName,
+            count: sData.count,
+            total: sData.total,
+            pct: data.count > 0 ? Math.round((sData.count / data.count) * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count);
+        return { name, ...data, rankingServicios };
+      })
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+
     const topServicios = Object.entries(serviceCounts)
-      .map(([name, data]) => ({ name, ...data }))
+      .map(([name, data]) => {
+        const rankingPrendas = Object.values(data.prendas || {})
+          .map(p => ({
+            ...p,
+            pct: data.totalPrendas > 0 ? Math.round((p.count / data.totalPrendas) * 100) : 0
+          }))
+          .sort((a, b) => b.count - a.count);
+        return { name, ...data, rankingPrendas };
+      })
       .sort((a, b) => b.count - a.count)
       .slice(0, 10);
 
@@ -511,8 +593,16 @@ function ReportesPage() {
           ])
         ];
 
-        exportToCsv(`Facturas_Enviadas_${rncEmisor}_${period}`, csvData[0], csvData.slice(1));
-        toast.success(`Facturas Enviadas de ${period} exportadas en Excel (CSV) 📊`);
+        exportFacturasEnviadasToExcel({
+          periodOrdenes,
+          rncEmisor,
+          exportYear,
+          exportMonth,
+          clientes,
+          rawEcfDocs,
+          tenantName: user?.tenant?.nombre || "Klynn Lavandería",
+        });
+        toast.success(`Facturas Enviadas de ${period} exportadas en Excel (.xlsx) con diseño 📊`);
       }
       setShowDgiiModal(false);
     } catch (e: any) {
@@ -545,10 +635,25 @@ function ReportesPage() {
             <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-elegant">
               <DropdownMenuItem 
                 className="gap-2 cursor-pointer py-2 rounded-lg font-medium text-xs sm:text-sm" 
-                onClick={() => exportToCsv("Reporte_Rendimiento", ["Métrica / Categoría", "Valor Registrado"], exportData)}
+                onClick={() => {
+                  try {
+                    exportReportesRendimientoToExcel({
+                      stats,
+                      ordenesCount: ordenes.length,
+                      gastosCount: gastos.length,
+                      empleados: emps,
+                      ordenes,
+                      tenantName: user?.tenant?.nombre || "Klynn Lavandería",
+                    });
+                    toast.success("Reporte de Rendimiento exportado a Excel (.xlsx) con diseño exitosamente");
+                  } catch (err) {
+                    console.error("Error al exportar reporte a Excel:", err);
+                    toast.error("Error al exportar a Excel");
+                  }
+                }}
               >
                 <FileSpreadsheet className="h-4 w-4 text-emerald-600 shrink-0" />
-                <span>Excel (CSV)</span>
+                <span>Excel (.xlsx)</span>
               </DropdownMenuItem>
               <DropdownMenuItem 
                 className="gap-2 cursor-pointer py-2 rounded-lg font-medium text-xs sm:text-sm" 

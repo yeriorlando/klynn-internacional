@@ -633,7 +633,8 @@ export function Ticket({
                           : (it.precio_unitario || 0);
 
                         const cleanDesc = it.descripcion.replace(/^↳\s*/, "");
-                        const cantPrefix = it.cantidad > 1 ? `${it.cantidad}x ` : "";
+                        const hasPrice = (it.precio_unitario || 0) > 0;
+                        const cantPrefix = !hasPrice && it.cantidad > 1 ? `${it.cantidad}x ` : "";
 
                         return (
                           <div key={'sd'+dIdx} className="flex justify-between items-start py-1">
@@ -703,10 +704,13 @@ export function Ticket({
                         ? (valor / it.cantidad)
                         : (it.precio_unitario || 0);
 
+                      const hasPrice = (it.precio_unitario || 0) > 0;
+                      const cantPrefix = !hasPrice && it.cantidad > 1 ? `${it.cantidad}x ` : "";
+
                       return (
                         <div key={'suelto'+i} className="flex justify-between items-start py-1">
                           <div className="flex-1 min-w-0 pr-1">
-                            <div className="font-semibold leading-tight text-[10.5px] break-words">{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
+                            <div className="font-semibold leading-tight text-[10.5px] break-words">{cantPrefix}{it.descripcion}{it.es_libra ? ` (${it.cantidad}lb)` : ""}</div>
                             {it.servicio_origen && (
                               <div className="text-[9px] font-bold text-black/80">↳ {it.servicio_origen}</div>
                             )}
