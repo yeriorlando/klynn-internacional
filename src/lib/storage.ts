@@ -3485,7 +3485,25 @@ export async function saveOrden(o: Orden) {
 
   // 3. Intentar guardar en Supabase; si falla por timeout o corte, encolar en Outbox
   try {
-    const { error } = await supabase.from("ordenes").upsert(dbPayload);
+    let { error } = await supabase.from("ordenes").upsert(dbPayload);
+
+    // Si la base de datos remota aún no tiene una columna recién creada (ej. 'marbetes' antes de correr la migración SQL),
+    // omitir esa columna específica y reintentar para no detener las ventas ni bloquear la caja registradora.
+    if (error && typeof error.message === "string") {
+      const colMatch = error.message.match(/Could not find the '([^']+)' column of 'ordenes'/i);
+      if (colMatch && colMatch[1]) {
+        const missingCol = colMatch[1];
+        console.warn(
+          `[saveOrden] La columna '${missingCol}' no existe aún en la tabla 'ordenes' de Supabase. Reintentando guardado sin esta columna para no interrumpir la venta...`,
+          error
+        );
+        const fallbackPayload = { ...(dbPayload as Record<string, any>) };
+        delete fallbackPayload[missingCol];
+        const retry = await supabase.from("ordenes").upsert(fallbackPayload);
+        error = retry.error;
+      }
+    }
+
     if (error) throw error;
   } catch (err) {
     const message = err instanceof Error

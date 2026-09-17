@@ -119,6 +119,17 @@ const VALID_COLUMNS: Record<string, Set<string>> = {
     "incidencia_notas",
     "incidencia_fecha",
     "ecf_status",
+    "marbete_color",
+    "marbete_piezas",
+    "marbete_secuencia",
+    "marbetes",
+    "condicion_cobro",
+    "pagos_detalle",
+    "anticipo_monto",
+    "dias_credito",
+    "fecha_vencimiento_credito",
+    "promocion_id",
+    "promocion_nombre",
   ]),
   clientes: new Set([
     "id",
@@ -636,7 +647,18 @@ class SyncManager {
     const sanitizedData = sanitizeForTable(table_name, data);
 
     // 5. UPSERT a la base de datos en Supabase
-    const { error } = await supabase.from(table_name).upsert(sanitizedData, { onConflict: "id" });
+    let { error } = await supabase.from(table_name).upsert(sanitizedData, { onConflict: "id" });
+    if (error && typeof error.message === "string") {
+      const colMatch = error.message.match(/Could not find the '([^']+)' column/i);
+      if (colMatch && colMatch[1]) {
+        const missingCol = colMatch[1];
+        console.warn(`[SyncManager] Columna '${missingCol}' no encontrada en el esquema de ${table_name}. Reintentando sin este campo...`);
+        const fallback = { ...sanitizedData };
+        delete fallback[missingCol];
+        const retryRes = await supabase.from(table_name).upsert(fallback, { onConflict: "id" });
+        error = retryRes.error;
+      }
+    }
     if (error) {
       console.error(`[SyncManager] Fallo upsert en ${table_name}:`, error);
       throw error;
