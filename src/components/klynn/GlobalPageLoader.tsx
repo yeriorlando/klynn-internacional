@@ -8,7 +8,7 @@ interface GlobalPageLoaderProps {
 }
 
 export function GlobalPageLoader({
-  text,
+  text = "Cargando...",
   minHeight = "min-h-[75vh] flex-1",
   compact = false,
   delayMs = 200,
