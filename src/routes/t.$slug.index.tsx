@@ -66,7 +66,10 @@ import {
   Loader2,
   Shirt,
   Scale,
+  Lock,
+  Unlock,
 } from "lucide-react";
+import { AperturaDialog } from "@/components/klynn/AperturaDialog";
 import {
   useOrdenes,
   useCajaAbierta,
@@ -154,6 +157,7 @@ function DashboardPage() {
   const { data: plans = [] } = usePlans();
 
   const [currentPage, setCurrentPage] = useState(1);
+  const [showAperturaModal, setShowAperturaModal] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -183,7 +187,6 @@ function DashboardPage() {
   );
   const [showDownloadA4, setShowDownloadA4] = useState<Orden | null>(null);
   const [estadoModal, setEstadoModal] = useState<Orden | null>(null);
-  const [notificandoLote, setNotificandoLote] = useState(false);
   const [showCompararVentasModal, setShowCompararVentasModal] = useState(false);
 
   const loading = loadingOrdenes || loadingCaja || loadingGastos || loadingClientes || loadingMovs;
@@ -217,37 +220,6 @@ function DashboardPage() {
   const ordenesSinRetirar = useMemo(() => {
     return obtenerOrdenesSinRetirar(ordenes, diasSinRetirarConfig);
   }, [ordenes, diasSinRetirarConfig]);
-
-  async function notificarTodosAlmacenados() {
-    if (ordenesSinRetirar.length === 0) return;
-    setNotificandoLote(true);
-    let enviados = 0;
-    let errores = 0;
-    const delay = (ms: number) => new Promise((res) => setTimeout(res, ms));
-
-    for (let i = 0; i < ordenesSinRetirar.length; i++) {
-      const item = ordenesSinRetirar[i];
-      const cli = clientes.find((c) => c.id === item.orden.cliente_id);
-      if (cli && cli.telefono) {
-        const res = await notificarWhatsApp(tenant, cli, item.orden, "sin_retirar");
-        if (res.ok) enviados++;
-        else errores++;
-
-        // Pausa anti-spam humanizada con variación natural (6.5s - 11s) para proteger el número contra baneos de WhatsApp
-        if (i < ordenesSinRetirar.length - 1) {
-          await delay(6500 + Math.floor(Math.random() * 4500));
-        }
-      }
-    }
-
-    setNotificandoLote(false);
-    if (enviados > 0) {
-      toast.success(`Se enviaron ${enviados} recordatorio(s) por WhatsApp ✅`);
-    }
-    if (errores > 0) {
-      toast.error(`${errores} cliente(s) no pudieron ser notificados.`);
-    }
-  }
 
   const [conveyorOrden, setConveyorOrden] = useState<Orden | null>(null);
   const [conveyorUbicacion, setConveyorUbicacion] = useState("");
@@ -522,65 +494,93 @@ function DashboardPage() {
 
       {/* Alertas */}
       {hasProcesos && ordenesSinRetirar.length > 0 && (
-        <Card className="mb-4 border-amber-500/30 bg-amber-500/10 p-4 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-2xs">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-amber-500/20 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0 font-bold">
-              <Package className="h-5 w-5" />
+        <Card className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-4.5 rounded-2xl border border-sky-400/40 dark:border-sky-500/30 bg-gradient-to-r from-sky-500/15 via-blue-500/10 to-indigo-500/5 dark:from-sky-950/40 dark:via-blue-950/25 dark:to-transparent shadow-xs animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-sky-500/20 text-[#1B4B73] dark:text-sky-300 border border-sky-500/30 shadow-2xs mt-0.5 sm:mt-0">
+              <Package className="h-5 w-5 stroke-[2.2]" />
             </div>
-            <div>
-              <div className="font-bold text-sm text-foreground">
-                {ordenesSinRetirar.length} orden(es) almacenadas sin retirar (Más de {diasSinRetirarConfig} días)
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-display text-sm sm:text-base font-extrabold text-slate-900 dark:text-sky-100 tracking-tight">
+                  {ordenesSinRetirar.length} {ordenesSinRetirar.length === 1 ? "orden almacenada" : "órdenes almacenadas"} sin retirar
+                </h4>
+                <span className="rounded-full bg-sky-500/20 dark:bg-sky-400/20 border border-sky-500/30 px-2.5 py-0.5 text-[10px] font-black uppercase text-sky-900 dark:text-sky-200 tracking-wider">
+                  Más de {diasSinRetirarConfig} días
+                </span>
               </div>
-              <div className="text-xs text-muted-foreground mt-0.5">
-                Prendas en estado LISTA desde hace más de {diasSinRetirarConfig} días. Notifica a tus clientes por WhatsApp para acelerar el retiro.
-              </div>
+              <p className="text-xs text-slate-600 dark:text-sky-200/80 font-medium mt-0.5 leading-relaxed">
+                Prendas en estado LISTA preparadas en estantería esperando ser entregadas a sus clientes.
+              </p>
             </div>
           </div>
-          <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
+          <div className="flex items-center gap-2.5 shrink-0">
             <Link to="/t/$slug/ordenes" params={{ slug: tenant.slug }} search={{ filter: "almacenadas" }}>
               <Button
-                variant="outline"
-                size="sm"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs hover:bg-muted/60 transition-all cursor-pointer shrink-0 whitespace-nowrap h-10"
+                className="flex items-center gap-2 px-5 py-2 rounded-xl font-bold text-xs sm:text-sm bg-[#1B4B73] hover:bg-[#143a59] text-white shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10 border border-[#1B4B73] active:scale-95 group"
               >
-                <Eye className="h-4 w-4 text-primary shrink-0" />
+                <Eye className="h-4 w-4 text-[#F0B900] shrink-0" />
                 <span>Ver órdenes</span>
+                <ArrowRight className="h-3.5 w-3.5 text-white/70 group-hover:translate-x-0.5 transition-transform" />
               </Button>
             </Link>
-            {hasWhatsApp && (
-              <Button
-                size="sm"
-                className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10"
-                disabled={notificandoLote}
-                onClick={notificarTodosAlmacenados}
-              >
-                {notificandoLote ? <Loader2 className="h-4 w-4 animate-spin shrink-0" /> : <MessageCircle className="h-4 w-4 shrink-0" />}
-                <span>Notificar por WhatsApp ({ordenesSinRetirar.length})</span>
-              </Button>
-            )}
           </div>
         </Card>
       )}
 
       {!caja && (
-        <Card className="mb-6 flex flex-wrap items-center gap-3 border-destructive/30 bg-destructive/5 p-4 rounded-2xl shadow-2xs">
-          <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
-          <div className="flex-1 min-w-[200px]">
-            <div className="font-bold text-sm text-foreground">No hay caja abierta</div>
-            <div className="text-xs text-muted-foreground mt-0.5">
-              Abre la caja para comenzar a registrar ventas en efectivo.
+        <Card className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 sm:p-4.5 rounded-2xl border border-amber-400/50 dark:border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/5 dark:from-amber-950/40 dark:via-amber-900/20 dark:to-transparent shadow-xs animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30 shadow-2xs mt-0.5 sm:mt-0">
+              <Lock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-display text-sm sm:text-base font-extrabold text-amber-950 dark:text-amber-200 tracking-tight">
+                  No hay caja abierta actualmente
+                </h4>
+                <span className="rounded-full bg-amber-500/20 dark:bg-amber-400/20 border border-amber-500/30 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900 dark:text-amber-300 tracking-wider">
+                  Turno Inactivo
+                </span>
+              </div>
+              <p className="text-xs text-amber-900/85 dark:text-amber-300/80 font-medium mt-0.5 leading-relaxed">
+                Inicia el turno operativo con tu fondo en efectivo para registrar cobros y ventas del día.
+              </p>
             </div>
           </div>
-          <Link to="/t/$slug/caja" params={{ slug: tenant.slug }}>
-            <Button 
-              variant="outline"
-              className="flex items-center gap-2 px-4 py-2 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs hover:bg-muted/60 transition-all cursor-pointer h-10 shrink-0"
+
+          <div className="flex items-center gap-2.5 self-end sm:self-center shrink-0 w-full sm:w-auto justify-end">
+            <Link to="/t/$slug/caja" params={{ slug: tenant.slug }}>
+              <Button 
+                variant="outline"
+                className="flex items-center gap-2 px-3.5 py-2 rounded-xl font-bold text-xs sm:text-sm bg-white dark:bg-slate-900 border border-amber-500/30 text-amber-950 dark:text-amber-200 shadow-2xs hover:bg-amber-500/10 transition-all cursor-pointer h-10 shrink-0"
+              >
+                <span>Ir a caja</span>
+              </Button>
+            </Link>
+
+            <Button
+              type="button"
+              onClick={() => setShowAperturaModal(true)}
+              className="flex items-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl h-10 px-4.5 shadow-sm transition-all active:scale-95 cursor-pointer text-xs sm:text-sm shrink-0 border border-emerald-600"
             >
-              Ir a caja
+              <Unlock className="h-4 w-4 stroke-[2.5]" />
+              <span>Abrir Caja</span>
             </Button>
-          </Link>
+          </div>
         </Card>
       )}
+
+      <AperturaDialog
+        open={showAperturaModal}
+        onOpenChange={setShowAperturaModal}
+        tenantId={tenantId}
+        empleadoId={user?.empleado?.id || ""}
+        onDone={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["caja-abierta", tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ["cajas", tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+        }}
+      />
 
       {/* KPIs */}
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">

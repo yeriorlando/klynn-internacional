@@ -35,6 +35,7 @@ import { Route as TSlugProcesosRouteImport } from './routes/t.$slug.procesos'
 import { Route as TSlugPersonalRouteImport } from './routes/t.$slug.personal'
 import { Route as TSlugOrdenesRouteImport } from './routes/t.$slug.ordenes'
 import { Route as TSlugNuevaOrdenRouteImport } from './routes/t.$slug.nueva-orden'
+import { Route as TSlugNominaRouteImport } from './routes/t.$slug.nomina'
 import { Route as TSlugLogisticaRouteImport } from './routes/t.$slug.logistica'
 import { Route as TSlugLoginRouteImport } from './routes/t.$slug.login'
 import { Route as TSlugGastosRouteImport } from './routes/t.$slug.gastos'
@@ -42,6 +43,7 @@ import { Route as TSlugFiscalPendientesRouteImport } from './routes/t.$slug.fisc
 import { Route as TSlugFiscalHomologacionRouteImport } from './routes/t.$slug.fiscal-homologacion'
 import { Route as TSlugFiscalRouteImport } from './routes/t.$slug.fiscal'
 import { Route as TSlugEstanteriaRouteImport } from './routes/t.$slug.estanteria'
+import { Route as TSlugCxpRouteImport } from './routes/t.$slug.cxp'
 import { Route as TSlugCxcRouteImport } from './routes/t.$slug.cxc'
 import { Route as TSlugConversationsRouteImport } from './routes/t.$slug.conversations'
 import { Route as TSlugControlMarbetesRouteImport } from './routes/t.$slug.control-marbetes'
@@ -183,6 +185,11 @@ const TSlugNuevaOrdenRoute = TSlugNuevaOrdenRouteImport.update({
   path: '/nueva-orden',
   getParentRoute: () => TSlugRoute,
 } as any)
+const TSlugNominaRoute = TSlugNominaRouteImport.update({
+  id: '/nomina',
+  path: '/nomina',
+  getParentRoute: () => TSlugRoute,
+} as any)
 const TSlugLogisticaRoute = TSlugLogisticaRouteImport.update({
   id: '/logistica',
   path: '/logistica',
@@ -216,6 +223,11 @@ const TSlugFiscalRoute = TSlugFiscalRouteImport.update({
 const TSlugEstanteriaRoute = TSlugEstanteriaRouteImport.update({
   id: '/estanteria',
   path: '/estanteria',
+  getParentRoute: () => TSlugRoute,
+} as any)
+const TSlugCxpRoute = TSlugCxpRouteImport.update({
+  id: '/cxp',
+  path: '/cxp',
   getParentRoute: () => TSlugRoute,
 } as any)
 const TSlugCxcRoute = TSlugCxcRouteImport.update({
@@ -281,6 +293,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/control-marbetes': typeof TSlugControlMarbetesRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
+  '/t/$slug/cxp': typeof TSlugCxpRoute
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
   '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
@@ -288,6 +301,7 @@ export interface FileRoutesByFullPath {
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
+  '/t/$slug/nomina': typeof TSlugNominaRoute
   '/t/$slug/nueva-orden': typeof TSlugNuevaOrdenRoute
   '/t/$slug/ordenes': typeof TSlugOrdenesRoute
   '/t/$slug/personal': typeof TSlugPersonalRoute
@@ -322,6 +336,7 @@ export interface FileRoutesByTo {
   '/t/$slug/control-marbetes': typeof TSlugControlMarbetesRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
+  '/t/$slug/cxp': typeof TSlugCxpRoute
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
   '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
@@ -329,6 +344,7 @@ export interface FileRoutesByTo {
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
+  '/t/$slug/nomina': typeof TSlugNominaRoute
   '/t/$slug/nueva-orden': typeof TSlugNuevaOrdenRoute
   '/t/$slug/ordenes': typeof TSlugOrdenesRoute
   '/t/$slug/personal': typeof TSlugPersonalRoute
@@ -365,6 +381,7 @@ export interface FileRoutesById {
   '/t/$slug/control-marbetes': typeof TSlugControlMarbetesRoute
   '/t/$slug/conversations': typeof TSlugConversationsRoute
   '/t/$slug/cxc': typeof TSlugCxcRoute
+  '/t/$slug/cxp': typeof TSlugCxpRoute
   '/t/$slug/estanteria': typeof TSlugEstanteriaRoute
   '/t/$slug/fiscal': typeof TSlugFiscalRoute
   '/t/$slug/fiscal-homologacion': typeof TSlugFiscalHomologacionRoute
@@ -372,6 +389,7 @@ export interface FileRoutesById {
   '/t/$slug/gastos': typeof TSlugGastosRoute
   '/t/$slug/login': typeof TSlugLoginRoute
   '/t/$slug/logistica': typeof TSlugLogisticaRoute
+  '/t/$slug/nomina': typeof TSlugNominaRoute
   '/t/$slug/nueva-orden': typeof TSlugNuevaOrdenRoute
   '/t/$slug/ordenes': typeof TSlugOrdenesRoute
   '/t/$slug/personal': typeof TSlugPersonalRoute
@@ -409,6 +427,7 @@ export interface FileRouteTypes {
     | '/t/$slug/control-marbetes'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
+    | '/t/$slug/cxp'
     | '/t/$slug/estanteria'
     | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
@@ -416,6 +435,7 @@ export interface FileRouteTypes {
     | '/t/$slug/gastos'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
+    | '/t/$slug/nomina'
     | '/t/$slug/nueva-orden'
     | '/t/$slug/ordenes'
     | '/t/$slug/personal'
@@ -450,6 +470,7 @@ export interface FileRouteTypes {
     | '/t/$slug/control-marbetes'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
+    | '/t/$slug/cxp'
     | '/t/$slug/estanteria'
     | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
@@ -457,6 +478,7 @@ export interface FileRouteTypes {
     | '/t/$slug/gastos'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
+    | '/t/$slug/nomina'
     | '/t/$slug/nueva-orden'
     | '/t/$slug/ordenes'
     | '/t/$slug/personal'
@@ -492,6 +514,7 @@ export interface FileRouteTypes {
     | '/t/$slug/control-marbetes'
     | '/t/$slug/conversations'
     | '/t/$slug/cxc'
+    | '/t/$slug/cxp'
     | '/t/$slug/estanteria'
     | '/t/$slug/fiscal'
     | '/t/$slug/fiscal-homologacion'
@@ -499,6 +522,7 @@ export interface FileRouteTypes {
     | '/t/$slug/gastos'
     | '/t/$slug/login'
     | '/t/$slug/logistica'
+    | '/t/$slug/nomina'
     | '/t/$slug/nueva-orden'
     | '/t/$slug/ordenes'
     | '/t/$slug/personal'
@@ -714,6 +738,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TSlugNuevaOrdenRouteImport
       parentRoute: typeof TSlugRoute
     }
+    '/t/$slug/nomina': {
+      id: '/t/$slug/nomina'
+      path: '/nomina'
+      fullPath: '/t/$slug/nomina'
+      preLoaderRoute: typeof TSlugNominaRouteImport
+      parentRoute: typeof TSlugRoute
+    }
     '/t/$slug/logistica': {
       id: '/t/$slug/logistica'
       path: '/logistica'
@@ -761,6 +792,13 @@ declare module '@tanstack/react-router' {
       path: '/estanteria'
       fullPath: '/t/$slug/estanteria'
       preLoaderRoute: typeof TSlugEstanteriaRouteImport
+      parentRoute: typeof TSlugRoute
+    }
+    '/t/$slug/cxp': {
+      id: '/t/$slug/cxp'
+      path: '/cxp'
+      fullPath: '/t/$slug/cxp'
+      preLoaderRoute: typeof TSlugCxpRouteImport
       parentRoute: typeof TSlugRoute
     }
     '/t/$slug/cxc': {
@@ -823,6 +861,7 @@ interface TSlugRouteChildren {
   TSlugControlMarbetesRoute: typeof TSlugControlMarbetesRoute
   TSlugConversationsRoute: typeof TSlugConversationsRoute
   TSlugCxcRoute: typeof TSlugCxcRoute
+  TSlugCxpRoute: typeof TSlugCxpRoute
   TSlugEstanteriaRoute: typeof TSlugEstanteriaRoute
   TSlugFiscalRoute: typeof TSlugFiscalRoute
   TSlugFiscalHomologacionRoute: typeof TSlugFiscalHomologacionRoute
@@ -830,6 +869,7 @@ interface TSlugRouteChildren {
   TSlugGastosRoute: typeof TSlugGastosRoute
   TSlugLoginRoute: typeof TSlugLoginRoute
   TSlugLogisticaRoute: typeof TSlugLogisticaRoute
+  TSlugNominaRoute: typeof TSlugNominaRoute
   TSlugNuevaOrdenRoute: typeof TSlugNuevaOrdenRoute
   TSlugOrdenesRoute: typeof TSlugOrdenesRoute
   TSlugPersonalRoute: typeof TSlugPersonalRoute
@@ -847,6 +887,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugControlMarbetesRoute: TSlugControlMarbetesRoute,
   TSlugConversationsRoute: TSlugConversationsRoute,
   TSlugCxcRoute: TSlugCxcRoute,
+  TSlugCxpRoute: TSlugCxpRoute,
   TSlugEstanteriaRoute: TSlugEstanteriaRoute,
   TSlugFiscalRoute: TSlugFiscalRoute,
   TSlugFiscalHomologacionRoute: TSlugFiscalHomologacionRoute,
@@ -854,6 +895,7 @@ const TSlugRouteChildren: TSlugRouteChildren = {
   TSlugGastosRoute: TSlugGastosRoute,
   TSlugLoginRoute: TSlugLoginRoute,
   TSlugLogisticaRoute: TSlugLogisticaRoute,
+  TSlugNominaRoute: TSlugNominaRoute,
   TSlugNuevaOrdenRoute: TSlugNuevaOrdenRoute,
   TSlugOrdenesRoute: TSlugOrdenesRoute,
   TSlugPersonalRoute: TSlugPersonalRoute,

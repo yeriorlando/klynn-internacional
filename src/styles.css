@@ -149,6 +149,9 @@
 
 @layer base {
   * { border-color: var(--color-border); }
+  button, [role="button"], select, summary, [type="button"], [type="reset"], [type="submit"], [role="tab"], a {
+    cursor: pointer;
+  }
   html { 
     font-family: var(--font-sans); 
     -webkit-font-smoothing: antialiased; 

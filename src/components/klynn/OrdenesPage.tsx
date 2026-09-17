@@ -1164,10 +1164,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   return (
     <div>
-      <PageHeader title="Órdenes" description={`${ordenes.length} órdenes registradas`}>
-        <div className="flex items-center gap-2.5 flex-wrap">
-          {/* Pendientes de pago (Amarillo Jabón #F0B900 Sólido) */}
-          <Button
+      <PageHeader 
+        title="Control de Órdenes" 
+        description="Seguimiento en tiempo real de prendas, estados de lavado, entregas y pagos pendientes"
+      >
+        {/* Pendientes de pago (Amarillo Jabón #F0B900 Sólido) */}
+        <Button
             onClick={() => setShowPendientes(true)}
             className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-extrabold text-xs sm:text-sm bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs transition-all cursor-pointer shrink-0 whitespace-nowrap h-10 active:scale-95"
           >
@@ -1229,14 +1231,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
           {/* Imprimir (Esmeralda Sólido) */}
           <Button 
-            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95" 
+            className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs text-xs sm:text-sm cursor-pointer transition-all active:scale-95 shrink-0" 
             onClick={() => setIsPrintingList(true)}
           >
             <Printer className="h-4 w-4 text-white shrink-0" />
             <span>Imprimir</span>
           </Button>
-
-        </div>
       </PageHeader>
 
       {limits.orderLimit !== null && (

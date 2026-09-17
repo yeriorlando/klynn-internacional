@@ -39,6 +39,8 @@ export interface Plan {
     estanteria?: boolean;
     pos_offline?: boolean;
     promociones?: boolean;
+    nomina?: boolean;
+    cxp?: boolean;
   };
   destacado?: boolean;
   es_especial?: boolean;
@@ -115,6 +117,17 @@ export interface Empleado {
   max_descuento_porcentaje?: number;
   creado_en: string;
   avatar_url?: string;
+  salario_base?: number;
+  frecuencia_pago?: "QUINCENAL" | "SEMANAL" | "MENSUAL";
+  tipo_contrato?: "FIJO" | "DESTAJO_COMISION" | "MIXTO";
+  metodo_pago?: "TRANSFERENCIA" | "EFECTIVO" | "CHEQUE";
+  banco_nombre?: string;
+  numero_cuenta_banco?: string;
+  tipo_cuenta_banco?: "AHORROS" | "CORRIENTE";
+  aplica_tss?: boolean;
+  aplica_isr?: boolean;
+  monto_por_docena_planchado?: number;
+  monto_por_entrega_delivery?: number;
 }
 
 type OfflineCachedEmpleado = Empleado & { _offline_auth?: OfflineAuthVerifier };
@@ -235,6 +248,8 @@ export interface TenantConfig {
     estanteria?: boolean;
     pos_offline?: boolean;
     promociones?: boolean;
+    nomina?: boolean;
+    cxp?: boolean;
   };
   habilitar_control_marbetes?: boolean;
   ultimo_marbete_color?: string;
@@ -686,6 +701,151 @@ export interface InvitacionCodigo {
   usado_por_email?: string | null;
 }
 
+// ============ Cuentas por Pagar (CXP) ============
+export type CategoriaInsumo =
+  | "QUIMICOS"
+  | "EMPAQUE"
+  | "CALDERAS_REPUESTOS"
+  | "COMBUSTIBLE"
+  | "SERVICIOS"
+  | "OTROS"
+  | (string & {});
+
+export interface Suplidor {
+  id: string;
+  tenant_id: string;
+  nombre_comercial: string;
+  razon_social?: string;
+  rnc_cedula?: string;
+  telefono?: string;
+  email?: string;
+  direccion?: string;
+  contacto_nombre?: string;
+  categoria_insumo: CategoriaInsumo;
+  dias_credito_default: number;
+  limite_credito?: number;
+  notas?: string;
+  activo: boolean;
+  creado_en: string;
+  actualizado_en?: string;
+}
+
+export type EstadoFacturaCXP = "PENDIENTE" | "PARCIAL" | "PAGADA" | "ANULADA";
+export type EstadoMoraCXP = "AL_DIA" | "POR_VENCER" | "VENCIDA" | "CRITICA" | "PAGADA";
+
+export interface FacturaCXP {
+  id: string;
+  tenant_id: string;
+  suplidor_id: string;
+  numero_factura: string;
+  ncf?: string;
+  tipo_ncf: string;
+  fecha_emision: string;
+  plazo_dias: number;
+  fecha_vencimiento: string;
+  subtotal: number;
+  itbis: number;
+  total: number;
+  monto_pagado: number;
+  saldo_pendiente: number;
+  estado: EstadoFacturaCXP;
+  categoria_gasto: string;
+  descripcion?: string;
+  comprobante_url?: string;
+  creado_por?: string;
+  creado_en: string;
+  actualizado_en?: string;
+  // Joins y campos computados
+  suplidor?: Suplidor;
+  dias_vencida?: number;
+  estado_mora?: EstadoMoraCXP;
+}
+
+export interface AbonoFacturaCXP {
+  id: string;
+  tenant_id: string;
+  factura_cxp_id: string;
+  suplidor_id: string;
+  empleado_id: string;
+  monto: number;
+  metodo_pago: "TRANSFERENCIA" | "EFECTIVO" | "CHEQUE" | "TARJETA";
+  banco_origen?: string;
+  referencia_bancaria?: string;
+  caja_id?: string;
+  gasto_id?: string;
+  notas?: string;
+  fecha_pago: string;
+  creado_en: string;
+}
+
+// ============ Nómina de Empleados ============
+export interface AnticipoNomina {
+  id: string;
+  tenant_id: string;
+  empleado_id: string;
+  monto: number;
+  fecha: string;
+  motivo?: string;
+  caja_id?: string;
+  estado: "PENDIENTE" | "DESCONTADO" | "ANULADO";
+  periodo_nomina_id?: string;
+  creado_por?: string;
+  creado_en: string;
+  empleado?: Empleado;
+}
+
+export type EstadoPeriodoNomina = "BORRADOR" | "APROBADA" | "PAGADA" | "ANULADA";
+export type FrecuenciaNomina = "QUINCENAL" | "SEMANAL" | "MENSUAL" | "REGALIA";
+
+export interface PeriodoNomina {
+  id: string;
+  tenant_id: string;
+  codigo: string;
+  nombre: string;
+  frecuencia: FrecuenciaNomina;
+  fecha_inicio: string;
+  fecha_fin: string;
+  fecha_pago: string;
+  total_bruto: number;
+  total_deducciones: number;
+  total_neto: number;
+  total_empleados: number;
+  estado: EstadoPeriodoNomina;
+  notas?: string;
+  aprobado_por?: string;
+  creado_por?: string;
+  creado_en: string;
+  actualizado_en?: string;
+}
+
+export interface DetalleNomina {
+  id: string;
+  tenant_id: string;
+  periodo_id: string;
+  empleado_id: string;
+  salario_base_periodo: number;
+  comisiones_destajo: number;
+  horas_extras: number;
+  cantidad_horas_extras?: number;
+  bonos_incentivos: number;
+  otros_ingresos: number;
+  total_ingresos: number;
+  anticipos_descontados: number;
+  tss_afp: number;
+  tss_sfs: number;
+  isr_retencion: number;
+  otras_deducciones: number;
+  total_deducciones: number;
+  neto_pagar: number;
+  metodo_pago: "TRANSFERENCIA" | "EFECTIVO" | "CHEQUE";
+  pagado: boolean;
+  fecha_pago?: string;
+  referencia_pago?: string;
+  notas?: string;
+  creado_en: string;
+  empleado?: Empleado;
+}
+
 export const KEY = {
   tenants: "lvx:tenants",
   empleados: "lvx:empleados",
@@ -702,6 +862,12 @@ export const KEY = {
   seq: "lvx:orden_seq",
   globalConfig: "lvx:globalConfig",
   invitaciones: "lvx:invitaciones",
+  suplidores: "lvx:suplidores",
+  facturas_cxp: "lvx:facturas_cxp",
+  abonos_cxp: "lvx:abonos_cxp",
+  anticipos_nomina: "lvx:anticipos_nomina",
+  periodos_nomina: "lvx:periodos_nomina",
+  detalles_nomina: "lvx:detalles_nomina",
 };
 
 export const ADMIN_EMAILS = ["admin@klynn.com.do"];
@@ -724,6 +890,8 @@ export const PLANS: Plan[] = [
       estanteria: true,
       pos_offline: false,
       promociones: false,
+      nomina: false,
+      cxp: false,
     },
     precio_sucursal_adicional: 1000,
     limite_sucursales_adicionales: 1,
@@ -746,6 +914,8 @@ export const PLANS: Plan[] = [
       estanteria: true,
       pos_offline: true,
       promociones: true,
+      nomina: true,
+      cxp: true,
     },
     destacado: true,
     precio_sucursal_adicional: 1200,
@@ -769,6 +939,8 @@ export const PLANS: Plan[] = [
       estanteria: true,
       pos_offline: true,
       promociones: true,
+      nomina: true,
+      cxp: true,
     },
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
@@ -812,7 +984,9 @@ export function isModuleEnabled(
     | "procesos"
     | "estanteria"
     | "pos_offline"
-    | "promociones",
+    | "promociones"
+    | "nomina"
+    | "cxp",
   plan?: Plan,
 ): boolean {
   if (!tenant || tenant.id === "__loading__") return true;
@@ -839,6 +1013,16 @@ export function isModuleEnabled(
   if (moduleKey === "promociones") {
     return activePlan?.modulos?.promociones !== undefined
       ? !!activePlan.modulos.promociones
+      : false;
+  }
+  if (moduleKey === "nomina") {
+    return activePlan?.modulos?.nomina !== undefined
+      ? !!activePlan.modulos.nomina
+      : false;
+  }
+  if (moduleKey === "cxp") {
+    return activePlan?.modulos?.cxp !== undefined
+      ? !!activePlan.modulos.cxp
       : false;
   }
   return !!activePlan?.modulos?.[moduleKey];
@@ -1086,6 +1270,21 @@ export const PERMISOS_SISTEMA = [
     nombre: "Condonar Deuda",
     descripcion: "Condonar saldos pendientes de pago",
   },
+  {
+    id: "autorizar-credito",
+    nombre: "Autorizar Crédito Excedido",
+    descripcion: "Permitir crear órdenes a crédito que sobrepasen el límite fijado al cliente",
+  },
+  {
+    id: "cxp",
+    nombre: "Cuentas por Pagar",
+    descripcion: "Facturas de compras, suplidores y pagos a crédito",
+  },
+  {
+    id: "nomina",
+    nombre: "Nómina de Empleados",
+    descripcion: "Gestión de salarios, períodos de nómina, recibos y vales",
+  },
 ];
 
 export function getPermisosPorRol(rol: RolEmpleado): string[] {
@@ -1105,6 +1304,8 @@ export function getPermisosPorRol(rol: RolEmpleado): string[] {
         "logistica",
         "gastos",
         "reportes",
+        "cxp",
+        "nomina",
       ];
     case "VENDEDOR":
       return ["dashboard", "nueva-orden", "ordenes", "procesos", "caja", "clientes"];
@@ -1210,6 +1411,18 @@ export async function getPlans(): Promise<Plan[]> {
                 : localMatch?.modulos?.promociones !== undefined
                   ? !!localMatch.modulos.promociones
                   : (staticMatch?.modulos?.promociones ?? false),
+            nomina:
+              p.nomina !== undefined && p.nomina !== null
+                ? !!p.nomina
+                : localMatch?.modulos?.nomina !== undefined
+                  ? !!localMatch.modulos.nomina
+                  : (staticMatch?.modulos?.nomina ?? false),
+            cxp:
+              p.cxp !== undefined && p.cxp !== null
+                ? !!p.cxp
+                : localMatch?.modulos?.cxp !== undefined
+                  ? !!localMatch.modulos.cxp
+                  : (staticMatch?.modulos?.cxp ?? false),
           },
           limite_whatsapp_mes:
             p.limite_whatsapp_mes ??
@@ -2787,7 +3000,13 @@ export async function saveEmpleado(e: Empleado) {
   };
 
   console.log("Upsert en tabla empleados:", dataToSave);
-  const { error: dbError } = await supabase.from("empleados").upsert(dataToSave);
+  let { error: dbError } = await supabase.from("empleados").upsert(dataToSave);
+
+  if (dbError && (dbError.message?.includes("metodo_pago") || (dbError as any).code === "PGRST204")) {
+    const { metodo_pago, ...fallbackData } = dataToSave as any;
+    const retry = await supabase.from("empleados").upsert(fallbackData);
+    dbError = retry.error;
+  }
 
   if (dbError) {
     console.error("DB ERROR:", dbError);
@@ -4213,6 +4432,8 @@ export async function savePlan(p: Plan) {
       estanteria: !!p.modulos?.estanteria,
       pos_offline: !!p.modulos?.pos_offline,
       promociones: !!p.modulos?.promociones,
+      nomina: !!p.modulos?.nomina,
+      cxp: !!p.modulos?.cxp,
       limite_whatsapp_mes: p.limite_whatsapp_mes,
       destacado: !!p.destacado,
       es_especial: !!p.es_especial,
@@ -5697,6 +5918,7 @@ export async function getNotificaciones(tenantId: string): Promise<Notificacion[
       .from("notificaciones")
       .select("*")
       .eq("tenant_id", tenantId)
+      .eq("leida", false)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -6154,5 +6376,625 @@ export async function registrarUsoPromocion(id: string, tenantId: string, montoD
     localStorage.setItem(localKey, JSON.stringify(updated));
   } catch (e) {
     console.warn("registrarUsoPromocion error:", e);
+  }
+}
+
+// ============================================================
+// CUENTAS POR PAGAR (CXP) — Operaciones de Almacenamiento
+// ============================================================
+
+export function calcularDiasVencimientoCXP(fechaVencimiento: string): number {
+  if (!fechaVencimiento) return 0;
+  const target = new Date(fechaVencimiento);
+  target.setHours(0, 0, 0, 0);
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  return Math.round((target.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+}
+
+export function getEstadoMoraCXP(fechaVencimiento: string, saldo: number): EstadoMoraCXP {
+  if (saldo <= 0) return "PAGADA";
+  const diasParaVencer = calcularDiasVencimientoCXP(fechaVencimiento);
+  if (diasParaVencer < -30) return "CRITICA"; // Vencida hace más de 30 días
+  if (diasParaVencer < 0) return "VENCIDA";    // Vencida
+  if (diasParaVencer <= 7) return "POR_VENCER"; // Vence en los próximos 7 días
+  return "AL_DIA";
+}
+
+export async function getSuplidores(tenantId: string): Promise<Suplidor[]> {
+  const realId = resolveTenantId(tenantId);
+  const local = read<Suplidor[]>(KEY.suplidores, []).filter(
+    (s) => s.tenant_id === realId || s.tenant_id === tenantId,
+  );
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return local;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("suplidores")
+      .select("*")
+      .eq("tenant_id", realId)
+      .order("nombre_comercial", { ascending: true });
+
+    if (!error && data) {
+      const mapped: Suplidor[] = data.map((item: any) => ({
+        ...item,
+        email: item.correo || item.email || "",
+      }));
+      const allLocal = read<Suplidor[]>(KEY.suplidores, []);
+      const others = allLocal.filter((s) => s.tenant_id !== realId && s.tenant_id !== tenantId);
+      write(KEY.suplidores, [...mapped, ...others]);
+      return mapped;
+    }
+  } catch (e) {
+    console.warn("getSuplidores error, using local:", e);
+  }
+
+  return local;
+}
+
+export async function saveSuplidor(suplidor: Suplidor): Promise<void> {
+  const realId = resolveTenantId(suplidor.tenant_id);
+  const toSave = { ...suplidor, tenant_id: realId, actualizado_en: new Date().toISOString() };
+
+  const allLocal = read<Suplidor[]>(KEY.suplidores, []);
+  const idx = allLocal.findIndex((s) => s.id === toSave.id);
+  if (idx >= 0) {
+    allLocal[idx] = toSave;
+  } else {
+    allLocal.push(toSave);
+  }
+  write(KEY.suplidores, allLocal);
+
+  try {
+    const { email, limite_credito, ...rest } = toSave as any;
+    const payload = {
+      ...rest,
+      correo: suplidor.email || (suplidor as any).correo || null,
+    };
+    const { error } = await supabase.from("suplidores").upsert(payload);
+    if (error) {
+      console.error("saveSuplidor supabase error:", error);
+    }
+  } catch (e) {
+    console.warn("saveSuplidor supabase error:", e);
+  }
+}
+
+export async function deleteSuplidor(id: string, tenantId: string): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<Suplidor[]>(KEY.suplidores, []);
+  write(
+    KEY.suplidores,
+    allLocal.filter((s) => !(s.id === id && (s.tenant_id === realId || s.tenant_id === tenantId))),
+  );
+
+  try {
+    const { error } = await supabase.from("suplidores").delete().eq("id", id).eq("tenant_id", realId);
+    if (error) {
+      console.error("deleteSuplidor supabase error:", error);
+    }
+  } catch (e) {
+    console.warn("deleteSuplidor supabase error:", e);
+  }
+}
+
+export async function getFacturasCXP(tenantId: string): Promise<FacturaCXP[]> {
+  const realId = resolveTenantId(tenantId);
+  const local = read<FacturaCXP[]>(KEY.facturas_cxp, []).filter(
+    (f) => f.tenant_id === realId || f.tenant_id === tenantId,
+  );
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return local.map((f) => ({
+      ...f,
+      estado_mora: getEstadoMoraCXP(f.fecha_vencimiento, f.saldo_pendiente),
+      dias_vencida: -calcularDiasVencimientoCXP(f.fecha_vencimiento),
+    }));
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("facturas_cxp")
+      .select("*, suplidores(*)")
+      .eq("tenant_id", realId)
+      .order("fecha_vencimiento", { ascending: true });
+
+    if (!error && data) {
+      const mapped: FacturaCXP[] = data.map((item: any) => ({
+        id: item.id,
+        tenant_id: item.tenant_id,
+        suplidor_id: item.suplidor_id,
+        numero_factura: item.numero_factura,
+        ncf: item.ncf,
+        tipo_ncf: item.tipo_ncf || (item.ncf ? item.ncf.substring(0, 3) : "B01"),
+        fecha_emision: item.fecha_emision,
+        plazo_dias: item.dias_credito ?? item.plazo_dias ?? 30,
+        fecha_vencimiento: item.fecha_vencimiento,
+        subtotal: Number(item.subtotal || 0),
+        itbis: Number(item.itbis || 0),
+        total: Number(item.total || 0),
+        monto_pagado: Number(item.monto_pagado || 0),
+        saldo_pendiente: Number(item.saldo_pendiente ?? item.total ?? 0),
+        estado: (item.estado_pago as EstadoFacturaCXP) || item.estado || "PENDIENTE",
+        categoria_gasto: item.categoria_gasto || "INSUMOS",
+        descripcion: item.notas || item.descripcion || "",
+        comprobante_url: item.comprobante_url,
+        creado_por: item.creado_por,
+        creado_en: item.creado_en,
+        actualizado_en: item.actualizado_en,
+        suplidor: item.suplidores
+          ? {
+              ...item.suplidores,
+              email: item.suplidores.correo || item.suplidores.email || "",
+            }
+          : undefined,
+        estado_mora: item.estado_mora || getEstadoMoraCXP(item.fecha_vencimiento, item.saldo_pendiente),
+        dias_vencida: -calcularDiasVencimientoCXP(item.fecha_vencimiento),
+      }));
+
+      const allLocal = read<FacturaCXP[]>(KEY.facturas_cxp, []);
+      const others = allLocal.filter((f) => f.tenant_id !== realId && f.tenant_id !== tenantId);
+      write(KEY.facturas_cxp, [...mapped, ...others]);
+      return mapped;
+    }
+  } catch (e) {
+    console.warn("getFacturasCXP error, using local:", e);
+  }
+
+  return local.map((f) => ({
+    ...f,
+    estado_mora: getEstadoMoraCXP(f.fecha_vencimiento, f.saldo_pendiente),
+    dias_vencida: -calcularDiasVencimientoCXP(f.fecha_vencimiento),
+  }));
+}
+
+export async function saveFacturaCXP(factura: FacturaCXP): Promise<void> {
+  const realId = resolveTenantId(factura.tenant_id);
+  const toSave = { ...factura, tenant_id: realId, actualizado_en: new Date().toISOString() };
+
+  const allLocal = read<FacturaCXP[]>(KEY.facturas_cxp, []);
+  const idx = allLocal.findIndex((f) => f.id === toSave.id);
+  if (idx >= 0) {
+    allLocal[idx] = toSave;
+  } else {
+    allLocal.push(toSave);
+  }
+  write(KEY.facturas_cxp, allLocal);
+
+  try {
+    const payload = {
+      id: toSave.id,
+      tenant_id: realId,
+      suplidor_id: toSave.suplidor_id,
+      numero_factura: toSave.numero_factura,
+      ncf: toSave.ncf || null,
+      fecha_emision: toSave.fecha_emision,
+      fecha_vencimiento: toSave.fecha_vencimiento,
+      subtotal: Number(toSave.subtotal || 0),
+      itbis: Number(toSave.itbis || 0),
+      otros_cargos: 0,
+      total: Number(toSave.total || 0),
+      monto_pagado: Number(toSave.monto_pagado || 0),
+      saldo_pendiente: Number(toSave.saldo_pendiente || 0),
+      estado_pago: toSave.estado || "PENDIENTE",
+      estado_mora: getEstadoMoraCXP(toSave.fecha_vencimiento, toSave.saldo_pendiente),
+      dias_credito: Number(toSave.plazo_dias || 30),
+      categoria_gasto: toSave.categoria_gasto || "INSUMOS",
+      comprobante_url: toSave.comprobante_url || null,
+      notas: toSave.descripcion || (toSave as any).notas || null,
+      creado_por: toSave.creado_por || null,
+      creado_en: toSave.creado_en || new Date().toISOString(),
+      actualizado_en: toSave.actualizado_en,
+    };
+    const { error } = await supabase.from("facturas_cxp").upsert(payload);
+    if (error) {
+      console.error("saveFacturaCXP supabase error:", error);
+    }
+  } catch (e) {
+    console.warn("saveFacturaCXP supabase error:", e);
+  }
+}
+
+export async function deleteFacturaCXP(id: string, tenantId: string): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<FacturaCXP[]>(KEY.facturas_cxp, []);
+  write(
+    KEY.facturas_cxp,
+    allLocal.filter((f) => !(f.id === id && (f.tenant_id === realId || f.tenant_id === tenantId))),
+  );
+
+  try {
+    const { error } = await supabase.from("facturas_cxp").delete().eq("id", id).eq("tenant_id", realId);
+    if (error) {
+      console.error("deleteFacturaCXP supabase error:", error);
+    }
+  } catch (e) {
+    console.warn("deleteFacturaCXP supabase error:", e);
+  }
+}
+
+export async function getAbonosCXP(tenantId: string, facturaId?: string): Promise<AbonoFacturaCXP[]> {
+  const realId = resolveTenantId(tenantId);
+  let local = read<AbonoFacturaCXP[]>(KEY.abonos_cxp, []).filter(
+    (a) => a.tenant_id === realId || a.tenant_id === tenantId,
+  );
+  if (facturaId) {
+    local = local.filter((a) => a.factura_cxp_id === facturaId);
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return local;
+  }
+
+  try {
+    let query = supabase.from("abonos_cxp").select("*").eq("tenant_id", realId);
+    if (facturaId) {
+      query = query.eq("factura_cxp_id", facturaId);
+    }
+    const { data, error } = await query.order("creado_en", { ascending: false });
+
+    if (!error && data) {
+      const mapped: AbonoFacturaCXP[] = data.map((item: any) => ({
+        id: item.id,
+        tenant_id: item.tenant_id,
+        factura_cxp_id: item.factura_cxp_id,
+        suplidor_id: item.suplidor_id,
+        empleado_id: item.creado_por || item.empleado_id || "admin",
+        monto: Number(item.monto || 0),
+        metodo_pago: item.metodo_pago,
+        banco_origen: item.banco_origen,
+        referencia_bancaria: item.referencia_bancaria,
+        caja_id: item.caja_id,
+        notas: item.notas,
+        fecha_pago: item.fecha_pago,
+        creado_en: item.creado_en,
+      }));
+
+      const allLocal = read<AbonoFacturaCXP[]>(KEY.abonos_cxp, []);
+      const others = allLocal.filter(
+        (a) =>
+          !(
+            (a.tenant_id === realId || a.tenant_id === tenantId) &&
+            (!facturaId || a.factura_cxp_id === facturaId)
+          ),
+      );
+      write(KEY.abonos_cxp, [...mapped, ...others]);
+      return mapped;
+    }
+  } catch (e) {
+    console.warn("getAbonosCXP error:", e);
+  }
+
+  return local;
+}
+
+export async function saveAbonoCXP(abono: AbonoFacturaCXP): Promise<void> {
+  const realId = resolveTenantId(abono.tenant_id);
+  const toSave = { ...abono, tenant_id: realId };
+
+  const allLocal = read<AbonoFacturaCXP[]>(KEY.abonos_cxp, []);
+  allLocal.unshift(toSave);
+  write(KEY.abonos_cxp, allLocal);
+
+  const facturas = await getFacturasCXP(realId);
+  const factura = facturas.find((f) => f.id === toSave.factura_cxp_id);
+  if (factura) {
+    const nuevoMontoPagado = +(Number(factura.monto_pagado || 0) + Number(toSave.monto)).toFixed(2);
+    const nuevoSaldo = Math.max(0, +(Number(factura.total) - nuevoMontoPagado).toFixed(2));
+    const nuevoEstado: EstadoFacturaCXP =
+      nuevoSaldo <= 0 ? "PAGADA" : nuevoMontoPagado > 0 ? "PARCIAL" : "PENDIENTE";
+
+    const facturaActualizada: FacturaCXP = {
+      ...factura,
+      monto_pagado: nuevoMontoPagado,
+      saldo_pendiente: nuevoSaldo,
+      estado: nuevoEstado,
+      actualizado_en: new Date().toISOString(),
+    };
+    await saveFacturaCXP(facturaActualizada);
+  }
+
+  try {
+    const payload = {
+      id: toSave.id,
+      tenant_id: realId,
+      factura_cxp_id: toSave.factura_cxp_id,
+      suplidor_id: toSave.suplidor_id,
+      monto: Number(toSave.monto),
+      fecha_pago: toSave.fecha_pago,
+      metodo_pago: toSave.metodo_pago,
+      banco_origen: toSave.banco_origen || null,
+      referencia_bancaria: toSave.referencia_bancaria || null,
+      comprobante_url: (toSave as any).comprobante_url || null,
+      notas: toSave.notas || null,
+      caja_id: toSave.caja_id || null,
+      creado_por: toSave.empleado_id || (toSave as any).creado_por || null,
+      creado_en: toSave.creado_en || new Date().toISOString(),
+    };
+    const { error } = await supabase.from("abonos_cxp").insert(payload);
+    if (error) {
+      console.error("saveAbonoCXP supabase error:", error);
+    }
+  } catch (e) {
+    console.warn("saveAbonoCXP supabase error:", e);
+  }
+}
+
+// ============================================================
+// NÓMINA DE EMPLEADOS — Cálculos Legales RD & Almacenamiento
+// ============================================================
+
+export function calcularTSS(salarioBase: number): { afp: number; sfs: number; totalTSS: number } {
+  if (!salarioBase || salarioBase <= 0) return { afp: 0, sfs: 0, totalTSS: 0 };
+  const afp = +(salarioBase * 0.0287).toFixed(2);
+  const sfs = +(salarioBase * 0.0304).toFixed(2);
+  const totalTSS = +(afp + sfs).toFixed(2);
+  return { afp, sfs, totalTSS };
+}
+
+export function calcularISRDGII(salarioMensual: number, deduccionTSS: number = 0): number {
+  const salarioNetoMensual = Math.max(0, salarioMensual - deduccionTSS);
+  const rentaAnual = salarioNetoMensual * 12;
+
+  let impuestoAnual = 0;
+  if (rentaAnual <= 416220) {
+    impuestoAnual = 0;
+  } else if (rentaAnual <= 624329) {
+    impuestoAnual = (rentaAnual - 416220) * 0.15;
+  } else if (rentaAnual <= 867123) {
+    impuestoAnual = 31216 + (rentaAnual - 624329) * 0.20;
+  } else {
+    impuestoAnual = 79776 + (rentaAnual - 867123) * 0.25;
+  }
+
+  return +(impuestoAnual / 12).toFixed(2);
+}
+
+export function calcularRegaliaPascual(totalGanadoAno: number): number {
+  if (!totalGanadoAno || totalGanadoAno <= 0) return 0;
+  return +(totalGanadoAno / 12).toFixed(2);
+}
+
+/**
+ * Cálculo oficial de Hora Extra en República Dominicana (Código de Trabajo Ley 16-92, Art. 203)
+ * - Salario Diario = Salario Mensual / 23.83 (factor legal oficial DGII y Ministerio de Trabajo)
+ * - Hora Ordinaria = Salario Diario / 8 horas de jornada legal
+ * - Hora Extra Regular (+35% de recargo legal) = Hora Ordinaria * 1.35
+ */
+export function calcularTarifaHoraExtra(salarioMensual: number): {
+  salarioDiario: number;
+  horaOrdinaria: number;
+  horaExtra35: number;
+} {
+  if (!salarioMensual || salarioMensual <= 0) {
+    return { salarioDiario: 0, horaOrdinaria: 0, horaExtra35: 0 };
+  }
+  const salarioDiario = +(salarioMensual / 23.83).toFixed(2);
+  const horaOrdinaria = +(salarioDiario / 8).toFixed(2);
+  const horaExtra35 = +(horaOrdinaria * 1.35).toFixed(2);
+  return { salarioDiario, horaOrdinaria, horaExtra35 };
+}
+
+export async function getAnticiposNomina(tenantId: string, empleadoId?: string): Promise<AnticipoNomina[]> {
+  const realId = resolveTenantId(tenantId);
+  let local = read<AnticipoNomina[]>(KEY.anticipos_nomina, []).filter(
+    (a) => a.tenant_id === realId || a.tenant_id === tenantId,
+  );
+  if (empleadoId) {
+    local = local.filter((a) => a.empleado_id === empleadoId);
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return local;
+  }
+
+  try {
+    let query = supabase.from("anticipos_nomina").select("*, empleados(*)").eq("tenant_id", realId);
+    if (empleadoId) {
+      query = query.eq("empleado_id", empleadoId);
+    }
+    const { data, error } = await query.order("fecha", { ascending: false });
+
+    if (!error && data) {
+      const mapped: AnticipoNomina[] = data.map((item: any) => ({
+        ...item,
+        empleado: item.empleados || undefined,
+      }));
+      const allLocal = read<AnticipoNomina[]>(KEY.anticipos_nomina, []);
+      const others = allLocal.filter(
+        (a) =>
+          !(
+            (a.tenant_id === realId || a.tenant_id === tenantId) &&
+            (!empleadoId || a.empleado_id === empleadoId)
+          ),
+      );
+      write(KEY.anticipos_nomina, [...mapped, ...others]);
+      return mapped;
+    }
+  } catch (e) {
+    console.warn("getAnticiposNomina error:", e);
+  }
+
+  return local;
+}
+
+export async function saveAnticipoNomina(anticipo: AnticipoNomina): Promise<void> {
+  const realId = resolveTenantId(anticipo.tenant_id);
+  const toSave = { ...anticipo, tenant_id: realId };
+
+  const allLocal = read<AnticipoNomina[]>(KEY.anticipos_nomina, []);
+  const idx = allLocal.findIndex((a) => a.id === toSave.id);
+  if (idx >= 0) {
+    allLocal[idx] = toSave;
+  } else {
+    allLocal.unshift(toSave);
+  }
+  write(KEY.anticipos_nomina, allLocal);
+
+  try {
+    const { empleado, ...payload } = toSave as any;
+    await supabase.from("anticipos_nomina").upsert(payload);
+  } catch (e) {
+    console.warn("saveAnticipoNomina supabase error:", e);
+  }
+}
+
+export async function deleteAnticipoNomina(id: string, tenantId: string): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<AnticipoNomina[]>(KEY.anticipos_nomina, []);
+  write(
+    KEY.anticipos_nomina,
+    allLocal.filter((a) => !(a.id === id && (a.tenant_id === realId || a.tenant_id === tenantId))),
+  );
+
+  try {
+    await supabase.from("anticipos_nomina").delete().eq("id", id).eq("tenant_id", realId);
+  } catch (e) {
+    console.warn("deleteAnticipoNomina supabase error:", e);
+  }
+}
+
+export async function getPeriodosNomina(tenantId: string): Promise<PeriodoNomina[]> {
+  const realId = resolveTenantId(tenantId);
+  const local = read<PeriodoNomina[]>(KEY.periodos_nomina, []).filter(
+    (p) => p.tenant_id === realId || p.tenant_id === tenantId,
+  );
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return local;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("periodos_nomina")
+      .select("*")
+      .eq("tenant_id", realId)
+      .order("fecha_inicio", { ascending: false });
+
+    if (!error && data) {
+      const allLocal = read<PeriodoNomina[]>(KEY.periodos_nomina, []);
+      const others = allLocal.filter((p) => p.tenant_id !== realId && p.tenant_id !== tenantId);
+      write(KEY.periodos_nomina, [...data, ...others]);
+      return data;
+    }
+  } catch (e) {
+    console.warn("getPeriodosNomina error:", e);
+  }
+
+  return local;
+}
+
+export async function savePeriodoNomina(periodo: PeriodoNomina): Promise<void> {
+  const realId = resolveTenantId(periodo.tenant_id);
+  const toSave = { ...periodo, tenant_id: realId, actualizado_en: new Date().toISOString() };
+
+  const allLocal = read<PeriodoNomina[]>(KEY.periodos_nomina, []);
+  const idx = allLocal.findIndex((p) => p.id === toSave.id);
+  if (idx >= 0) {
+    allLocal[idx] = toSave;
+  } else {
+    allLocal.unshift(toSave);
+  }
+  write(KEY.periodos_nomina, allLocal);
+
+  try {
+    await supabase.from("periodos_nomina").upsert(toSave);
+  } catch (e) {
+    console.warn("savePeriodoNomina supabase error:", e);
+  }
+}
+
+export async function deletePeriodoNomina(id: string, tenantId: string): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<PeriodoNomina[]>(KEY.periodos_nomina, []);
+  write(
+    KEY.periodos_nomina,
+    allLocal.filter((p) => !(p.id === id && (p.tenant_id === realId || p.tenant_id === tenantId))),
+  );
+
+  const allDetalles = read<DetalleNomina[]>(KEY.detalles_nomina, []);
+  write(
+    KEY.detalles_nomina,
+    allDetalles.filter((d) => d.periodo_id !== id),
+  );
+
+  try {
+    await supabase.from("periodos_nomina").delete().eq("id", id).eq("tenant_id", realId);
+  } catch (e) {
+    console.warn("deletePeriodoNomina supabase error:", e);
+  }
+}
+
+export async function getDetallesNomina(tenantId: string, periodoId?: string): Promise<DetalleNomina[]> {
+  const realId = resolveTenantId(tenantId);
+  let local = read<DetalleNomina[]>(KEY.detalles_nomina, []).filter(
+    (d) => d.tenant_id === realId || d.tenant_id === tenantId,
+  );
+  if (periodoId) {
+    local = local.filter((d) => d.periodo_id === periodoId);
+  }
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return local;
+  }
+
+  try {
+    let query = supabase.from("detalles_nomina").select("*, empleados(*)").eq("tenant_id", realId);
+    if (periodoId) {
+      query = query.eq("periodo_id", periodoId);
+    }
+    const { data, error } = await query;
+
+    if (!error && data) {
+      const mapped: DetalleNomina[] = data.map((item: any) => ({
+        ...item,
+        empleado: item.empleados || undefined,
+      }));
+      const allLocal = read<DetalleNomina[]>(KEY.detalles_nomina, []);
+      const others = allLocal.filter(
+        (d) =>
+          !(
+            (d.tenant_id === realId || d.tenant_id === tenantId) &&
+            (!periodoId || d.periodo_id === periodoId)
+          ),
+      );
+      write(KEY.detalles_nomina, [...mapped, ...others]);
+      return mapped;
+    }
+  } catch (e) {
+    console.warn("getDetallesNomina error:", e);
+  }
+
+  return local;
+}
+
+export async function saveDetallesNomina(detalles: DetalleNomina[]): Promise<void> {
+  if (!detalles || detalles.length === 0) return;
+  const realId = resolveTenantId(detalles[0].tenant_id);
+
+  const allLocal = read<DetalleNomina[]>(KEY.detalles_nomina, []);
+  const updated = allLocal.filter((d) => !detalles.some((item) => item.id === d.id));
+  detalles.forEach((d) => updated.push({ ...d, tenant_id: realId }));
+  write(KEY.detalles_nomina, updated);
+
+  try {
+    const payload = detalles.map((d) => {
+      const { empleado, ...rest } = d as any;
+      return { ...rest, tenant_id: realId };
+    });
+    const { error } = await supabase.from("detalles_nomina").upsert(payload);
+    if (error) {
+      if (error.message?.includes("cantidad_horas_extras") || (error as any).code === "PGRST204") {
+        const fallbackPayload = payload.map(({ cantidad_horas_extras, ...rest }: any) => rest);
+        await supabase.from("detalles_nomina").upsert(fallbackPayload);
+      } else {
+        console.warn("saveDetallesNomina supabase error:", error);
+      }
+    }
+  } catch (e) {
+    console.warn("saveDetallesNomina supabase error:", e);
   }
 }

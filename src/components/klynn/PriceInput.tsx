@@ -2,24 +2,26 @@ import React, { useState, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { formatAmountInput, parseAmount } from "@/lib/storage";
 
-interface PriceInputProps {
-  value: number;
+export interface PriceInputProps extends Omit<React.InputHTMLAttributes<HTMLInputElement>, "value" | "onChange"> {
+  value: number | undefined | null;
   onChange: (val: number) => void;
   className?: string;
   placeholder?: string;
 }
 
-export function PriceInput({ value, onChange, className, placeholder }: PriceInputProps) {
-  const [localVal, setLocalVal] = useState<string>("");
+export function PriceInput({ value, onChange, className, placeholder, ...props }: PriceInputProps) {
+  const [localVal, setLocalVal] = useState<string>(() => {
+    const num = Number(value) || 0;
+    return num > 0 ? formatAmountInput(String(num)) : "";
+  });
 
-  // Sync with outer value when it changes
+  // Sync with outer value when it changes externally
   useEffect(() => {
-    // If the parsed numeric value of localVal is the same as the external value,
-    // we don't overwrite it. This preserves active typing states (like trailing dots or zeros).
-    if (parseAmount(localVal) !== value) {
-      setLocalVal(value ? formatAmountInput(String(value)) : "");
+    const num = Number(value) || 0;
+    if (parseAmount(localVal) !== num) {
+      setLocalVal(num > 0 ? formatAmountInput(String(num)) : "");
     }
-  }, [value, localVal]);
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
@@ -56,9 +58,14 @@ export function PriceInput({ value, onChange, className, placeholder }: PriceInp
     onChange(parseAmount(formatted));
   };
 
-  const handleBlur = () => {
-    // Standardize representation on blur
-    setLocalVal(value ? formatAmountInput(String(value)) : "");
+  const handleBlur = (e: React.FocusEvent<HTMLInputElement>) => {
+    const num = Number(value) || 0;
+    if (num > 0) {
+      setLocalVal(formatAmountInput(localVal || String(num)));
+    } else {
+      setLocalVal("");
+    }
+    props.onBlur?.(e);
   };
 
   return (
@@ -70,6 +77,8 @@ export function PriceInput({ value, onChange, className, placeholder }: PriceInp
       onChange={handleChange}
       onBlur={handleBlur}
       placeholder={placeholder}
+      {...props}
     />
   );
 }
+

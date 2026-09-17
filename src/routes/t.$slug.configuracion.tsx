@@ -2652,6 +2652,8 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                           { key: "promociones", label: "Promociones y Cupones" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "pos_offline", label: "Modo Offline" },
+                          { key: "nomina", label: "Nómina y TSS / ISR" },
+                          { key: "cxp", label: "Cuentas por Pagar (CxP)" },
                         ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
@@ -2908,6 +2910,8 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                               { key: "promociones", label: "Promociones y Cupones" },
                               { key: "logistica", label: "Envío a domicilio" },
                               { key: "pos_offline", label: "Modo Offline" },
+                              { key: "nomina", label: "Nómina y TSS / ISR" },
+                              { key: "cxp", label: "Cuentas por Pagar (CxP)" },
                             ].map(({ key, label }) => {
                               const v = !!p.modulos?.[key as keyof typeof p.modulos];
                               return (

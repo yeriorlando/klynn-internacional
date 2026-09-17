@@ -484,28 +484,26 @@ function EstanteriaPage() {
     <div className="w-full space-y-6 pb-10 animate-in fade-in duration-300">
       {/* HEADER */}
       <PageHeader
-        title="Estantería virtual"
-        subtitle="Organización física de ganchos, rieles, casilleros y estantes de tu lavandería en tiempo real."
+        title="Estantería Virtual"
+        description="Organización física de ganchos, rieles, casilleros y estantes de tu lavandería en tiempo real"
       >
-        <div className="flex items-center gap-2.5 flex-wrap">
-          <Button
-            type="button"
-            onClick={() => setShowZoneModal(true)}
-            className="flex items-center gap-2 rounded-xl h-10 px-4 font-extrabold bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-          >
-            <FolderPlus className="h-4 w-4 text-[#1B4B73] shrink-0" />
-            <span>Nueva Zona</span>
-          </Button>
+        <Button
+          type="button"
+          onClick={() => setShowZoneModal(true)}
+          className="flex items-center gap-2 rounded-xl h-10 px-4 font-extrabold bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#F0B900] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+        >
+          <FolderPlus className="h-4 w-4 text-[#1B4B73] shrink-0" />
+          <span>Nueva Zona</span>
+        </Button>
 
-          <Button
-            type="button"
-            onClick={() => openBatchModal()}
-            className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-          >
-            <Layers className="h-4 w-4 text-[#F0B900] shrink-0" />
-            <span>Crear Rango</span>
-          </Button>
-        </div>
+        <Button
+          type="button"
+          onClick={() => openBatchModal()}
+          className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+        >
+          <Layers className="h-4 w-4 text-[#F0B900] shrink-0" />
+          <span>Crear Rango</span>
+        </Button>
       </PageHeader>
 
       {/* 4 EXECUTIVE KPI CARDS (ESTILO /GASTOS) */}

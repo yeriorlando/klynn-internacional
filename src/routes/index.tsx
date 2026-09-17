@@ -1579,6 +1579,8 @@ function LandingPage() {
                           { key: "promociones", label: "Promociones y Cupones" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "pos_offline", label: "Modo Offline" },
+                          { key: "nomina", label: "Nómina y TSS / ISR" },
+                          { key: "cxp", label: "Cuentas por Pagar (CxP)" },
                         ].map(({ key, label }) => {
                           const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                           return (
@@ -1782,6 +1784,8 @@ function LandingPage() {
                               { key: "promociones", label: "Promociones y Cupones" },
                               { key: "logistica", label: "Envío a domicilio" },
                               { key: "pos_offline", label: "Modo Offline" },
+                              { key: "nomina", label: "Nómina y TSS / ISR" },
+                              { key: "cxp", label: "Cuentas por Pagar (CxP)" },
                             ].map(({ key, label }) => {
                               const v = !!plan.modulos?.[key as keyof typeof plan.modulos];
                               return (

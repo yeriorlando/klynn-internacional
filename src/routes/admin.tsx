@@ -6,7 +6,7 @@ import {
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
   Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes,
-  Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2
+  Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2, Calculator
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
@@ -196,6 +196,8 @@ function AdminPage() {
   const [modOverrideEstanteria, setModOverrideEstanteria] = useState(true);
   const [modOverridePosOffline, setModOverridePosOffline] = useState(false);
   const [modOverridePromociones, setModOverridePromociones] = useState(false);
+  const [modOverrideNomina, setModOverrideNomina] = useState(false);
+  const [modOverrideCxp, setModOverrideCxp] = useState(false);
   const [tenantFiscalEnvironment, setTenantFiscalEnvironment] = useState<"TesteCF" | "CerteCF" | "eCF">("TesteCF");
   const [tenantFiscalActive, setTenantFiscalActive] = useState(false);
   const [tenantEf2Token, setTenantEf2Token] = useState<string>("");
@@ -682,6 +684,12 @@ function AdminPage() {
     setModOverridePromociones(t.config?.modulos_override?.promociones !== undefined
       ? t.config.modulos_override.promociones
       : (pOfTenant?.modulos.promociones !== undefined ? !!pOfTenant.modulos.promociones : false));
+    setModOverrideNomina(t.config?.modulos_override?.nomina !== undefined
+      ? t.config.modulos_override.nomina
+      : (pOfTenant?.modulos.nomina !== undefined ? !!pOfTenant.modulos.nomina : false));
+    setModOverrideCxp(t.config?.modulos_override?.cxp !== undefined
+      ? t.config.modulos_override.cxp
+      : (pOfTenant?.modulos.cxp !== undefined ? !!pOfTenant.modulos.cxp : false));
 
     setEditStep(1);
     setOpenEditModal(true);
@@ -775,6 +783,8 @@ function AdminPage() {
             estanteria: modOverrideEstanteria,
             pos_offline: modOverridePosOffline,
             promociones: modOverridePromociones,
+            nomina: modOverrideNomina,
+            cxp: modOverrideCxp,
           }
         );
       } else {
@@ -1182,6 +1192,12 @@ function AdminPage() {
                         const hasPromociones = t.config?.modulos_override?.promociones !== undefined 
                           ? t.config.modulos_override.promociones 
                           : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
+                        const hasNomina = t.config?.modulos_override?.nomina !== undefined 
+                          ? t.config.modulos_override.nomina 
+                          : (planOfTenant?.modulos?.nomina !== undefined ? !!planOfTenant.modulos.nomina : false);
+                        const hasCxp = t.config?.modulos_override?.cxp !== undefined 
+                          ? t.config.modulos_override.cxp 
+                          : (planOfTenant?.modulos?.cxp !== undefined ? !!planOfTenant.modulos.cxp : false);
 
                         const daysRemaining = t.trial_hasta
                           ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1404,6 +1420,26 @@ function AdminPage() {
                                 >
                                   <Sparkles className="h-3 w-3" />
                                 </span>
+                                <span
+                                  title={hasNomina ? "Nómina y TSS: Habilitada" : "Nómina: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasNomina
+                                      ? "bg-indigo-50 text-indigo-700 border border-indigo-300 dark:bg-indigo-950/50 dark:text-indigo-300 dark:border-indigo-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <Calculator className="h-3 w-3" />
+                                </span>
+                                <span
+                                  title={hasCxp ? "Cuentas por Pagar (CxP): Habilitada" : "CxP: Inactiva"}
+                                  className={`p-1 rounded-md transition-all ${
+                                    hasCxp
+                                      ? "bg-amber-50 text-amber-700 border border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700 shadow-2xs"
+                                      : "bg-muted/30 text-muted-foreground/30 border border-transparent opacity-30"
+                                  }`}
+                                >
+                                  <CreditCard className="h-3 w-3" />
+                                </span>
                               </div>
                             </td>
 
@@ -1533,6 +1569,8 @@ function AdminPage() {
                   const hasEstanteria = t.config?.modulos_override?.estanteria !== undefined ? t.config.modulos_override.estanteria : (planOfTenant?.modulos?.estanteria !== undefined ? !!planOfTenant.modulos.estanteria : true);
                   const hasOffline = t.config?.modulos_override?.pos_offline !== undefined ? t.config.modulos_override.pos_offline : (planOfTenant?.modulos?.pos_offline !== undefined ? !!planOfTenant.modulos.pos_offline : false);
                   const hasPromociones = t.config?.modulos_override?.promociones !== undefined ? t.config.modulos_override.promociones : (planOfTenant?.modulos?.promociones !== undefined ? !!planOfTenant.modulos.promociones : false);
+                  const hasNomina = t.config?.modulos_override?.nomina !== undefined ? t.config.modulos_override.nomina : (planOfTenant?.modulos?.nomina !== undefined ? !!planOfTenant.modulos.nomina : false);
+                  const hasCxp = t.config?.modulos_override?.cxp !== undefined ? t.config.modulos_override.cxp : (planOfTenant?.modulos?.cxp !== undefined ? !!planOfTenant.modulos.cxp : false);
 
                   const daysRemaining = t.trial_hasta
                     ? Math.max(0, Math.ceil((new Date(t.trial_hasta).getTime() - Date.now()) / 86400000))
@@ -1657,6 +1695,8 @@ function AdminPage() {
                             <span className={`p-1 rounded ${hasEstanteria ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasEstanteria ? "Estantería virtual: Habilitada" : "Estantería: Inactiva"}><Layers className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasOffline ? 'text-rose-600 bg-rose-50 dark:bg-rose-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasOffline ? "Modo Offline: Habilitado (Punto de Venta sin conexión)" : "Modo Offline: Inactivo"}><WifiOff className="h-3 w-3" /></span>
                             <span className={`p-1 rounded ${hasPromociones ? 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasPromociones ? "Promociones y Cupones: Habilitado" : "Promociones: Inactivo"}><Sparkles className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasNomina ? 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasNomina ? "Nómina y TSS: Habilitada" : "Nómina: Inactiva"}><Calculator className="h-3 w-3" /></span>
+                            <span className={`p-1 rounded ${hasCxp ? 'text-amber-600 bg-amber-50 dark:bg-amber-950/60' : 'text-muted-foreground/30 opacity-40'}`} title={hasCxp ? "Cuentas por Pagar (CxP): Habilitada" : "CxP: Inactiva"}><CreditCard className="h-3 w-3" /></span>
                           </div>
                         </div>
 
@@ -1951,6 +1991,8 @@ function AdminPage() {
                           { key: "promociones", label: "Promociones y Cupones" },
                           { key: "logistica", label: "Envío a domicilio" },
                           { key: "pos_offline", label: "Modo Offline" },
+                          { key: "nomina", label: "Nómina y TSS / ISR" },
+                          { key: "cxp", label: "Cuentas por Pagar (CxP)" },
                         ].map(({ key, label }) => {
                           const v = !!p.modulos?.[key as keyof typeof p.modulos];
                           return (
@@ -2156,6 +2198,8 @@ function AdminPage() {
                                 { key: "promociones", label: "Promociones y Cupones" },
                                 { key: "logistica", label: "Envío a domicilio" },
                                 { key: "pos_offline", label: "Modo Offline" },
+                                { key: "nomina", label: "Nómina y TSS / ISR" },
+                                { key: "cxp", label: "Cuentas por Pagar (CxP)" },
                               ].map(({ key, label }) => {
                                 const v = !!p.modulos?.[key as keyof typeof p.modulos];
                                 return (
@@ -3567,6 +3611,8 @@ function AdminPage() {
                           setModOverrideEstanteria(newPlan.modulos.estanteria !== undefined ? !!newPlan.modulos.estanteria : true);
                           setModOverridePosOffline(newPlan.modulos.pos_offline !== undefined ? !!newPlan.modulos.pos_offline : false);
                           setModOverridePromociones(newPlan.modulos.promociones !== undefined ? !!newPlan.modulos.promociones : false);
+                          setModOverrideNomina(newPlan.modulos.nomina !== undefined ? !!newPlan.modulos.nomina : false);
+                          setModOverrideCxp(newPlan.modulos.cxp !== undefined ? !!newPlan.modulos.cxp : false);
                         }
                       }}
                     >
@@ -3866,6 +3912,8 @@ function AdminPage() {
                           setModOverrideEstanteria(currentPlan.modulos.estanteria !== undefined ? !!currentPlan.modulos.estanteria : true);
                           setModOverridePosOffline(currentPlan.modulos.pos_offline !== undefined ? !!currentPlan.modulos.pos_offline : false);
                           setModOverridePromociones(currentPlan.modulos.promociones !== undefined ? !!currentPlan.modulos.promociones : false);
+                          setModOverrideNomina(currentPlan.modulos.nomina !== undefined ? !!currentPlan.modulos.nomina : false);
+                          setModOverrideCxp(currentPlan.modulos.cxp !== undefined ? !!currentPlan.modulos.cxp : false);
                         }
                         toast.info("Restablecido a los módulos del Plan Oficial");
                       }}
@@ -3899,6 +3947,8 @@ function AdminPage() {
                     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, checked: modOverrideProcesos, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideProcesos(v); }, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
                     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, checked: modOverrideEstanteria, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideEstanteria(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
                     { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, checked: modOverridePromociones, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverridePromociones(v); }, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+                    { key: "nomina", label: "Nómina de Empleados", desc: "Sueldos, horas extras, TSS e ISR", icon: Calculator, checked: modOverrideNomina, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideNomina(v); }, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+                    { key: "cxp", label: "Cuentas por Pagar (CxP)", desc: "Suplidores, facturas y abonos", icon: CreditCard, checked: modOverrideCxp, onChange: (v: boolean) => { setIsCustomOverride(true); setModOverrideCxp(v); }, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
                   ].map(({ key, label, desc, icon: IconComp, checked, onChange, colorClass, bgClass }) => (
                     <div
                       key={key}
@@ -4397,7 +4447,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         id: ("plan_" + Date.now()) as PlanId,
         nombre: "", precio_mensual: 0, precio_anual: 0, limite_empleados: 5, limite_ordenes_mes: 500,
         limite_whatsapp_mes: 300,
-        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false },
+        modulos: { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false },
       });
     }
   }, [open, initial]);
@@ -4419,19 +4469,10 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       precio_mensual: Number(f.precio_mensual) || 0,
       precio_anual: Number(f.precio_anual) || 0,
       limite_empleados: Number(f.limite_empleados) || 1,
-      limite_ordenes_mes: f.limite_ordenes_mes === null ? null : Number(f.limite_ordenes_mes) || null,
-      limite_whatsapp_mes: Number(f.limite_whatsapp_mes) || 0,
-      modulos: {
-        whatsapp: !!f.modulos?.whatsapp,
-        facturacion_fiscal: !!f.modulos?.facturacion_fiscal,
-        multisucursal: !!f.modulos?.multisucursal,
-        pos_offline: !!f.modulos?.pos_offline,
-        logistica: !!f.modulos?.logistica,
-        procesos: !!f.modulos?.procesos,
-        estanteria: !!f.modulos?.estanteria,
-        promociones: !!f.modulos?.promociones,
-      },
-      destacado: f.destacado,
+      limite_ordenes_mes: f.limite_ordenes_mes === null ? null : (Number(f.limite_ordenes_mes) || null),
+      limite_whatsapp_mes: f.limite_whatsapp_mes === null ? null : (Number(f.limite_whatsapp_mes) || null),
+      modulos: f.modulos || { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false },
+      destacado: !!f.destacado,
       es_especial: !!f.es_especial,
       titulo_especial: f.titulo_especial?.trim() || "Plan especial",
       polar_product_monthly_url: f.polar_product_monthly_url?.trim() || undefined,
@@ -4457,6 +4498,8 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
     { key: "procesos", label: "Tablero de Procesos", desc: "Control Kanban por etapas", icon: Wrench, colorClass: "text-teal-600 dark:text-teal-400", bgClass: "bg-teal-500/10" },
     { key: "estanteria", label: "Estantería virtual", desc: "Ganchos, rieles y casilleros", icon: Layers, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
     { key: "promociones", label: "Promociones y Cupones", desc: "Descuentos y ofertas automáticas", icon: Sparkles, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
+    { key: "nomina", label: "Nómina de Empleados", desc: "Sueldos, horas extras, TSS e ISR", icon: Calculator, colorClass: "text-indigo-600 dark:text-indigo-400", bgClass: "bg-indigo-500/10" },
+    { key: "cxp", label: "Cuentas por Pagar (CxP)", desc: "Suplidores, facturas y abonos", icon: CreditCard, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
   ];
 
   return (

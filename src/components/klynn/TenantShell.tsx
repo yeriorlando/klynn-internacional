@@ -1,5 +1,5 @@
 import { Link, Outlet, useNavigate, useRouterState } from "@tanstack/react-router";
-import React, { Suspense, useMemo, useState, useRef, useEffect } from "react";
+import React, { Suspense, useMemo, useState, useRef, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase";
 import { playNotificationSoundDebounced, playOrderDeliveredSoundDebounced, unlockAudioContext } from "@/lib/notificationSound";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -55,6 +55,8 @@ import {
   WifiOff,
   Tag,
   Lock,
+  Building2,
+  DollarSign,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
@@ -146,10 +148,13 @@ const NAV: (slug: string) => NavItem[] = (slug) => [
   { to: `/t/${slug}/procesos`, label: "Operaciones", icon: Wrench, permission: "procesos" },
   { to: `/t/${slug}/estanteria`, label: "Estantería virtual", icon: Layers, permission: "procesos" },
   { to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja" },
+  { to: `/t/${slug}/cxc`, label: "Cuentas por cobrar", icon: CreditCard, permission: "caja" },
+  { to: `/t/${slug}/cxp`, label: "Cuentas por pagar", icon: Building2, permission: "cxp" },
   { to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
   { to: `/t/${slug}/catalogo`, label: "Productos", icon: Package, permission: "catalogo" },
   { to: `/t/${slug}/promociones`, label: "Promociones", icon: Sparkles, permission: "catalogo" },
   { to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
+  { to: `/t/${slug}/nomina`, label: "Nómina", icon: DollarSign, permission: "nomina" },
   { to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
   { to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
   { to: `/t/${slug}/reportes`, label: "Reportes", icon: BarChart3, permission: "reportes" },
@@ -198,7 +203,9 @@ export function TenantShell() {
         || pathname.endsWith("/control-marbetes")
         || pathname.endsWith("/ordenes")
         || pathname.endsWith("/estanteria")
-        || pathname.endsWith("/reportes"));
+        || pathname.endsWith("/reportes")
+        || pathname.endsWith("/nomina")
+        || pathname.endsWith("/cxp"));
   const [isLoggingOut, setIsLoggingOut] = useState(false);
 
   // Bloqueo de pantalla por inactividad (PIN)
@@ -349,14 +356,55 @@ export function TenantShell() {
   const [hasFiscal, setHasFiscal] = useState<boolean>(true);
   const [hasEstanteria, setHasEstanteria] = useState<boolean>(true);
   const [hasPromociones, setHasPromociones] = useState<boolean>(true);
+  const [hasNomina, setHasNomina] = useState<boolean>(true);
+  const [hasCxp, setHasCxp] = useState<boolean>(true);
 
   // NOTIFICACIONES GENERALES
+  const getDismissedIds = useCallback((): Set<string> => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const key = tenantId ? `klynn_dismissed_notifs_${tenantId}` : "klynn_dismissed_notifs";
+      const raw = localStorage.getItem(key) || "[]";
+      const parsed = JSON.parse(raw);
+      const delVirt = JSON.parse(localStorage.getItem("klynn_deleted_virtuals") || "[]");
+      const readVirt = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
+      return new Set([...(Array.isArray(parsed) ? parsed : []), ...delVirt, ...readVirt]);
+    } catch {
+      return new Set();
+    }
+  }, [tenantId]);
+
+  const saveDismissedIds = useCallback(
+    (ids: string[]) => {
+      if (typeof window === "undefined" || !ids.length) return;
+      try {
+        const key = tenantId ? `klynn_dismissed_notifs_${tenantId}` : "klynn_dismissed_notifs";
+        const existing = Array.from(getDismissedIds());
+        const combined = Array.from(new Set([...existing, ...ids]));
+        const trimmed = combined.slice(-500);
+        localStorage.setItem(key, JSON.stringify(trimmed));
+        localStorage.setItem("klynn_deleted_virtuals", JSON.stringify(trimmed));
+        localStorage.setItem("klynn_read_virtuals", JSON.stringify(trimmed));
+        window.dispatchEvent(new CustomEvent("klynn_notifs_dismissed", { detail: ids }));
+      } catch {}
+    },
+    [tenantId, getDismissedIds],
+  );
+
   const [notificaciones, setNotificaciones] = useState<Notificacion[]>([]);
-  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>([]);
-  const visibleNotificaciones = notificaciones.filter((n) => !deletedNotifIds.includes(n.id));
-  const unreadNotifs = notificaciones.filter(
+  const [deletedNotifIds, setDeletedNotifIds] = useState<string[]>(() =>
+    Array.from(getDismissedIds()),
+  );
+
+  useEffect(() => {
+    if (!tenantId || tenantId === "__loading__") return;
+    setDeletedNotifIds(Array.from(getDismissedIds()));
+  }, [tenantId, getDismissedIds]);
+
+  const visibleNotificaciones = notificaciones.filter(
     (n) => !n.leida && !deletedNotifIds.includes(n.id),
-  ).length;
+  );
+  const unreadNotifs = visibleNotificaciones.length;
 
   useEffect(() => {
     if (!user || user.tenant.id === "__loading__") return;
@@ -368,6 +416,8 @@ export function TenantShell() {
       setHasFiscal(isModuleEnabled(user.tenant, "facturacion_fiscal", plan));
       setHasEstanteria(isModuleEnabled(user.tenant, "estanteria", plan));
       setHasPromociones(isModuleEnabled(user.tenant, "promociones", plan));
+      setHasNomina(isModuleEnabled(user.tenant, "nomina", plan));
+      setHasCxp(isModuleEnabled(user.tenant, "cxp", plan));
     });
   }, [user?.tenant?.id, user?.tenant?.plan_id, user?.tenant?.config?.modulos_override]);
 
@@ -524,6 +574,8 @@ export function TenantShell() {
 
     // Cargar notificaciones y ordenes para mezclar
     const loadNotificaciones = async () => {
+      if (!tenantId || tenantId === "__loading__") return;
+      const dismissed = getDismissedIds();
       const dbNotifs = await getNotificaciones(tenantId);
       const orders = (await getOrdenes(tenantId)) || [];
       const clients = (await getClientes(tenantId)) || [];
@@ -536,20 +588,6 @@ export function TenantShell() {
       tomorrow.setDate(tomorrow.getDate() + 1);
       const dayAfter = new Date(tomorrow);
       dayAfter.setDate(dayAfter.getDate() + 1);
-
-      // Leer notificaciones virtuales marcadas como leídas
-      const readVirtualsStr = localStorage.getItem("klynn_read_virtuals") || "[]";
-      let readVirtuals: string[] = [];
-      try {
-        readVirtuals = JSON.parse(readVirtualsStr);
-      } catch (e) {}
-
-      // Leer notificaciones virtuales eliminadas
-      const deletedVirtualsStr = localStorage.getItem("klynn_deleted_virtuals") || "[]";
-      let deletedVirtuals: string[] = [];
-      try {
-        deletedVirtuals = JSON.parse(deletedVirtualsStr);
-      } catch (e) {}
 
       // Filtrar órdenes pendientes y en proceso (no entregadas, ni anuladas, ni listas)
       const pendingOrders = orders.filter(
@@ -564,7 +602,7 @@ export function TenantShell() {
           const isToday = deliveryDate < tomorrow;
           const label = isToday ? "hoy" : "mañana";
           const vId = `virtual-orden-${o.id}`;
-          if (!deletedVirtuals.includes(vId)) {
+          if (!dismissed.has(vId)) {
             const clientName = clientMap.get(o.cliente_id) || "Cliente Desconocido";
             virtualNotifs.push({
               id: vId,
@@ -572,7 +610,7 @@ export function TenantShell() {
               titulo: `Entrega para ${label}`,
               mensaje: `La orden #${o.numero} del cliente ${clientName} debe entregarse ${label}.`,
               tipo: "WARNING",
-              leida: readVirtuals.includes(vId),
+              leida: false,
               link: `/ordenes?view=${o.numero}`,
               created_at: o.creado_en || o.fecha_entrega || new Date(Date.now() - 1000 * 60 * 60 * 12).toISOString(),
             });
@@ -585,6 +623,8 @@ export function TenantShell() {
 
       for (const o of deliveredOrders) {
         const cleanNum = (o.numero || "").replace(/^#/, "");
+        const vId = `virtual-entregada-${o.id}`;
+        if (dismissed.has(vId)) continue;
         
         // Si ya existe una notificación real en la BD para esta entrega, NO generar notificación virtual duplicada
         const hasDbNotif = dbNotifs.some(
@@ -595,42 +635,41 @@ export function TenantShell() {
         const dateToUse = o.pod_fecha || o.creado_en || new Date().toISOString();
         const diffHours = (Date.now() - new Date(dateToUse).getTime()) / (1000 * 60 * 60);
         if (diffHours <= 48) {
-          const vId = `virtual-entregada-${o.id}`;
-          if (!deletedVirtuals.includes(vId)) {
-            const clientName = clientMap.get(o.cliente_id) || "Cliente";
-            
-            let receptorTxt = "";
-            if (o.pod_receptor) {
-              if (o.pod_receptor.toLowerCase().startsWith("titular")) {
-                receptorTxt = " (Titular)";
-              } else {
-                receptorTxt = ` • Recibió: **${o.pod_receptor}**`;
-              }
+          const clientName = clientMap.get(o.cliente_id) || "Cliente";
+          
+          let receptorTxt = "";
+          if (o.pod_receptor) {
+            if (o.pod_receptor.toLowerCase().startsWith("titular")) {
+              receptorTxt = " (Titular)";
+            } else {
+              receptorTxt = ` • Recibió: **${o.pod_receptor}**`;
             }
-            
-            let cobroInfo = " • Pagado";
-            if (o.pod_cobro_monto && o.pod_cobro_monto > 0) {
-              cobroInfo = ` • Cobrado: **${formatRD(o.pod_cobro_monto)}** (${o.pod_cobro_metodo || "EFECTIVO"})`;
-            } else if (o.saldo > 0) {
-              cobroInfo = ` • Saldo pendiente: **${formatRD(o.saldo)}**`;
-            }
-
-            virtualNotifs.push({
-              id: vId,
-              tenant_id: tenantId,
-              titulo: `Orden #${cleanNum} Entregada por Delivery 🛵`,
-              mensaje: `Cliente: **${clientName}**${receptorTxt}${cobroInfo}`,
-              tipo: "SUCCESS",
-              leida: readVirtuals.includes(vId),
-              link: `/logistica`,
-              created_at: dateToUse,
-            });
           }
+          
+          let cobroInfo = " • Pagado";
+          if (o.pod_cobro_monto && o.pod_cobro_monto > 0) {
+            cobroInfo = ` • Cobrado: **${formatRD(o.pod_cobro_monto)}** (${o.pod_cobro_metodo || "EFECTIVO"})`;
+          } else if (o.saldo > 0) {
+            cobroInfo = ` • Saldo pendiente: **${formatRD(o.saldo)}**`;
+          }
+
+          virtualNotifs.push({
+            id: vId,
+            tenant_id: tenantId,
+            titulo: `Orden #${cleanNum} Entregada por Delivery 🛵`,
+            mensaje: `Cliente: **${clientName}**${receptorTxt}${cobroInfo}`,
+            tipo: "SUCCESS",
+            leida: false,
+            link: `/logistica`,
+            created_at: dateToUse,
+          });
         }
       }
 
+      const activeDbNotifs = dbNotifs.filter((n) => !n.leida && !dismissed.has(n.id));
+
       setNotificaciones(
-        [...virtualNotifs, ...dbNotifs].sort(
+        [...virtualNotifs, ...activeDbNotifs].sort(
           (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
         ),
       );
@@ -929,84 +968,84 @@ export function TenantShell() {
   };
 
   const onNotificacionClick = async (n: Notificacion) => {
-    if (!n.leida) {
-      if (n.id.startsWith("virtual-")) {
-        const readVirtuals = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
-        if (!readVirtuals.includes(n.id)) {
-          readVirtuals.push(n.id);
-          localStorage.setItem("klynn_read_virtuals", JSON.stringify(readVirtuals));
-        }
-      } else {
+    saveDismissedIds([n.id]);
+    setDeletedNotifIds((prev) => Array.from(new Set([...prev, n.id])));
+    setNotificaciones((prev) => prev.filter((x) => x.id !== n.id));
+
+    if (!n.id.startsWith("virtual-")) {
+      try {
         await marcarNotificacionLeida(n.id);
+      } catch (e) {
+        console.warn("Aviso al marcar notificación en DB:", e);
       }
-      setNotificaciones((prev) => prev.map((x) => (x.id === n.id ? { ...x, leida: true } : x)));
     }
-    setDeletedNotifIds((prev) => [...prev, n.id]);
+
     if (n.link) navigate({ to: `/t/${tenant.slug}${n.link}` });
   };
 
   const handleMarcarLeida = async (id: string) => {
-    setDeletedNotifIds((prev) => [...prev, id]);
-    if (id.startsWith("virtual-")) {
-      const readVirtuals = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
-      if (!readVirtuals.includes(id)) {
-        readVirtuals.push(id);
-        localStorage.setItem("klynn_read_virtuals", JSON.stringify(readVirtuals));
+    saveDismissedIds([id]);
+    setDeletedNotifIds((prev) => Array.from(new Set([...prev, id])));
+    setNotificaciones((prev) => prev.filter((x) => x.id !== id));
+
+    if (!id.startsWith("virtual-")) {
+      try {
+        await marcarNotificacionLeida(id);
+      } catch (e) {
+        console.warn("Aviso al marcar notificación en DB:", e);
       }
-    } else {
-      await marcarNotificacionLeida(id);
     }
-    setNotificaciones((prev) => prev.map((x) => (x.id === id ? { ...x, leida: true } : x)));
   };
 
   const handleMarcarTodasLeidas = async () => {
-    if (tenantId) await marcarTodasNotificacionesLeidas(tenantId);
+    const currentIds = notificaciones.map((n) => n.id);
+    if (currentIds.length === 0) return;
 
-    const virtualIds = notificaciones
-      .filter((n) => n.id.startsWith("virtual-") && !n.leida)
-      .map((n) => n.id);
-    if (virtualIds.length > 0) {
-      const readVirtuals = JSON.parse(localStorage.getItem("klynn_read_virtuals") || "[]");
-      localStorage.setItem("klynn_read_virtuals", JSON.stringify([...readVirtuals, ...virtualIds]));
+    saveDismissedIds(currentIds);
+    setDeletedNotifIds((prev) => Array.from(new Set([...prev, ...currentIds])));
+    setNotificaciones([]);
+
+    if (tenantId) {
+      try {
+        await marcarTodasNotificacionesLeidas(tenantId);
+      } catch (e) {
+        console.warn("Aviso al marcar notificaciones leídas en DB:", e);
+      }
     }
-
-    const unreadIds = notificaciones.filter((n) => !n.leida).map((n) => n.id);
-    setDeletedNotifIds((prev) => [...prev, ...unreadIds]);
-    setNotificaciones((prev) => prev.map((n) => ({ ...n, leida: true })));
   };
 
   const handleLimpiarNotificaciones = async () => {
-    const allIds = notificaciones.map((n) => n.id);
-    setDeletedNotifIds((prev) => [...prev, ...allIds]);
+    const currentIds = notificaciones.map((n) => n.id);
+    if (currentIds.length === 0) return;
+
+    saveDismissedIds(currentIds);
+    setDeletedNotifIds((prev) => Array.from(new Set([...prev, ...currentIds])));
+    setNotificaciones([]);
 
     if (tenantId) {
-      await supabase.from("notificaciones").delete().eq("tenant_id", tenantId);
+      try {
+        await supabase.from("notificaciones").delete().eq("tenant_id", tenantId);
+      } catch (e) {
+        console.warn("Aviso al limpiar notificaciones en DB:", e);
+      }
+      try {
+        await marcarTodasNotificacionesLeidas(tenantId);
+      } catch {}
     }
-
-    const virtualIds = notificaciones.filter((n) => n.id.startsWith("virtual-")).map((n) => n.id);
-    if (virtualIds.length > 0) {
-      const deletedVirtuals = JSON.parse(localStorage.getItem("klynn_deleted_virtuals") || "[]");
-      localStorage.setItem(
-        "klynn_deleted_virtuals",
-        JSON.stringify([...deletedVirtuals, ...virtualIds]),
-      );
-    }
-
-    setNotificaciones([]);
   };
 
   const handleEliminarNotificacion = async (id: string) => {
-    setDeletedNotifIds((prev) => [...prev, id]);
-    if (id.startsWith("virtual-")) {
-      const deletedVirtuals = JSON.parse(localStorage.getItem("klynn_deleted_virtuals") || "[]");
-      if (!deletedVirtuals.includes(id)) {
-        deletedVirtuals.push(id);
-        localStorage.setItem("klynn_deleted_virtuals", JSON.stringify(deletedVirtuals));
-      }
-    } else {
-      await supabase.from("notificaciones").delete().eq("id", id);
-    }
+    saveDismissedIds([id]);
+    setDeletedNotifIds((prev) => Array.from(new Set([...prev, id])));
     setNotificaciones((prev) => prev.filter((x) => x.id !== id));
+
+    if (!id.startsWith("virtual-")) {
+      try {
+        await supabase.from("notificaciones").delete().eq("id", id);
+      } catch (e) {
+        console.warn("Aviso al eliminar notificación en DB:", e);
+      }
+    }
   };
 
   return (
@@ -1350,6 +1389,8 @@ export function TenantShell() {
           hasFiscal={hasFiscal}
           hasEstanteria={hasEstanteria}
           hasPromociones={hasPromociones}
+          hasNomina={hasNomina}
+          hasCxp={hasCxp}
         />
       </aside>
 
@@ -1376,6 +1417,8 @@ export function TenantShell() {
               hasFiscal={hasFiscal}
               hasEstanteria={hasEstanteria}
               hasPromociones={hasPromociones}
+              hasNomina={hasNomina}
+              hasCxp={hasCxp}
             />
           </aside>
         </div>
@@ -1438,7 +1481,9 @@ export function TenantShell() {
               || pathname.endsWith("/control-marbetes")
               || pathname.endsWith("/ordenes")
               || pathname.endsWith("/estanteria")
-              || pathname.endsWith("/reportes")) && (
+              || pathname.endsWith("/reportes")
+              || pathname.endsWith("/nomina")
+              || pathname.endsWith("/cxp")) && (
               <button
                 type="button"
                 onClick={toggleFullscreen}
@@ -1810,6 +1855,8 @@ function SidebarContent({
   hasFiscal,
   hasEstanteria,
   hasPromociones,
+  hasNomina,
+  hasCxp,
 }: {
   tenant: {
     id: string;
@@ -1833,6 +1880,8 @@ function SidebarContent({
   hasFiscal: boolean;
   hasEstanteria: boolean;
   hasPromociones: boolean;
+  hasNomina: boolean;
+  hasCxp: boolean;
 }) {
   const [showSwitcher, setShowSwitcher] = useState(false);
   const [myTenants, setMyTenants] = useState<any[]>([]);
@@ -2007,6 +2056,7 @@ function SidebarContent({
           },
           { id: "caja", to: `/t/${slug}/caja`, label: "Caja", icon: Wallet, permission: "caja", shortcut: "C" },
           { id: "cxc", to: `/t/${slug}/cxc`, label: "Cuentas por cobrar", icon: CreditCard, permission: "caja", shortcut: "T" },
+          { id: "cxp", to: `/t/${slug}/cxp`, label: "Cuentas por pagar", icon: Building2, permission: "cxp" },
           { id: "gastos", to: `/t/${slug}/gastos`, label: "Gastos", icon: Banknote, permission: "gastos" },
           { id: "logistica", to: `/t/${slug}/logistica`, label: "Envío a domicilio", icon: Truck, permission: "logistica" },
         ],
@@ -2042,6 +2092,7 @@ function SidebarContent({
         items: [
           { id: "clientes", to: `/t/${slug}/clientes`, label: "Clientes", icon: User, permission: "clientes" },
           { id: "personal", to: `/t/${slug}/personal`, label: "Personal", icon: Users, permission: "personal" },
+          { id: "nomina", to: `/t/${slug}/nomina`, label: "Nómina", icon: DollarSign, permission: "nomina" },
         ],
       },
       {
@@ -2076,11 +2127,13 @@ function SidebarContent({
         if (!hasEstanteria) items = items.filter((i) => !i.to.endsWith("/estanteria"));
         if (!hasFiscal) items = items.filter((i) => !i.to.endsWith("/fiscal"));
         if (!hasPromociones) items = items.filter((i) => !i.to.endsWith("/promociones"));
+        if (!hasNomina) items = items.filter((i) => !i.to.endsWith("/nomina"));
+        if (!hasCxp) items = items.filter((i) => !i.to.endsWith("/cxp"));
         items = items.filter((i) => !i.permission || can(empleado, i.permission));
         return { ...cat, items };
       })
       .filter((cat) => cat.items.length > 0);
-  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal, hasEstanteria, hasPromociones]);
+  }, [tenant.slug, empleado, hasLogistica, hasWhatsApp, hasProcesos, hasFiscal, hasEstanteria, hasPromociones, hasNomina, hasCxp]);
 
   return (
     <>

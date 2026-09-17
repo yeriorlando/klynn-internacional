@@ -41,12 +41,15 @@ import {
   Ban,
   BadgePercent,
   MessageCircle,
+  CreditCard,
+  Banknote,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PriceInput } from "@/components/klynn/PriceInput";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -70,6 +73,7 @@ import {
   deleteEmpleado,
   getOrdenes,
   formatRD,
+  calcularTarifaHoraExtra,
   uid,
   PERMISOS_SISTEMA,
   getPermisosPorRol,
@@ -82,6 +86,7 @@ import {
   inviteEmployeeByEmail,
   resendEmployeeInvitation,
   getGlobalConfig,
+  isModuleEnabled,
   type Empleado,
   type RolEmpleado,
   type Orden,
@@ -127,6 +132,7 @@ const PERMISOS_CONFIG: Record<string, { icon: any; color: string; bg: string; bo
   "condonar-deuda": { icon: BadgePercent, color: "text-amber-700 dark:text-amber-300", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-300 dark:border-amber-700" },
   "nota-credito": { icon: FileMinus, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/60", border: "border-cyan-200 dark:border-cyan-800" },
   "nota-debito": { icon: FilePlus, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/60", border: "border-violet-200 dark:border-violet-800" },
+  "autorizar-credito": { icon: CreditCard, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-200 dark:border-amber-800" },
 };
 
 function getRoleBadgeClass(rol: RolEmpleado) {
@@ -177,15 +183,17 @@ function PersonalPage() {
   const [showLimitModal, setShowLimitModal] = useState(false);
   const [limits, setLimits] = useState<any>({ employeesReached: false, employeeLimit: 0 });
 
-  const isMarbetesEnabled = Boolean(tenant?.config?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
+  const isMarbetesEnabled = Boolean((tenant?.config as any)?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
+  const hasNomina = isModuleEnabled(tenant, "nomina");
+  const hasCxp = isModuleEnabled(tenant, "cxp");
   const permisosDisponibles = useMemo(() => {
     return PERMISOS_SISTEMA.filter((p) => {
-      if (p.id === "control-marbetes") {
-        return isMarbetesEnabled;
-      }
+      if (p.id === "control-marbetes") return isMarbetesEnabled;
+      if (p.id === "nomina") return hasNomina;
+      if (p.id === "cxp") return hasCxp;
       return true;
     });
-  }, [isMarbetesEnabled]);
+  }, [isMarbetesEnabled, hasNomina, hasCxp]);
 
   useEffect(() => {
     async function checkLimits() {
@@ -216,11 +224,8 @@ function PersonalPage() {
 
   async function handleResendInvitation(invitation: EmployeeInvitation) {
     try {
-      const replacement = await resendEmployeeInvitation(invitation.id, tenantId, invitation.email);
-      queryClient.setQueryData<EmployeeInvitation[]>(["employee-invitations", tenantId], (current = []) => [
-        replacement,
-        ...current.filter((item) => item.id !== invitation.id),
-      ]);
+      await resendEmployeeInvitation(invitation.id, tenantId, invitation.email);
+      queryClient.invalidateQueries({ queryKey: ["employee-invitations", tenantId] });
       toast.success(`Invitación reenviada a ${invitation.email}`);
       refresh();
     } catch (error: any) {
@@ -581,14 +586,16 @@ function EmpleadoDialog({
   onDone: () => void;
 }) {
   const isMarbetesEnabled = Boolean(tenant?.config?.control_marbetes || tenant?.config?.habilitar_control_marbetes);
+  const hasNomina = isModuleEnabled(tenant, "nomina");
+  const hasCxp = isModuleEnabled(tenant, "cxp");
   const permisosDisponibles = useMemo(() => {
     return PERMISOS_SISTEMA.filter((p) => {
-      if (p.id === "control-marbetes") {
-        return isMarbetesEnabled;
-      }
+      if (p.id === "control-marbetes") return isMarbetesEnabled;
+      if (p.id === "nomina") return hasNomina;
+      if (p.id === "cxp") return hasCxp;
       return true;
     });
-  }, [isMarbetesEnabled]);
+  }, [isMarbetesEnabled, hasNomina, hasCxp]);
 
   const empty = {
     nombre: "",
@@ -600,6 +607,15 @@ function EmpleadoDialog({
     activo: true,
     permisos: getPermisosPorRol("VENDEDOR"),
     max_descuento_porcentaje: 10,
+    salario_base: 0,
+    frecuencia_pago: "QUINCENAL" as "QUINCENAL" | "SEMANAL" | "MENSUAL",
+    tipo_contrato: "FIJO" as "FIJO" | "DESTAJO_COMISION" | "MIXTO",
+    metodo_pago: "TRANSFERENCIA" as "TRANSFERENCIA" | "EFECTIVO" | "CHEQUE",
+    banco_nombre: "BANCO_POPULAR",
+    numero_cuenta_banco: "",
+    tipo_cuenta_banco: "AHORROS" as "AHORROS" | "CORRIENTE",
+    aplica_tss: false,
+    aplica_isr: false,
   };
   const [f, setF] = useState(
     empleado
@@ -608,10 +624,18 @@ function EmpleadoDialog({
           ...empleado,
           permisos: empleado.permisos || getPermisosPorRol(empleado.rol),
           max_descuento_porcentaje: empleado.max_descuento_porcentaje ?? 10,
+          salario_base: empleado.salario_base ?? 0,
+          frecuencia_pago: empleado.frecuencia_pago ?? "QUINCENAL",
+          tipo_contrato: empleado.tipo_contrato ?? "FIJO",
+          metodo_pago: (empleado.metodo_pago as any) ?? (empleado.numero_cuenta_banco ? "TRANSFERENCIA" : "EFECTIVO"),
+          banco_nombre: empleado.banco_nombre ?? "BANCO_POPULAR",
+          numero_cuenta_banco: empleado.numero_cuenta_banco ?? "",
+          aplica_tss: !!empleado.aplica_tss,
+          aplica_isr: !!empleado.aplica_isr,
         }
       : empty,
   );
-  const [step, setStep] = useState<1 | 2 | 3>(1);
+  const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isOtpRequired, setIsOtpRequired] = useState(requireEmployeeOtp);
@@ -651,6 +675,7 @@ function EmpleadoDialog({
       setF({
         ...empty,
         ...empleado,
+        metodo_pago: (empleado.metodo_pago as any) || (empleado.numero_cuenta_banco ? "TRANSFERENCIA" : "EFECTIVO"),
         permisos: empleado.permisos || getPermisosPorRol(empleado.rol),
         max_descuento_porcentaje:
           empleado.max_descuento_porcentaje ?? (empleado.rol === "ADMIN" ? 100 : 10),
@@ -664,7 +689,7 @@ function EmpleadoDialog({
   // Contador de reenvío OTP
   useEffect(() => {
     let interval: any;
-    if (step === 3 && otpTimer > 0) {
+    if (step === 4 && otpTimer > 0) {
       interval = setInterval(() => {
         setOtpTimer((prev) => {
           if (prev <= 1) {
@@ -740,7 +765,7 @@ function EmpleadoDialog({
 
   function handleNext() {
     if (!validateStep1()) return;
-    setStep(2);
+    setStep(hasNomina ? 2 : 3);
   }
 
   async function handleResendOtp() {
@@ -778,6 +803,14 @@ function EmpleadoDialog({
         activo: f.activo,
         permisos: f.permisos,
         max_descuento_porcentaje: f.rol === "ADMIN" ? 100 : Number(f.max_descuento_porcentaje) || 0,
+        salario_base: Number(f.salario_base) || 0,
+        frecuencia_pago: f.frecuencia_pago || "QUINCENAL",
+        tipo_contrato: f.tipo_contrato || "FIJO",
+        banco_nombre: f.banco_nombre || undefined,
+        numero_cuenta_banco: f.numero_cuenta_banco ? f.numero_cuenta_banco.trim() : undefined,
+        tipo_cuenta_banco: f.tipo_cuenta_banco || "AHORROS",
+        aplica_tss: !!f.aplica_tss,
+        aplica_isr: !!f.aplica_isr,
         creado_en: new Date().toISOString(),
       };
       await verifyEmployeeOtpAndSave(otpCode.trim(), e);
@@ -802,7 +835,7 @@ function EmpleadoDialog({
       setLoading(true);
       try {
         await sendEmployeeSignUpOtp(f.email, f.password, f.nombre, tenantId, f.rol);
-        setStep(3);
+        setStep(4);
         setOtpTimer(60);
         setCanResendOtp(false);
         toast.info(`Hemos enviado un código OTP de 6 dígitos al correo ${f.email}`);
@@ -830,6 +863,14 @@ function EmpleadoDialog({
         activo: f.activo,
         permisos: f.permisos,
         max_descuento_porcentaje: f.rol === "ADMIN" ? 100 : Number(f.max_descuento_porcentaje) || 0,
+        salario_base: Number(f.salario_base) || 0,
+        frecuencia_pago: f.frecuencia_pago || "QUINCENAL",
+        tipo_contrato: f.tipo_contrato || "FIJO",
+        banco_nombre: f.banco_nombre || undefined,
+        numero_cuenta_banco: f.numero_cuenta_banco ? f.numero_cuenta_banco.trim() : undefined,
+        tipo_cuenta_banco: f.tipo_cuenta_banco || "AHORROS",
+        aplica_tss: !!f.aplica_tss,
+        aplica_isr: !!f.aplica_isr,
         creado_en: empleado?.creado_en || new Date().toISOString(),
       };
       await saveEmpleado(e);
@@ -859,7 +900,7 @@ function EmpleadoDialog({
     }
   }
 
-  const isThreeSteps = isOtpRequired && !empleado;
+  const isFourSteps = isOtpRequired && !empleado;
 
   async function submitInvitation() {
     const email = inviteEmail.trim().toLowerCase();
@@ -1054,9 +1095,9 @@ function EmpleadoDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground">
+      <DialogContent className="rounded-2xl max-w-lg p-0 overflow-hidden border-none shadow-2xl bg-background text-foreground max-h-[92vh] flex flex-col">
         {/* STEPPER HEADER */}
-        <div className="bg-slate-50/80 dark:bg-slate-900/70 p-4 pb-2.5 relative border-b border-slate-100 dark:border-slate-800">
+        <div className="bg-slate-50/80 dark:bg-slate-900/70 p-4 pb-2.5 relative border-b border-slate-100 dark:border-slate-800 shrink-0">
           {/* Title row with right padding to clear the close icon */}
           <div className="flex items-center justify-between mb-2.5 pr-10">
             <div className="flex items-center gap-2.5">
@@ -1064,9 +1105,11 @@ function EmpleadoDialog({
                 {step === 1 ? (
                   <User className="h-5 w-5" />
                 ) : step === 2 ? (
-                  <ShieldCheck className="h-5 w-5" />
+                  <DollarSign className="h-5 w-5 text-emerald-600" />
+                ) : step === 3 ? (
+                  <ShieldCheck className="h-5 w-5 text-primary" />
                 ) : (
-                  <KeyRound className="h-5 w-5" />
+                  <KeyRound className="h-5 w-5 text-[#1B4B73]" />
                 )}
               </div>
               <div>
@@ -1077,27 +1120,30 @@ function EmpleadoDialog({
                   {step === 1
                     ? "Paso 1: Datos personales y de acceso"
                     : step === 2
-                    ? "Paso 2: Permisos por módulo del sistema"
-                    : "Paso 3: Verificación de código OTP"}
+                    ? "Paso 2: Compensación y nómina (República Dominicana)"
+                    : step === 3
+                    ? `${hasNomina ? "Paso 3" : "Paso 2"}: Permisos por módulo del sistema`
+                    : `${hasNomina ? "Paso 4" : "Paso 3"}: Verificación de código OTP`}
                 </p>
               </div>
             </div>
           </div>
 
           {/* Stepper Buttons */}
-          <div className={`grid ${isThreeSteps ? "grid-cols-3" : "grid-cols-2"} gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80`}>
+          <div className={`grid ${(hasNomina ? (isFourSteps ? 4 : 3) : (isFourSteps ? 3 : 2)) === 4 ? "grid-cols-4" : (hasNomina ? (isFourSteps ? 4 : 3) : (isFourSteps ? 3 : 2)) === 3 ? "grid-cols-3" : "grid-cols-2"} gap-1.5 p-1 rounded-xl bg-slate-200/60 dark:bg-slate-800/80`}>
+            {/* 1. Datos */}
             <button
               type="button"
-              onClick={() => step !== 3 && setStep(1)}
-              disabled={step === 3}
-              className={`flex items-center justify-center gap-2 py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
+              onClick={() => step !== 4 && setStep(1)}
+              disabled={step === 4}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
                 step === 1
                   ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              } ${step === 3 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              } ${step === 4 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <span
-                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
                   step === 1
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
@@ -1108,44 +1154,77 @@ function EmpleadoDialog({
               <span className="truncate">Datos</span>
             </button>
 
+            {/* 2. Nómina (Solo si el módulo de Nómina está activo en el plan) */}
+            {hasNomina && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (step === 4) return;
+                  if (validateStep1()) setStep(2);
+                }}
+                disabled={step === 4}
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+                  step === 2
+                    ? "bg-primary text-white shadow-sm font-bold"
+                    : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
+                } ${step === 4 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              >
+                <span
+                  className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
+                    step === 2
+                      ? "bg-white/25 text-white"
+                      : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
+                  }`}
+                >
+                  2
+                </span>
+                <span className="truncate">Nómina</span>
+              </button>
+            )}
+
+            {/* 3. Permisos */}
             <button
               type="button"
-              onClick={() => step !== 3 && handleNext()}
-              disabled={step === 3}
-              className={`flex items-center justify-center gap-2 py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
-                step === 2
+              onClick={() => {
+                if (step === 4) return;
+                if (validateStep1()) setStep(3);
+              }}
+              disabled={step === 4}
+              className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+                step === 3
                   ? "bg-primary text-white shadow-sm font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
-              } ${step === 3 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
+              } ${step === 4 ? "opacity-60 cursor-not-allowed" : "cursor-pointer"}`}
             >
               <span
-                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
-                  step === 2
+                className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
+                  step === 3
                     ? "bg-white/25 text-white"
                     : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                 }`}
               >
-                2
+                {hasNomina ? 3 : 2}
               </span>
               <span className="truncate">Permisos</span>
             </button>
 
-            {isThreeSteps && (
+            {/* 4. Código OTP (si aplica) */}
+            {isFourSteps && (
               <div
-                className={`flex items-center justify-center gap-2 py-2 px-2.5 rounded-lg text-xs font-bold transition-all ${
-                  step === 3
+                className={`flex items-center justify-center gap-1.5 sm:gap-2 py-2 px-2 rounded-lg text-xs font-bold transition-all ${
+                  step === 4
                     ? "bg-[#1B4B73] text-white shadow-sm font-bold"
                     : "text-slate-600 dark:text-slate-400"
                 }`}
               >
                 <span
-                  className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black ${
-                    step === 3
+                  className={`h-5 w-5 rounded-full flex items-center justify-center text-[11px] font-black shrink-0 ${
+                    step === 4
                       ? "bg-[#F0B900] text-[#1B4B73]"
                       : "bg-slate-300 dark:bg-slate-700 text-slate-700 dark:text-slate-300"
                   }`}
                 >
-                  3
+                  {hasNomina ? 4 : 3}
                 </span>
                 <span className="truncate">Código OTP</span>
               </div>
@@ -1154,7 +1233,7 @@ function EmpleadoDialog({
         </div>
 
         {/* DIALOG BODY - TIGHT SEAMLESS ATTACHMENT */}
-        <div className="px-4 sm:px-5 pt-2 pb-4">
+        <div className="px-4 sm:px-5 py-3 overflow-y-auto flex-1">
           {step === 1 && (
             /* STEP 1: INFORMACIÓN Y ACCESO */
             <div className="space-y-2.5 animate-in fade-in slide-in-from-left-3 duration-200">
@@ -1318,8 +1397,228 @@ function EmpleadoDialog({
             </div>
           )}
 
-          {step === 2 && (
-            /* STEP 2: PERMISOS DE ACCESO */
+          {hasNomina && step === 2 && (
+            /* STEP 2: COMPENSACIÓN Y NÓMINA (RD) */
+            <div className="space-y-3 animate-in fade-in slide-in-from-right-3 duration-200">
+              <div className="p-3.5 rounded-xl border border-border/70 bg-surface/60 space-y-3">
+                <div className="grid gap-2.5 sm:grid-cols-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Sueldo Base Mensual (RD$)
+                    </Label>
+                    <PriceInput
+                      value={f.salario_base || 0}
+                      placeholder="0.00"
+                      onChange={(val) => setF({ ...f, salario_base: val })}
+                      className="h-10 font-bold tabular-nums text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Frecuencia de Pago
+                    </Label>
+                    <Select
+                      value={f.frecuencia_pago}
+                      onValueChange={(val: any) => setF({ ...f, frecuencia_pago: val })}
+                    >
+                      <SelectTrigger className="h-10 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+                        <SelectItem value="QUINCENAL" className="cursor-pointer text-xs sm:text-sm">Quincenal (15 y 30)</SelectItem>
+                        <SelectItem value="SEMANAL" className="cursor-pointer text-xs sm:text-sm">Semanal (Operarios)</SelectItem>
+                        <SelectItem value="MENSUAL" className="cursor-pointer text-xs sm:text-sm">Mensual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {f.salario_base > 0 && (() => {
+                  const tarifas = calcularTarifaHoraExtra(f.salario_base);
+                  return (
+                    <div className="p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-800/50 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-bold text-blue-900 dark:text-blue-200 flex items-center gap-1.5">
+                          <Clock3 className="h-3.5 w-3.5 text-blue-600 dark:text-blue-400" />
+                          Tarifas Oficiales por Hora (Ley 16-92, Art. 203)
+                        </span>
+                        <span className="text-[10px] text-blue-700 dark:text-blue-300 font-semibold tabular-nums bg-white/80 dark:bg-slate-900 px-2 py-0.5 rounded border border-blue-200/60">
+                          23.83 días / 8h
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-center pt-0.5">
+                        <div className="bg-white/90 dark:bg-slate-900/70 p-2 rounded-lg border border-blue-100 dark:border-blue-900/40">
+                          <div className="text-[10px] text-muted-foreground font-medium">Salario Diario</div>
+                          <div className="text-xs font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                            {formatRD(tarifas.salarioDiario)}
+                          </div>
+                        </div>
+                        <div className="bg-white/90 dark:bg-slate-900/70 p-2 rounded-lg border border-blue-100 dark:border-blue-900/40">
+                          <div className="text-[10px] text-muted-foreground font-medium">Hora Regular</div>
+                          <div className="text-xs font-bold tabular-nums text-slate-800 dark:text-slate-200">
+                            {formatRD(tarifas.horaOrdinaria)}/h
+                          </div>
+                        </div>
+                        <div className="bg-emerald-50 dark:bg-emerald-950/40 p-2 rounded-lg border border-emerald-200 dark:border-emerald-800/40 shadow-2xs">
+                          <div className="text-[10px] text-emerald-800 dark:text-emerald-300 font-bold">Hora Extra (+35%)</div>
+                          <div className="text-xs font-black tabular-nums text-emerald-700 dark:text-emerald-300">
+                            {formatRD(tarifas.horaExtra35)}/h
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                <div className="space-y-2.5">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                      Método de Pago
+                    </Label>
+                    <Select
+                      value={f.metodo_pago || "TRANSFERENCIA"}
+                      onValueChange={(val: any) => setF({ ...f, metodo_pago: val })}
+                    >
+                      <SelectTrigger className="h-10 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+                        <SelectItem value="TRANSFERENCIA" className="cursor-pointer text-xs sm:text-sm">
+                          Transferencia Bancaria
+                        </SelectItem>
+                        <SelectItem value="EFECTIVO" className="cursor-pointer text-xs sm:text-sm">
+                          Efectivo
+                        </SelectItem>
+                        <SelectItem value="CHEQUE" className="cursor-pointer text-xs sm:text-sm">
+                          Cheque
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {f.metodo_pago === "TRANSFERENCIA" && (
+                    <div className="grid gap-2.5 sm:grid-cols-2 animate-in fade-in-50 duration-200">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Banco Destino de Nómina
+                        </Label>
+                        <Select
+                          value={f.banco_nombre}
+                          onValueChange={(val) => setF({ ...f, banco_nombre: val })}
+                        >
+                          <SelectTrigger className="h-10 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+                            <SelectItem value="BANCO_POPULAR" className="cursor-pointer text-xs sm:text-sm">Banco Popular</SelectItem>
+                            <SelectItem value="BANRESERVAS" className="cursor-pointer text-xs sm:text-sm">Banreservas</SelectItem>
+                            <SelectItem value="BANCO_BHD" className="cursor-pointer text-xs sm:text-sm">Banco BHD</SelectItem>
+                            <SelectItem value="BANCO_SANTA_CRUZ" className="cursor-pointer text-xs sm:text-sm">Banco Santa Cruz</SelectItem>
+                            <SelectItem value="SCOTIABANK" className="cursor-pointer text-xs sm:text-sm">Scotiabank</SelectItem>
+                            <SelectItem value="BANCO_PROMERICA" className="cursor-pointer text-xs sm:text-sm">Banco Promerica</SelectItem>
+                            <SelectItem value="BANCO_CARIBE" className="cursor-pointer text-xs sm:text-sm">Banco Caribe</SelectItem>
+                            <SelectItem value="BANCO_BDI" className="cursor-pointer text-xs sm:text-sm">Banco BDI</SelectItem>
+                            <SelectItem value="APAP" className="cursor-pointer text-xs sm:text-sm">APAP (Asoc. Popular)</SelectItem>
+                            <SelectItem value="ALAVER" className="cursor-pointer text-xs sm:text-sm">Alaver</SelectItem>
+                            <SelectItem value="ACAP" className="cursor-pointer text-xs sm:text-sm">Asociación Cibao</SelectItem>
+                            <SelectItem value="OTRO" className="cursor-pointer text-xs sm:text-sm">Otro Banco</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Cuenta Bancaria / Transferencia
+                        </Label>
+                        <Input
+                          value={f.numero_cuenta_banco || ""}
+                          placeholder="Ej. 1029482910"
+                          onChange={(e) => setF({ ...f, numero_cuenta_banco: e.target.value })}
+                          className="h-10 font-bold tabular-nums text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {f.metodo_pago === "CHEQUE" && (
+                    <div className="grid gap-2.5 sm:grid-cols-2 animate-in fade-in-50 duration-200">
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Banco Emisor del Cheque
+                        </Label>
+                        <Select
+                          value={f.banco_nombre}
+                          onValueChange={(val) => setF({ ...f, banco_nombre: val })}
+                        >
+                          <SelectTrigger className="h-10 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
+                            <SelectItem value="BANCO_POPULAR" className="cursor-pointer text-xs sm:text-sm">Banco Popular</SelectItem>
+                            <SelectItem value="BANRESERVAS" className="cursor-pointer text-xs sm:text-sm">Banreservas</SelectItem>
+                            <SelectItem value="BANCO_BHD" className="cursor-pointer text-xs sm:text-sm">Banco BHD</SelectItem>
+                            <SelectItem value="OTRO" className="cursor-pointer text-xs sm:text-sm">Otro Banco</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-1">
+                        <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                          Beneficiario / Ref. Cheque
+                        </Label>
+                        <Input
+                          value={f.numero_cuenta_banco || ""}
+                          placeholder={`A nombre de: ${f.nombre} ${f.apellido || ""}`.trim()}
+                          onChange={(e) => setF({ ...f, numero_cuenta_banco: e.target.value })}
+                          className="h-10 text-xs sm:text-sm bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs rounded-xl focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
+                        />
+                      </div>
+                    </div>
+                  )}
+
+                  {f.metodo_pago === "EFECTIVO" && (
+                    <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-800/50 rounded-xl flex items-center gap-2.5 animate-in fade-in-50 duration-200">
+                      <div className="h-8 w-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+                        <Banknote className="h-4 w-4" />
+                      </div>
+                      <div className="text-xs">
+                        <div className="font-bold text-emerald-950 dark:text-emerald-200">
+                          Liquidación en Efectivo
+                        </div>
+                        <div className="text-muted-foreground text-[11px] mt-0.5">
+                          Este colaborador recibirá su liquidación de nómina en efectivo directamente en caja o administración contra recibo firmado.
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="pt-2.5 border-t border-border/50 grid grid-cols-2 gap-2 text-xs">
+                  <label className="flex items-center gap-2 p-2 rounded-lg border border-border/60 bg-white/70 dark:bg-slate-900/60 cursor-pointer font-medium text-slate-800 dark:text-slate-200 hover:border-primary/40 transition-colors">
+                    <Checkbox
+                      checked={f.aplica_tss}
+                      onCheckedChange={(c) => setF({ ...f, aplica_tss: !!c })}
+                      className="cursor-pointer"
+                    />
+                    <span className="text-[11px] font-semibold">Retener TSS Ley (5.91%)</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 p-2 rounded-lg border border-border/60 bg-white/70 dark:bg-slate-900/60 cursor-pointer font-medium text-slate-800 dark:text-slate-200 hover:border-primary/40 transition-colors">
+                    <Checkbox
+                      checked={f.aplica_isr}
+                      onCheckedChange={(c) => setF({ ...f, aplica_isr: !!c })}
+                      className="cursor-pointer"
+                    />
+                    <span className="text-[11px] font-semibold">Retener ISR DGII</span>
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {step === 3 && (
+            /* STEP 3: PERMISOS DE ACCESO */
             <div className="space-y-2.5 animate-in fade-in slide-in-from-right-3 duration-200">
               {/* Toolbar Actions (Primary Brand Background Card) */}
               <div className="flex flex-wrap items-center justify-between gap-1.5 p-2 px-3 rounded-xl bg-primary/10 border border-primary/20 shadow-2xs">
@@ -1340,20 +1639,22 @@ function EmpleadoDialog({
                     size="sm"
                     onClick={resetRoleDefaults}
                     disabled={f.rol === "ADMIN"}
-                    className="h-7.5 rounded-lg text-[10px] text-primary hover:bg-primary/10 gap-1 px-2 font-bold cursor-pointer"
+                    className="h-7 text-[11px] font-semibold text-primary hover:text-primary-dark hover:bg-primary/15 rounded-lg px-2 gap-1 cursor-pointer transition-colors"
                   >
                     <RotateCcw className="h-3 w-3" />
-                    Valores del Rol
+                    <span>Por Defecto</span>
                   </Button>
+                  <Separator orientation="vertical" className="h-3.5 bg-primary/20 mx-0.5" />
                   <Button
                     type="button"
                     variant="ghost"
                     size="sm"
                     onClick={selectAllPermisos}
                     disabled={f.rol === "ADMIN"}
-                    className="h-7.5 rounded-lg text-[10px] text-slate-700 hover:bg-slate-200 dark:text-slate-300 px-2 font-bold cursor-pointer"
+                    className="h-7 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400 hover:bg-emerald-50 dark:hover:bg-emerald-950/40 rounded-lg px-2 gap-1 cursor-pointer transition-colors"
                   >
-                    Todos
+                    <Check className="h-3 w-3" />
+                    <span>Todos</span>
                   </Button>
                   <Button
                     type="button"
@@ -1361,9 +1662,10 @@ function EmpleadoDialog({
                     size="sm"
                     onClick={deselectAllPermisos}
                     disabled={f.rol === "ADMIN"}
-                    className="h-7.5 rounded-lg text-[10px] text-muted-foreground hover:bg-slate-200 dark:hover:bg-slate-800 px-2 font-bold cursor-pointer"
+                    className="h-7 text-[11px] font-semibold text-rose-700 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-lg px-2 gap-1 cursor-pointer transition-colors"
                   >
-                    Ninguno
+                    <Ban className="h-3 w-3" />
+                    <span>Ninguno</span>
                   </Button>
                 </div>
               </div>
@@ -1449,8 +1751,8 @@ function EmpleadoDialog({
             </div>
           )}
 
-          {step === 3 && (
-            /* STEP 3: VERIFICACIÓN OTP */
+          {step === 4 && (
+            /* STEP 4: VERIFICACIÓN OTP */
             <div className="space-y-4 py-2 animate-in fade-in zoom-in-95 duration-200">
               <div className="text-center space-y-2 p-4 rounded-2xl bg-primary/5 border border-primary/15">
                 <div className="mx-auto w-12 h-12 rounded-2xl bg-[#1B4B73] text-white flex items-center justify-center shadow-md">
@@ -1516,10 +1818,11 @@ function EmpleadoDialog({
               </div>
             </div>
           )}
+        </div>
 
-          {/* FOOTER ACTIONS */}
-          <div className="pt-3 mt-3 border-t border-border/50 flex items-center justify-between gap-2">
-            <div>
+        {/* FOOTER ACTIONS */}
+        <div className="px-4 sm:px-5 py-3 border-t border-border/50 flex items-center justify-between gap-2 shrink-0 bg-background">
+          <div>
               {empleado && step === 1 ? (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -1560,9 +1863,18 @@ function EmpleadoDialog({
                   onClick={() => setStep(1)}
                   className="rounded-xl h-9.5 px-4 text-xs font-semibold gap-1.5 border-slate-300 cursor-pointer"
                 >
-                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior
+                  <ArrowLeft className="h-3.5 w-3.5" /> Anterior: Datos
                 </Button>
               ) : step === 3 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setStep(hasNomina ? 2 : 1)}
+                  className="rounded-xl h-9.5 px-4 text-xs font-semibold gap-1.5 border-slate-300 cursor-pointer"
+                >
+                  <ArrowLeft className="h-3.5 w-3.5" /> {hasNomina ? "Anterior: Nómina" : "Anterior: Datos"}
+                </Button>
+              ) : step === 4 ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -1590,9 +1902,17 @@ function EmpleadoDialog({
                   onClick={handleNext}
                   className="bg-primary hover:bg-primary/95 text-white rounded-xl h-9.5 px-5 text-xs font-bold shadow-md gap-1.5 transition-all cursor-pointer"
                 >
-                  Siguiente: Permisos <ArrowRight className="h-3.5 w-3.5" />
+                  {hasNomina ? "Siguiente: Nómina" : "Siguiente: Permisos"} <ArrowRight className="h-3.5 w-3.5" />
                 </Button>
               ) : step === 2 ? (
+                <Button
+                  type="button"
+                  onClick={() => setStep(3)}
+                  className="bg-primary hover:bg-primary/95 text-white rounded-xl h-9.5 px-5 text-xs font-bold shadow-md gap-1.5 transition-all cursor-pointer"
+                >
+                  Siguiente: Permisos <ArrowRight className="h-3.5 w-3.5" />
+                </Button>
+              ) : step === 3 ? (
                 <Button
                   type="button"
                   onClick={submit}
@@ -1629,9 +1949,8 @@ function EmpleadoDialog({
               )}
             </div>
           </div>
-        </div>
-      </DialogContent>
-    </Dialog>
+        </DialogContent>
+      </Dialog>
   );
 }
 

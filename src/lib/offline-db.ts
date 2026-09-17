@@ -1,7 +1,7 @@
 /** Persistencia offline y outbox durable de Klynn. */
 
 const DB_NAME = "klynn_pos_offline_db";
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 const OUTBOX_STORE = "sync_outbox_v2";
 const LEGACY_OUTBOX_STORE = "sync_outbox";
 const PROCESSING_LEASE_MS = 60_000;

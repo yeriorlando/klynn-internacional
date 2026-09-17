@@ -624,8 +624,7 @@ function ReportesPage() {
   return (
     <div className="space-y-6 pb-12">
       <PageHeader title="Reportes y estadísticas" description="Visualiza el rendimiento integral de tu lavandería en tiempo real.">
-        <div className="flex flex-wrap items-center gap-2.5">
-          <DropdownMenu>
+        <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button className="gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0">
                 <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
@@ -691,7 +690,6 @@ function ReportesPage() {
               </Button>
             </>
           )}
-        </div>
       </PageHeader>
 
       <Dialog open={showDgiiModal} onOpenChange={setShowDgiiModal}>

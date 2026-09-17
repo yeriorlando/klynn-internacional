@@ -4,7 +4,8 @@ import {
   getCajaAbierta, getGastos, getEmpleados, getMovimientos,
   getECFConfig, getCajas, getECFDocuments, getPlans, 
   getGlobalConfig, getECFSequences, getMetasServicios,
-  getPromociones 
+  getPromociones, getSuplidores, getFacturasCXP, getAbonosCXP,
+  getPeriodosNomina, getDetallesNomina, getAnticiposNomina
 } from "@/lib/storage";
 
 export function usePromociones(tenantId: string) {
@@ -154,6 +155,54 @@ export function useConversations(tenantId: string) {
   return useQuery({
     queryKey: ['conversations', tenantId],
     queryFn: () => getConversations(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function useSuplidores(tenantId: string) {
+  return useQuery({
+    queryKey: ['suplidores', tenantId],
+    queryFn: () => getSuplidores(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function useFacturasCXP(tenantId: string) {
+  return useQuery({
+    queryKey: ['facturas-cxp', tenantId],
+    queryFn: () => getFacturasCXP(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function useAbonosCXP(tenantId: string, facturaId?: string) {
+  return useQuery({
+    queryKey: ['abonos-cxp', tenantId, facturaId],
+    queryFn: () => getAbonosCXP(tenantId, facturaId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function useAnticiposNomina(tenantId: string, empleadoId?: string) {
+  return useQuery({
+    queryKey: ['anticipos-nomina', tenantId, empleadoId],
+    queryFn: () => getAnticiposNomina(tenantId, empleadoId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function usePeriodosNomina(tenantId: string) {
+  return useQuery({
+    queryKey: ['periodos-nomina', tenantId],
+    queryFn: () => getPeriodosNomina(tenantId),
+    enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function useDetallesNomina(tenantId: string, periodoId?: string) {
+  return useQuery({
+    queryKey: ['detalles-nomina', tenantId, periodoId],
+    queryFn: () => getDetallesNomina(tenantId, periodoId),
     enabled: !!tenantId && tenantId !== '__loading__',
   });
 }

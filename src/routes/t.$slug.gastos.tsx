@@ -610,136 +610,124 @@ function GastosPage() {
       onValueChange={(t) => { setActiveTab(t); setSelectedCategory("all"); }} 
       className="space-y-6 pb-12 animate-in fade-in-50 duration-300 w-full"
     >
-      {/* HEADER DE PÁGINA: TÍTULO ARRIBA CENTRADO Y TODOS LOS BOTONES ALINEADOS DEBAJO */}
-      <div className="flex flex-col items-center justify-center gap-3.5 sm:gap-4 w-full">
-        {/* Título y Contador Centrado */}
-        <div className="text-center">
-          <h1 className="font-display text-2xl sm:text-3xl font-black text-foreground tracking-tight">Gastos</h1>
-          <p className="text-xs text-muted-foreground mt-0.5 font-medium">
-            {activeTab === "manual" ? manualGastos.length : cajaChicaGastos.length} egresos registrados
-          </p>
-        </div>
+      {/* HEADER DE PÁGINA LLAMATIVO CON DESCRIPCIÓN ESTILO NÓMINA */}
+      <PageHeader
+        title="Control de Gastos y Egresos"
+        description="Gestión de gastos operativos, compras a proveedores, caja chica y análisis financiero de costos"
+      >
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+              >
+                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                <span>Exportar</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
+              <DropdownMenuItem 
+                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
+                onClick={() => {
+                  try {
+                    exportGastosListToExcel(
+                      activeTab === "caja-chica" ? cajaChicaGastos : manualGastos,
+                      activeTab,
+                      user?.tenant?.nombre || "Klynn"
+                    );
+                    toast.success("Gastos exportados a Excel (.xlsx) exitosamente");
+                  } catch (err) {
+                    console.error("Error al exportar gastos:", err);
+                    toast.error("Error al exportar a Excel");
+                  }
+                }}
+              >
+                <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (.xlsx)
+              </DropdownMenuItem>
+              <DropdownMenuItem 
+                className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
+                onClick={() => setIsPrinting(true)}
+              >
+                <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
 
-        {/* Todos los Botones Alineados Debajo */}
-        <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-2.5 w-full">
-          {/* PESTAÑAS (Gastos Manuales & Caja Chica) */}
-          <TabsList className="flex items-center gap-2 bg-transparent p-0 border-none h-auto justify-start overflow-x-auto scrollbar-none">
-            {/* Gastos Manuales (Azul Añil / Primary) */}
-            <TabsTrigger 
-              value="manual"
-              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
-            >
-              <Receipt className={`h-4 w-4 shrink-0 transition-colors ${
-                activeTab === "manual" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
-              }`} />
-              <span>Gastos Manuales</span>
-              <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
-                activeTab === "manual" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
-              }`}>
-                {manualGastos.length}
-              </span>
-            </TabsTrigger>
+          <Button 
+            type="button"
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
+            onClick={() => setIsPrinting(true)}
+          >
+            <Printer className="h-4 w-4 text-white shrink-0" />
+            <span>Imprimir</span>
+          </Button>
 
-            {/* Caja Chica (Ámbar / Oro) */}
-            <TabsTrigger 
-              value="caja-chica"
-              className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:border-amber-600 data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
-            >
-              <PiggyBank className={`h-4 w-4 shrink-0 transition-colors ${
-                activeTab === "caja-chica" ? "text-white" : "text-amber-600 dark:text-amber-400"
-              }`} />
-              <span>Caja Chica</span>
-              <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
-                activeTab === "caja-chica" ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"
-              }`}>
-                {cajaChicaGastos.length}
-              </span>
-            </TabsTrigger>
-          </TabsList>
+          {/* Botón 0: COMPARAR PERÍODOS (LADO A LADO) */}
+          <Button 
+            type="button"
+            onClick={() => setShowCompararModal(true)} 
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700/80 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+          >
+            <Scale className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Comparar Períodos</span>
+          </Button>
 
-          {/* Separador vertical sutil entre tabs y acciones */}
-          <div className="hidden sm:block h-6 w-px bg-border/80 mx-1 shrink-0" />
+          {/* Botón 1: NUEVA COMPRA (E41 - Proveedores Informales con Retención) */}
+          <Button 
+            type="button"
+            onClick={() => setShowCompraModal(true)} 
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-600 cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+          >
+            <ShoppingBag className="h-4 w-4 text-white shrink-0" />
+            <span>Nueva Compra</span>
+          </Button>
 
-          {/* Acciones Rápidas */}
-          <div className="flex items-center gap-2 sm:gap-2.5 flex-wrap shrink-0">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                >
-                  <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
-                  <span>Exportar</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-48 rounded-2xl shadow-xl p-1.5">
-                <DropdownMenuItem 
-                  className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                  onClick={() => {
-                    try {
-                      exportGastosListToExcel(
-                        activeTab === "caja-chica" ? cajaChicaGastos : manualGastos,
-                        activeTab,
-                        user?.tenant?.nombre || "Klynn"
-                      );
-                      toast.success("Gastos exportados a Excel (.xlsx) exitosamente");
-                    } catch (err) {
-                      console.error("Error al exportar gastos:", err);
-                      toast.error("Error al exportar a Excel");
-                    }
-                  }}
-                >
-                  <FileSpreadsheet className="h-4 w-4 text-emerald-600" /> Excel (.xlsx)
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  className="gap-2 cursor-pointer py-2 rounded-xl text-xs font-bold" 
-                  onClick={() => setIsPrinting(true)}
-                >
-                  <Printer className="h-4 w-4 text-rose-600" /> PDF / Impresión
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+          {/* Botón 2: NUEVO GASTO (E43 - Gastos Menores / Control Interno) */}
+          <Button 
+            type="button"
+            onClick={() => setShowGastoModal(true)} 
+            className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+          >
+            <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
+            <span>Nuevo Gasto</span>
+          </Button>
+      </PageHeader>
 
-            <Button 
-              type="button"
-              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0" 
-              onClick={() => setIsPrinting(true)}
-            >
-              <Printer className="h-4 w-4 text-white shrink-0" />
-              <span>Imprimir</span>
-            </Button>
+      {/* PESTAÑAS (Gastos Manuales & Caja Chica) */}
+      <div className="flex items-center gap-2">
+        <TabsList className="flex items-center gap-2 bg-transparent p-0 border-none h-auto justify-start overflow-x-auto scrollbar-none">
+          {/* Gastos Manuales (Azul Añil / Primary) */}
+          <TabsTrigger 
+            value="manual"
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <Receipt className={`h-4 w-4 shrink-0 transition-colors ${
+              activeTab === "manual" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"
+            }`} />
+            <span>Gastos Manuales</span>
+            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
+              activeTab === "manual" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
+            }`}>
+              {manualGastos.length}
+            </span>
+          </TabsTrigger>
 
-            {/* Botón 0: COMPARAR PERÍODOS (LADO A LADO) */}
-            <Button 
-              type="button"
-              onClick={() => setShowCompararModal(true)} 
-              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white border border-slate-700/80 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-            >
-              <Scale className="h-4 w-4 text-[#F0B900] shrink-0" />
-              <span>Comparar Períodos</span>
-            </Button>
-
-            {/* Botón 1: NUEVA COMPRA (E41 - Proveedores Informales con Retención) */}
-            <Button 
-              type="button"
-              onClick={() => setShowCompraModal(true)} 
-              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4 font-bold bg-blue-600 hover:bg-blue-700 text-white shadow-xs border border-blue-600 cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-            >
-              <ShoppingBag className="h-4 w-4 text-white shrink-0" />
-              <span>Nueva Compra</span>
-            </Button>
-
-            {/* Botón 2: NUEVO GASTO (E43 - Gastos Menores / Control Interno) */}
-            <Button 
-              type="button"
-              onClick={() => setShowGastoModal(true)} 
-              className="flex items-center gap-2 rounded-xl h-10 px-3.5 sm:px-4.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-            >
-              <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
-              <span>Nuevo Gasto</span>
-            </Button>
-          </div>
-        </div>
+          {/* Caja Chica (Ámbar / Oro) */}
+          <TabsTrigger 
+            value="caja-chica"
+            className="flex items-center gap-2 px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-amber-600 data-[state=active]:text-white data-[state=active]:border-amber-600 data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0 whitespace-nowrap"
+          >
+            <PiggyBank className={`h-4 w-4 shrink-0 transition-colors ${
+              activeTab === "caja-chica" ? "text-white" : "text-amber-600 dark:text-amber-400"
+            }`} />
+            <span>Caja Chica</span>
+            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${
+              activeTab === "caja-chica" ? "bg-white/20 text-white" : "bg-amber-500/15 text-amber-800 dark:text-amber-300"
+            }`}>
+              {cajaChicaGastos.length}
+            </span>
+          </TabsTrigger>
+        </TabsList>
       </div>
 
       {/* 4 EXECUTIVE KPI CARDS (EXACTO ESTILO /CAJA CON COMPARATIVA MOM) */}

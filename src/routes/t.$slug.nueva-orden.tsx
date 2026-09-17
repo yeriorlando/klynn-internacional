@@ -14,6 +14,8 @@ import {
   Trash2,
   Search,
   UserPlus,
+  Users,
+  UserCheck,
   Check,
   AlertTriangle,
   Printer,
@@ -55,8 +57,11 @@ import {
   MapPin,
   WifiOff,
   Lock,
+  Unlock,
   RefreshCw,
   ShieldCheck,
+  ShieldAlert,
+  Landmark,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -130,6 +135,7 @@ import {
   type Promocion,
   registrarUsoPromocion,
   NCF_NOMBRES,
+  can,
 } from "@/lib/storage";
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
 import { notificarWhatsApp } from "@/lib/whatsapp";
@@ -146,12 +152,14 @@ import {
   usePlans,
   useECFSequences,
   usePromociones,
+  useEmpleados,
 } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { PriceInput } from "@/components/klynn/PriceInput";
 import { PendingCollectionsDialog } from "@/components/klynn/PendingCollectionsDialog";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
+import { AperturaDialog } from "@/components/klynn/AperturaDialog";
 
 export const Route = createFileRoute("/t/$slug/nueva-orden")({
   component: NuevaOrdenPage,
@@ -457,6 +465,192 @@ function getAdaptiveTitleStyle(name: string): string {
   return "text-xs sm:text-sm leading-snug";
 }
 
+function CreditFinancialStatusCard({
+  cliente,
+  limiteCredito,
+  deudaPrevia,
+  saldoEstaOrden,
+  disponibleActual,
+  deudaProyectada,
+  excedeLimite,
+  montoExceso,
+  porcentajeUso,
+}: {
+  cliente: Cliente | null;
+  limiteCredito: number;
+  deudaPrevia: number;
+  saldoEstaOrden: number;
+  disponibleActual: number;
+  deudaProyectada: number;
+  excedeLimite: boolean;
+  montoExceso: number;
+  porcentajeUso: number;
+}) {
+  return (
+    <div
+      className={`rounded-2xl border-2 p-4 shadow-xs transition-all duration-200 ${
+        excedeLimite
+          ? "border-rose-300 dark:border-rose-800 bg-rose-50/70 dark:bg-rose-950/25 text-rose-950 dark:text-rose-100"
+          : limiteCredito > 0
+          ? "border-emerald-300 dark:border-emerald-800 bg-emerald-50/50 dark:bg-emerald-950/20 text-emerald-950 dark:text-emerald-100"
+          : "border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20 text-amber-950 dark:text-amber-100"
+      }`}
+    >
+      {/* Cabecera */}
+      <div className="flex items-center justify-between gap-2 pb-3 border-b border-black/5 dark:border-white/5">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl font-black ${
+              excedeLimite
+                ? "bg-rose-500/15 text-rose-600 dark:text-rose-400"
+                : limiteCredito > 0
+                ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
+                : "bg-amber-500/15 text-amber-600 dark:text-amber-400"
+            }`}
+          >
+            <CreditCard className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h4 className="text-xs font-black tracking-tight truncate">
+              Línea de Crédito: {cliente?.nombre} {cliente?.apellido || ""}
+            </h4>
+            <p className="text-[10px] text-muted-foreground">
+              {cliente?.telefono && cliente.telefono !== "---"
+                ? formatPhoneRD(cliente.telefono)
+                : "Cliente registrado"}
+            </p>
+          </div>
+        </div>
+
+        {/* Badge de Estado */}
+        {excedeLimite ? (
+          <Badge className="bg-rose-600 text-white hover:bg-rose-600 border-none font-black text-[10px] tracking-wide px-2.5 py-0.5 shadow-xs shrink-0 flex items-center gap-1.5 animate-pulse">
+            <AlertTriangle className="h-3.5 w-3.5" />
+            LÍMITE EXCEDIDO
+          </Badge>
+        ) : limiteCredito > 0 ? (
+          <Badge className="bg-emerald-600 text-white hover:bg-emerald-600 border-none font-black text-[10px] tracking-wide px-2.5 py-0.5 shadow-xs shrink-0 flex items-center gap-1.5">
+            <CheckCircle2 className="h-3.5 w-3.5" />
+            DENTRO DEL LÍMITE
+          </Badge>
+        ) : (
+          <Badge className="bg-amber-600 text-white hover:bg-amber-600 border-none font-black text-[10px] tracking-wide px-2.5 py-0.5 shadow-xs shrink-0 flex items-center gap-1.5">
+            <ShieldAlert className="h-3.5 w-3.5" />
+            SIN LÍNEA (RD$0)
+          </Badge>
+        )}
+      </div>
+
+      {/* Grid de 3 Métricas Financieras */}
+      <div className="grid grid-cols-3 gap-2 pt-3 text-center">
+        <div className="p-2 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+          <span className="text-[9px] font-black uppercase tracking-wider text-muted-foreground block truncate">
+            Límite Fijado
+          </span>
+          <span className="text-xs font-black font-display text-slate-800 dark:text-slate-100 block mt-0.5">
+            {formatRD(limiteCredito)}
+          </span>
+        </div>
+
+        <div className="p-2 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-black/5 dark:border-white/5">
+          <span className="text-[9px] font-black uppercase tracking-wider text-muted-foreground block truncate">
+            Deuda Previa
+          </span>
+          <span
+            className={`text-xs font-black font-display block mt-0.5 ${
+              deudaPrevia > 0
+                ? "text-amber-600 dark:text-amber-400"
+                : "text-slate-700 dark:text-slate-300"
+            }`}
+          >
+            {formatRD(deudaPrevia)}
+          </span>
+        </div>
+
+        <div
+          className={`p-2 rounded-xl border ${
+            excedeLimite
+              ? "bg-rose-500/10 border-rose-500/20 text-rose-700 dark:text-rose-300"
+              : "bg-emerald-500/10 border-emerald-500/20 text-emerald-700 dark:text-emerald-300"
+          }`}
+        >
+          <span className="text-[9px] font-black uppercase tracking-wider block truncate">
+            {excedeLimite ? "Exceso Orden" : "Disponible"}
+          </span>
+          <span className="text-xs font-black font-display block mt-0.5">
+            {excedeLimite ? `+${formatRD(montoExceso)}` : formatRD(disponibleActual)}
+          </span>
+        </div>
+      </div>
+
+      {/* Barra de utilización de crédito */}
+      {limiteCredito > 0 && (
+        <div className="mt-3 pt-2.5 border-t border-black/5 dark:border-white/5 space-y-1.5">
+          <div className="flex items-center justify-between text-[10px] font-bold">
+            <span className="text-muted-foreground">
+              Saldo de esta orden:{" "}
+              <strong className="text-slate-900 dark:text-slate-100">
+                {formatRD(saldoEstaOrden)}
+              </strong>
+            </span>
+            <span
+              className={
+                excedeLimite
+                  ? "text-rose-600 dark:text-rose-400 font-black"
+                  : "text-emerald-700 dark:text-emerald-400 font-black"
+              }
+            >
+              {porcentajeUso}% del límite
+            </span>
+          </div>
+          <div className="h-2 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden">
+            <div
+              className={`h-full rounded-full transition-all duration-300 ${
+                excedeLimite
+                  ? "bg-gradient-to-r from-amber-500 to-rose-600"
+                  : "bg-gradient-to-r from-teal-500 to-emerald-500"
+              }`}
+              style={{ width: `${Math.min(100, porcentajeUso)}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Mensaje Contextual de Alerta en Vivo */}
+      <div className="mt-3">
+        {excedeLimite ? (
+          <div className="flex items-start gap-2 p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/25 text-[11px] text-rose-800 dark:text-rose-300 leading-snug">
+            <AlertTriangle className="h-4 w-4 text-rose-600 shrink-0 mt-0.5" />
+            <div>
+              <strong className="block font-black text-rose-900 dark:text-rose-200">
+                Esta orden sobrepasa el límite autorizado por {formatRD(montoExceso)}
+              </strong>
+              <span>
+                Deuda total proyectada: <b>{formatRD(deudaProyectada)}</b> (Límite: {formatRD(limiteCredito)}).
+                Al guardar se solicitará <b>PIN de Administrador</b>, o puedes ingresar un abono inicial de al menos <b>{formatRD(montoExceso)}</b> para no excederlo.
+              </span>
+            </div>
+          </div>
+        ) : limiteCredito > 0 ? (
+          <div className="flex items-center gap-2 p-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-[11px] text-emerald-800 dark:text-emerald-300">
+            <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+            <span>
+              Crédito cubierto. Saldo restante disponible tras esta orden: <b>{formatRD(Math.max(0, limiteCredito - deudaProyectada))}</b>.
+            </span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
+            <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+            <span>
+              El cliente no posee límite pre-aprobado (RD$0.00). Cualquier venta a crédito requerirá PIN de Administrador.
+            </span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function NuevaOrdenPage() {
   const user = useRequireAuth();
   const navigate = useNavigate();
@@ -532,8 +726,14 @@ function NuevaOrdenPage() {
   const [showQuickNoteModal, setShowQuickNoteModal] = useState(false);
   const [quickNoteText, setQuickNoteText] = useState("");
 
-  // Confirmación de Límite de Crédito
+  // Confirmación de Límite de Crédito con PIN
   const [showCreditLimitConfirm, setShowCreditLimitConfirm] = useState(false);
+  const [creditAuthPin, setCreditAuthPin] = useState("");
+  const [creditAuthError, setCreditAuthError] = useState("");
+
+  // Cobro Unificado de Deuda Anterior en Mostrador
+  const [incluirAbonoDeuda, setIncluirAbonoDeuda] = useState(false);
+  const [abonoDeudaAnterior, setAbonoDeudaAnterior] = useState<number>(0);
 
   // Selector y Detalles de Color / Notas por Prenda
   const COLORES_PRENDA = [
@@ -711,6 +911,7 @@ function NuevaOrdenPage() {
   const [weightQty, setWeightQty] = useState<number>(10);
   const [selectedPromo, setSelectedPromo] = useState<Promocion | null>(null);
   const [promoDismissedManually, setPromoDismissedManually] = useState(false);
+  const [showAperturaModal, setShowAperturaModal] = useState(false);
 
   useEffect(() => {
     if (servicePickerItem) {
@@ -723,9 +924,40 @@ function NuevaOrdenPage() {
   const { data: promocionesData = [] } = usePromociones(tenantId);
   const { data: clientes = [], isLoading: loadingClientes } = useClientes(tenantId);
   const { data: ordenes = [] } = useOrdenes(tenantId);
+  const { data: empleadosList = [] } = useEmpleados(tenantId);
   const { data: caja, isLoading: loadingCaja } = useCajaAbierta(tenantId);
   const { data: fiscalConfigData } = useECFConfig(tenantId);
   const { data: ecfSequences } = useECFSequences(tenantId);
+
+  // Cliente activo sincronizado con el caché en vivo de clientes
+  const currentCliente = useMemo(() => {
+    if (!cliente?.id || cliente.id === "generic") return cliente;
+    return clientes.find((c) => c.id === cliente.id) || cliente;
+  }, [cliente, clientes]);
+
+  // Órdenes pendientes y deuda acumulada previa del cliente
+  const ordenesPendientesCliente = useMemo(() => {
+    if (!currentCliente?.id || currentCliente.id === "generic" || (currentCliente.nombre === "Consumidor" && currentCliente.apellido === "Final")) return [];
+    return (ordenes || [])
+      .filter((o) => o.cliente_id === currentCliente.id && o.saldo > 0 && o.estado !== "ANULADA")
+      .sort((a, b) => new Date(a.creado_en).getTime() - new Date(b.creado_en).getTime());
+  }, [ordenes, currentCliente?.id, currentCliente?.nombre, currentCliente?.apellido]);
+
+  const totalDeudaAnterior = useMemo(() => {
+    return +(ordenesPendientesCliente.reduce((sum, o) => sum + o.saldo, 0)).toFixed(2);
+  }, [ordenesPendientesCliente]);
+
+  const currentEmpleadoHasCreditAuth = useMemo(() => {
+    const currentEmp = user?.empleado;
+    if (!currentEmp) return false;
+    return currentEmp.rol === "ADMIN" || can(currentEmp, "autorizar-credito");
+  }, [user?.empleado]);
+
+  const authorizedEmployees = useMemo(() => {
+    return (empleadosList || []).filter(
+      (e) => e.activo && (e.rol === "ADMIN" || can(e, "autorizar-credito"))
+    );
+  }, [empleadosList]);
 
   const totalPiezasCalculadas = useMemo(() => {
     return items.reduce((acc, it) => acc + (it.es_libra ? 1 : it.cantidad), 0);
@@ -1075,11 +1307,19 @@ function NuevaOrdenPage() {
     }
   }, [cliente?.id, cliente?.descuento_fijo, cfg?.descuento_cliente_activo]);
 
-  // Sincronizar el cliente seleccionado con la lista actualizada de clientes (por si se actualizó su descuento o datos)
+  // Sincronizar el cliente seleccionado con la lista actualizada de clientes (por si se actualizó su límite, descuento o datos)
   useEffect(() => {
     if (!cliente || !clientes || clientes.length === 0) return;
     const fresh = clientes.find((c) => c.id === cliente.id);
-    if (fresh && fresh.descuento_fijo !== cliente.descuento_fijo) {
+    if (
+      fresh &&
+      (fresh.descuento_fijo !== cliente.descuento_fijo ||
+        fresh.limite_credito !== cliente.limite_credito ||
+        fresh.nombre !== cliente.nombre ||
+        fresh.apellido !== cliente.apellido ||
+        fresh.telefono !== cliente.telefono ||
+        fresh.tipo !== cliente.tipo)
+    ) {
       setCliente(fresh);
     }
   }, [clientes, cliente?.id]);
@@ -1201,6 +1441,8 @@ function getMarbeteColorStyle(colorName?: string) {
     setShowConveyorPOS(false);
     setRecibido(0);
     setAbonoCredito(0);
+    setIncluirAbonoDeuda(false);
+    setAbonoDeudaAnterior(0);
     setReferencia("");
     setShowRefInput(false);
     setServicioDomicilio(false);
@@ -1963,8 +2205,37 @@ function getMarbeteColorStyle(colorName?: string) {
 
   total = +(Math.max(0, subtotalConImpuestos - descuentoMonto) + costoEnvio).toFixed(2);
 
-  const vuelto = metodo === "EFECTIVO" && recibido > total ? recibido - total : 0;
-  const faltante = metodo === "EFECTIVO" && recibido > 0 && recibido < total ? total - recibido : 0;
+  // Monto consolidado a cobrar hoy (Orden Actual [Total o Anticipo] + Abono Deuda Anterior si está activo)
+  const montoCobroHoy = +(
+    (condicionCobro === "ANTICIPO" ? anticipoMonto : total) +
+    (incluirAbonoDeuda ? abonoDeudaAnterior : 0)
+  ).toFixed(2);
+  const montoTotalCobrar = +(total + (incluirAbonoDeuda ? abonoDeudaAnterior : 0)).toFixed(2);
+
+  const vuelto = metodo === "EFECTIVO" && recibido > montoCobroHoy ? +((recibido - montoCobroHoy).toFixed(2)) : 0;
+  const faltante = metodo === "EFECTIVO" && recibido > 0 && recibido < montoCobroHoy ? +((montoCobroHoy - recibido).toFixed(2)) : 0;
+
+  // Métricas reactivas y validación en tiempo real del límite de crédito del cliente
+  const limiteCreditoCliente = currentCliente?.limite_credito || 0;
+  const saldoEstaOrdenCredito = +Math.max(0, total - abonoCredito).toFixed(2);
+  const deudaTotalPrevio = totalDeudaAnterior;
+  const creditoDisponibleActual = +Math.max(0, limiteCreditoCliente - deudaTotalPrevio).toFixed(2);
+  const deudaFinalProyectada = +(deudaTotalPrevio + saldoEstaOrdenCredito).toFixed(2);
+  const excedeLimiteCredito = limiteCreditoCliente > 0 && deudaFinalProyectada > limiteCreditoCliente;
+  const montoExcesoCredito = +(deudaFinalProyectada - limiteCreditoCliente).toFixed(2);
+  const sinLineaCredito =
+    !currentCliente ||
+    (currentCliente.nombre === "Consumidor" && currentCliente.apellido === "Final")
+      ? false
+      : limiteCreditoCliente === 0;
+  const porcentajeUsoCredito =
+    limiteCreditoCliente > 0
+      ? Math.min(100, Math.round((deudaFinalProyectada / limiteCreditoCliente) * 100))
+      : 0;
+  const porcentajeUsoReal =
+    limiteCreditoCliente > 0
+      ? Math.round((deudaFinalProyectada / limiteCreditoCliente) * 100)
+      : 0;
 
   function addItem(it: OrdenItem) {
     setItems((arr) => {
@@ -2099,11 +2370,11 @@ function getMarbeteColorStyle(colorName?: string) {
     setIsCreatingOrden(true);
 
     // 1. Validar cliente para crédito
+    const activeCliente = currentCliente || cliente;
     if (condicionCobro === "CREDITO") {
       if (
-        !cliente ||
-        (cliente.nombre === "Consumidor" && cliente.apellido === "Final") ||
-        cliente.tipo === "Consumidor Final"
+        !activeCliente ||
+        (activeCliente.nombre === "Consumidor" && activeCliente.apellido === "Final")
       ) {
         toast.error("Las ventas a crédito deben asignarse a un cliente registrado.");
         releaseOrderCreation();
@@ -2111,7 +2382,7 @@ function getMarbeteColorStyle(colorName?: string) {
       }
     }
 
-    let targetCliente: Cliente | null = cliente;
+    let targetCliente: Cliente | null = activeCliente;
     if (!targetCliente) {
       const isConsumoFinal = tipoECF === "E32" || tipoECF === "B02";
       if (isConsumoFinal) {
@@ -2549,6 +2820,49 @@ function getMarbeteColorStyle(colorName?: string) {
         }
       }
 
+      // Cobro Unificado en Mostrador: Amortizar abono a órdenes anteriores si se incluyó
+      if (incluirAbonoDeuda && abonoDeudaAnterior > 0 && caja && ordenesPendientesCliente.length > 0) {
+        let restanteAbono = +abonoDeudaAnterior.toFixed(2);
+        const metodoCobroAbono: MetodoPago = instrumentoPago === "MIXTO" ? "EFECTIVO" : (instrumentoPago as MetodoPago);
+
+        for (const prevOrden of ordenesPendientesCliente) {
+          if (restanteAbono <= 0) break;
+          const montoAmortizar = +Math.min(restanteAbono, prevOrden.saldo).toFixed(2);
+          if (montoAmortizar <= 0) continue;
+
+          const nuevoSaldo = +Math.max(0, prevOrden.saldo - montoAmortizar).toFixed(2);
+          const nuevoPagado = +((prevOrden.pagado || 0) + montoAmortizar).toFixed(2);
+          const updatedPrevOrden: Orden = {
+            ...prevOrden,
+            saldo: nuevoSaldo,
+            pagado: nuevoPagado,
+          };
+
+          await saveOrden(updatedPrevOrden);
+
+          await saveMovimiento({
+            id: uid("mov"),
+            tenant_id: tenant.id,
+            caja_id: caja.id,
+            empleado_id: empleado.id,
+            tipo: "ABONO",
+            concepto: `Abono a orden #${prevOrden.numero} [Cobro Unificado Mostrador #${ordenActualizada.numero}]${
+              referencia ? ` (Ref: ${referencia})` : ""
+            }${nuevoSaldo === 0 ? " - SALDADA ✓" : ` (Saldo restante: ${formatRD(nuevoSaldo)})`}`,
+            monto: montoAmortizar,
+            metodo: metodoCobroAbono,
+            orden_id: prevOrden.id,
+            creado_en: new Date().toISOString(),
+          });
+
+          restanteAbono = +(restanteAbono - montoAmortizar).toFixed(2);
+        }
+
+        toast.success(`Abono de ${formatRD(abonoDeudaAnterior)} aplicado a deuda pendiente de ${targetCliente?.nombre || "cliente"} ✅`);
+        queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+      }
+
       if (
         targetCliente &&
         servicioDomicilio &&
@@ -2634,6 +2948,52 @@ function getMarbeteColorStyle(colorName?: string) {
       toast.error(e?.message || "Error al crear la orden");
     } finally {
       releaseOrderCreation();
+    }
+  }
+
+  function handleConfirmCreditAuth() {
+    setCreditAuthError("");
+    const enteredPin = creditAuthPin.trim();
+    if (!enteredPin) {
+      setCreditAuthError("Por favor ingresa el PIN de autorización.");
+      return;
+    }
+
+    if (currentEmpleadoHasCreditAuth) {
+      // El empleado actual tiene permiso (ADMIN o autorizar-credito).
+      // Se exige su PIN para certificar su presencia y evitar que terceros usen su sesión.
+      const currentEmp = user?.empleado;
+      const isPinValid =
+        (currentEmp?.pin && currentEmp.pin === enteredPin) ||
+        (currentEmp?.password && currentEmp.password === enteredPin);
+
+      if (!isPinValid) {
+        setCreditAuthError("PIN incorrecto. No se pudo validar tu identidad.");
+        return;
+      }
+
+      toast.success(`Límite de crédito autorizado por ${currentEmp?.nombre || "Administrador"} ✓`);
+      setShowCreditLimitConfirm(false);
+      setCreditAuthPin("");
+      setCreditAuthError("");
+      onCrearOrden(true);
+    } else {
+      // El empleado actual NO tiene permiso.
+      // Se requiere el PIN de un Administrador o supervisor con permiso autorizar-credito.
+      const authorizer = authorizedEmployees.find(
+        (e) => (e.pin && e.pin === enteredPin) || (e.password && e.password === enteredPin)
+      );
+
+      if (!authorizer) {
+        setCreditAuthError("PIN no reconocido o no pertenece a un Administrador / personal autorizado.");
+        return;
+      }
+
+      toast.success(`Límite de crédito autorizado por ${authorizer.nombre} ${authorizer.apellido || ""} (${authorizer.rol}) ✓`);
+      setShowCreditLimitConfirm(false);
+      setCreditAuthPin("");
+      setCreditAuthError("");
+      onCrearOrden(true);
     }
   }
 
@@ -2791,11 +3151,50 @@ function getMarbeteColorStyle(colorName?: string) {
         />
       )}
       {!caja && (
-        <Card className="mb-4 flex items-center gap-3 border-warning/40 bg-warning/10 p-4 text-sm">
-          <AlertTriangle className="h-5 w-5 text-warning" />
-          La caja está cerrada. Solo podrás registrar órdenes en crédito.
-        </Card>
+        <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3.5 rounded-2xl border border-amber-400/50 dark:border-amber-500/30 bg-gradient-to-r from-amber-500/15 via-amber-500/10 to-amber-500/5 dark:from-amber-950/40 dark:via-amber-900/20 dark:to-transparent p-3.5 sm:p-4 shadow-xs transition-all animate-in fade-in duration-300">
+          <div className="flex items-start sm:items-center gap-3.5 min-w-0">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-amber-500/20 text-amber-800 dark:text-amber-300 border border-amber-500/30 shadow-2xs mt-0.5 sm:mt-0">
+              <Lock className="h-5 w-5" />
+            </div>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-display text-sm sm:text-base font-extrabold text-amber-950 dark:text-amber-200 tracking-tight">
+                  La caja de operaciones está cerrada
+                </span>
+                <span className="rounded-full bg-amber-500/20 dark:bg-amber-400/20 border border-amber-500/30 px-2 py-0.5 text-[10px] font-black uppercase text-amber-900 dark:text-amber-300 tracking-wider">
+                  Solo Crédito / Pago al Retirar
+                </span>
+              </div>
+              <p className="text-xs text-amber-900/85 dark:text-amber-300/80 font-medium mt-0.5 leading-relaxed">
+                Para recibir cobros en efectivo, tarjeta o transferencia debes abrir el turno de caja. ¿Olvidaste abrirla? Puedes hacerlo ahora mismo sin salir de esta pantalla.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0 w-full sm:w-auto justify-end">
+            <Button
+              type="button"
+              onClick={() => setShowAperturaModal(true)}
+              className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-black rounded-xl h-10 px-4.5 shadow-sm transition-all active:scale-95 cursor-pointer text-xs sm:text-sm w-full sm:w-auto shrink-0 border border-emerald-600"
+            >
+              <Unlock className="h-4 w-4 stroke-[2.5]" />
+              <span>Abrir Caja</span>
+            </Button>
+          </div>
+        </div>
       )}
+
+      <AperturaDialog
+        open={showAperturaModal}
+        onOpenChange={setShowAperturaModal}
+        tenantId={tenantId}
+        empleadoId={user?.empleado?.id || ""}
+        onDone={async () => {
+          await queryClient.invalidateQueries({ queryKey: ["caja-abierta", tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ["cajas", tenantId] });
+          await queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+        }}
+      />
 
       {isPosMode ? (
         <div className="flex gap-6 overflow-hidden min-h-0 w-full flex-1">
@@ -3554,13 +3953,27 @@ function getMarbeteColorStyle(colorName?: string) {
                         </span>
                         <Badge
                           variant="outline"
-                          className="text-[9px] px-1 py-0 h-4 font-bold border-primary/30 text-primary shrink-0"
+                          className={`text-[9px] px-1.5 py-0 h-4 font-bold border shrink-0 ${
+                            cliente.tipo === "Empresa"
+                              ? "border-[#1B4B73]/30 bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 dark:border-[#1B4B73]/40"
+                              : "border-[#F0B900]/40 bg-[#F0B900]/15 text-[#9E7300] dark:bg-[#F0B900]/25 dark:text-[#F0B900] dark:border-[#F0B900]/40"
+                          }`}
                         >
                           {cliente.tipo === "Empresa" ? "Empresa" : "Cliente"}
                         </Badge>
-                        {(cliente.descuento_fijo ?? 0) > 0 && (
+                        {((currentCliente?.descuento_fijo ?? cliente.descuento_fijo) ?? 0) > 0 && (
                           <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-black shrink-0">
-                            %{cliente.descuento_fijo}% Desc. Fijo
+                            %{currentCliente?.descuento_fijo ?? cliente.descuento_fijo}% Desc. Fijo
+                          </Badge>
+                        )}
+                        {((currentCliente?.limite_credito ?? cliente.limite_credito) ?? 0) > 0 && (
+                          <Badge
+                            variant="outline"
+                            className="bg-[#1B4B73] hover:bg-[#143a5a] text-white border border-[#F0B900]/70 hover:border-[#F0B900] text-[9px] px-2 py-0.5 h-4.5 font-black shrink-0 flex items-center gap-1.5 transition-all duration-150 shadow-2xs select-none"
+                          >
+                            <CreditCard className="h-2.5 w-2.5 text-[#F0B900] shrink-0" />
+                            <span className="text-white/90">Límite:</span>
+                            <span className="text-[#F0B900] font-black tracking-tight">{formatRD(currentCliente?.limite_credito ?? cliente.limite_credito ?? 0)}</span>
                           </Badge>
                         )}
                       </div>
@@ -4631,21 +5044,26 @@ function getMarbeteColorStyle(colorName?: string) {
                               %{c.descuento_fijo}% Desc.
                             </Badge>
                           )}
-                          {c.tipo === "Empresa" ? (
+                          {(c.limite_credito ?? 0) > 0 && (
                             <Badge
                               variant="outline"
-                              className="border-blue-500/20 bg-blue-500/10 text-blue-600"
+                              className="bg-[#1B4B73] hover:bg-[#143a5a] text-white border border-[#F0B900]/70 hover:border-[#F0B900] text-[10px] px-2 py-0.5 font-black flex items-center gap-1.5 shadow-2xs transition-all duration-150"
                             >
-                              Empresa
-                            </Badge>
-                          ) : (
-                            <Badge
-                              variant="outline"
-                              className="border-emerald-500/20 bg-emerald-500/10 text-emerald-600"
-                            >
-                              Consumidor Final
+                              <CreditCard className="h-3 w-3 text-[#F0B900] shrink-0" />
+                              <span className="text-white/90">Límite:</span>
+                              <span className="text-[#F0B900] font-black">{formatRD(c.limite_credito)}</span>
                             </Badge>
                           )}
+                          <Badge
+                            variant="outline"
+                            className={`text-[10px] px-2 py-0.5 font-bold border shrink-0 ${
+                              c.tipo === "Empresa"
+                                ? "border-[#1B4B73]/30 bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 dark:border-[#1B4B73]/40"
+                                : "border-[#F0B900]/40 bg-[#F0B900]/15 text-[#9E7300] dark:bg-[#F0B900]/25 dark:text-[#F0B900] dark:border-[#F0B900]/40"
+                            }`}
+                          >
+                            {c.tipo === "Empresa" ? "Empresa" : "Cliente"}
+                          </Badge>
                           {cliente?.id === c.id && (
                             <Check className="h-5 w-5 text-primary animate-in zoom-in duration-200" />
                           )}
@@ -5643,23 +6061,27 @@ function getMarbeteColorStyle(colorName?: string) {
                   {/* C. CRÉDITO */}
                   {condicionCobro === "CREDITO" && (
                     <div className="space-y-4 pt-1">
-                      {(!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final") || cliente.tipo === "Consumidor Final") ? (
+                      {(!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final")) ? (
                         <div className="flex items-center gap-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-destructive">
                           <AlertTriangle className="h-8 w-8 text-destructive shrink-0" />
                           <div>
                             <strong className="block text-sm">Cliente Registrado Obligatorio</strong>
-                            <span className="text-xs">Las ventas a crédito deben asignarse a un cliente registrado (no Consumidor Final).</span>
+                            <span className="text-xs">Las ventas a crédito deben asignarse a un cliente registrado.</span>
                           </div>
                         </div>
                       ) : (
                         <>
-                          <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-4 text-warning-foreground">
-                            <AlertTriangle className="h-7 w-7 text-warning shrink-0" />
-                            <div>
-                              <strong className="block text-sm">Venta a crédito</strong>
-                              <span className="text-xs">Se registrará en el balance de <span className="font-bold">{cliente?.nombre} {cliente?.apellido}</span>.</span>
-                            </div>
-                          </div>
+                          <CreditFinancialStatusCard
+                            cliente={currentCliente || cliente}
+                            limiteCredito={limiteCreditoCliente}
+                            deudaPrevia={deudaTotalPrevio}
+                            saldoEstaOrden={saldoEstaOrdenCredito}
+                            disponibleActual={creditoDisponibleActual}
+                            deudaProyectada={deudaFinalProyectada}
+                            excedeLimite={excedeLimiteCredito}
+                            montoExceso={montoExcesoCredito}
+                            porcentajeUso={porcentajeUsoReal}
+                          />
 
                           <div className="rounded-2xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 p-4 shadow-2xs">
                             <div className="flex items-center gap-2 mb-3">
@@ -5713,7 +6135,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               />
                             </div>
                             <p className="mt-1.5 text-xs text-amber-600/70 font-medium">
-                              Saldo restante (<strong>{formatRD(Math.max(0, total - abonoCredito))}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                              Saldo restante (<strong>{formatRD(Math.max(0, total - abonoCredito))}</strong>) irá al balance de <strong>{currentCliente?.nombre || cliente?.nombre}</strong>.
                             </p>
                           </div>
                         </>
@@ -5830,146 +6252,214 @@ function getMarbeteColorStyle(colorName?: string) {
         />
       )}
       <Dialog open={isClientModalOpen} onOpenChange={setIsClientModalOpen}>
-        <DialogContent className="w-[90vw] sm:max-w-[580px] rounded-3xl p-6 overflow-hidden flex flex-col gap-4">
-          <DialogHeader>
-            <DialogTitle className="text-lg font-display font-bold flex items-center gap-2">
-              <Search className="h-5 w-5 text-primary" />
-              <span>Buscar Cliente</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs">
-              Busca por nombre o teléfono en la lista de clientes registrados.
-            </DialogDescription>
+        <DialogContent className="w-[95vw] sm:max-w-[580px] rounded-3xl p-5 sm:p-6 shadow-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 overflow-hidden flex flex-col gap-3.5">
+          <DialogHeader className="flex flex-row items-center gap-3 space-y-0 pb-0.5">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#1B4B73]/10 dark:bg-[#1B4B73]/30 text-[#1B4B73] dark:text-sky-300 border border-[#1B4B73]/20 dark:border-[#1B4B73]/40 shadow-2xs">
+              <Users className="h-5 w-5" />
+            </div>
+            <div className="min-w-0 flex-1">
+              <DialogTitle className="font-display text-lg sm:text-xl font-bold tracking-tight text-slate-900 dark:text-white">
+                Buscar Cliente
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Busca por nombre o teléfono en la lista de clientes registrados.
+              </p>
+            </div>
           </DialogHeader>
 
-          <div className="py-1 space-y-4 w-full">
+          {/* HERO CARD BÚSQUEDA */}
+          <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-gradient-to-b from-slate-50/70 to-white dark:from-slate-900/80 dark:to-slate-900 p-2.5 shadow-2xs">
             <div className="relative w-full">
-              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/50" />
+              <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/60" />
               <Input
                 value={clientSearchQuery}
                 onChange={(e) => setClientSearchQuery(e.target.value)}
                 placeholder="Escribe el nombre o teléfono del cliente..."
-                className="w-full pl-10 h-11 bg-accent/20 border-border/50 focus-visible:ring-primary/20 rounded-xl text-sm"
+                className="w-full pl-10 pr-20 h-11 bg-white dark:bg-slate-950 border border-slate-200 dark:border-slate-800 focus-visible:ring-2 focus-visible:ring-[#1B4B73]/25 rounded-xl text-sm font-medium transition-all shadow-2xs placeholder:text-muted-foreground/60"
                 autoFocus
               />
+              {clientSearchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setClientSearchQuery("")}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 h-7 px-2.5 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 border border-slate-200/90 dark:border-slate-700 text-xs font-bold shadow-2xs transition-all active:scale-95 cursor-pointer select-none"
+                >
+                  Limpiar
+                </button>
+              )}
             </div>
+          </div>
 
-            <div className="max-h-60 overflow-y-auto space-y-1.5 custom-scrollbar text-xs pr-1 w-full">
-              <div className="flex items-center gap-2 mt-2 mb-2.5 px-1.5">
-                <div className="h-3.5 w-1 bg-primary rounded-full animate-pulse" />
-                <span className="text-xs font-black uppercase tracking-widest text-primary">
+          {/* LISTADO DE CLIENTES */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                   Clientes Registrados
                 </span>
-                <div className="flex-1 h-px bg-primary/10" />
+                <span className="text-[9px] font-black text-[#1B4B73] dark:text-sky-300 bg-[#1B4B73]/10 dark:bg-[#1B4B73]/30 px-2 py-0.5 rounded-full border border-[#1B4B73]/15">
+                  {filteredClients.length}
+                </span>
               </div>
+              {cliente && cliente.nombre !== "Consumidor" && (
+                <span className="text-[10px] text-muted-foreground truncate max-w-[220px]">
+                  Actual: <strong className="text-slate-800 dark:text-slate-200">{cliente.nombre} {cliente.apellido || ""}</strong>
+                </span>
+              )}
+            </div>
 
+            <div className="max-h-60 overflow-y-auto space-y-2 custom-scrollbar pr-1 w-full">
               {filteredClients
                 .filter(
                   (c) =>
                     c.id !== tenantId.substring(0, 24) + "f000" + tenantId.substring(28) &&
                     c.id !== tenantId.substring(0, 24) + "e000" + tenantId.substring(28),
                 )
-                .map((c) => (
-                  <button
-                    key={c.id}
-                    type="button"
-                    onClick={() => {
-                      setCliente(c);
-                      setIsClientModalOpen(false);
-                      if (cfg?.descuento_cliente_activo !== false && (c.descuento_fijo ?? 0) > 0) {
-                        setSelectedPromo(null);
-                        setPromoDismissedManually(true);
-                        setDescuento(Number(c.descuento_fijo));
-                      }
-                      const isEmpresa = c.tipo === "Empresa" || (c.cedula && c.cedula.length >= 9);
-                      const target = isElectronic
-                        ? isEmpresa
-                          ? "E31"
-                          : "E32"
-                        : isEmpresa
-                          ? "B01"
-                          : "B02";
-                      if (validTipos.includes(target)) {
-                        setTipoECF(target);
-                      }
-                    }}
-                    className={`group flex w-full items-center justify-between rounded-xl px-3 py-2 transition-all text-left border ${
-                      cliente?.id === c.id
-                        ? "bg-primary border-transparent text-white font-bold shadow-sm"
-                        : "hover:bg-primary hover:text-white hover:border-transparent border-transparent"
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0 flex-1">
-                      <div
-                        className={`h-9 w-9 rounded-full flex items-center justify-center font-bold shrink-0 transition-colors ${
-                          cliente?.id === c.id
-                            ? "bg-white/20 text-white"
-                            : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 group-hover:bg-white/20 group-hover:text-white"
-                        }`}
-                      >
-                        {c.tipo === "Empresa" ? (
-                          <Building className="h-4.5 w-4.5" />
-                        ) : (
-                          <UserIcon className="h-4.5 w-4.5" />
-                        )}
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 font-bold text-sm truncate leading-snug">
-                          <span className="truncate">{c.nombre} {c.apellido || ""}</span>
-                          {(c.descuento_fijo ?? 0) > 0 && (
-                            <Badge className="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30 text-[9px] px-1.5 py-0 h-4 font-black shrink-0">
-                              %{c.descuento_fijo}% Desc.
-                            </Badge>
-                          )}
-                        </div>
+                .map((c) => {
+                  const isSelected = cliente?.id === c.id;
+                  return (
+                    <button
+                      key={c.id}
+                      type="button"
+                      onClick={() => {
+                        setCliente(c);
+                        setIsClientModalOpen(false);
+                        if (cfg?.descuento_cliente_activo !== false && (c.descuento_fijo ?? 0) > 0) {
+                          setSelectedPromo(null);
+                          setPromoDismissedManually(true);
+                          setDescuento(Number(c.descuento_fijo));
+                        }
+                        const isEmpresa = c.tipo === "Empresa" || (c.cedula && c.cedula.length >= 9);
+                        const target = isElectronic
+                          ? isEmpresa
+                            ? "E31"
+                            : "E32"
+                          : isEmpresa
+                            ? "B01"
+                            : "B02";
+                        if (validTipos.includes(target)) {
+                          setTipoECF(target);
+                        }
+                      }}
+                      className={`group relative flex w-full items-center justify-between rounded-2xl p-3 text-left transition-all duration-200 cursor-pointer border ${
+                        isSelected
+                          ? "border-2 border-[#1B4B73] bg-[#1B4B73]/[0.04] dark:bg-[#1B4B73]/15 shadow-xs"
+                          : "border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/70 hover:border-[#1B4B73]/50 hover:bg-slate-50/80 dark:hover:bg-slate-800/50 shadow-2xs"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
                         <div
-                          className={`text-xs transition-colors mt-0.5 ${
-                            cliente?.id === c.id
-                              ? "text-white/80"
-                              : "text-muted-foreground group-hover:text-white/85"
+                          className={`h-10 w-10 rounded-2xl flex items-center justify-center font-black text-xs shrink-0 transition-colors shadow-2xs border ${
+                            isSelected
+                              ? "bg-[#1B4B73] text-white border-[#1B4B73]"
+                              : c.tipo === "Empresa"
+                              ? "bg-blue-50 dark:bg-blue-950/40 text-[#1B4B73] dark:text-sky-300 border-blue-200/60 dark:border-blue-800/40"
+                              : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200/60 dark:border-slate-700/60 group-hover:border-[#1B4B73]/30"
                           }`}
                         >
-                          {c.telefono}
+                          {c.tipo === "Empresa" ? (
+                            <Building className="h-4.5 w-4.5" />
+                          ) : (
+                            <span>{`${c.nombre[0] || ""}${c.apellido ? c.apellido[0] : ""}`.toUpperCase() || "CL"}</span>
+                          )}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-1.5 flex-wrap leading-tight">
+                            <span className="font-bold text-sm text-slate-900 dark:text-white truncate">
+                              {c.nombre} {c.apellido || ""}
+                            </span>
+
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-md border shrink-0 ${
+                                c.tipo === "Empresa"
+                                  ? "border-[#1B4B73]/30 bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 dark:border-[#1B4B73]/40"
+                                  : "border-[#F0B900]/40 bg-[#F0B900]/15 text-[#9E7300] dark:bg-[#F0B900]/25 dark:text-[#F0B900] dark:border-[#F0B900]/40"
+                              }`}
+                            >
+                              {c.tipo === "Empresa" ? "Empresa" : "Cliente"}
+                            </span>
+
+                            {(c.descuento_fijo ?? 0) > 0 && (
+                              <span className="bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/50 text-[9px] px-1.5 py-0.5 rounded-md font-black shrink-0">
+                                %{c.descuento_fijo}% Desc.
+                              </span>
+                            )}
+
+                            {(c.limite_credito ?? 0) > 0 && (
+                              <span className="bg-[#F0B900]/20 hover:bg-[#F0B900]/30 text-[#1B4B73] dark:text-[#F0B900] border border-[#F0B900]/70 text-[9px] px-2 py-0.5 rounded-md font-black shrink-0 flex items-center gap-1 shadow-2xs transition-colors select-none">
+                                <CreditCard className="h-2.5 w-2.5 text-[#1B4B73] dark:text-[#F0B900] shrink-0" />
+                                <span>Límite: <b>{formatRD(c.limite_credito)}</b></span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2.5 text-xs text-muted-foreground mt-1">
+                            {c.telefono && c.telefono !== "---" && (
+                              <span className="flex items-center gap-1 truncate font-medium">
+                                <Phone className="h-3 w-3 text-slate-400 shrink-0" />
+                                {formatPhoneRD(c.telefono)}
+                              </span>
+                            )}
+                            {c.cedula && (
+                              <span className="text-[11px] text-slate-400 truncate">
+                                ID: {c.cedula}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </div>
-                    </div>
-                    {cliente?.id === c.id && (
-                      <Check className="h-4.5 w-4.5 text-white shrink-0 transition-colors" />
-                    )}
-                  </button>
-                ))}
+
+                      {isSelected && (
+                        <div className="h-6 w-6 rounded-full bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs ml-2">
+                          <Check className="h-3.5 w-3.5 stroke-[3]" />
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
 
               {filteredClients.length === 0 && (
-                <div className="py-6 text-center text-muted-foreground text-[10px]">
-                  No se encontraron clientes
+                <div className="py-8 text-center text-muted-foreground text-xs rounded-2xl border border-dashed border-slate-200 dark:border-slate-800">
+                  <p className="font-semibold text-slate-700 dark:text-slate-300">No se encontraron clientes</p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">Intenta con otro término o registra un nuevo cliente.</p>
                 </div>
               )}
             </div>
           </div>
 
-          <div className="h-px bg-border my-1" />
-          <div className="grid grid-cols-2 gap-3 w-full">
+          {/* Footer estilo Caja */}
+          <div className="border-t border-slate-100 dark:border-slate-800 pt-3 flex items-center justify-between gap-2">
             <Button
-              variant="default"
-              size="sm"
-              className="h-10 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98] dark:bg-emerald-600 dark:hover:bg-emerald-700"
-              onClick={() => {
-                setIsClientModalOpen(false);
-                setShowNewCliente(true);
-              }}
+              type="button"
+              variant="outline"
+              onClick={() => setIsClientModalOpen(false)}
+              className="h-9.5 rounded-xl font-bold border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 px-4 text-xs cursor-pointer"
             >
-              <UserPlus className="h-4 w-4" /> Nuevo Cliente
+              Cancelar
             </Button>
-            <Button
-              variant="default"
-              size="sm"
-              className="h-10 text-xs font-bold rounded-xl bg-[#1e293b] hover:bg-[#0f172a] text-white border-none shadow-sm flex items-center justify-center gap-1.5 w-full transition-all active:scale-[0.98] dark:bg-[#0f172a] dark:hover:bg-slate-950"
-              onClick={() => {
-                setIsClientModalOpen(false);
-                setEmpresaDialogOpen(true);
-              }}
-            >
-              <Search className="h-4 w-4" /> Buscar RNC (DGII)
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                type="button"
+                className="h-9.5 text-xs font-bold rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs flex items-center justify-center gap-1.5 px-4 transition-all cursor-pointer"
+                onClick={() => {
+                  setIsClientModalOpen(false);
+                  setShowNewCliente(true);
+                }}
+              >
+                <UserPlus className="h-4 w-4" /> Nuevo Cliente
+              </Button>
+              <Button
+                type="button"
+                className="h-9.5 text-xs font-bold rounded-xl bg-[#1B4B73] hover:bg-[#153c5e] text-white shadow-xs flex items-center justify-center gap-1.5 px-4 transition-all cursor-pointer"
+                onClick={() => {
+                  setIsClientModalOpen(false);
+                  setEmpresaDialogOpen(true);
+                }}
+              >
+                <Search className="h-4 w-4" /> Buscar RNC (DGII)
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -6961,67 +7451,118 @@ function getMarbeteColorStyle(colorName?: string) {
       </Dialog>
 
       {/* ================= MODAL DE ADVERTENCIA DE LÍMITE DE CRÉDITO ================= */}
-      <Dialog open={showCreditLimitConfirm} onOpenChange={setShowCreditLimitConfirm}>
-        <DialogContent className="max-w-md p-5 sm:p-6 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800">
+      <Dialog
+        open={showCreditLimitConfirm}
+        onOpenChange={(open) => {
+          setShowCreditLimitConfirm(open);
+          if (!open) {
+            setCreditAuthPin("");
+            setCreditAuthError("");
+          }
+        }}
+      >
+        <DialogContent className="max-w-md p-5 sm:p-6 rounded-3xl z-50 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-lg font-display font-bold flex items-center gap-2 text-amber-600 dark:text-amber-400">
-              <AlertTriangle className="h-5 w-5 text-amber-500" /> Límite de Crédito Excedido
+              <AlertTriangle className="h-5 w-5 text-amber-500 shrink-0" /> Límite de Crédito Excedido
             </DialogTitle>
             <DialogDescription className="text-xs text-muted-foreground pt-1">
-              El cliente <strong>{cliente?.nombre} {cliente?.apellido}</strong> excede el límite de crédito disponible autorizado.
+              El cliente <strong>{currentCliente?.nombre || cliente?.nombre} {currentCliente?.apellido || cliente?.apellido}</strong> excede el límite de crédito disponible autorizado.
             </DialogDescription>
           </DialogHeader>
+
           <div className="py-2 space-y-2 bg-amber-500/10 border border-amber-500/20 p-3.5 rounded-2xl text-xs">
             <div className="flex justify-between">
               <span className="text-muted-foreground">Límite de crédito fijado:</span>
-              <span className="font-bold">{formatRD(cliente?.limite_credito || 0)}</span>
+              <span className="font-bold">{formatRD(limiteCreditoCliente)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Deuda acumulada actual:</span>
-              <span className="font-bold">
-                {formatRD(
-                  (ordenes || [])
-                    .filter((o) => o.cliente_id === cliente?.id && o.saldo > 0 && o.estado !== "ANULADA")
-                    .reduce((s, o) => s + o.saldo, 0)
-                )}
-              </span>
+              <span className="font-bold">{formatRD(deudaTotalPrevio)}</span>
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Saldo a crédito de esta orden:</span>
-              <span className="font-bold">{formatRD(total - abonoCredito)}</span>
+              <span className="font-bold">{formatRD(saldoEstaOrdenCredito)}</span>
             </div>
             <div className="border-t border-amber-500/30 pt-1.5 flex justify-between font-black text-amber-900 dark:text-amber-200">
               <span>Nueva deuda acumulada:</span>
-              <span>
-                {formatRD(
-                  (ordenes || [])
-                    .filter((o) => o.cliente_id === cliente?.id && o.saldo > 0 && o.estado !== "ANULADA")
-                    .reduce((s, o) => s + o.saldo, 0) + (total - abonoCredito)
-                )}
-              </span>
+              <span>{formatRD(deudaFinalProyectada)}</span>
             </div>
           </div>
-          <p className="text-[11px] text-muted-foreground">
-            ¿Deseas autorizar esta venta a crédito como cajero/administrador?
-          </p>
+
+          {/* Contexto de Rol y Permiso */}
+          {currentEmpleadoHasCreditAuth ? (
+            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200">
+              <ShieldCheck className="h-5 w-5 text-amber-600 shrink-0" />
+              <div className="text-xs">
+                <strong className="block font-bold">Autorización de {user?.empleado?.nombre} ({user?.empleado?.rol})</strong>
+                <span className="text-[11px] text-muted-foreground">Tu cuenta tiene permiso. Por seguridad de estación, introduce tu PIN de 4 dígitos.</span>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-center gap-2.5 p-3 rounded-2xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-800 text-rose-800 dark:text-rose-200">
+              <Lock className="h-5 w-5 text-rose-600 shrink-0" />
+              <div className="text-xs">
+                <strong className="block font-bold">Permiso de Administrador Requerido</strong>
+                <span className="text-[11px] text-muted-foreground">Tu usuario no puede saltarse el límite de crédito. Se requiere el PIN de un Administrador.</span>
+              </div>
+            </div>
+          )}
+
+          {/* Campo de PIN */}
+          <div className="space-y-1.5 pt-1">
+            <Label className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300 flex items-center justify-between">
+              <span>{currentEmpleadoHasCreditAuth ? "Tu PIN de Autorización" : "PIN de Administrador"}</span>
+              <span className="text-[10px] text-muted-foreground font-normal">4 dígitos</span>
+            </Label>
+            <Input
+              type="password"
+              inputMode="numeric"
+              pattern="[0-9]*"
+              maxLength={8}
+              autoFocus
+              placeholder="••••"
+              value={creditAuthPin}
+              onChange={(e) => {
+                setCreditAuthPin(e.target.value);
+                if (creditAuthError) setCreditAuthError("");
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  handleConfirmCreditAuth();
+                }
+              }}
+              className={`h-12 text-center text-2xl tracking-[0.4em] font-mono font-bold rounded-2xl border-2 bg-white dark:bg-slate-900 shadow-2xs ${
+                creditAuthError ? "border-destructive focus-visible:ring-destructive" : "border-slate-200 dark:border-slate-700 focus-visible:ring-amber-500/30"
+              }`}
+            />
+            {creditAuthError && (
+              <p className="text-xs text-destructive font-bold flex items-center gap-1 mt-1">
+                <AlertTriangle className="h-3.5 w-3.5 shrink-0" /> {creditAuthError}
+              </p>
+            )}
+          </div>
+
           <DialogFooter className="flex gap-2 pt-2">
             <Button
               type="button"
               variant="outline"
-              className="flex-1 rounded-xl text-xs font-bold"
-              onClick={() => setShowCreditLimitConfirm(false)}
+              className="flex-1 rounded-xl text-xs font-bold cursor-pointer"
+              onClick={() => {
+                setShowCreditLimitConfirm(false);
+                setCreditAuthPin("");
+                setCreditAuthError("");
+              }}
             >
               Cancelar
             </Button>
             <Button
               type="button"
-              className="flex-1 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white"
-              onClick={() => {
-                setShowCreditLimitConfirm(false);
-                onCrearOrden(true);
-              }}
+              className="flex-1 rounded-xl text-xs font-black bg-amber-600 hover:bg-amber-700 text-white cursor-pointer shadow-xs"
+              onClick={handleConfirmCreditAuth}
             >
-              Autorizar y Crear
+              Verificar PIN y Autorizar
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -7639,12 +8180,17 @@ function getMarbeteColorStyle(colorName?: string) {
 
               {/* Total Header Right */}
               <div className="text-right pr-6 sm:pr-8">
-                <span className="text-[10px] font-black uppercase tracking-widest text-[#1B4B73]/70 dark:text-sky-400 block leading-none mb-1">
+                <span className="text-[10px] font-black uppercase tracking-wider text-[#1B4B73]/70 dark:text-sky-400 block leading-none mb-1">
                   TOTAL A COBRAR
                 </span>
                 <span className="text-3xl sm:text-4xl font-display font-black text-[#1B4B73] dark:text-sky-300 tracking-tight leading-none">
-                  {formatRD(total)}
+                  {formatRD(condicionCobro === "ANTICIPO" ? montoCobroHoy : (incluirAbonoDeuda && abonoDeudaAnterior > 0 ? montoTotalCobrar : total))}
                 </span>
+                {incluirAbonoDeuda && abonoDeudaAnterior > 0 && (
+                  <span className="text-[10px] text-amber-600 dark:text-amber-400 font-bold block mt-0.5">
+                    +{formatRD(abonoDeudaAnterior)} deuda previa
+                  </span>
+                )}
               </div>
             </div>
             <DialogDescription className="sr-only">
@@ -7737,6 +8283,146 @@ function getMarbeteColorStyle(colorName?: string) {
               })}
             </div>
 
+            {/* COBRO UNIFICADO DE DEUDA ANTERIOR EN MOSTRADOR */}
+            {totalDeudaAnterior > 0 && (condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && (
+              <div className="p-3 sm:p-4 rounded-2xl border-2 border-amber-300/60 dark:border-amber-700/60 bg-amber-50/50 dark:bg-amber-950/20 space-y-3 shadow-2xs animate-in fade-in duration-200">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-8 w-8 rounded-xl bg-amber-500/20 text-amber-700 dark:text-amber-300 flex items-center justify-center shrink-0">
+                      <Receipt className="h-4.5 w-4.5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-black uppercase tracking-wider text-amber-900 dark:text-amber-200">
+                          Deuda previa en sistema:
+                        </span>
+                        <Badge className="bg-amber-600 text-white font-black text-[10px] px-2 py-0.5 rounded-md border-none">
+                          {formatRD(totalDeudaAnterior)}
+                        </Badge>
+                      </div>
+                      <p className="text-[11px] text-amber-800/80 dark:text-amber-300/80 font-medium mt-0.5">
+                        {ordenesPendientesCliente.length} {ordenesPendientesCliente.length === 1 ? "orden pendiente" : "órdenes pendientes"} de pago.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Toggle para incluir abono */}
+                  <label className="flex items-center gap-2 cursor-pointer select-none self-start sm:self-auto bg-white dark:bg-slate-900 px-3 py-1.5 rounded-xl border border-amber-300/80 dark:border-amber-700/80 shadow-2xs hover:border-amber-400 transition-all">
+                    <input
+                      type="checkbox"
+                      checked={incluirAbonoDeuda}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        setIncluirAbonoDeuda(checked);
+                        if (checked) {
+                          setAbonoDeudaAnterior(totalDeudaAnterior);
+                          if (instrumentoPago === "EFECTIVO") {
+                            setRecibido(
+                              +(
+                                (condicionCobro === "ANTICIPO" ? anticipoMonto : total) +
+                                totalDeudaAnterior
+                              ).toFixed(2)
+                            );
+                          }
+                        } else {
+                          setAbonoDeudaAnterior(0);
+                          if (instrumentoPago === "EFECTIVO") {
+                            setRecibido(condicionCobro === "ANTICIPO" ? anticipoMonto : total);
+                          }
+                        }
+                      }}
+                      className="h-4 w-4 rounded accent-[#1B4B73] cursor-pointer"
+                    />
+                    <span className="text-xs font-black text-[#1B4B73] dark:text-sky-300">
+                      Abonar a deuda hoy
+                    </span>
+                  </label>
+                </div>
+
+                {incluirAbonoDeuda && (
+                  <div className="pt-2 border-t border-amber-200/80 dark:border-amber-800/80 space-y-2.5">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <Label className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                        ¿Cuánto desea abonar el cliente a sus órdenes anteriores?
+                      </Label>
+                      <div className="flex gap-1.5">
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-[10px] font-bold border-amber-300 text-amber-800 dark:text-amber-200 hover:bg-amber-100 rounded-lg cursor-pointer"
+                          onClick={() => {
+                            setAbonoDeudaAnterior(totalDeudaAnterior);
+                            if (instrumentoPago === "EFECTIVO") {
+                              setRecibido(
+                                +(
+                                  (condicionCobro === "ANTICIPO" ? anticipoMonto : total) +
+                                  totalDeudaAnterior
+                                ).toFixed(2)
+                              );
+                            }
+                          }}
+                        >
+                          Saldar Todo ({formatRD(totalDeudaAnterior)})
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 text-[10px] text-muted-foreground hover:text-foreground rounded-lg cursor-pointer"
+                          onClick={() => {
+                            setAbonoDeudaAnterior(0);
+                            if (instrumentoPago === "EFECTIVO") {
+                              setRecibido(condicionCobro === "ANTICIPO" ? anticipoMonto : total);
+                            }
+                          }}
+                        >
+                          Limpiar
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="relative h-11">
+                      <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-sm text-amber-600/70">
+                        RD$
+                      </span>
+                      <PriceInput
+                        className="!h-full pl-12 !text-lg font-black font-display bg-white dark:bg-slate-900 border-2 border-amber-400/50 focus-visible:ring-amber-400/30 rounded-xl text-amber-800 dark:text-amber-200 shadow-2xs"
+                        value={abonoDeudaAnterior}
+                        onChange={(val) => {
+                          if (val > totalDeudaAnterior) {
+                            toast.warning(`El abono no puede exceder la deuda total (${formatRD(totalDeudaAnterior)})`);
+                            setAbonoDeudaAnterior(totalDeudaAnterior);
+                            return;
+                          }
+                          setAbonoDeudaAnterior(val);
+                          if (instrumentoPago === "EFECTIVO") {
+                            setRecibido(
+                              +(
+                                (condicionCobro === "ANTICIPO" ? anticipoMonto : total) +
+                                val
+                              ).toFixed(2)
+                            );
+                          }
+                        }}
+                        placeholder="0.00"
+                      />
+                    </div>
+
+                    <div className="flex flex-wrap items-center justify-between text-[11px] font-bold text-amber-800 dark:text-amber-300 pt-0.5 gap-1">
+                      <span>
+                        Orden actual ({condicionCobro === "ANTICIPO" ? "Anticipo" : "Total"}): {formatRD(condicionCobro === "ANTICIPO" ? anticipoMonto : total)}
+                      </span>
+                      <span>+ Abono deuda previa: {formatRD(abonoDeudaAnterior)}</span>
+                      <span className="text-[#1B4B73] dark:text-sky-300 font-black">
+                        = Total consolidado: {formatRD(montoCobroHoy)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 2. MÉTODOS DE PAGO (PÍLDORAS HORIZONTALES) */}
             {(condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && (
               <div className="space-y-3">
@@ -7756,7 +8442,7 @@ function getMarbeteColorStyle(colorName?: string) {
                         onClick={() => {
                           setInstrumentoPago(inst.id as any);
                           if (inst.id === "MIXTO") {
-                            const targetMonto = condicionCobro === "ANTICIPO" ? anticipoMonto : total;
+                            const targetMonto = montoCobroHoy;
                             setPagoEfectivo(+Math.round(targetMonto / 2));
                             setPagoTarjeta(+Math.max(0, targetMonto - Math.round(targetMonto / 2)));
                             setPagoTransferencia(0);
@@ -7845,11 +8531,11 @@ function getMarbeteColorStyle(colorName?: string) {
                     </div>
 
                     <div>
-                      <Label className={`text-[10px] font-black uppercase tracking-wider mb-1.5 block ${recibido < total ? "text-rose-600" : "text-emerald-600"}`}>
-                        {recibido < total ? "FALTANTE" : "CAMBIO A ENTREGAR"}
+                      <Label className={`text-[10px] font-black uppercase tracking-wider mb-1.5 block ${recibido < montoCobroHoy ? "text-rose-600" : "text-emerald-600"}`}>
+                        {recibido < montoCobroHoy ? "FALTANTE" : "CAMBIO A ENTREGAR"}
                       </Label>
                       <div className={`rounded-2xl border-2 p-2.5 flex items-center justify-between ${
-                        recibido < total
+                        recibido < montoCobroHoy
                           ? "border-rose-100 dark:border-rose-900/40 bg-rose-50/40 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400"
                           : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
                       }`}>
@@ -7857,18 +8543,18 @@ function getMarbeteColorStyle(colorName?: string) {
                           <span className="font-bold text-sm opacity-80">RD$</span>
                           <span className="text-2xl font-display font-black leading-none">
                             {formatRD(
-                              recibido > total
-                                ? recibido - total
-                                : total - recibido
+                              recibido > montoCobroHoy
+                                ? recibido - montoCobroHoy
+                                : montoCobroHoy - recibido
                             ).replace("RD$", "").trim()}
                           </span>
                         </div>
                         <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${
-                          recibido < total
+                          recibido < montoCobroHoy
                             ? "bg-rose-100 dark:bg-rose-900/60 text-rose-600"
                             : "bg-emerald-100 dark:bg-emerald-900/60 text-emerald-600"
                         }`}>
-                          {recibido < total ? (
+                          {recibido < montoCobroHoy ? (
                             <AlertTriangle className="h-5 w-5" />
                           ) : (
                             <CheckCircle2 className="h-5 w-5" />
@@ -7928,7 +8614,7 @@ function getMarbeteColorStyle(colorName?: string) {
                         <Split className="h-4 w-4" /> Desglose Multi-método
                       </span>
                       <span className="text-muted-foreground">
-                        Total: <b>{formatRD(condicionCobro === "ANTICIPO" ? anticipoMonto : total)}</b>
+                        Total: <b>{formatRD(montoCobroHoy)}</b>
                       </span>
                     </div>
 
@@ -7992,9 +8678,9 @@ function getMarbeteColorStyle(colorName?: string) {
                         <span className="font-black text-foreground">{formatRD(pagoEfectivo + pagoTarjeta + pagoTransferencia)}</span>
                       </div>
                       <div>
-                        {Math.abs((condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ? (
+                        {Math.abs(montoCobroHoy - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ? (
                           <span className="text-destructive font-black">
-                            Falta: {formatRD(Math.max(0, (condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)))}
+                            Falta: {formatRD(Math.max(0, montoCobroHoy - (pagoEfectivo + pagoTarjeta + pagoTransferencia)))}
                           </span>
                         ) : (
                           <span className="text-emerald-600 font-black flex items-center gap-1">
@@ -8030,23 +8716,27 @@ function getMarbeteColorStyle(colorName?: string) {
             {/* C. CRÉDITO */}
             {condicionCobro === "CREDITO" && (
               <div className="space-y-3 animate-in fade-in slide-in-from-top-1 duration-200">
-                {(!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final") || cliente.tipo === "Consumidor Final") ? (
+                {(!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final")) ? (
                   <div className="flex items-center gap-4 rounded-xl border border-destructive/40 bg-destructive/5 p-4 text-destructive">
                     <AlertTriangle className="h-8 w-8 text-destructive shrink-0" />
                     <div>
                       <strong className="block text-sm">Cliente Registrado Obligatorio</strong>
-                      <span className="text-xs">Las ventas a crédito deben asignarse a un cliente registrado (no Consumidor Final).</span>
+                      <span className="text-xs">Las ventas a crédito deben asignarse a un cliente registrado.</span>
                     </div>
                   </div>
                 ) : (
                   <>
-                    <div className="flex items-center gap-4 rounded-xl border border-warning/40 bg-warning/5 p-3.5 text-warning-foreground">
-                      <AlertTriangle className="h-7 w-7 text-warning shrink-0" />
-                      <div>
-                        <strong className="block text-sm">Venta a crédito</strong>
-                        <span className="text-xs">Se registrará en el balance de <span className="font-bold">{cliente?.nombre} {cliente?.apellido}</span>.</span>
-                      </div>
-                    </div>
+                    <CreditFinancialStatusCard
+                      cliente={currentCliente || cliente}
+                      limiteCredito={limiteCreditoCliente}
+                      deudaPrevia={deudaTotalPrevio}
+                      saldoEstaOrden={saldoEstaOrdenCredito}
+                      disponibleActual={creditoDisponibleActual}
+                      deudaProyectada={deudaFinalProyectada}
+                      excedeLimite={excedeLimiteCredito}
+                      montoExceso={montoExcesoCredito}
+                      porcentajeUso={porcentajeUsoReal}
+                    />
 
                     <div className="rounded-2xl border-2 border-amber-200 dark:border-amber-800 bg-amber-50/30 dark:bg-amber-950/20 p-3.5 shadow-2xs">
                       <div className="flex items-center gap-2 mb-2.5">
@@ -8100,7 +8790,7 @@ function getMarbeteColorStyle(colorName?: string) {
                         />
                       </div>
                       <p className="mt-1 text-xs text-amber-600/70 font-medium">
-                        Saldo restante (<strong>{formatRD(Math.max(0, total - abonoCredito))}</strong>) irá al balance de <strong>{cliente?.nombre}</strong>.
+                        Saldo restante (<strong>{formatRD(Math.max(0, total - abonoCredito))}</strong>) irá al balance de <strong>{currentCliente?.nombre || cliente?.nombre}</strong>.
                       </p>
                     </div>
                   </>
@@ -8132,11 +8822,11 @@ function getMarbeteColorStyle(colorName?: string) {
                 onClick={() => onCrearOrden(false)}
                 disabled={
                   isCreatingOrden ||
-                  (condicionCobro === "CREDITO" && (!cliente || cliente.tipo === "Consumidor Final" || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))) ||
-                  ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "EFECTIVO" && recibido < (condicionCobro === "ANTICIPO" ? anticipoMonto : total)) ||
+                  (condicionCobro === "CREDITO" && (!cliente || (cliente.nombre === "Consumidor" && cliente.apellido === "Final"))) ||
+                  ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "EFECTIVO" && recibido < montoCobroHoy) ||
                   ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "TRANSFERENCIA" && !referencia.trim()) ||
                   ((condicionCobro === "COBRAR_AHORA" || condicionCobro === "ANTICIPO") && instrumentoPago === "MIXTO" && (
-                    Math.abs((condicionCobro === "ANTICIPO" ? anticipoMonto : total) - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ||
+                    Math.abs(montoCobroHoy - (pagoEfectivo + pagoTarjeta + pagoTransferencia)) > 0.01 ||
                     (pagoTransferencia > 0 && !pagoTransferenciaRef.trim())
                   ))
                 }

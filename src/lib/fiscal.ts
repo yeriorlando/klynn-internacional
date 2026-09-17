@@ -536,8 +536,30 @@ export async function syncSequencesEF2(tenantId: string): Promise<EF2SecuenciaRa
     environment: config?.ef2_environment,
   }).consultarSecuencias();
   const ranges = Array.isArray(response?.data) ? response.data : [];
-  const local = await getECFSequences(tenantId);
+  if (ranges.length === 0) return [];
+
+  // Según doc.ef2.do: solo puede existir un rango con estado: true por tipo de comprobante.
+  // Consolidamos para que los rangos inactivos históricos no sobrescriban el rango activo vigente.
+  const rangesByType = new Map<string, EF2SecuenciaRango>();
   for (const range of ranges) {
+    const type = range.prefijo || `E${range.tipo_codigo || "32"}`;
+    const isActive = range.estado === true || range.estado === 1 || String(range.estado) === "1";
+    if (rangesByType.has(type)) {
+      const current = rangesByType.get(type)!;
+      const currentIsActive = current.estado === true || current.estado === 1 || String(current.estado) === "1";
+      // Si el actual es inactivo pero encontramos el activo, el activo toma precedencia
+      if (!currentIsActive && isActive) {
+        rangesByType.set(type, range);
+      }
+    } else {
+      rangesByType.set(type, range);
+    }
+  }
+
+  const authoritativeRanges = Array.from(rangesByType.values());
+  const local = await getECFSequences(tenantId);
+
+  for (const range of authoritativeRanges) {
     const type = range.prefijo || `E${range.tipo_codigo || "32"}`;
     const existing = local.find(
       (sequence) => sequence.ef2_sequence_id === Number(range.id) || sequence.tipo_ecf === type,
@@ -559,7 +581,7 @@ export async function syncSequencesEF2(tenantId: string): Promise<EF2SecuenciaRa
       ef2_synced_at: new Date().toISOString(),
     });
   }
-  return ranges;
+  return authoritativeRanges;
 }
 
 export async function createSequenceEF2(
