@@ -3091,9 +3091,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
             .replace(/💡\s*_?Por favor guarda nuestro contacto[^_\n]*_?/gi, "")
             .replace(/💡\s*_?Recuerda guardar nuestro número[^_\n]*_?/gi, "")
             .trim();
-          return `${cleaned}\n\n📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*\n💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._`;
+          return `${cleaned}\n\n📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*\n\n💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._\n`;
         }
-        return current;
+        if (current.includes("confirmarlo.*\n💡") || current.includes("confirmarlo.*\r\n💡")) {
+          return current.replace(/confirmarlo\.\*(\r?\n)💡/g, "confirmarlo.*$1$1💡") + (current.endsWith("\n") ? "" : "\n");
+        }
+        return current.endsWith("\n") ? current : current + "\n";
       }
 
       // 2. Plantilla Lista
@@ -3101,7 +3104,10 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         if (!lower.includes("responde") && (lower.includes("ya está lista") || lower.includes("ya esta lista"))) {
           return DEFAULT_CONFIG.whatsapp.plantilla_lista;
         }
-        return current;
+        if (current.includes("MAÑANA\".*\n💡") || current.includes("MAÑANA\".*\r\n💡")) {
+          return current.replace(/MAÑANA\"\.\*(\r?\n)💡/g, "MAÑANA\".*$1$1💡") + (current.endsWith("\n") ? "" : "\n");
+        }
+        return current.endsWith("\n") ? current : current + "\n";
       }
 
       // 3. Plantilla Entregada
@@ -3109,7 +3115,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         if (!lower.includes("del 1 al 5") && !lower.includes("responde")) {
           return DEFAULT_CONFIG.whatsapp.plantilla_entregada;
         }
-        return current;
+        return current.endsWith("\n") ? current : current + "\n";
       }
 
       // 4. Plantilla Sin Retirar
@@ -3117,7 +3123,10 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         if (!lower.includes("responde") && lower.includes("días lista")) {
           return DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar;
         }
-        return current;
+        if (current.includes("almacén.*\n📍") || current.includes("almacén.*\r\n📍")) {
+          return current.replace(/almacén\.\*(\r?\n)📍/g, "almacén.*$1$1📍") + (current.endsWith("\n") ? "" : "\n");
+        }
+        return current.endsWith("\n") ? current : current + "\n";
       }
 
       // 5. Plantilla En Camino
@@ -3125,10 +3134,10 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         if (!current || !lower.includes("responde")) {
           return (DEFAULT_CONFIG.whatsapp as any).plantilla_en_camino || defaultVal;
         }
-        return current;
+        return current.endsWith("\n") ? current : current + "\n";
       }
 
-      return current;
+      return current.endsWith("\n") ? current : current + "\n";
     };
 
     return {
@@ -5916,7 +5925,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                                 <button
                                   type="button"
                                   onClick={() => openAlertModal(seq)}
-                                  className="text-[9px] text-primary hover:underline font-sans font-semibold cursor-pointer block text-right transition-colors"
+                                  className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline font-sans cursor-pointer block text-right transition-colors"
                                   title="Alerta activa. Clic para modificar umbral."
                                 >
                                   Alerta: {threshold}
@@ -5925,7 +5934,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                                 <button
                                   type="button"
                                   onClick={() => openAlertModal(seq)}
-                                  className="text-[9px] text-muted-foreground/60 hover:text-primary font-sans cursor-pointer block text-right transition-colors"
+                                  className="text-[10px] text-slate-400 dark:text-slate-500 hover:text-slate-600 font-sans cursor-pointer block text-right transition-colors"
                                   title="Sin alerta configurada. Clic para definir alerta."
                                 >
                                   Sin alerta
@@ -5939,14 +5948,14 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               <button 
                                 type="button"
                                 onClick={() => openAlertModal(seq)}
-                                className={`h-8 w-8 rounded-xl border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                                className={`h-8 w-8 rounded-xl flex items-center justify-center transition-all active:scale-90 cursor-pointer shadow-xs ${
                                   hasAlertConfigured 
-                                    ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
-                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-emerald-600/20' 
+                                    : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300/80 dark:border-slate-700'
                                 }`}
-                                title={hasAlertConfigured ? `Alerta activa (${threshold} disp.). Clic para configurar.` : "Sin alerta. Clic para configurar cantidad de alerta."}
+                                title={hasAlertConfigured ? `Alerta ACTIVA (${threshold} disp.). Clic para configurar.` : "Alerta DESACTIVADA. Clic para configurar."}
                               >
-                                {hasAlertConfigured ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
+                                {hasAlertConfigured ? <Bell className="h-3.5 w-3.5 fill-white text-white" /> : <BellOff className="h-3.5 w-3.5" />}
                               </button>
 
                               {/* Trash/Delete Sequence Button */}
@@ -6055,7 +6064,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                                 <button
                                   type="button"
                                   onClick={() => openAlertModal(seq)}
-                                  className="text-[9px] text-primary hover:underline font-sans font-semibold cursor-pointer block text-right transition-colors"
+                                  className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold hover:underline font-sans cursor-pointer block text-right transition-colors"
                                   title="Alerta activa. Clic para modificar umbral."
                                 >
                                   Alerta: {threshold}
@@ -6064,7 +6073,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                                 <button
                                   type="button"
                                   onClick={() => openAlertModal(seq)}
-                                  className="text-[9px] text-muted-foreground/60 hover:text-primary font-sans cursor-pointer block text-right transition-colors"
+                                  className="text-[10px] text-slate-400 dark:text-slate-500 hover:text-slate-600 font-sans cursor-pointer block text-right transition-colors"
                                   title="Sin alerta configurada. Clic para definir alerta."
                                 >
                                   Sin alerta
@@ -6078,14 +6087,14 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               <button 
                                 type="button"
                                 onClick={() => openAlertModal(seq)}
-                                className={`h-7.5 w-7.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                                className={`h-7.5 w-7.5 rounded-lg flex items-center justify-center transition-all active:scale-90 cursor-pointer shadow-xs ${
                                   hasAlertConfigured 
-                                    ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
-                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
+                                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-emerald-600/20' 
+                                    : 'bg-slate-200 hover:bg-slate-300 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 dark:text-slate-400 border border-slate-300/80 dark:border-slate-700'
                                 }`}
-                                title={hasAlertConfigured ? `Alerta activa (${threshold} disp.). Clic para configurar.` : "Sin alerta. Clic para configurar cantidad de alerta."}
+                                title={hasAlertConfigured ? `Alerta ACTIVA (${threshold} disp.). Clic para configurar.` : "Alerta DESACTIVADA. Clic para configurar."}
                               >
-                                {hasAlertConfigured ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
+                                {hasAlertConfigured ? <Bell className="h-3.5 w-3.5 fill-white text-white" /> : <BellOff className="h-3.5 w-3.5" />}
                               </button>
 
                               {/* Void Sequence Button (Only for Electronic) */}
@@ -6288,13 +6297,13 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                     onClick={() => setAlertEnabled(!alertEnabled)}
                     className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
                       alertEnabled 
-                        ? "bg-primary/5 border-primary/30 shadow-xs" 
+                        ? "bg-emerald-50/80 border-emerald-300 dark:bg-emerald-950/30 dark:border-emerald-800/80 shadow-xs" 
                         : "bg-slate-50/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800"
                     }`}
                   >
                     <div className="space-y-0.5">
                       <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
-                        <Bell className={`h-3.5 w-3.5 shrink-0 ${alertEnabled ? "text-primary" : "text-slate-400"}`} />
+                        <Bell className={`h-3.5 w-3.5 shrink-0 ${alertEnabled ? "text-emerald-600 dark:text-emerald-400 fill-emerald-500" : "text-slate-400"}`} />
                         <span>Activar alerta</span>
                       </div>
                       <p className="text-[10px] text-muted-foreground leading-tight">
@@ -6307,7 +6316,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       role="switch"
                       aria-checked={alertEnabled}
                       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                        alertEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+                        alertEnabled ? "bg-emerald-600" : "bg-slate-300 dark:bg-slate-700"
                       }`}
                     >
                       <span
@@ -6324,7 +6333,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       <div className="space-y-1">
                         <label className="text-[11px] font-bold text-foreground flex items-center justify-between">
                           <span>Avisar cuando queden menos de:</span>
-                          <span className="text-[10.5px] font-mono text-primary font-bold">
+                          <span className="text-[10.5px] font-mono text-emerald-600 dark:text-emerald-400 font-bold">
                             {alertThreshold} comprobantes
                           </span>
                         </label>
@@ -6350,7 +6359,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               onClick={() => setAlertThreshold(preset)}
                               className={`py-1 px-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
                                 alertThreshold === preset
-                                  ? "bg-primary text-white border-primary shadow-xs"
+                                  ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
                                   : "bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300"
                               }`}
                             >
@@ -6401,7 +6410,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                 type="button"
                 onClick={handleSaveAlertConfig}
                 disabled={isSavingAlert}
-                className="rounded-xl h-8.5 text-xs font-bold bg-primary hover:bg-primary/95 text-white shadow-sm px-4"
+                className="rounded-xl h-8.5 text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm px-4 cursor-pointer"
               >
                 {isSavingAlert && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
                 Guardar Configuración

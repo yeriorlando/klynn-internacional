@@ -1125,15 +1125,17 @@ export const DEFAULT_CONFIG: TenantConfig = {
 {ticket_nota}
 
 📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*
-💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._`,
+
+💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._
+`,
     plantilla_lista:
-      "Hola 👋, {cliente} ✨. Tu orden {numero} de:\n\n{detalle}\n\nEn *{lavanderia}* ya está LISTA para retirar.\n\n🚗 *¿Pasarás a retirar hoy? Responde \"HOY\" para tener tus prendas a mano en el mostrador o \"MAÑANA\".*\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._",
+      "Hola 👋, {cliente} ✨. Tu orden {numero} de:\n\n{detalle}\n\nEn *{lavanderia}* ya está LISTA para retirar.\n\n🚗 *¿Pasarás a retirar hoy? Responde \"HOY\" para tener tus prendas a mano en el mostrador o \"MAÑANA\".*\n\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._\n",
     plantilla_entregada:
-      "Hola 👋, {cliente}. Tu orden {numero} fue entregada con éxito. ¡Gracias por confiar en *{lavanderia}*! ✨\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: \"5\"). ¡Tu opinión nos ayuda a mejorar!*",
+      "Hola 👋, {cliente}. Tu orden {numero} fue entregada con éxito. ¡Gracias por confiar en *{lavanderia}*! ✨\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: \"5\"). ¡Tu opinión nos ayuda a mejorar!*\n",
     plantilla_sin_retirar:
-      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} de:\n\n{detalle}\n\nLleva {dias} días lista en *{lavanderia}*. Saldo pendiente: {saldo}.\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: \"VIERNES\") para mantenerla protegida en almacén.*\n📍 Te esperamos en {lavanderia_dir}.",
+      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} de:\n\n{detalle}\n\nLleva {dias} días lista en *{lavanderia}*. Saldo pendiente: {saldo}.\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: \"VIERNES\") para mantenerla protegida en almacén.*\n\n📍 Te esperamos en {lavanderia_dir}.\n",
     plantilla_en_camino:
-      "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de *{lavanderia}* y va de camino a tu dirección:\n\n📍 {cliente_dir}\n\n⏱️ *¿Estarás disponible para recibir en los próximos 20 minutos? Responde \"SÍ\" o \"NO\" para coordinar con el chofer.*",
+      "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de *{lavanderia}* y va de camino a tu dirección:\n\n📍 {cliente_dir}\n\n⏱️ *¿Estarás disponible para recibir en los próximos 20 minutos? Responde \"SÍ\" o \"NO\" para coordinar con el chofer.*\n",
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,

@@ -461,29 +461,37 @@ export async function notificarWhatsApp(
   
   // Anti-ban & Inbound First: Asegurar que cada mensaje tenga un incentivo de respuesta
   // Si la plantilla personalizada del usuario no incluye la pregunta interactiva, se inyecta como seguro
-  const lower = mensajeFinal.toLowerCase();
   if (evento === "creada") {
     if (!lower.includes("responde")) {
       mensajeFinal += '\n\n📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*';
     }
     if (!lower.includes("guarda nuestro") && !lower.includes("guarda nuestro contacto")) {
-      mensajeFinal += "\n💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._";
+      mensajeFinal += "\n\n💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._\n";
     }
   } else if (evento === "lista") {
     if (!lower.includes("responde")) {
       mensajeFinal += '\n\n🚗 *¿Pasarás a retirar hoy? Responde "HOY" para tener tus prendas a mano en el mostrador o "MAÑANA".*';
     }
     if (!lower.includes("guarda nuestro") && !lower.includes("recuerda guardar")) {
-      mensajeFinal += "\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._";
+      mensajeFinal += "\n\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._\n";
     }
   } else if (evento === "sin_retirar") {
     if (!lower.includes("responde")) {
-      mensajeFinal += '\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: "VIERNES") para mantenerla protegida en almacén.*';
+      mensajeFinal += '\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: "VIERNES") para mantenerla protegida en almacén.*\n';
     }
   } else if (evento === "entregada") {
     if (!lower.includes("responde")) {
-      mensajeFinal += '\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: "5"). ¡Tu opinión nos ayuda a mejorar!*';
+      mensajeFinal += '\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: "5"). ¡Tu opinión nos ayuda a mejorar!*\n';
     }
+  }
+
+  // Garantizar separación visual de elementos pegados y espacio al final del globo
+  mensajeFinal = mensajeFinal
+    .replace(/confirmarlo\.\*\r?\n💡/g, "confirmarlo.*\n\n💡")
+    .replace(/\"MAÑANA\"\.\*\r?\n💡/g, '"MAÑANA".*\n\n💡')
+    .replace(/almacén\.\*\r?\n📍/g, 'almacén.*\n\n📍');
+  if (!mensajeFinal.endsWith("\n")) {
+    mensajeFinal += "\n";
   }
 
   const phone = normalizePhoneRD(cliente.telefono);
