@@ -249,7 +249,14 @@ async function callEF2(
     const text = await response.text();
     let data: any;
     try {
-      data = text ? JSON.parse(text) : {};
+      // EF2 puede incluir warnings de PHP (ej. PDFGeneratorModerno) antes o después del JSON
+      const jsonStart = text.indexOf("{");
+      const jsonEnd = text.lastIndexOf("}");
+      if (jsonStart !== -1 && jsonEnd !== -1 && jsonEnd > jsonStart) {
+        data = JSON.parse(text.slice(jsonStart, jsonEnd + 1));
+      } else {
+        data = text ? JSON.parse(text) : {};
+      }
     } catch {
       data = { success: false, message: text || `EF2 respondió HTTP ${response.status}` };
     }

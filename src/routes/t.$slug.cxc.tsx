@@ -73,6 +73,7 @@ function estadoMora(dias: number, limite: number): CXCOrden["estado_mora"] {
 
 function CuentasPorCobrarPage() {
   const user = useRequireAuth();
+  const navigate = useNavigate();
   const tenantId = user?.tenant?.id || "";
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const queryClient = useQueryClient();
