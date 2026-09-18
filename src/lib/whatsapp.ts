@@ -30,6 +30,35 @@ function normalizePhoneRD(tel: string): string {
 }
 
 /**
+ * Filtra números de prueba o ficticios para proteger la reputación de la línea de WhatsApp (Anti-Bounce)
+ */
+export function isDummyPhoneNumber(phone: string): boolean {
+  const clean = phone.replace(/\D/g, "");
+  if (clean.length < 10) return true;
+  // Secuencias repetitivas comunes en teléfonos de prueba
+  if (clean.endsWith("0000000") || clean.endsWith("1111111") || clean.endsWith("1234567") || clean.endsWith("9999999")) {
+    return true;
+  }
+  const dummies = [
+    "8090000000", "8290000000", "8490000000",
+    "18090000000", "18290000000", "18490000000",
+    "8091111111", "8291111111", "8491111111",
+    "18091111111", "18291111111", "18491111111",
+    "8091234567", "8291234567", "8491234567",
+    "18091234567", "18291234567", "18491234567"
+  ];
+  return dummies.includes(clean);
+}
+
+/**
+ * Sanitiza caracteres de control invisibles que pueden corromper el socket de WhatsApp/Baileys
+ */
+export function sanitizeWhatsAppText(text?: string): string {
+  if (!text) return "";
+  return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "").trim();
+}
+
+/**
  * Único punto de salida para WhatsApp en el cliente.
  * El tenant puede tener su propio proveedor (ej. Meta Cloud API Oficial)
  * o seguir la selección global de /admin (Klynn Connect / WASender).
@@ -46,7 +75,14 @@ export async function sendWhatsAppMessage(
 
   if (!wa?.enabled) return { ok: false, provider, reason: "WhatsApp deshabilitado" };
   if (phone.length < 11) return { ok: false, provider, reason: "Número de WhatsApp inválido" };
-  if (!request.text?.trim() && !request.mediaUrl) {
+  if (isDummyPhoneNumber(phone)) {
+    return { ok: false, provider, reason: "Número telefónico ficticio o de prueba (protección anti-rebote)" };
+  }
+  
+  const cleanText = sanitizeWhatsAppText(request.text);
+  const cleanCaption = sanitizeWhatsAppText(request.caption);
+
+  if (!cleanText && !request.mediaUrl) {
     return { ok: false, provider, reason: "El mensaje no contiene texto ni archivo" };
   }
 
@@ -63,11 +99,11 @@ export async function sendWhatsAppMessage(
           body: JSON.stringify({
             instance_name: instanceName,
             number: phone,
-            text: request.text,
+            text: cleanText,
             mediaUrl: request.mediaUrl,
             mediaType: request.mediaType,
             fileName: request.fileName,
-            caption: request.caption || request.text || "",
+            caption: cleanCaption || cleanText || "",
             server_url: globalCfg.klynn_connect_url || "https://wa.klynn.com.do",
             api_key: globalCfg.klynn_connect_apikey,
             delay: Math.floor(1200 + Math.random() * 800), // Simulación humana anti-ban
@@ -118,10 +154,10 @@ export async function sendWhatsAppMessage(
           phone_number_id: phoneNumberId,
           access_token: accessToken,
           to: phone,
-          text: request.text,
+          text: cleanText,
           mediaUrl: request.mediaUrl,
           mediaType: request.mediaType,
-          caption: request.caption || request.text || "",
+          caption: cleanCaption || cleanText || "",
           fileName: request.fileName,
         }),
       });
@@ -176,7 +212,7 @@ export async function sendWhatsAppMessage(
       to: `+${phone}`,
       instance_id: wa.instance,
     };
-    if (!mediaUrl) payload.text = request.text;
+    if (!mediaUrl) payload.text = cleanText;
     else if (request.mediaType === "image") payload.imageUrl = mediaUrl;
     else if (request.mediaType === "audio") {
       payload.audioUrl = mediaUrl;
@@ -288,7 +324,7 @@ export async function notificarWhatsApp(
   const tpl =
     evento === "creada" ? (wa.plantilla_creada || DEFAULT_CONFIG.whatsapp?.plantilla_creada || "") :
     evento === "lista" ? (wa.plantilla_lista || DEFAULT_CONFIG.whatsapp?.plantilla_lista || "") :
-    evento === "en_camino" ? "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de {lavanderia} y va de camino a tu dirección:\n\n{cliente_dir}\n\n¡Nos vemos pronto!" :
+    evento === "en_camino" ? "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de *{lavanderia}* y va de camino a tu dirección:\n\n📍 {cliente_dir}\n\n⏱️ *¿Estarás disponible para recibir en los próximos 20 minutos? Responde \"SÍ\" o \"NO\" para coordinar con el chofer.*" :
     evento === "sin_retirar" ? (wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp?.plantilla_sin_retirar || "") :
     (wa.plantilla_entregada || DEFAULT_CONFIG.whatsapp?.plantilla_entregada || "");
 
@@ -422,9 +458,32 @@ export async function notificarWhatsApp(
   });
 
   let mensajeFinal = mensaje;
-  // Anti-ban: Incentivar al cliente a registrar el número para que WhatsApp oculte el botón de 'Reportar / Bloquear'
-  if (evento === "creada" && !mensajeFinal.toLowerCase().includes("guarda nuestro")) {
-    mensajeFinal += "\n\n💡 _Por favor guarda nuestro número en tus contactos para recibir avisos de tu ropa._";
+  
+  // Anti-ban & Inbound First: Asegurar que cada mensaje tenga un incentivo de respuesta
+  // Si la plantilla personalizada del usuario no incluye la pregunta interactiva, se inyecta como seguro
+  const lower = mensajeFinal.toLowerCase();
+  if (evento === "creada") {
+    if (!lower.includes("responde")) {
+      mensajeFinal += '\n\n📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*';
+    }
+    if (!lower.includes("guarda nuestro") && !lower.includes("guarda nuestro contacto")) {
+      mensajeFinal += "\n💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._";
+    }
+  } else if (evento === "lista") {
+    if (!lower.includes("responde")) {
+      mensajeFinal += '\n\n🚗 *¿Pasarás a retirar hoy? Responde "HOY" para tener tus prendas a mano en el mostrador o "MAÑANA".*';
+    }
+    if (!lower.includes("guarda nuestro") && !lower.includes("recuerda guardar")) {
+      mensajeFinal += "\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._";
+    }
+  } else if (evento === "sin_retirar") {
+    if (!lower.includes("responde")) {
+      mensajeFinal += '\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: "VIERNES") para mantenerla protegida en almacén.*';
+    }
+  } else if (evento === "entregada") {
+    if (!lower.includes("responde")) {
+      mensajeFinal += '\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: "5"). ¡Tu opinión nos ayuda a mejorar!*';
+    }
   }
 
   const phone = normalizePhoneRD(cliente.telefono);

@@ -1123,13 +1123,14 @@ export const DEFAULT_CONFIG: TenantConfig = {
 {ticket_pie}
 {ticket_nota}
 
-💡 _Por favor guarda nuestro contacto para recibir las alertas y el estatus de tus prendas._`,
+📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*
+💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._`,
     plantilla_lista:
-      "Hola 👋, {cliente} ✨, tu orden {numero} de:\n\n{detalle}\n\nEn {lavanderia} ya está LISTA para retirar. ¡Te esperamos!\n\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._",
+      "Hola 👋, {cliente} ✨. Tu orden {numero} de:\n\n{detalle}\n\nEn *{lavanderia}* ya está LISTA para retirar.\n\n🚗 *¿Pasarás a retirar hoy? Responde \"HOY\" para tener tus prendas a mano en el mostrador o \"MAÑANA\".*\n💡 _Recuerda guardar nuestro número para avisos de tus prendas._",
     plantilla_entregada:
-      "Hola 👋, {cliente}, tu orden {numero} fue entregada. ¡Gracias por preferir {lavanderia}!",
+      "Hola 👋, {cliente}. Tu orden {numero} fue entregada con éxito. ¡Gracias por confiar en *{lavanderia}*! ✨\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: \"5\"). ¡Tu opinión nos ayuda a mejorar!*",
     plantilla_sin_retirar:
-      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} de:\n\n{detalle}\n\nLleva {dias} días lista en {lavanderia}. Saldo pendiente: {saldo}.\n¡Pasa a retirarla cuando gustes en {lavanderia_dir}!",
+      "Hola 👋, {cliente}. Te recordamos que tu orden {numero} de:\n\n{detalle}\n\nLleva {dias} días lista en *{lavanderia}*. Saldo pendiente: {saldo}.\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: \"VIERNES\") para mantenerla protegida en almacén.*\n📍 Te esperamos en {lavanderia_dir}.",
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
