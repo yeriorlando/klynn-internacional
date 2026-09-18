@@ -5738,8 +5738,10 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               <span className="text-primary truncate">{seq.tipo_ecf}{NCF_NOMBRES[seq.tipo_ecf] ? ` - ${NCF_NOMBRES[seq.tipo_ecf]}` : ''}</span>
                               <Badge className="bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-100 text-[9px] px-1.5 py-0 h-4 border-none shrink-0 font-bold">NCF</Badge>
                             </div>
-                            <div className="text-[11px] text-muted-foreground font-mono mt-0.5 font-bold tracking-tight">
-                              {codeDisplay}
+                            <div className="text-[11px] text-muted-foreground font-mono mt-1 flex items-center gap-2 flex-wrap">
+                              <span>Último emitido: <strong className="text-foreground font-bold">{codeDisplay}</strong></span>
+                              <span className="text-slate-300 dark:text-slate-700">·</span>
+                              <span>Rango: {seq.tipo_ecf}{String(seq.valor_inicial).padStart(8, '0')} ➔ {seq.tipo_ecf}{String(seq.valor_final).padStart(8, '0')}</span>
                             </div>
                           </div>
                           

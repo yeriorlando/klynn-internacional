@@ -571,13 +571,18 @@ export function encodeEscPos(
     }
     writeLine("-".repeat(columns));
     bytes.push(...ALIGN_LEFT);
+    bytes.push(...BOLD_ON);
     writeLine(`Orden No°: ${orden.numero}`);
     if (orden.ncf) {
-      writeLine(`NCF: ${orden.ncf}`);
+      const isECF = !!(orden.tipo_ecf?.startsWith("E") || orden.ncf?.startsWith("E"));
+      writeLine(`${isECF ? "e-NCF:" : "NCF:"} ${orden.ncf}`);
       if (orden.ncf_vencimiento) {
+        bytes.push(...BOLD_OFF);
         writeLine(`Vence: ${new Date(orden.ncf_vencimiento).toLocaleDateString("es-DO")}`);
+        bytes.push(...BOLD_ON);
       }
     }
+    bytes.push(...BOLD_OFF);
     writeLine(`Fecha: ${new Date(orden.creado_en).toLocaleString("es-DO")}`);
     writeLine(`Entrega: ${orden.fecha_entrega}`);
     writeLine("-".repeat(columns));

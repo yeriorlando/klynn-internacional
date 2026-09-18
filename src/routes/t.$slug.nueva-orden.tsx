@@ -117,6 +117,7 @@ import {
   getECFConfig,
   getECFSequences,
   nextECFNumero,
+  nextNCFTradicional,
   saveECFDocument,
   isModuleEnabled,
   type Cliente,
@@ -919,6 +920,24 @@ function NuevaOrdenPage() {
     }
   }, [servicePickerItem]);
 
+  // Desactivar automáticamente modo de desglose si el servicio ya no está presente en la orden
+  useEffect(() => {
+    if (!desgloseServiceName) return;
+    const existsInServicios = serviciosSel.some(
+      (s) => s === desgloseServiceName || s.toLowerCase().trim() === desgloseServiceName.toLowerCase().trim(),
+    );
+    const existsInItems = items.some(
+      (it) =>
+        it.descripcion === desgloseServiceName ||
+        cleanItemName(it.descripcion).toLowerCase().trim() === desgloseServiceName.toLowerCase().trim(),
+    );
+    if (!existsInServicios && !existsInItems) {
+      setDesgloseServiceName("");
+      setIndexDesglose(-1);
+      setShowDesgloseDialog(false);
+    }
+  }, [serviciosSel, items, desgloseServiceName]);
+
   const { data: catalogoData = [], isLoading: loadingCatalog } = useCatalogo(tenantId);
   const { data: serviciosData = [], isLoading: loadingServicios } = useServicios(tenantId);
   const { data: promocionesData = [] } = usePromociones(tenantId);
@@ -1452,6 +1471,9 @@ function getMarbeteColorStyle(colorName?: string) {
     setMarbetesList([]);
     setStep(1);
     handleSelectGeneric("Persona");
+    setDesgloseServiceName("");
+    setIndexDesglose(-1);
+    setShowDesgloseDialog(false);
   }
 
   const handleImprimirTicket = (ordenToPrint: Orden | null) => {
@@ -2257,6 +2279,17 @@ function getMarbeteColorStyle(colorName?: string) {
     });
   }
   function removeItem(i: number) {
+    const it = items[i];
+    if (
+      it &&
+      desgloseServiceName &&
+      (desgloseServiceName === it.descripcion ||
+        cleanItemName(it.descripcion).toLowerCase().trim() === desgloseServiceName.toLowerCase().trim())
+    ) {
+      setDesgloseServiceName("");
+      setIndexDesglose(-1);
+      setShowDesgloseDialog(false);
+    }
     setItems((arr) => arr.filter((_, idx) => idx !== i));
   }
   function addItemDesglose(it: OrdenItem) {
@@ -2605,7 +2638,7 @@ function getMarbeteColorStyle(colorName?: string) {
         condicionCobro !== "AL_RETIRAR"
       ) {
         try {
-          const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, activeTipo);
+          const { ncf: nextNCF, expiration_date } = await nextNCFTradicional(tenant.id, activeTipo);
           finalNCF = nextNCF;
           ncfVencimiento = expiration_date;
         } catch (seqErr) {
@@ -2668,6 +2701,7 @@ function getMarbeteColorStyle(colorName?: string) {
         ubicacion_ropa: ubicacionRopa.trim() || undefined,
         creado_en: new Date().toISOString(),
         ncf: finalNCF,
+        tipo_ecf: activeTipo,
         ncf_vencimiento: ncfVencimiento,
         entrega_domicilio: servicioDomicilio || undefined,
         costo_envio: servicioDomicilio && costoEnvio > 0 ? costoEnvio : undefined,
@@ -2885,6 +2919,11 @@ function getMarbeteColorStyle(colorName?: string) {
       if (targetCliente) {
         queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
         queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+      }
+
+      // Sincronizar actualización de secuencias fiscales en tiempo real
+      if (finalNCF) {
+        queryClient.invalidateQueries({ queryKey: ["ecf-sequences"] });
       }
 
       if (cfg.habilitar_control_marbetes && validMarbetes.length > 0) {
@@ -3492,7 +3531,19 @@ function getMarbeteColorStyle(colorName?: string) {
                     )}
                   </div>
 
-                  {desgloseServiceName && !showDesgloseDialog && (
+                  {desgloseServiceName &&
+                    !showDesgloseDialog &&
+                    (serviciosSel.some(
+                      (s) =>
+                        s === desgloseServiceName ||
+                        s.toLowerCase().trim() === desgloseServiceName.toLowerCase().trim(),
+                    ) ||
+                      items.some(
+                        (it) =>
+                          it.descripcion === desgloseServiceName ||
+                          cleanItemName(it.descripcion).toLowerCase().trim() ===
+                            desgloseServiceName.toLowerCase().trim(),
+                      )) && (
                     <div className="mt-2 py-2 px-3 rounded-xl bg-primary text-white shadow-sm border border-primary/20 flex items-center justify-between gap-3 animate-in fade-in duration-200">
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="h-7.5 w-7.5 rounded-lg bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-white shrink-0 shadow-inner">
@@ -3710,6 +3761,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                           precio_unitario: item.precio || 0,
                                           es_libra: item.por_libra,
                                           is_exento: item.is_exento,
+                                          permitir_editar_precio: !!item.permitir_editar_precio,
                                         });
                                         toast.success(`${item.nombre} agregado ✨`);
                                         return;
@@ -3731,6 +3783,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                           es_libra: item.por_libra || false,
                                           is_exento: !!item.is_exento,
                                           servicio_origen: desgloseServiceName,
+                                          permitir_editar_precio: !!item.permitir_editar_precio,
                                         });
                                         return;
                                       }
@@ -3793,6 +3846,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                               servicio_origen: targetService,
                                               es_libra: item.por_libra || false,
                                               is_exento: !!item.is_exento,
+                                              permitir_editar_precio: !!item.permitir_editar_precio,
                                             },
                                           ];
                                         });
@@ -3807,6 +3861,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                         precio_unitario: item.precio || 0,
                                         es_libra: item.por_libra || false,
                                         is_exento: !!item.is_exento,
+                                        permitir_editar_precio: !!item.permitir_editar_precio,
                                       });
                                       toast.success(`${item.nombre} agregado ✨`);
                                     }}
@@ -4100,17 +4155,9 @@ function getMarbeteColorStyle(colorName?: string) {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0"
+                                className="h-5 w-5 text-destructive hover:bg-rose-50 dark:hover:bg-rose-950/30 rounded-md shrink-0 cursor-pointer"
                                 onClick={() => {
-                                  setServiciosSel((prev) => {
-                                    const index = prev.indexOf(srv.nombre);
-                                    if (index > -1) {
-                                      const next = [...prev];
-                                      next.splice(index, 1);
-                                      return next;
-                                    }
-                                    return prev;
-                                  });
+                                  setServiciosSel((prev) => prev.filter((x) => x !== srv.nombre));
                                   setItems((prev) =>
                                     prev.filter(
                                       (it) =>
@@ -4120,6 +4167,19 @@ function getMarbeteColorStyle(colorName?: string) {
                                         ),
                                     ),
                                   );
+                                  setCustomServicePrices((prev) => {
+                                    const next = { ...prev };
+                                    delete next[srv.nombre];
+                                    return next;
+                                  });
+                                  if (
+                                    desgloseServiceName === srv.nombre ||
+                                    desgloseServiceName.toLowerCase().trim() === srv.nombre.toLowerCase().trim()
+                                  ) {
+                                    setDesgloseServiceName("");
+                                    setIndexDesglose(-1);
+                                    setShowDesgloseDialog(false);
+                                  }
                                 }}
                               >
                                 <Trash2 className="h-3.5 w-3.5" />
@@ -4237,6 +4297,9 @@ function getMarbeteColorStyle(colorName?: string) {
 
                           {/* Prendas del Servicio */}
                           {prendasDelServicio.map(({ item: it, index: itemOriginalIndex }) => {
+                            const cleanName = cleanItemName(it.descripcion);
+                            const catalogMatch = catalogoMap.get(cleanName) || catalogoMap.get(cleanName.toLowerCase());
+                            const canEditPrice = Boolean(it.permitir_editar_precio || catalogMatch?.permitir_editar_precio);
                             return (
                               <div
                                 key={"pos-detail-" + itemOriginalIndex}
@@ -4384,8 +4447,34 @@ function getMarbeteColorStyle(colorName?: string) {
                                       </Button>
                                     </div>
                                   )}
-                                  <div className="text-xs font-black text-primary">
-                                    {formatRD(it.cantidad * it.precio_unitario)}
+                                  <div className="flex flex-col items-end gap-0.5 shrink-0">
+                                    {canEditPrice ? (
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
+                                          RD$
+                                        </span>
+                                        <PriceInput
+                                          className="w-20 sm:w-24 h-8 px-2 text-center !text-sm font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
+                                          value={it.precio_unitario || 0}
+                                          onChange={(val) => {
+                                            setItems((prev) =>
+                                              prev.map((item, idx) =>
+                                                idx === itemOriginalIndex ? { ...item, precio_unitario: val } : item,
+                                              ),
+                                            );
+                                          }}
+                                        />
+                                      </div>
+                                    ) : (
+                                      <div className="text-xs font-black text-primary">
+                                        {formatRD(it.cantidad * it.precio_unitario)}
+                                      </div>
+                                    )}
+                                    {canEditPrice && it.cantidad > 1 && (
+                                      <span className="text-[10px] text-muted-foreground font-semibold">
+                                        Tot: {formatRD(it.cantidad * (it.precio_unitario || 0))}
+                                      </span>
+                                    )}
                                   </div>
                                 </div>
                               </div>
@@ -4398,7 +4487,9 @@ function getMarbeteColorStyle(colorName?: string) {
                   {/* Prendas / Items Generales del Catálogo */}
                   {generalItems.map(({ item: it, index: itemOriginalIndex }) => {
                       const isDetail = it.descripcion.startsWith("↳");
-                      const catalogMatch = catalogoMap.get(it.descripcion);
+                      const cleanName = cleanItemName(it.descripcion);
+                      const catalogMatch = catalogoMap.get(cleanName) || catalogoMap.get(cleanName.toLowerCase());
+                      const canEditPrice = Boolean(it.permitir_editar_precio || catalogMatch?.permitir_editar_precio);
                       return (
                         <div
                           key={"pos-item-" + itemOriginalIndex}
@@ -4568,26 +4659,33 @@ function getMarbeteColorStyle(colorName?: string) {
                               </div>
                             )}
                             <div className="flex flex-col items-end gap-0.5 shrink-0">
-                              {!isDetail && catalogMatch?.permitir_editar_precio ? (
-                                <div className="flex items-center gap-1.5">
-                                  <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
-                                    RD$
-                                  </span>
-                                  <PriceInput
-                                    className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
-                                    value={it.precio_unitario || 0}
-                                    onChange={(val) => {
-                                      setItems((prev) =>
-                                        prev.map((item, idx) =>
-                                          idx === itemOriginalIndex ? { ...item, precio_unitario: val } : item,
-                                        ),
-                                      );
-                                    }}
-                                  />
+                              {canEditPrice ? (
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
+                                      RD$
+                                    </span>
+                                    <PriceInput
+                                      className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
+                                      value={it.precio_unitario || 0}
+                                      onChange={(val) => {
+                                        setItems((prev) =>
+                                          prev.map((item, idx) =>
+                                            idx === itemOriginalIndex ? { ...item, precio_unitario: val } : item,
+                                          ),
+                                        );
+                                      }}
+                                    />
+                                  </div>
+                                  {it.cantidad > 1 && (
+                                    <span className="text-[10px] text-muted-foreground font-semibold">
+                                      Tot: {formatRD(it.cantidad * (it.precio_unitario || 0))}
+                                    </span>
+                                  )}
                                 </div>
                               ) : (
                                 <div className="text-xs font-black text-primary">
-                                  {isDetail
+                                  {isDetail && (it.precio_unitario || 0) === 0
                                     ? "RD$0.00"
                                     : formatRD(it.cantidad * it.precio_unitario)}
                                 </div>
@@ -5100,6 +5198,14 @@ function getMarbeteColorStyle(colorName?: string) {
                                   delete next[s.nombre];
                                   return next;
                                 });
+                                if (
+                                  desgloseServiceName === s.nombre ||
+                                  desgloseServiceName.toLowerCase().trim() === s.nombre.toLowerCase().trim()
+                                ) {
+                                  setDesgloseServiceName("");
+                                  setIndexDesglose(-1);
+                                  setShowDesgloseDialog(false);
+                                }
                               } else {
                                 if (s.permite_piezas_adicionales && (s.precio_pieza_adicional ?? 0) > 0) {
                                   setPackagePickerService(s);
@@ -5278,6 +5384,19 @@ function getMarbeteColorStyle(colorName?: string) {
                                         ),
                                     ),
                                   );
+                                  setCustomServicePrices((prev) => {
+                                    const next = { ...prev };
+                                    delete next[srv.nombre];
+                                    return next;
+                                  });
+                                  if (
+                                    desgloseServiceName === srv.nombre ||
+                                    desgloseServiceName.toLowerCase().trim() === srv.nombre.toLowerCase().trim()
+                                  ) {
+                                    setDesgloseServiceName("");
+                                    setIndexDesglose(-1);
+                                    setShowDesgloseDialog(false);
+                                  }
                                 }}
                               >
                                 <Trash2 className="h-4 w-4" />
@@ -5290,7 +5409,9 @@ function getMarbeteColorStyle(colorName?: string) {
                     {/* Items normal */}
                     {items.map((it, i) => {
                       const isDetail = it.descripcion.startsWith("↳");
-                      const catalogMatch = catalogoMap.get(it.descripcion);
+                      const cleanName = cleanItemName(it.descripcion);
+                      const catalogMatch = catalogoMap.get(cleanName) || catalogoMap.get(cleanName.toLowerCase());
+                      const canEditPrice = Boolean(it.permitir_editar_precio || catalogMatch?.permitir_editar_precio);
                       return (
                         <div
                           key={i}
@@ -5348,7 +5469,7 @@ function getMarbeteColorStyle(colorName?: string) {
                             </div>
                           </div>
                           <div className="flex flex-col items-end gap-1">
-                            {!isDetail && catalogMatch?.permitir_editar_precio ? (
+                            {canEditPrice ? (
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
@@ -5368,13 +5489,13 @@ function getMarbeteColorStyle(colorName?: string) {
                                 </div>
                                 {it.cantidad > 1 && (
                                   <span className="text-[10px] text-muted-foreground font-semibold">
-                                    Total: {formatRD(it.cantidad * it.precio_unitario)}
+                                    Total: {formatRD(it.cantidad * (it.precio_unitario || 0))}
                                   </span>
                                 )}
                               </div>
                             ) : (
                               <div className="font-display text-lg">
-                                {isDetail ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
+                                {isDetail && (it.precio_unitario || 0) === 0 ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
                               </div>
                             )}
                           </div>
@@ -6704,6 +6825,7 @@ function getMarbeteColorStyle(colorName?: string) {
                       servicio_origen: targetService,
                       es_libra: servicePickerItem.por_libra || false,
                       is_exento: !!servicePickerItem.is_exento,
+                      permitir_editar_precio: !!servicePickerItem.permitir_editar_precio,
                     },
                   ];
                 });
@@ -9008,6 +9130,7 @@ function AddItemDialog({
         es_libra: it.por_libra || false,
         is_exento: !!it.is_exento,
         servicio_origen: serviceName,
+        permitir_editar_precio: !!it.permitir_editar_precio,
       });
       return;
     }
@@ -9021,6 +9144,7 @@ function AddItemDialog({
         precio_unitario: matchedServicePrice,
         es_libra: it.por_libra,
         is_exento: it.is_exento,
+        permitir_editar_precio: !!it.permitir_editar_precio,
       });
     }
   }

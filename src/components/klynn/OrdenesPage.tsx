@@ -31,7 +31,7 @@ import { Switch } from "@/components/ui/switch";
 import {
   getOrdenes, saveOrden, getClientes, getClienteById, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
   type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant, type EstanteriaZona,
-  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, saveECFDocument, IS_LOCAL_MODE,
+  checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveECFDocument, IS_LOCAL_MODE,
   updateOrdenEstado, can
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
@@ -4056,7 +4056,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
 
         if (!isElectronic) {
           try {
-            const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenant.id, tipoECFDefault);
+            const { ncf: nextNCF, expiration_date } = await nextNCFTradicional(tenant.id, tipoECFDefault);
             finalNCF = nextNCF;
             finalNcfVencimiento = expiration_date;
           } catch (seqErr) {
@@ -4200,6 +4200,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
       queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
+      queryClient.invalidateQueries({ queryKey: ["ecf-sequences"] });
 
       onClose();
       if (showPrintPortal) {

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, saveTenant, formatDateTimeRD } from "@/lib/storage";
+import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveTenant, formatDateTimeRD } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
@@ -996,7 +996,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
 
           if (!isElectronic) {
             try {
-              const { ncf: nextNCF, expiration_date } = await nextECFNumero(tenantId, tipoECFDefault);
+              const { ncf: nextNCF, expiration_date } = await nextNCFTradicional(tenantId, tipoECFDefault);
               finalNCF = nextNCF;
               finalNcfVencimiento = expiration_date;
             } catch (seqErr) {
@@ -1125,6 +1125,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
       
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
+      queryClient.invalidateQueries({ queryKey: ['ecf-sequences'] });
 
       onSuccess();
       onClose();

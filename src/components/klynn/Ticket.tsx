@@ -426,8 +426,8 @@ export function Ticket({
       <div className="space-y-1 text-[11px] pr-2">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 min-w-0">
-            <ClipboardList className="h-3.5 w-3.5 shrink-0 text-black" />
-            <span><b>Orden No°:</b> <span className="font-bold tabular-nums ml-0.5">{orden.numero}</span></span>
+            <ClipboardList className="h-4 w-4 shrink-0 text-black" />
+            <span className="text-[13px]"><b>Orden No°:</b> <span className="font-black tabular-nums ml-0.5">{orden.numero}</span></span>
           </div>
           {orden.es_urgente && (
             <span className="font-bold text-[9px] bg-black text-white px-1.5 py-0.5 rounded-xs uppercase shrink-0">
@@ -439,19 +439,19 @@ export function Ticket({
         {orden.nota_credito_ncf || orden.nota_debito_ncf ? (
           <>
             <div className={`flex items-center gap-1.5 font-bold ${isCreditNote ? "text-destructive" : "text-blue-700"}`}>
-              <FileText className="h-3.5 w-3.5 shrink-0" />
-              <span><b>{isECF ? 'e-NCF:' : 'NCF:'}</b> <span className="tabular-nums ml-0.5">{fiscalNCF}</span></span>
+              <FileText className="h-4 w-4 shrink-0" />
+              <span className="text-[13px]"><b>{isECF ? 'e-NCF:' : 'NCF:'}</b> <span className="font-black tabular-nums ml-0.5">{fiscalNCF}</span></span>
             </div>
             <div className="flex items-center gap-1.5 text-[10px]">
               <FileText className="h-3.5 w-3.5 shrink-0" />
-              <span><b>{isECF ? 'e-NCF modificado:' : 'NCF modificado:'}</b> <span className="tabular-nums ml-0.5">{orden.ncf}</span></span>
+              <span><b>{isECF ? 'e-NCF modificado:' : 'NCF modificado:'}</b> <span className="font-bold tabular-nums ml-0.5">{orden.ncf}</span></span>
             </div>
           </>
         ) : (
           orden.ncf && (
             <div className="flex items-center gap-1.5">
-              <FileText className="h-3.5 w-3.5 shrink-0 text-black" />
-              <span><b>{isECF ? "e-NCF:" : "NCF:"}</b> <span className="font-bold tabular-nums ml-0.5">{orden.ncf}</span></span>
+              <FileText className="h-4 w-4 shrink-0 text-black" />
+              <span className="text-[13px]"><b>{isECF ? "e-NCF:" : "NCF:"}</b> <span className="font-black tabular-nums ml-0.5">{orden.ncf}</span></span>
             </div>
           )
         )}

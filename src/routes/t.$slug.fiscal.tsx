@@ -74,6 +74,7 @@ import {
   saveECFDocument,
   updateEstadoComercialECF,
   saveGasto,
+  saveECFSequence,
   type ECFConfig,
   type ECFSequence,
   type ECFDocument,
@@ -83,6 +84,7 @@ import {
   useECFConfig,
   usePlans,
   useOrdenes,
+  useClientes,
   useGastos,
   useECFDocuments,
   useECFSequences,
@@ -196,6 +198,7 @@ function CentroFiscalPage() {
   const { data: ecfConfig, isLoading: loadingConfig } = useECFConfig(tenantId);
   const { data: plans = [] } = usePlans();
   const { data: rawOrds = [] } = useOrdenes(tenantId);
+  const { data: rawClientes = [] } = useClientes(tenantId);
   const { data: rawGastos = [] } = useGastos(tenantId);
   const { data: rawEcfDocs = [] } = useECFDocuments(tenantId);
   const { data: rawSequences = [] } = useECFSequences(tenantId);
@@ -387,17 +390,25 @@ function CentroFiscalPage() {
       });
     }
 
+    const clientesMap = new Map((rawClientes || []).map((c: any) => [c.id, c]));
     for (const order of (rawOrds || []).filter((item: any) => item.ncf && !seenOrders.has(item.id))) {
       const orderNcf = String(order.ncf);
+      const isTraditional = orderNcf.startsWith("B");
+      const client = clientesMap.get(order.cliente_id);
+      const buyerName = client
+        ? `${client.nombre} ${client.apellido || ""}`.trim()
+        : ((order as any)?.cliente_nombre || (order as any)?.cliente?.nombre || "Consumidor Final");
+      const buyerRnc = client?.cedula || (isTraditional ? "Consumidor Final" : "Consumidor Final");
+
       list.push({
         id: order.id,
         encf: orderNcf,
         type: order.tipo_ecf || orderNcf.substring(0, 3),
-        buyerName: order.cliente_nombre || "Cliente General",
-        buyerRnc: "Consumidor Final",
+        buyerName,
+        buyerRnc,
         totalAmount: order.total || 0,
         totalItbis: order.itbis || 0,
-        status: order.ecf_status || "REGISTERED",
+        status: order.ecf_status || (isTraditional ? "ACCEPTED" : "REGISTERED"),
         createdAt: order.creado_en,
         pdfUrl: undefined,
         xmlUrl: undefined,
@@ -411,7 +422,7 @@ function CentroFiscalPage() {
 
     list.sort((a, b) => +new Date(b.createdAt) - +new Date(a.createdAt));
     return list;
-  }, [rawEcfDocs, rawOrds, rawGastos]);
+  }, [rawEcfDocs, rawOrds, rawGastos, rawClientes]);
 
   function getDgiiValidationUrl(doc: any) {
     if (!doc) return "";
@@ -544,6 +555,31 @@ function CentroFiscalPage() {
     if (!tenant || !doc?.encf) return;
     setSelectedAuditDetail(doc);
     setAuditLogs([]);
+
+    if (String(doc.encf).startsWith("B")) {
+      setAuditLogs([
+        {
+          titulo: "Tipo de Comprobante",
+          valor: `${doc.type} - Comprobante Fiscal Tradicional`,
+          tipo: "SUCCESS",
+          detalle: "Secuencia autorizada por la DGII y emitida localmente.",
+        },
+        {
+          titulo: "Modalidad Fiscal",
+          valor: "Facturación Tradicional (Oficina Virtual DGII)",
+          tipo: "INFO",
+          detalle: "Los comprobantes tradicionales NCF no requieren timbrado electrónico vía web service. Se reportan periódicamente mediante Formulario 607.",
+        },
+        {
+          titulo: "Receptor y Monto",
+          valor: `${doc.buyerName} | ${formatRD(doc.totalAmount)}`,
+          tipo: "INFO",
+          detalle: `RNC/Cédula: ${doc.buyerRnc || "-"} · ITBIS: ${formatRD(doc.totalItbis || 0)}`,
+        },
+      ]);
+      return;
+    }
+
     setLoadingAuditLive(true);
     try {
       const res = await getDocumentAuditEF2(tenant.id, {
@@ -613,19 +649,39 @@ function CentroFiscalPage() {
     try {
       const fromNum = parseInt(newSeqFrom.replace(/,/g, "")) || 1;
       const toNum = parseInt(newSeqTo.replace(/,/g, "")) || 1;
-      await createSequenceEF2(tenant.id, {
-        type: newSeqType,
-        from: fromNum,
-        to: toNum,
-        current: fromNum - 1,
-        expiration: newSeqType === "E32" ? undefined : newSeqExp || undefined,
-      });
-      toast.success(`Rango para ${newSeqType} creado y sincronizado con EF2 ✓`);
+
+      if (newSeqType.startsWith("B")) {
+        await saveECFSequence({
+          id: crypto.randomUUID(),
+          tenant_id: tenant.id,
+          tipo_ecf: newSeqType,
+          prefijo: "B",
+          valor_inicial: fromNum,
+          valor_final: toNum,
+          valor_actual: fromNum - 1,
+          expiration_date: newSeqExp || undefined,
+          is_active: true,
+          recibir_alertas: false,
+          alerta_limite: 50,
+        });
+        toast.success(`Secuencia tradicional ${newSeqType} creada correctamente ✓`);
+      } else {
+        await createSequenceEF2(tenant.id, {
+          type: newSeqType,
+          from: fromNum,
+          to: toNum,
+          current: fromNum - 1,
+          expiration: newSeqType === "E32" ? undefined : newSeqExp || undefined,
+        });
+        toast.success(`Rango para ${newSeqType} creado y sincronizado con EF2 ✓`);
+      }
+
       setShowNewSeqModal(false);
       setNewSeqFrom("");
       setNewSeqTo("");
       setNewSeqExp("");
       queryClient.invalidateQueries({ queryKey: ["ecf-sequences", tenant.id] });
+      queryClient.invalidateQueries({ queryKey: ["ecf-sequences"] });
     } catch (err: any) {
       toast.error(err.message || "Error al crear el rango en EF2");
     } finally {
@@ -1321,11 +1377,20 @@ function CentroFiscalPage() {
                 className="h-10 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-medium shadow-2xs"
               >
                 <option value="ALL">Todos los tipos</option>
-                <option value="E31">E31 - Crédito Fiscal</option>
-                <option value="E32">E32 - Consumidor Final</option>
-                <option value="E34">E34 - Nota de Crédito</option>
-                <option value="E41">E41 - Compras</option>
-                <option value="E43">E43 - Gastos Menores</option>
+                <optgroup label="Comprobantes Electrónicos (e-CF)">
+                  <option value="E31">E31 - Crédito Fiscal (Electrónico)</option>
+                  <option value="E32">E32 - Consumidor Final (Electrónico)</option>
+                  <option value="E34">E34 - Nota de Crédito (Electrónico)</option>
+                  <option value="E41">E41 - Compras (Electrónico)</option>
+                  <option value="E43">E43 - Gastos Menores (Electrónico)</option>
+                </optgroup>
+                <optgroup label="Comprobantes Tradicionales (NCF)">
+                  <option value="B01">B01 - Crédito Fiscal (Tradicional)</option>
+                  <option value="B02">B02 - Consumidor Final (Tradicional)</option>
+                  <option value="B04">B04 - Nota de Crédito (Tradicional)</option>
+                  <option value="B14">B14 - Regímenes Especiales (Tradicional)</option>
+                  <option value="B15">B15 - Gubernamental (Tradicional)</option>
+                </optgroup>
               </select>
             </div>
 
@@ -2016,8 +2081,8 @@ function CentroFiscalPage() {
             {/* Selector de Período */}
             <div className="flex items-center gap-2">
               <select
-                value={reportMonth}
-                onChange={(e) => setReportMonth(e.target.value)}
+                value={String(reportMonth).padStart(2, "0")}
+                onChange={(e) => setReportMonth(Number(e.target.value))}
                 className="h-10 px-3.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-bold shadow-2xs"
               >
                 <option value="01">Enero</option>
@@ -2035,8 +2100,8 @@ function CentroFiscalPage() {
               </select>
 
               <select
-                value={reportYear}
-                onChange={(e) => setReportYear(e.target.value)}
+                value={String(reportYear)}
+                onChange={(e) => setReportYear(Number(e.target.value))}
                 className="h-10 px-3.5 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-bold font-mono shadow-2xs"
               >
                 <option value="2026">2026</option>
@@ -2520,20 +2585,29 @@ function CentroFiscalPage() {
 
           <div className="space-y-3 py-2">
             <div>
-              <Label className="text-xs font-bold">Tipo de e-CF *</Label>
+              <Label className="text-xs font-bold">Tipo de Comprobante *</Label>
               <select
                 value={newSeqType}
                 onChange={(e) => setNewSeqType(e.target.value)}
                 className="w-full h-10 px-3 text-xs rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 font-bold mt-1 shadow-2xs"
               >
-                <option value="E31">E31 - Factura de Crédito Fiscal</option>
-                <option value="E32">E32 - Factura de Consumo Final</option>
-                <option value="E33">E33 - Nota de Débito</option>
-                <option value="E34">E34 - Nota de Crédito</option>
-                <option value="E41">E41 - Comprobante de Compras</option>
-                <option value="E43">E43 - Gastos Menores</option>
-                <option value="E44">E44 - Regímenes Especiales</option>
-                <option value="E45">E45 - Gubernamental</option>
+                <optgroup label="Comprobantes Electrónicos (e-CF)">
+                  <option value="E31">E31 - Factura de Crédito Fiscal</option>
+                  <option value="E32">E32 - Factura de Consumo Final</option>
+                  <option value="E33">E33 - Nota de Débito</option>
+                  <option value="E34">E34 - Nota de Crédito</option>
+                  <option value="E41">E41 - Comprobante de Compras</option>
+                  <option value="E43">E43 - Gastos Menores</option>
+                  <option value="E44">E44 - Regímenes Especiales</option>
+                  <option value="E45">E45 - Gubernamental</option>
+                </optgroup>
+                <optgroup label="Comprobantes Tradicionales (NCF)">
+                  <option value="B01">B01 - Factura de Crédito Fiscal</option>
+                  <option value="B02">B02 - Factura de Consumo Final</option>
+                  <option value="B04">B04 - Nota de Crédito</option>
+                  <option value="B14">B14 - Regímenes Especiales</option>
+                  <option value="B15">B15 - Gubernamental</option>
+                </optgroup>
               </select>
             </div>
 

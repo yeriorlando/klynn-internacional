@@ -374,6 +374,7 @@ export interface OrdenItem {
   color_hex?: string;
   notas?: string;
   servicio_origen?: string;
+  permitir_editar_precio?: boolean;
 }
 
 export interface Orden {
@@ -5559,12 +5560,53 @@ export async function saveECFConfig(config: ECFConfig) {
 export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> {
   const realId = resolveTenantId(tenantId);
   const cacheKey = `klynn_ecf_seqs_${realId}`;
+
+  // Helper de reconciliación: alinea secuencias con el máximo NCF ya emitido en órdenes
+  const reconcileWithOrders = (sequences: ECFSequence[]): ECFSequence[] => {
+    let localOrders: Orden[] = [];
+    try {
+      localOrders = read<Orden[]>(KEY.ordenes, []);
+    } catch {}
+
+    let hasChanges = false;
+    const reconciled = sequences.map((s) => {
+      let maxOrderNum = 0;
+      for (const o of localOrders) {
+        if (o.ncf && o.ncf.startsWith(s.tipo_ecf)) {
+          const numPart = parseInt(o.ncf.slice(s.tipo_ecf.length), 10);
+          if (!isNaN(numPart) && numPart > maxOrderNum) {
+            maxOrderNum = numPart;
+          }
+        }
+      }
+      const currentVal = Number(s.valor_actual || 0);
+      if (maxOrderNum > currentVal) {
+        hasChanges = true;
+        if (typeof window === "undefined" || navigator.onLine) {
+          void supabase
+            .from("ecf_sequences")
+            .update({ valor_actual: maxOrderNum })
+            .eq("id", String(s.id))
+            .then();
+        }
+        return { ...s, valor_actual: maxOrderNum };
+      }
+      return s;
+    });
+
+    if (hasChanges && typeof window !== "undefined") {
+      localStorage.setItem(cacheKey, JSON.stringify(reconciled));
+      localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(reconciled));
+    }
+    return reconciled;
+  };
+
   if (typeof window !== "undefined" && !navigator.onLine) {
     const cached =
       localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (cached) {
       try {
-        return JSON.parse(cached);
+        return reconcileWithOrders(JSON.parse(cached));
       } catch {}
     }
     return [];
@@ -5583,12 +5625,13 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
-    if (!error && data) {
+    if (!error && data && Array.isArray(data)) {
+      const reconciled = reconcileWithOrders(data);
       if (typeof window !== "undefined") {
-        localStorage.setItem(cacheKey, JSON.stringify(data));
-        localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(data));
+        localStorage.setItem(cacheKey, JSON.stringify(reconciled));
+        localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(reconciled));
       }
-      return data;
+      return reconciled;
     }
   } catch (e) {
     console.warn("Aviso al obtener secuencias:", e);
@@ -5599,7 +5642,7 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
       localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
     if (cached) {
       try {
-        return JSON.parse(cached);
+        return reconcileWithOrders(JSON.parse(cached));
       } catch {}
     }
   }
@@ -5733,14 +5776,182 @@ export async function saveECFDocument(doc: ECFDocument) {
   } catch (err) {}
 }
 
+/**
+ * Generador y gestor de secuencias exclusivo para FACTURACIÓN TRADICIONAL (NCF de la DGII).
+ * Aislado completamente del flujo electrónico (e-CF / EF2).
+ * Incluye soporte completo OFFLINE (IndexedDB / Outbox) y ONLINE (Supabase).
+ */
+export async function nextNCFTradicional(
+  tenantId: string,
+  tipoNCF: string,
+): Promise<{ ncf: string; expiration_date?: string }> {
+  const realId = resolveTenantId(tenantId);
+  const normalizedTipo = tipoNCF.startsWith("B")
+    ? tipoNCF
+    : tipoNCF === "E31"
+      ? "B01"
+      : tipoNCF === "E34"
+        ? "B04"
+        : tipoNCF.startsWith("E")
+          ? `B${tipoNCF.slice(1)}`
+          : `B${tipoNCF}`;
+
+  const padLen = 8; // Formato tradicional DGII: Tipo (Bxx) + 8 dígitos
+  const cacheKey = `klynn_ecf_seqs_${realId}`;
+
+  // 1. Número máximo YA utilizado en órdenes locales existentes
+  let maxOrderNum = 0;
+  try {
+    const localOrders = read<Orden[]>(KEY.ordenes, []);
+    for (const o of localOrders) {
+      if (o.ncf && o.ncf.startsWith(normalizedTipo)) {
+        const numPart = parseInt(o.ncf.slice(normalizedTipo.length), 10);
+        if (!isNaN(numPart) && numPart > maxOrderNum) {
+          maxOrderNum = numPart;
+        }
+      }
+    }
+  } catch {}
+
+  // 2. Obtener secuencias locales en caché
+  let localSeqs: any[] = [];
+  if (typeof window !== "undefined") {
+    const raw =
+      localStorage.getItem(cacheKey) || localStorage.getItem(`klynn_ecf_seqs_${tenantId}`);
+    if (raw) {
+      try {
+        localSeqs = JSON.parse(raw);
+      } catch {}
+    }
+  }
+
+  // Buscar secuencia tradicional para este tipo
+  let seqIndex = localSeqs.findIndex(
+    (s) =>
+      (s.tipo_ecf === normalizedTipo || s.tipo === normalizedTipo) &&
+      s.is_active !== false &&
+      s.activa !== false,
+  );
+  let seq = seqIndex >= 0 ? localSeqs[seqIndex] : null;
+
+  // Si estamos online y no encontramos la secuencia en caché local, intentar obtener de Supabase
+  if (!seq && (typeof window === "undefined" || navigator.onLine)) {
+    try {
+      const { data } = await supabase
+        .from("ecf_sequences")
+        .select("*")
+        .eq("tenant_id", realId)
+        .eq("tipo_ecf", normalizedTipo)
+        .maybeSingle();
+      if (data) {
+        seq = data;
+        localSeqs.push(data);
+        seqIndex = localSeqs.length - 1;
+      }
+    } catch {}
+  }
+
+  const currentSeqVal = seq ? Number(seq.valor_actual ?? 0) : 0;
+  const initialSeqVal = seq ? Number(seq.valor_inicial ?? 1) : 1;
+  const localCounter = read<number>(`klynn_ncf_sec_${realId}_${normalizedTipo}`, 0);
+
+  // El siguiente número DEBE ser estrictamente mayor a todas las fuentes conocidas
+  const baseNum = Math.max(currentSeqVal, maxOrderNum, localCounter, initialSeqVal - 1);
+  const proximo = baseNum + 1;
+
+  // 3. Actualizar inmediatamente todas las fuentes locales (0ms latencia para POS)
+  if (seqIndex >= 0) {
+    localSeqs[seqIndex].valor_actual = proximo;
+  } else {
+    localSeqs.push({
+      id: seq?.id || uid("seq_trad"),
+      tenant_id: realId,
+      tipo_ecf: normalizedTipo,
+      prefijo: "B",
+      valor_inicial: initialSeqVal,
+      valor_final: 99999999,
+      valor_actual: proximo,
+      is_active: true,
+      activa: true,
+    });
+  }
+
+  if (typeof window !== "undefined") {
+    localStorage.setItem(cacheKey, JSON.stringify(localSeqs));
+    localStorage.setItem(`klynn_ecf_seqs_${tenantId}`, JSON.stringify(localSeqs));
+  }
+  write(`klynn_ncf_sec_${realId}_${normalizedTipo}`, proximo);
+  write(`klynn_ncf_sec_${tenantId}_${normalizedTipo}`, proximo);
+
+  const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
+
+  // 4. Sincronización en Base de Datos / Outbox (Soporte Online + Offline)
+  const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
+
+  if (isOnline) {
+    try {
+      if (seq?.id) {
+        const { data: updated } = await supabase
+          .from("ecf_sequences")
+          .update({ valor_actual: proximo })
+          .eq("id", String(seq.id))
+          .select("id");
+        if (!updated || updated.length === 0) {
+          await supabase
+            .from("ecf_sequences")
+            .update({ valor_actual: proximo })
+            .eq("tenant_id", realId)
+            .eq("tipo_ecf", normalizedTipo);
+        }
+      } else {
+        await supabase
+          .from("ecf_sequences")
+          .update({ valor_actual: proximo })
+          .eq("tenant_id", realId)
+          .eq("tipo_ecf", normalizedTipo);
+      }
+    } catch (err) {
+      console.warn("Aviso actualizando secuencia NCF tradicional en Supabase:", err);
+    }
+  } else {
+    // 🌐 MODO OFFLINE: Encolar en IndexedDB Outbox para sincronización automática
+    try {
+      await offlineDB.addToOutbox({
+        id: `seq_${seq?.id || normalizedTipo}_${Date.now()}`,
+        tenant_id: realId,
+        table_name: "ecf_sequences",
+        action: "UPDATE",
+        payload: {
+          id: seq?.id,
+          tenant_id: realId,
+          tipo_ecf: normalizedTipo,
+          valor_actual: proximo,
+        },
+      });
+      window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    } catch (offlineErr) {
+      console.warn("Aviso encolando secuencia NCF tradicional en Outbox:", offlineErr);
+    }
+  }
+
+  return {
+    ncf: encf,
+    expiration_date: seq?.expiration_date || seq?.fecha_vencimiento,
+  };
+}
+
+/**
+ * Generador exclusivo para FACTURACIÓN ELECTRÓNICA (e-CF de la DGII vía EF2).
+ * Formato oficial e-CF de 10 dígitos (E31..., E32..., etc.)
+ */
 export async function nextECFNumero(
   tenantId: string,
   tipo: string,
 ): Promise<{ ncf: string; expiration_date?: string }> {
   const realId = resolveTenantId(tenantId);
-  const normalizedTipo = tipo.startsWith("E") || tipo.startsWith("B") ? tipo : `E${tipo}`;
+  const normalizedTipo = tipo.startsWith("E") ? tipo : `E${tipo}`;
 
-  const padLen = normalizedTipo.startsWith("E") ? 10 : 8;
+  const padLen = 10;
   const cacheKey = `klynn_ecf_seqs_${realId}`;
 
   // 1. Obtener el número máximo YA UTILIZADO en órdenes locales existentes
@@ -5789,16 +6000,15 @@ export async function nextECFNumero(
   // Actualizar inmediatamente todas las fuentes locales (0ms)
   if (seqIndex >= 0) {
     localSeqs[seqIndex].valor_actual = proximo;
-    localSeqs[seqIndex].secuencia_actual = proximo;
   } else {
     localSeqs.push({
       id: uid("seq"),
       tenant_id: realId,
       tipo_ecf: normalizedTipo,
+      prefijo: "E",
       valor_inicial: 1,
-      valor_final: 99999999,
+      valor_final: 9999999999,
       valor_actual: proximo,
-      secuencia_actual: proximo,
       is_active: true,
       activa: true,
     });
@@ -5813,18 +6023,18 @@ export async function nextECFNumero(
 
   const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
 
-  // Si estamos online, intentar actualizar Supabase en segundo plano
+  // Si estamos online, actualizar Supabase
   if (typeof window === "undefined" || navigator.onLine) {
-    if (seq?.id && !isNaN(Number(seq.id))) {
+    if (seq?.id) {
       supabase
         .from("ecf_sequences")
-        .update({ valor_actual: proximo, secuencia_actual: proximo })
-        .eq("id", Number(seq.id))
+        .update({ valor_actual: proximo })
+        .eq("id", String(seq.id))
         .then();
     }
   }
 
-  return { ncf: encf, expiration_date: seq?.fecha_vencimiento };
+  return { ncf: encf, expiration_date: seq?.expiration_date || seq?.fecha_vencimiento };
 }
 
 export async function getECFDocumentosRecibidos(tenantId: string): Promise<ECFDocumentRecibido[]> {
