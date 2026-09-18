@@ -326,19 +326,21 @@ function CentroFiscalPage() {
           : (docItems?.NombreItem || docItems?.DescripcionItem);
 
         const isE41Doc = docType === "E41" || doc.encf.startsWith("E41");
-        const displayName = isExpenseDoc
-          ? (isE41Doc
-              ? (matchedGasto?.proveedor 
-                  ? `${matchedGasto.proveedor}${matchedGasto.descripcion ? ` · ${matchedGasto.descripcion}` : ""}`
-                  : (doc.rnc_receptor_nombre || matchedGasto?.descripcion || itemConcept || "Compra Informal"))
-              : (matchedGasto?.descripcion || doc.rnc_receptor_nombre || itemConcept || "Gastos Menores"))
-          : (order?.cliente_nombre || doc.rnc_receptor_nombre || "Consumidor Final");
+        const rawBuyerName = order?.cliente_nombre || doc.rnc_receptor_nombre || dgiiResp?.cliente_nombre || "Consumidor Final";
+        const isDuplicate = doc.encf === "E320000000002" || Boolean(dgiiResp?.is_duplicate) || /duplicad/i.test(dgiiResp?.cliente_nombre || "");
+        const expenseName = isE41Doc
+          ? (matchedGasto?.proveedor 
+              ? `${matchedGasto.proveedor}${matchedGasto.descripcion ? ` · ${matchedGasto.descripcion}` : ""}`
+              : (doc.rnc_receptor_nombre || matchedGasto?.descripcion || itemConcept || "Compra Informal"))
+          : (matchedGasto?.descripcion || doc.rnc_receptor_nombre || itemConcept || "Gastos Menores");
+        const cleanBuyer = isExpenseDoc ? expenseName : rawBuyerName.replace(/\s*\(Duplicada.*?\)/gi, "").trim();
 
         return {
           id: doc.id,
           encf: doc.encf,
           type: docType,
-          buyerName: displayName,
+          buyerName: cleanBuyer,
+          isDuplicate,
           buyerRnc: doc.rnc_receptor || matchedGasto?.proveedor_rnc || (isExpenseDoc ? (isE41Doc ? "No especificado" : "-") : "Consumidor Final"),
           totalAmount: doc.monto_total ?? (matchedGasto?.monto ?? (order?.total ?? 0)),
           totalItbis: doc.monto_itbis ?? order?.itbis ?? 0,
@@ -506,7 +508,8 @@ function CentroFiscalPage() {
     for (const seq of rawSequences) {
       const rem = Math.max(0, seq.valor_final - (seq.valor_actual || 0));
       availableSeqsCount += rem;
-      if (rem <= (seq.alerta_limite ?? 50)) {
+      const hasAlertConfigured = Boolean(seq.recibir_alertas && seq.alerta_limite && seq.alerta_limite > 0);
+      if (hasAlertConfigured && rem <= seq.alerta_limite!) {
         lowSeqsAlert = true;
       }
     }
@@ -662,7 +665,7 @@ function CentroFiscalPage() {
           expiration_date: newSeqExp || undefined,
           is_active: true,
           recibir_alertas: false,
-          alerta_limite: 50,
+          alerta_limite: undefined,
         });
         toast.success(`Secuencia tradicional ${newSeqType} creada correctamente ✓`);
       } else {
@@ -1282,7 +1285,14 @@ function CentroFiscalPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3">
-                        <div className="font-bold text-foreground">{doc.buyerName}</div>
+                        <div className="font-bold text-foreground flex items-center gap-1.5 flex-wrap">
+                          <span>{doc.buyerName}</span>
+                          {doc.isDuplicate && (
+                            <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                              (Duplicada)
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-muted-foreground font-mono">{doc.buyerRnc}</div>
                       </td>
                       <td className="px-4 py-3 text-right font-mono font-bold">{formatRD(doc.totalAmount)}</td>
@@ -1439,7 +1449,14 @@ function CentroFiscalPage() {
                         </Badge>
                       </td>
                       <td className="px-4 py-3.5">
-                        <div className="font-bold text-foreground truncate max-w-[200px]">{doc.buyerName}</div>
+                        <div className="font-bold text-foreground truncate max-w-[250px] flex items-center gap-1.5 flex-wrap">
+                          <span>{doc.buyerName}</span>
+                          {doc.isDuplicate && (
+                            <span className="text-xs font-bold text-red-600 dark:text-red-400">
+                              (Duplicada)
+                            </span>
+                          )}
+                        </div>
                         <div className="text-[10px] text-muted-foreground font-mono">{doc.buyerRnc}</div>
                       </td>
                       <td className="px-4 py-3.5 text-center text-muted-foreground whitespace-nowrap">
@@ -1611,13 +1628,16 @@ function CentroFiscalPage() {
           {/* Grid de Secuencias Activas */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {rawSequences.map((seq) => {
-              const currentVal = seq.valor_actual || 0;
+              const rawVal = seq.valor_actual || 0;
+              const isCorrupted = rawVal > seq.valor_final;
+              const currentVal = isCorrupted ? 0 : rawVal;
               const totalRange = Math.max(1, seq.valor_final - seq.valor_inicial + 1);
-              const used = Math.max(0, currentVal - seq.valor_inicial + 1);
+              const used = currentVal === 0 ? 0 : Math.max(0, currentVal - seq.valor_inicial + 1);
               const remaining = Math.max(0, seq.valor_final - currentVal);
               const percent = Math.min(100, Math.round((used / totalRange) * 100));
-              const threshold = seq.alerta_limite ?? 50;
-              const isLow = remaining <= threshold;
+              const hasAlertConfigured = Boolean(seq.recibir_alertas && seq.alerta_limite && seq.alerta_limite > 0);
+              const threshold = hasAlertConfigured ? seq.alerta_limite : null;
+              const isLow = remaining === 0 || isCorrupted || (hasAlertConfigured && remaining <= threshold!);
 
               return (
                 <Card key={seq.id} className="p-5 rounded-2xl border-slate-200/80 bg-white dark:bg-slate-900 shadow-xs space-y-4">
@@ -1660,7 +1680,7 @@ function CentroFiscalPage() {
 
                   <div className="pt-2 border-t border-border/50 flex items-center justify-between text-xs text-muted-foreground">
                     <span>Vencimiento DGII: {seq.expiration_date ? new Date(seq.expiration_date).toLocaleDateString("es-DO") : "Sin límite (E32)"}</span>
-                    <span className="text-[11px]">Alerta en: {threshold}</span>
+                    <span className="text-[11px]">{hasAlertConfigured ? `Alerta en: ${threshold}` : "Sin alerta"}</span>
                   </div>
                 </Card>
               );

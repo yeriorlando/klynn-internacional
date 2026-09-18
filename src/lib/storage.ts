@@ -304,6 +304,7 @@ export interface WhatsAppConfig {
   plantilla_lista: string;
   plantilla_entregada: string;
   plantilla_sin_retirar?: string;
+  plantilla_en_camino?: string;
 }
 
 export interface LicenciaLocal {
@@ -1131,6 +1132,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
       "Hola 👋, {cliente}. Tu orden {numero} fue entregada con éxito. ¡Gracias por confiar en *{lavanderia}*! ✨\n\n⭐ *Del 1 al 5, ¿qué tal quedó tu ropa hoy? Responde con tu puntuación (ej: \"5\"). ¡Tu opinión nos ayuda a mejorar!*",
     plantilla_sin_retirar:
       "Hola 👋, {cliente}. Te recordamos que tu orden {numero} de:\n\n{detalle}\n\nLleva {dias} días lista en *{lavanderia}*. Saldo pendiente: {saldo}.\n\n📅 *¿Qué día estimas pasar a retirarla? Responde con el día (ej: \"VIERNES\") para mantenerla protegida en almacén.*\n📍 Te esperamos en {lavanderia_dir}.",
+    plantilla_en_camino:
+      "¡Tu orden va en camino! 🛵\n\nHola {cliente}, te informamos que tu orden #{numero} ya salió de *{lavanderia}* y va de camino a tu dirección:\n\n📍 {cliente_dir}\n\n⏱️ *¿Estarás disponible para recibir en los próximos 20 minutos? Responde \"SÍ\" o \"NO\" para coordinar con el chofer.*",
   },
   pos_habilitar_servicios: true,
   pos_habilitar_prendas: true,
@@ -1427,10 +1430,11 @@ export async function getPlans(): Promise<Plan[]> {
                   : (staticMatch?.modulos?.cxp ?? false),
           },
           limite_whatsapp_mes:
-            p.limite_whatsapp_mes ??
-            localMatch?.limite_whatsapp_mes ??
-            staticMatch?.limite_whatsapp_mes ??
-            0,
+            p.limite_whatsapp_mes !== undefined && p.limite_whatsapp_mes !== null
+              ? Number(p.limite_whatsapp_mes)
+              : localMatch?.limite_whatsapp_mes !== undefined && localMatch?.limite_whatsapp_mes !== null
+                ? Number(localMatch.limite_whatsapp_mes)
+                : (staticMatch?.limite_whatsapp_mes ?? 0),
           destacado:
             localMatch?.destacado !== undefined
               ? !!localMatch.destacado
@@ -3355,24 +3359,45 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
       }
     }
 
-    if (allData.length > 0) {
-      if (isBrowser()) {
-        const local = read<Orden[]>(KEY.ordenes, []).filter(
-          (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId),
+    if (isBrowser()) {
+      const allLocal = read<Orden[]>(KEY.ordenes, []);
+      const otherTenants = allLocal.filter(
+        (o) => !isSameTenant(o.tenant_id, tenant_id) && !isSameTenant(o.tenant_id, realId),
+      );
+      let pendingLocal: Orden[] = [];
+      try {
+        const outbox = await offlineDB.getOutboxItems(realId);
+        const pendingIds = new Set(
+          outbox
+            .filter((item) => item.table_name === "ordenes" && item.status !== "synced")
+            .map((item) => item.entity_id),
         );
-        const combined = [...allData];
-        local.forEach((lo) => {
-          if (!combined.some((co) => co.id === lo.id)) combined.push(lo);
-        });
-        const sorted = combined.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-        write(KEY.ordenes, sorted);
-        try {
-          offlineDB.putMany("ordenes", sorted);
-        } catch {}
-        return sorted;
-      }
-      return allData;
+        if (pendingIds.size > 0) {
+          pendingLocal = allLocal.filter(
+            (o) =>
+              (isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId)) &&
+              pendingIds.has(o.id) &&
+              !allData.some((remote) => remote.id === o.id),
+          );
+        }
+      } catch {}
+
+      const combined = [...allData, ...pendingLocal];
+      const sorted = combined.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+      write(KEY.ordenes, [...otherTenants, ...sorted]);
+      try {
+        const existingIdb = await offlineDB.getAll<Orden>("ordenes", realId);
+        const activeIds = new Set(sorted.map((o) => o.id));
+        for (const old of existingIdb) {
+          if (!activeIds.has(old.id)) {
+            await offlineDB.delete("ordenes", old.id);
+          }
+        }
+        await offlineDB.putMany("ordenes", sorted);
+      } catch {}
+      return sorted;
     }
+    return allData;
   } catch (e) {
     // Fallback silencioso a almacenamiento local e IndexedDB
   }
@@ -4454,7 +4479,10 @@ export async function savePlan(p: Plan) {
       promociones: !!p.modulos?.promociones,
       nomina: !!p.modulos?.nomina,
       cxp: !!p.modulos?.cxp,
-      limite_whatsapp_mes: p.limite_whatsapp_mes,
+      limite_whatsapp_mes:
+        p.limite_whatsapp_mes !== undefined && p.limite_whatsapp_mes !== null
+          ? Number(p.limite_whatsapp_mes)
+          : 0,
       destacado: !!p.destacado,
       es_especial: !!p.es_especial,
       titulo_especial: p.titulo_especial || "Plan especial",
@@ -5573,24 +5601,31 @@ export async function getECFSequences(tenantId: string): Promise<ECFSequence[]> 
     const reconciled = sequences.map((s) => {
       let maxOrderNum = 0;
       for (const o of localOrders) {
+        // SEGURIDAD MULTI-TENANT: Solo considerar órdenes de este tenant específico
+        if (o.tenant_id && o.tenant_id !== realId && o.tenant_id !== tenantId) continue;
         if (o.ncf && o.ncf.startsWith(s.tipo_ecf)) {
           const numPart = parseInt(o.ncf.slice(s.tipo_ecf.length), 10);
-          if (!isNaN(numPart) && numPart > maxOrderNum) {
+          // SEGURIDAD RANGO: Solo considerar números dentro del rango válido de la secuencia
+          if (!isNaN(numPart) && numPart >= s.valor_inicial && numPart <= s.valor_final && numPart > maxOrderNum) {
             maxOrderNum = numPart;
           }
         }
       }
       const currentVal = Number(s.valor_actual || 0);
-      if (maxOrderNum > currentVal) {
+      const isCorrupted = currentVal > s.valor_final;
+      const effectiveVal = isCorrupted ? 0 : currentVal;
+
+      if (maxOrderNum > effectiveVal || isCorrupted) {
+        const nextVal = Math.max(maxOrderNum, isCorrupted ? maxOrderNum : effectiveVal);
         hasChanges = true;
         if (typeof window === "undefined" || navigator.onLine) {
           void supabase
             .from("ecf_sequences")
-            .update({ valor_actual: maxOrderNum })
+            .update({ valor_actual: nextVal })
             .eq("id", String(s.id))
             .then();
         }
-        return { ...s, valor_actual: maxOrderNum };
+        return { ...s, valor_actual: nextVal };
       }
       return s;
     });
@@ -5886,6 +5921,22 @@ export async function nextNCFTradicional(
 
   const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
 
+  // 3.1 Verificar alerta automática de secuencia baja por WhatsApp
+  const targetSeq = seqIndex >= 0 ? localSeqs[seqIndex] : seq;
+  if (targetSeq && targetSeq.recibir_alertas && targetSeq.alerta_limite) {
+    const restantes = Math.max(0, (targetSeq.valor_final || 0) - proximo);
+    if (restantes <= targetSeq.alerta_limite) {
+      import("./whatsapp").then(({ checkAndTriggerSequenceWhatsAppAlert }) => {
+        checkAndTriggerSequenceWhatsAppAlert({
+          tenantId: realId,
+          seq: targetSeq,
+          restantes,
+          ultimoEmitido: encf,
+        }).catch((err) => console.warn("Aviso alerta WhatsApp NCF:", err));
+      }).catch(() => {});
+    }
+  }
+
   // 4. Sincronización en Base de Datos / Outbox (Soporte Online + Offline)
   const isOnline = typeof window !== "undefined" ? navigator.onLine : true;
 
@@ -6023,6 +6074,22 @@ export async function nextECFNumero(
   write(`klynn_ecf_sec_${tenantId}_${normalizedTipo}`, proximo);
 
   const encf = `${normalizedTipo}${String(proximo).padStart(padLen, "0")}`;
+
+  // Verificar alerta automática de secuencia baja por WhatsApp
+  const targetSeq = seqIndex >= 0 ? localSeqs[seqIndex] : seq;
+  if (targetSeq && targetSeq.recibir_alertas && targetSeq.alerta_limite) {
+    const restantes = Math.max(0, (targetSeq.valor_final || 0) - proximo);
+    if (restantes <= targetSeq.alerta_limite) {
+      import("./whatsapp").then(({ checkAndTriggerSequenceWhatsAppAlert }) => {
+        checkAndTriggerSequenceWhatsAppAlert({
+          tenantId: realId,
+          seq: targetSeq,
+          restantes,
+          ultimoEmitido: encf,
+        }).catch((err) => console.warn("Aviso alerta WhatsApp e-CF:", err));
+      }).catch(() => {});
+    }
+  }
 
   // Si estamos online, actualizar Supabase
   if (typeof window === "undefined" || navigator.onLine) {

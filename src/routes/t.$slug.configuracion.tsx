@@ -34,7 +34,7 @@ import {
   type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
 } from "@/lib/storage";
 import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA, consultarRNC, isECFReady, syncSequencesEF2 } from "@/lib/fiscal";
-import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage } from "@/lib/whatsapp";
+import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage, checkAndTriggerSequenceWhatsAppAlert } from "@/lib/whatsapp";
 import { useECFConfig, usePlans, useGlobalConfig, useECFSequences } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -3077,15 +3077,70 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     if (baseWa.base_url?.includes("wapisender")) {
       baseWa.base_url = "https://wasenderapi.com";
     }
+
+    const resolveTemplate = (key: keyof WhatsAppConfig, current?: string) => {
+      const defaultVal = (DEFAULT_CONFIG.whatsapp as any)[key] || "";
+      if (!current || !current.trim()) return defaultVal;
+
+      const lower = current.toLowerCase();
+
+      // 1. Plantilla Creada (Recibo)
+      if (key === "plantilla_creada") {
+        if (!lower.includes("responde \"sí\"") && !lower.includes("responde \"si\"") && !lower.includes("¿deseas que te avisemos")) {
+          const cleaned = current
+            .replace(/💡\s*_?Por favor guarda nuestro contacto[^_\n]*_?/gi, "")
+            .replace(/💡\s*_?Recuerda guardar nuestro número[^_\n]*_?/gi, "")
+            .trim();
+          return `${cleaned}\n\n📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*\n💡 _Por favor guarda nuestro contacto en tu celular para recibir las alertas._`;
+        }
+        return current;
+      }
+
+      // 2. Plantilla Lista
+      if (key === "plantilla_lista") {
+        if (!lower.includes("responde") && (lower.includes("ya está lista") || lower.includes("ya esta lista"))) {
+          return DEFAULT_CONFIG.whatsapp.plantilla_lista;
+        }
+        return current;
+      }
+
+      // 3. Plantilla Entregada
+      if (key === "plantilla_entregada") {
+        if (!lower.includes("del 1 al 5") && !lower.includes("responde")) {
+          return DEFAULT_CONFIG.whatsapp.plantilla_entregada;
+        }
+        return current;
+      }
+
+      // 4. Plantilla Sin Retirar
+      if (key === "plantilla_sin_retirar") {
+        if (!lower.includes("responde") && lower.includes("días lista")) {
+          return DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar;
+        }
+        return current;
+      }
+
+      // 5. Plantilla En Camino
+      if (key === "plantilla_en_camino") {
+        if (!current || !lower.includes("responde")) {
+          return (DEFAULT_CONFIG.whatsapp as any).plantilla_en_camino || defaultVal;
+        }
+        return current;
+      }
+
+      return current;
+    };
+
     return {
       ...baseWa,
       instance: baseWa.instance || instanceName,
-      plantilla_creada: wa.plantilla_creada || DEFAULT_CONFIG.whatsapp.plantilla_creada,
-      plantilla_lista: wa.plantilla_lista || DEFAULT_CONFIG.whatsapp.plantilla_lista,
-      plantilla_entregada: wa.plantilla_entregada || DEFAULT_CONFIG.whatsapp.plantilla_entregada,
+      plantilla_creada: resolveTemplate("plantilla_creada", wa.plantilla_creada),
+      plantilla_lista: resolveTemplate("plantilla_lista", wa.plantilla_lista),
+      plantilla_entregada: resolveTemplate("plantilla_entregada", wa.plantilla_entregada),
       notif_orden_sin_retirar: wa.notif_orden_sin_retirar !== false,
       dias_recordatorio_sin_retirar: wa.dias_recordatorio_sin_retirar || 5,
-      plantilla_sin_retirar: wa.plantilla_sin_retirar || DEFAULT_CONFIG.whatsapp.plantilla_sin_retirar,
+      plantilla_sin_retirar: resolveTemplate("plantilla_sin_retirar", wa.plantilla_sin_retirar),
+      plantilla_en_camino: resolveTemplate("plantilla_en_camino", wa.plantilla_en_camino),
     };
   });
 
@@ -4360,17 +4415,55 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
 
           {/* Plantillas de Textos */}
           <div className="space-y-4 pt-2">
-            <Field label="Plantilla — Orden creada" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {ncf} {ncf_label} {entrega} {detalle}">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200/70 dark:border-emerald-800/50">
+              <div className="space-y-0.5">
+                <div className="flex items-center gap-2 font-bold text-xs text-emerald-800 dark:text-emerald-300">
+                  <ShieldCheck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Plantillas Blindadas Anti-Baneos de WhatsApp</span>
+                </div>
+                <p className="text-[11px] text-emerald-700/90 dark:text-emerald-400/90 leading-relaxed">
+                  Cada plantilla incluye preguntas interactivas para que tus clientes respondan naturalmente, evitando que WhatsApp detecte tus mensajes como spam o publicidad no deseada.
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setDraft((prev) => ({
+                    ...prev,
+                    plantilla_creada: DEFAULT_CONFIG.whatsapp!.plantilla_creada,
+                    plantilla_lista: DEFAULT_CONFIG.whatsapp!.plantilla_lista,
+                    plantilla_entregada: DEFAULT_CONFIG.whatsapp!.plantilla_entregada,
+                    plantilla_sin_retirar: DEFAULT_CONFIG.whatsapp!.plantilla_sin_retirar,
+                    plantilla_en_camino: (DEFAULT_CONFIG.whatsapp as any)!.plantilla_en_camino,
+                  }));
+                  toast.success("Plantillas blindadas anti-baneos aplicadas");
+                }}
+                className="h-8.5 text-xs font-bold border-emerald-300 dark:border-emerald-700 bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-100/50 dark:hover:bg-emerald-950/50 cursor-pointer shrink-0 shadow-2xs"
+              >
+                <Sparkles className="h-3.5 w-3.5 mr-1.5 text-emerald-600 dark:text-emerald-400" /> Restablecer a Recomendadas
+              </Button>
+            </div>
+
+            <Field label="Plantilla — Orden creada (Recibo)" hint="Variables: {lavanderia} {lavanderia_tel} {numero} {cliente} {total} {saldo} {ncf} {ncf_label} {entrega} {detalle}">
               <ExpandingTextarea 
                 value={draft.plantilla_creada} 
                 onChange={(e: any) => setDraft({ ...draft, plantilla_creada: e.target.value })} 
               />
             </Field>
 
-            <Field label="Plantilla — Orden lista" hint="Variables: {lavanderia} {numero} {cliente} {total} {saldo}">
+            <Field label="Plantilla — Orden lista para retirar" hint="Variables: {lavanderia} {numero} {cliente} {total} {saldo} {detalle}">
               <ExpandingTextarea 
                 value={draft.plantilla_lista} 
                 onChange={(e: any) => setDraft({ ...draft, plantilla_lista: e.target.value })} 
+              />
+            </Field>
+
+            <Field label="Plantilla — Orden en camino (Logística / Domicilio)" hint="Variables: {lavanderia} {numero} {cliente} {cliente_dir}">
+              <ExpandingTextarea 
+                value={draft.plantilla_en_camino || (DEFAULT_CONFIG.whatsapp as any)?.plantilla_en_camino || ""} 
+                onChange={(e: any) => setDraft({ ...draft, plantilla_en_camino: e.target.value })} 
               />
             </Field>
 
@@ -4381,7 +4474,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
               />
             </Field>
 
-            <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables: {lavanderia} {numero} {cliente} {dias} {saldo}">
+            <Field label="Plantilla — Recordatorio prendas sin retirar" hint="Variables: {lavanderia} {numero} {cliente} {dias} {saldo} {detalle} {lavanderia_dir}">
               <ExpandingTextarea 
                 value={draft.plantilla_sin_retirar} 
                 onChange={(e: any) => setDraft({ ...draft, plantilla_sin_retirar: e.target.value })} 
@@ -4918,6 +5011,44 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   const [voidEnd, setVoidEnd] = useState("");
   const [voidReason, setVoidReason] = useState("");
   const [certFileName, setCertFileName] = useState<string>("");
+
+  // Estados para modal de configuración de alertas de secuencia
+  const [alertConfigSeq, setAlertConfigSeq] = useState<ECFSequence | null>(null);
+  const [alertEnabled, setAlertEnabled] = useState<boolean>(false);
+  const [alertThreshold, setAlertThreshold] = useState<number>(20);
+  const [isSavingAlert, setIsSavingAlert] = useState<boolean>(false);
+
+  function openAlertModal(seq: ECFSequence) {
+    setAlertConfigSeq(seq);
+    const enabled = Boolean(seq.recibir_alertas);
+    setAlertEnabled(enabled);
+    setAlertThreshold(seq.alerta_limite && seq.alerta_limite > 0 ? seq.alerta_limite : 20);
+  }
+
+  async function handleSaveAlertConfig() {
+    if (!alertConfigSeq) return;
+    setIsSavingAlert(true);
+    try {
+      const updatedSeq: ECFSequence = {
+        ...alertConfigSeq,
+        recibir_alertas: alertEnabled,
+        alerta_limite: alertEnabled ? (Number(alertThreshold) > 0 ? Number(alertThreshold) : 20) : undefined,
+      };
+      await saveECFSequence(updatedSeq);
+      await queryClient.invalidateQueries({ queryKey: ["ecf-sequences"] });
+      toast.success(
+        alertEnabled
+          ? `🔔 Alerta configurada: te avisaremos cuando queden ${updatedSeq.alerta_limite} comprobantes`
+          : "🔕 Alertas desactivadas para esta secuencia"
+      );
+      setAlertConfigSeq(null);
+      onRefresh();
+    } catch (err: any) {
+      toast.error("Error al guardar alerta: " + err.message);
+    } finally {
+      setIsSavingAlert(false);
+    }
+  }
 
   const queryClient = useQueryClient();
   const { data: globalFiscalConfig } = useGlobalConfig();
@@ -5577,17 +5708,48 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       return;
                     }
                     
+                    const firstSeq = sequences.find(s => s.is_active !== false) || sequences[0];
+                    const sampleSeq: ECFSequence = firstSeq || {
+                      id: "test",
+                      tenant_id: tenant.id,
+                      tipo_ecf: isElectronic ? "E32" : "B02",
+                      prefijo: isElectronic ? "E" : "B",
+                      valor_inicial: 1,
+                      valor_final: 100,
+                      valor_actual: 85,
+                      is_active: true,
+                      recibir_alertas: true,
+                      alerta_limite: 20,
+                    };
+
                     const promise = (async () => {
-                      const result = await sendTestWhatsAppMessage(
-                        tenant,
-                        alertPhone,
-                        `*🚨 ALERTA FISCAL: SECUENCIA PRÓXIMA A AGOTARSE*\n\nEstimado cliente, te informamos que la secuencia fiscal de tu negocio está a punto de agotarse:\n\n• *Tipo de NCF:* B02 - CONSUMIDOR FINAL\n• *Rango Restante:* 8 comprobantes disponibles (Límite configurado: 50)\n• *Último Emitido:* B0200000042\n• *Fecha de Vencimiento:* 31/12/2026\n\n*Recomendación:* Solicita un nuevo rango de comprobantes en la Oficina Virtual de la DGII de inmediato para evitar interrupciones en tu facturación.\n\n_Mensaje automático de prueba generado desde Klynn._`,
-                      );
+                      const tenantWithPhone: Tenant = {
+                        ...tenant,
+                        config: {
+                          ...cfg,
+                          alerta_ncf_telefono: alertPhone,
+                        },
+                      };
+                      
+                      const rem = Math.max(0, (sampleSeq.valor_final || 100) - (sampleSeq.valor_actual || 85));
+                      const sampleUltimo = `${sampleSeq.tipo_ecf}${String(sampleSeq.valor_actual || 85).padStart(sampleSeq.tipo_ecf.startsWith("E") ? 10 : 8, "0")}`;
+
+                      const result = await checkAndTriggerSequenceWhatsAppAlert({
+                        tenant: tenantWithPhone,
+                        tenantId: tenant.id,
+                        seq: {
+                          ...sampleSeq,
+                          alerta_limite: sampleSeq.alerta_limite || 20,
+                        },
+                        restantes: rem,
+                        ultimoEmitido: sampleUltimo,
+                        forzar: true, // Forzar envío en modo prueba
+                      });
                       if (!result.ok) throw new Error(result.reason || "No se pudo enviar la alerta");
                     })();
 
                     toast.promise(promise, {
-                      loading: "Enviando alerta de prueba...",
+                      loading: "Enviando alerta de prueba a WhatsApp...",
                       success: "¡Alerta de prueba enviada con éxito! ✓",
                       error: (err) => `Error al enviar: ${err.message}`
                     });
@@ -5671,7 +5833,7 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                                       expiration_date: rawVencimiento ? new Date(rawVencimiento).toISOString().split('T')[0] : undefined,
                                       is_active: true,
                                       recibir_alertas: false, // Desactivadas por defecto
-                                      alerta_limite: 50
+                                      alerta_limite: undefined
                                     });
                                     importedCount++;
                                   }
@@ -5722,9 +5884,9 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       const currentVal = isCorrupted ? 0 : seq.valor_actual;
                       const rawRemaining = seq.valor_final - currentVal;
                       const remaining = Math.max(0, rawRemaining);
-                      const threshold = seq.alerta_limite ?? 50;
-                      const isLow = remaining <= threshold || isCorrupted;
-                      const hasAlertEnabled = seq.recibir_alertas !== false;
+                      const hasAlertConfigured = Boolean(seq.recibir_alertas && seq.alerta_limite && seq.alerta_limite > 0);
+                      const threshold = hasAlertConfigured ? seq.alerta_limite! : null;
+                      const isLow = remaining === 0 || isCorrupted || (hasAlertConfigured && remaining <= threshold!);
 
                       const formattedCurrent = String(currentVal).padStart(8, '0');
                       const codeDisplay = seq.tipo_ecf.startsWith('B') 
@@ -5750,28 +5912,46 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               <div className={`text-xs font-bold ${isLow ? 'text-red-500 font-extrabold' : 'text-emerald-600'}`}>
                                 {remaining === 0 ? '0 disp.' : `${remaining} disp.`}
                               </div>
-                              <div className="text-[9px] text-muted-foreground font-sans">
-                                Alerta: {threshold}
-                              </div>
+                              {hasAlertConfigured ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openAlertModal(seq)}
+                                  className="text-[9px] text-primary hover:underline font-sans font-semibold cursor-pointer block text-right transition-colors"
+                                  title="Alerta activa. Clic para modificar umbral."
+                                >
+                                  Alerta: {threshold}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => openAlertModal(seq)}
+                                  className="text-[9px] text-muted-foreground/60 hover:text-primary font-sans cursor-pointer block text-right transition-colors"
+                                  title="Sin alerta configurada. Clic para definir alerta."
+                                >
+                                  Sin alerta
+                                </button>
+                              )}
                             </div>
                             
                             {/* Actions Group (Bell and Trash) */}
                             <div className="flex items-center gap-1.5">
-                              {/* Quick Mute Bell Toggle Button */}
+                              {/* Open Alert Config Modal Button */}
                               <button 
-                                onClick={() => toggleSequenceAlert(seq)}
+                                type="button"
+                                onClick={() => openAlertModal(seq)}
                                 className={`h-8 w-8 rounded-xl border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
-                                  hasAlertEnabled 
+                                  hasAlertConfigured 
                                     ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
                                     : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
                                 }`}
-                                title={hasAlertEnabled ? "Alertas de WhatsApp activadas. Clic para silenciar." : "Alertas desactivadas. Clic para activar."}
+                                title={hasAlertConfigured ? `Alerta activa (${threshold} disp.). Clic para configurar.` : "Sin alerta. Clic para configurar cantidad de alerta."}
                               >
-                                {hasAlertEnabled ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
+                                {hasAlertConfigured ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
                               </button>
 
                               {/* Trash/Delete Sequence Button */}
                               <button 
+                                type="button"
                                 onClick={() => setDeleteSeqId(seq.id)}
                                 className="h-8 w-8 rounded-xl border border-red-100 dark:border-red-900/30 bg-white dark:bg-slate-900 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 hover:text-red-600 flex items-center justify-center transition-all active:scale-90 shadow-xs cursor-pointer"
                                 title="Eliminar esta secuencia permanentemente"
@@ -5845,9 +6025,9 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                       const currentVal = isCorrupted ? 0 : seq.valor_actual;
                       const rawRemaining = seq.valor_final - currentVal;
                       const remaining = Math.max(0, rawRemaining);
-                      const threshold = seq.alerta_limite ?? 50;
-                      const isLow = remaining <= threshold || isCorrupted;
-                      const hasAlertEnabled = seq.recibir_alertas !== false;
+                      const hasAlertConfigured = Boolean(seq.recibir_alertas && seq.alerta_limite && seq.alerta_limite > 0);
+                      const threshold = hasAlertConfigured ? seq.alerta_limite! : null;
+                      const isLow = remaining === 0 || isCorrupted || (hasAlertConfigured && remaining <= threshold!);
 
                       const formattedCurrent = String(currentVal).padStart(seq.tipo_ecf.startsWith('E') ? 10 : 8, '0');
                       const codeDisplay = seq.tipo_ecf.startsWith('E') || seq.tipo_ecf.startsWith('B') 
@@ -5871,24 +6051,41 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
                               <div className={`text-xs font-bold ${isLow ? 'text-red-500 font-extrabold' : 'text-emerald-600'}`}>
                                 {remaining === 0 ? '0 disp.' : `${remaining} disp.`}
                               </div>
-                              <div className="text-[9px] text-muted-foreground font-sans">
-                                Alerta: {threshold}
-                              </div>
+                              {hasAlertConfigured ? (
+                                <button
+                                  type="button"
+                                  onClick={() => openAlertModal(seq)}
+                                  className="text-[9px] text-primary hover:underline font-sans font-semibold cursor-pointer block text-right transition-colors"
+                                  title="Alerta activa. Clic para modificar umbral."
+                                >
+                                  Alerta: {threshold}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => openAlertModal(seq)}
+                                  className="text-[9px] text-muted-foreground/60 hover:text-primary font-sans cursor-pointer block text-right transition-colors"
+                                  title="Sin alerta configurada. Clic para definir alerta."
+                                >
+                                  Sin alerta
+                                </button>
+                              )}
                             </div>
                             
                             {/* Actions Group (Bell and Trash) */}
                             <div className="flex items-center gap-1">
-                              {/* Quick Mute Bell Toggle Button */}
+                              {/* Open Alert Config Modal Button */}
                               <button 
-                                onClick={() => toggleSequenceAlert(seq)}
-                                className={`h-7.5 w-7.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 ${
-                                  hasAlertEnabled 
+                                type="button"
+                                onClick={() => openAlertModal(seq)}
+                                className={`h-7.5 w-7.5 rounded-lg border flex items-center justify-center transition-all active:scale-90 cursor-pointer ${
+                                  hasAlertConfigured 
                                     ? 'bg-primary/10 border-primary/20 text-primary shadow-xs hover:bg-primary/20' 
-                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100'
+                                    : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-slate-100 dark:bg-slate-800 dark:border-slate-700'
                                 }`}
-                                title={hasAlertEnabled ? "Alertas de WhatsApp activadas. Clic para silenciar." : "Alertas desactivadas. Clic para activar."}
+                                title={hasAlertConfigured ? `Alerta activa (${threshold} disp.). Clic para configurar.` : "Sin alerta. Clic para configurar cantidad de alerta."}
                               >
-                                {hasAlertEnabled ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
+                                {hasAlertConfigured ? <Bell className="h-3.5 w-3.5 animate-pulse" /> : <BellOff className="h-3.5 w-3.5 opacity-60" />}
                               </button>
 
                               {/* Void Sequence Button (Only for Electronic) */}
@@ -6036,6 +6233,184 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
         </AlertDialogContent>
       </AlertDialog>
 
+      {/* MODAL COMPACTO Y ELEGANTE PARA CONFIGURAR ALERTA DE SECUENCIA */}
+      <Dialog open={!!alertConfigSeq} onOpenChange={(open) => !open && setAlertConfigSeq(null)}>
+        <DialogContent className="rounded-3xl border border-slate-200/80 dark:border-slate-800 shadow-2xl max-w-[380px] p-0 overflow-hidden bg-background">
+          <div className="p-5 space-y-3.5">
+            <DialogHeader className="space-y-1">
+              <div className="flex items-center gap-2.5">
+                <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 transition-colors ${
+                  alertEnabled ? "bg-primary/10 text-primary" : "bg-slate-100 dark:bg-slate-800 text-slate-400"
+                }`}>
+                  <Bell className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <DialogTitle className="text-base font-bold font-display tracking-tight text-foreground">
+                    Alerta de Comprobantes
+                  </DialogTitle>
+                  <DialogDescription className="text-[11px] text-muted-foreground leading-tight">
+                    Avisar por WhatsApp antes de agotar esta secuencia.
+                  </DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+
+            {alertConfigSeq && (() => {
+              const currentVal = alertConfigSeq.valor_actual || 0;
+              const remaining = Math.max(0, alertConfigSeq.valor_final - currentVal);
+              const isWillBeLow = alertEnabled && remaining <= (Number(alertThreshold) || 0);
+
+              return (
+                <div className="space-y-3">
+                  {/* Tarjeta de información de la secuencia compacta */}
+                  <div className="p-2.5 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 space-y-0.5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-mono font-bold text-xs text-primary">
+                          {alertConfigSeq.tipo_ecf}
+                        </span>
+                        <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 text-[9px] px-1.5 py-0 h-4 border-none font-bold">
+                          {alertConfigSeq.tipo_ecf.startsWith("E") ? "e-CF" : "NCF"}
+                        </Badge>
+                      </div>
+                      <span className={`text-[11px] font-bold ${remaining === 0 ? "text-red-500 font-extrabold" : "text-emerald-600 dark:text-emerald-400"}`}>
+                        {remaining} disponibles
+                      </span>
+                    </div>
+
+                    <div className="text-[10px] text-muted-foreground truncate">
+                      {NCF_NOMBRES[alertConfigSeq.tipo_ecf] || "Comprobante Fiscal"}
+                    </div>
+                  </div>
+
+                  {/* Toggle Activar / Desactivar Alerta */}
+                  <div 
+                    onClick={() => setAlertEnabled(!alertEnabled)}
+                    className={`p-2.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-2.5 ${
+                      alertEnabled 
+                        ? "bg-primary/5 border-primary/30 shadow-xs" 
+                        : "bg-slate-50/70 dark:bg-slate-900/40 border-slate-200 dark:border-slate-800"
+                    }`}
+                  >
+                    <div className="space-y-0.5">
+                      <div className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                        <Bell className={`h-3.5 w-3.5 shrink-0 ${alertEnabled ? "text-primary" : "text-slate-400"}`} />
+                        <span>Activar alerta</span>
+                      </div>
+                      <p className="text-[10px] text-muted-foreground leading-tight">
+                        {alertEnabled ? "Notificar cuando baje del umbral" : "Alertas en silencio"}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={alertEnabled}
+                      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                        alertEnabled ? "bg-primary" : "bg-slate-300 dark:bg-slate-700"
+                      }`}
+                    >
+                      <span
+                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
+                          alertEnabled ? "translate-x-4" : "translate-x-0"
+                        }`}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Configuración de Cantidad Umbral (Compacta) */}
+                  {alertEnabled && (
+                    <div className="space-y-2.5 pt-0.5 animate-in fade-in duration-150">
+                      <div className="space-y-1">
+                        <label className="text-[11px] font-bold text-foreground flex items-center justify-between">
+                          <span>Avisar cuando queden menos de:</span>
+                          <span className="text-[10.5px] font-mono text-primary font-bold">
+                            {alertThreshold} comprobantes
+                          </span>
+                        </label>
+                        <Input
+                          type="number"
+                          min={1}
+                          max={alertConfigSeq.valor_final}
+                          value={alertThreshold}
+                          onChange={(e) => setAlertThreshold(Math.max(1, Number(e.target.value)))}
+                          className="h-8.5 text-xs font-bold font-mono rounded-lg bg-background border-slate-200 dark:border-slate-800"
+                          placeholder="Ej. 20"
+                        />
+                      </div>
+
+                      {/* Presets rápidos compactos */}
+                      <div className="space-y-1">
+                        <span className="text-[9.5px] text-muted-foreground font-semibold">Accesos rápidos:</span>
+                        <div className="grid grid-cols-4 gap-1">
+                          {[10, 20, 50, 100].map((preset) => (
+                            <button
+                              key={preset}
+                              type="button"
+                              onClick={() => setAlertThreshold(preset)}
+                              className={`py-1 px-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer border ${
+                                alertThreshold === preset
+                                  ? "bg-primary text-white border-primary shadow-xs"
+                                  : "bg-slate-50 dark:bg-slate-800/60 hover:bg-slate-100 border-slate-200/80 dark:border-slate-700 text-slate-700 dark:text-slate-300"
+                              }`}
+                            >
+                              {preset}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Caja de estado compacta */}
+                      <div className={`p-2 rounded-lg border text-[10.5px] leading-snug flex items-start gap-1.5 ${
+                        isWillBeLow
+                          ? "bg-amber-50/70 border-amber-200 text-amber-900 dark:bg-amber-950/30 dark:border-amber-800/60 dark:text-amber-300"
+                          : "bg-emerald-50/70 border-emerald-200 text-emerald-900 dark:bg-emerald-950/30 dark:border-emerald-800/60 dark:text-emerald-300"
+                      }`}>
+                        {isWillBeLow ? (
+                          <>
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5 text-amber-600 dark:text-amber-400" />
+                            <div>
+                              <strong>Alerta inmediata:</strong> Quedan <b>{remaining}</b> y el umbral es <b>{alertThreshold}</b>; entrará en alerta ahora.
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <CheckCircle2 className="h-3.5 w-3.5 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                            <div>
+                              <strong>Inventario holgado:</strong> Quedan <b>{remaining}</b>. Se avisará al llegar a <b>{alertThreshold}</b> o menos.
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            <DialogFooter className="gap-2 pt-2 border-t border-border/70">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-xl h-8.5 text-xs border-border px-3"
+                onClick={() => setAlertConfigSeq(null)}
+              >
+                Cancelar
+              </Button>
+              <Button
+                type="button"
+                onClick={handleSaveAlertConfig}
+                disabled={isSavingAlert}
+                className="rounded-xl h-8.5 text-xs font-bold bg-primary hover:bg-primary/95 text-white shadow-sm px-4"
+              >
+                {isSavingAlert && <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />}
+                Guardar Configuración
+              </Button>
+            </DialogFooter>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <NewSequenceDialog open={showNewSeq} onOpenChange={setShowNewSeq} tenantId={tenant.id} onCreated={onRefresh} mode={dialogMode} sequences={sequences} />
     </div>
   );
@@ -6056,7 +6431,7 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
     expiration_date: "",
     is_active: true,
     recibir_alertas: false, // Notification alerts disabled by default
-    alerta_limite: 50
+    alerta_limite: undefined
   });
 
   // Sync mode changes to reset initial state appropriately when modal triggers
@@ -6072,7 +6447,7 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
         expiration_date: "",
         is_active: true,
         recibir_alertas: false,
-        alerta_limite: 50
+        alerta_limite: undefined
       });
     }
   }, [open, mode, tenantId]);
@@ -6090,15 +6465,13 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
           const client = getEF2Client({ tenantId });
           const tipoNum = parseInt(tipo.replace(/\D/g, '') || '32', 10);
           const created = await client.crearSecuencia({
-            tipo_ecf_id: tipoNum,
-            prefijo: 'E',
-            desde: Number(seq.valor_inicial || 1),
-            hasta: Number(seq.valor_final || 100),
+            tipo_comprobante: tipoNum,
+            desde: Number(seq.valor_inicial),
+            hasta: Number(seq.valor_final),
             secuencia_actual: Number(seq.valor_actual || 0),
-            fecha_vencimiento: seq.expiration_date || undefined,
-            estado: true,
+            fecha_vencimiento: seq.expiration_date || undefined
           });
-          if (created?.data?.id) {
+          if (created.success && created.data?.id) {
             ef2SequenceId = created.data.id;
           }
         } catch {
@@ -6112,7 +6485,9 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
         tenant_id: tenantId,
         tipo_ecf: tipo,
         prefijo: mode === 'traditional' ? 'B' : 'E',
-        ef2_sequence_id: ef2SequenceId
+        ef2_sequence_id: ef2SequenceId,
+        recibir_alertas: Boolean(seq.recibir_alertas),
+        alerta_limite: seq.recibir_alertas && seq.alerta_limite ? Number(seq.alerta_limite) : undefined,
       } as ECFSequence);
 
       toast.success("Secuencia creada con éxito");
@@ -6264,7 +6639,14 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
                   <input 
                     type="checkbox" 
                     checked={seq.recibir_alertas === true} 
-                    onChange={(e) => setSeq({ ...seq, recibir_alertas: e.target.checked })} 
+                    onChange={(e) => {
+                      const isChecked = e.target.checked;
+                      setSeq({
+                        ...seq,
+                        recibir_alertas: isChecked,
+                        alerta_limite: isChecked ? (seq.alerta_limite || 20) : undefined
+                      });
+                    }} 
                     className="h-5 w-5 accent-primary cursor-pointer rounded-lg border-gray-300"
                   />
                 </div>
@@ -6275,7 +6657,7 @@ function NewSequenceDialog({ open, onOpenChange, tenantId, onCreated, mode = 'el
                     <Input 
                       type="number" 
                       className="h-10 rounded-lg"
-                      value={seq.alerta_limite ?? 50} 
+                      value={seq.alerta_limite ?? 20} 
                       onChange={(e) => setSeq({ ...seq, alerta_limite: Number(e.target.value) })} 
                     />
                   </Field>

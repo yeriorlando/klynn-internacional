@@ -4469,8 +4469,10 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       precio_mensual: Number(f.precio_mensual) || 0,
       precio_anual: Number(f.precio_anual) || 0,
       limite_empleados: Number(f.limite_empleados) || 1,
-      limite_ordenes_mes: f.limite_ordenes_mes === null ? null : (Number(f.limite_ordenes_mes) || null),
-      limite_whatsapp_mes: f.limite_whatsapp_mes === null ? null : (Number(f.limite_whatsapp_mes) || null),
+      limite_ordenes_mes: f.limite_ordenes_mes === null || f.limite_ordenes_mes === "" ? null : (Number(f.limite_ordenes_mes) || null),
+      limite_whatsapp_mes: (f.limite_whatsapp_mes === "" || f.limite_whatsapp_mes === null || f.limite_whatsapp_mes === undefined)
+        ? 0
+        : Math.max(0, Math.floor(Number(f.limite_whatsapp_mes) || 0)),
       modulos: f.modulos || { whatsapp: false, facturacion_fiscal: false, multisucursal: false, logistica: false, procesos: true, estanteria: true, pos_offline: false, promociones: false, nomina: false, cxp: false },
       destacado: !!f.destacado,
       es_especial: !!f.es_especial,
@@ -4666,8 +4668,11 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                   <Input
                     type="number"
                     min={0}
-                    value={f.limite_whatsapp_mes ?? 0}
-                    onChange={(e) => setF({ ...f, limite_whatsapp_mes: Number(e.target.value) || 0 })}
+                    value={f.limite_whatsapp_mes !== undefined && f.limite_whatsapp_mes !== null ? f.limite_whatsapp_mes : ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setF({ ...f, limite_whatsapp_mes: val === "" ? ("" as any) : Number(val) });
+                    }}
                     placeholder="0 = Ilimitado"
                     className="h-8 rounded-lg bg-surface border-border/60 text-xs text-center font-bold"
                   />

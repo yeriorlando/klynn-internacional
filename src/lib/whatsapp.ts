@@ -1,5 +1,5 @@
-import type { Tenant, Cliente, Orden } from "@/lib/storage";
-import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAppCount, saveOrden, getGlobalConfig } from "@/lib/storage";
+import type { Tenant, Cliente, Orden, ECFSequence } from "@/lib/storage";
+import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAppCount, saveOrden, getGlobalConfig, getTenantById, NCF_NOMBRES } from "@/lib/storage";
 
 type Evento = "creada" | "lista" | "en_camino" | "entregada" | "sin_retirar";
 
@@ -516,6 +516,135 @@ export function getKlynnConnectInstanceName(tenant: Tenant): string {
 export async function sendTestWhatsAppMessage(tenant: Tenant, destPhone: string, text: string): Promise<{ ok: boolean; reason?: string }> {
   const result = await sendWhatsAppMessage(tenant, destPhone, { text });
   return result.ok ? { ok: true } : { ok: false, reason: result.reason };
+}
+
+export interface SequenceAlertParams {
+  tenant?: Tenant | null;
+  tenantId: string;
+  seq: ECFSequence;
+  restantes: number;
+  ultimoEmitido?: string;
+  forzar?: boolean;
+}
+
+/**
+ * Dispara una alerta de secuencia fiscal por WhatsApp de forma automática
+ * al número configurado en Datos Fiscales (alerta_ncf_telefono) o teléfono del tenant.
+ * Cuenta con protección inteligente Anti-Spam (máx. 1 mensaje por día salvo agotamiento total).
+ */
+export async function checkAndTriggerSequenceWhatsAppAlert({
+  tenant,
+  tenantId,
+  seq,
+  restantes,
+  ultimoEmitido,
+  forzar = false,
+}: SequenceAlertParams): Promise<{ ok: boolean; reason?: string }> {
+  // 1. Validar si la alerta debe dispararse
+  if (!forzar) {
+    if (!seq.recibir_alertas || !seq.alerta_limite || seq.alerta_limite <= 0) {
+      return { ok: false, reason: "Alertas no activas para esta secuencia" };
+    }
+    if (restantes > seq.alerta_limite) {
+      return { ok: false, reason: `Secuencia con comprobantes suficientes (${restantes} restantes)` };
+    }
+  }
+
+  // 2. Obtener tenant
+  let targetTenant = tenant;
+  if (!targetTenant && tenantId) {
+    try {
+      targetTenant = await getTenantById(tenantId);
+    } catch {}
+  }
+  if (!targetTenant) {
+    return { ok: false, reason: "No se encontró el tenant para enviar alerta" };
+  }
+
+  // 3. Validar WhatsApp activo en el negocio
+  const wa = targetTenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
+  if (!wa?.enabled) {
+    return { ok: false, reason: "WhatsApp no está activo en la configuración del negocio" };
+  }
+
+  // 4. Obtener teléfono destino
+  const alertPhone = targetTenant.config?.alerta_ncf_telefono || targetTenant.telefono;
+  if (!alertPhone) {
+    return { ok: false, reason: "No hay número de WhatsApp configurado para recibir alertas de secuencia" };
+  }
+  if (isDummyPhoneNumber(alertPhone)) {
+    return { ok: false, reason: "El número configurado es un número de prueba o ficticio" };
+  }
+
+  const tipoDoc = seq.tipo_ecf || seq.prefijo || "Comprobante";
+  const isElectronic = tipoDoc.startsWith("E");
+
+  // 5. Deduplicación Anti-Spam (Máximo 1 alerta por día a menos que caiga a 0 o sea forzada)
+  if (!forzar && typeof window !== "undefined") {
+    const cacheKey = `klynn_wa_seq_alert_${targetTenant.id}_${tipoDoc}`;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      const raw = localStorage.getItem(cacheKey);
+      if (raw) {
+        const data = JSON.parse(raw);
+        if (data.date === today) {
+          if (restantes > 0) {
+            return { ok: true, reason: "Alerta diaria ya enviada hoy (anti-spam activo)" };
+          }
+          if (restantes === 0 && data.restantes === 0) {
+            return { ok: true, reason: "Alerta de secuencia agotada ya enviada hoy" };
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // 6. Preparar texto del mensaje
+  const ncfNombre = NCF_NOMBRES[tipoDoc] || (isElectronic ? "COMPROBANTE ELECTRÓNICO (e-CF)" : "COMPROBANTE FISCAL");
+  const isExhausted = restantes <= 0;
+  const vencimientoStr = seq.expiration_date
+    ? new Date(seq.expiration_date).toLocaleDateString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric" })
+    : (isElectronic && tipoDoc === "E32" ? "Sin vencimiento fijo (e-CF Consumo)" : "No especificada");
+
+  const titulo = isExhausted
+    ? "🚨 *¡ALERTA CRÍTICA: SECUENCIA FISCAL AGOTADA!*"
+    : "⚠️ *ALERTA FISCAL: SECUENCIA PRÓXIMA A AGOTARSE*";
+
+  const situacion = isExhausted
+    ? `*¡URGENTE!* Se han agotado totalmente los comprobantes de este tipo (*0 restantes*). Debes solicitar un nuevo rango de inmediato para continuar facturando.`
+    : `Te informamos que la secuencia fiscal ha alcanzado el umbral configurado (*quedan ${restantes} comprobantes de ${seq.alerta_limite || 20} establecidos*):`;
+
+  const mensaje = `${titulo}
+
+Hola, *${targetTenant.nombre}*. ${situacion}
+
+📋 *Tipo:* ${tipoDoc} - ${ncfNombre}
+🔢 *Comprobantes Restantes:* *${restantes} disponibles*
+📊 *Rango Autorizado:* Del ${seq.valor_inicial} al ${seq.valor_final}
+📝 *Último Emitido:* ${ultimoEmitido || `${tipoDoc}${String(seq.valor_actual || 0).padStart(isElectronic ? 10 : 8, "0")}`}
+📅 *Vencimiento:* ${vencimientoStr}
+
+💡 *Recomendación:*
+${isElectronic
+  ? `Solicita una nueva autorización de rangos e-CF en la Oficina Virtual de la DGII o comunícate con tu proveedor fiscal (EF2) para sincronizar el nuevo rango en Klynn.`
+  : `Solicita de inmediato una nueva autorización de comprobantes tradicionales en la Oficina Virtual de la DGII para evitar pausas en tu facturación.`}
+
+_Mensaje automático de control fiscal emitido desde Klynn._`;
+
+  const result = await sendWhatsAppMessage(targetTenant, alertPhone, { text: mensaje });
+
+  if (result.ok && !forzar && typeof window !== "undefined") {
+    const cacheKey = `klynn_wa_seq_alert_${targetTenant.id}_${tipoDoc}`;
+    const today = new Date().toISOString().slice(0, 10);
+    try {
+      localStorage.setItem(
+        cacheKey,
+        JSON.stringify({ date: today, restantes, timestamp: Date.now() })
+      );
+    } catch {}
+  }
+
+  return result;
 }
 
 export function calcularDiasEnAlmacen(creadoEn: string): number {

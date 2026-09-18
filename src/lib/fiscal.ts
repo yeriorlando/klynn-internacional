@@ -226,6 +226,19 @@ export async function emitirECF(
 
           if (seq && numSol > (seq.valor_actual || 0) && numSol <= seq.valor_final) {
             await supabase.from("ecf_sequences").update({ valor_actual: numSol }).eq("id", seq.id);
+            const updatedSeq = { ...seq, valor_actual: numSol };
+            const restantes = Math.max(0, (updatedSeq.valor_final || 0) - numSol);
+            if (updatedSeq.recibir_alertas && updatedSeq.alerta_limite && restantes <= updatedSeq.alerta_limite) {
+              import("./whatsapp").then(({ checkAndTriggerSequenceWhatsAppAlert }) => {
+                checkAndTriggerSequenceWhatsAppAlert({
+                  tenant,
+                  tenantId: tenant.id,
+                  seq: updatedSeq,
+                  restantes,
+                  ultimoEmitido: assignedEncf,
+                }).catch((err) => console.warn("Aviso alerta WhatsApp e-CF:", err));
+              }).catch(() => {});
+            }
           }
         }
       })().catch((seqSyncErr) => {
@@ -564,7 +577,7 @@ export async function syncSequencesEF2(tenantId: string): Promise<EF2SecuenciaRa
     const existing = local.find(
       (sequence) => sequence.ef2_sequence_id === Number(range.id) || sequence.tipo_ecf === type,
     );
-    await saveECFSequence({
+    const seqToSave = {
       id: existing?.id || crypto.randomUUID(),
       tenant_id: tenantId,
       tipo_ecf: type,
@@ -575,11 +588,25 @@ export async function syncSequencesEF2(tenantId: string): Promise<EF2SecuenciaRa
       expiration_date: range.fecha_vencimiento || undefined,
       is_active: range.estado === true || range.estado === 1 || String(range.estado) === "1",
       recibir_alertas: existing?.recibir_alertas ?? false,
-      alerta_limite: existing?.alerta_limite ?? 50,
+      alerta_limite: existing?.alerta_limite !== undefined ? existing.alerta_limite : undefined,
       pronesoft_sequence_id: existing?.pronesoft_sequence_id,
       ef2_sequence_id: Number(range.id),
       ef2_synced_at: new Date().toISOString(),
-    });
+    };
+    await saveECFSequence(seqToSave);
+
+    const restantes = Math.max(0, seqToSave.valor_final - seqToSave.valor_actual);
+    if (seqToSave.recibir_alertas && seqToSave.alerta_limite && restantes <= seqToSave.alerta_limite) {
+      const encf = `${type}${String(seqToSave.valor_actual).padStart(10, "0")}`;
+      import("./whatsapp").then(({ checkAndTriggerSequenceWhatsAppAlert }) => {
+        checkAndTriggerSequenceWhatsAppAlert({
+          tenantId,
+          seq: seqToSave,
+          restantes,
+          ultimoEmitido: encf,
+        }).catch(() => {});
+      }).catch(() => {});
+    }
   }
   return authoritativeRanges;
 }
