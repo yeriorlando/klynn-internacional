@@ -1,7 +1,9 @@
+/* Hallmark · pre-emit critique: P5 H5 E5 S5 R5 V4 */
 import { createFileRoute, useNavigate, Link } from "@tanstack/react-router";
 import { useState, useMemo, useEffect } from "react";
 import {
   Building2,
+  Store,
   Plus,
   Search,
   Clock,
@@ -274,7 +276,6 @@ function CuentasPorPagarPage() {
     categoria_gasto: "INSUMOS",
     descripcion: "",
   });
-
   // Formulario Abono
   const [abonoForm, setAbonoForm] = useState({
     monto: 0,
@@ -688,14 +689,14 @@ function CuentasPorPagarPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto pb-24 font-sans">
+    <div className="w-full min-w-0 max-w-none space-y-5 pb-24 font-sans">
       {/* Header */}
       <PageHeader
         title="Cuentas por Pagar (CXP)"
         description="Control de compras a crédito, suplidores, facturas con NCF y pagos"
       >
         <Button
-          className="gap-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold border border-emerald-600 shadow-xs hover:shadow cursor-pointer transition-all active:scale-95 shrink-0"
+          className="h-10 shrink-0 gap-2 rounded-xl border border-emerald-600 bg-emerald-600 px-4 font-bold text-white shadow-xs hover:bg-emerald-700 hover:text-white focus-visible:ring-emerald-600/30"
           onClick={() =>
             exportCXPToExcel({
               tenantName: user?.tenant?.nombre,
@@ -705,161 +706,121 @@ function CuentasPorPagarPage() {
             })
           }
         >
-          <FileSpreadsheet className="h-4 w-4 text-white" />
-          <span>Exportar Excel</span>
+          <FileSpreadsheet className="h-4 w-4" />
+          <span>Exportar</span>
         </Button>
         <Button
-          className="gap-2 bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#d4a300] font-bold shadow-xs hover:shadow cursor-pointer transition-all active:scale-95 shrink-0"
+          className="h-10 shrink-0 gap-2 rounded-xl border border-amber-500 bg-amber-400 px-4 font-bold text-primary shadow-xs hover:bg-amber-500 hover:text-primary focus-visible:ring-amber-500/35"
           onClick={() => setModalSuplidorOpen(true)}
         >
-          <Building2 className="h-4 w-4 text-[#1B4B73]" />
-          <span>Nuevo Suplidor</span>
+          <Building2 className="h-4 w-4" />
+          <span>Nuevo suplidor</span>
         </Button>
         <Button
-          className="gap-2 bg-[#1B4B73] hover:bg-[#133857] text-white font-bold border border-[#133857] shadow-xs hover:shadow cursor-pointer transition-all active:scale-95 shrink-0"
+          className="h-10 shrink-0 gap-2 rounded-xl bg-primary px-4 font-bold text-primary-foreground shadow-xs hover:bg-primary/90"
           onClick={() => setModalFacturaOpen(true)}
         >
-          <Plus className="h-4 w-4 text-white" />
+          <Plus className="h-4 w-4" />
           <span>Registrar Factura a Crédito</span>
         </Button>
       </PageHeader>
 
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <Card className="p-4 border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <CreditCard className="h-3.5 w-3.5 text-primary" />
-            Total Por Pagar
+      {/* Resumen financiero operativo */}
+      <Card className="overflow-hidden rounded-3xl border-slate-200 p-0 shadow-xs dark:border-slate-800">
+        <div className="grid grid-cols-2 lg:grid-cols-[1.35fr_repeat(4,minmax(0,1fr))]">
+          <div className="col-span-2 bg-primary p-5 text-primary-foreground lg:col-span-1 lg:p-6">
+            <div className="flex items-center justify-between gap-3">
+              <span className="text-xs font-bold uppercase tracking-[0.14em] opacity-75">Deuda pendiente</span>
+              <Wallet className="h-5 w-5 opacity-80" />
+            </div>
+            <div className="mt-3 text-3xl font-black tracking-tight tabular-nums">{formatRD(stats.totalDeuda)}</div>
+            <div className="mt-2 text-sm opacity-80">{facturasPendientes.length} factura(s) por liquidar</div>
           </div>
-          <div className="text-xl md:text-2xl font-black text-foreground mt-2 tracking-tight">
-            {formatRD(stats.totalDeuda)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">
-            {facturasPendientes.length} facturas por liquidar
-          </div>
-        </Card>
+          {[
+            { label: "Mora crítica", value: stats.criticas, note: "Más de 30 días", tone: "text-rose-600" },
+            { label: "Vencidas", value: stats.vencidas, note: "Fuera de término", tone: "text-orange-600" },
+            { label: "Próximos 7 días", value: stats.porVencer, note: "Requiere previsión", tone: "text-amber-600" },
+            { label: "Al día", value: stats.alDia, note: "Dentro del plazo", tone: "text-emerald-600" },
+          ].map((item) => (
+            <div key={item.label} className="border-t border-slate-200 p-4 lg:border-l lg:border-t-0 lg:p-5 dark:border-slate-800">
+              <div className="text-sm font-semibold text-muted-foreground">{item.label}</div>
+              <div className={`mt-2 text-xl font-black tabular-nums ${item.tone}`}>{formatRD(item.value)}</div>
+              <div className="mt-1 text-xs text-muted-foreground">{item.note}</div>
+            </div>
+          ))}
+        </div>
+      </Card>
 
-        <Card className="p-4 border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
-            Mora Crítica (&gt;30d)
-          </div>
-          <div className="text-xl md:text-2xl font-black text-rose-600 dark:text-rose-400 mt-2 tracking-tight">
-            {formatRD(stats.criticas)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">Prioridad de pago alta</div>
-        </Card>
-
-        <Card className="p-4 border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-orange-500" />
-            Vencidas (1-30d)
-          </div>
-          <div className="text-xl md:text-2xl font-black text-orange-600 dark:text-orange-400 mt-2 tracking-tight">
-            {formatRD(stats.vencidas)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">Fuera del término</div>
-        </Card>
-
-        <Card className="p-4 border-slate-200 dark:border-slate-800 shadow-xs">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-amber-500" />
-            Por Vencer (≤7d)
-          </div>
-          <div className="text-xl md:text-2xl font-black text-amber-600 dark:text-amber-400 mt-2 tracking-tight">
-            {formatRD(stats.porVencer)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">Flujo de esta semana</div>
-        </Card>
-
-        <Card className="p-4 border-slate-200 dark:border-slate-800 shadow-xs col-span-2 md:col-span-1">
-          <div className="text-xs text-muted-foreground font-medium uppercase tracking-wider flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-emerald-500" />
-            Al Día
-          </div>
-          <div className="text-xl md:text-2xl font-black text-emerald-600 dark:text-emerald-400 mt-2 tracking-tight">
-            {formatRD(stats.alDia)}
-          </div>
-          <div className="text-xs text-muted-foreground mt-1">Dentro del plazo de crédito</div>
-        </Card>
-      </div>
-
-      {/* Selector de pestañas y búsqueda perfectamente alineados en una sola fila */}
-      <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 dark:border-slate-800 pb-2">
-        <div className="flex items-center gap-2">
+      {/* Navegación y herramientas */}
+      <Card className="rounded-3xl border-slate-200 p-3 shadow-xs dark:border-slate-800 sm:p-4">
+        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+          <div className="flex items-center gap-1 rounded-2xl bg-muted/70 p-1">
           <Button
-            variant={tabActual === "FACTURAS" ? "default" : "ghost"}
-            size="sm"
+            variant={tabActual !== "SUPLIDORES" ? "default" : "ghost"}
             onClick={() => setTabActual("FACTURAS")}
-            className={`font-semibold gap-1.5 cursor-pointer transition-colors ${
-              tabActual === "FACTURAS" ? "bg-[#1B4B73] hover:bg-[#133857] text-white" : ""
-            }`}
+            className={`h-11 rounded-xl px-4 font-bold gap-2 ${tabActual !== "SUPLIDORES" ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
           >
             <Receipt className="h-4 w-4" />
-            <span>Facturas Pendientes</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
-              {facturasPendientes.length}
-            </Badge>
+            <span>Facturas</span>
           </Button>
-
-          <Button
-            variant={tabActual === "POR_SUPLIDOR" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setTabActual("POR_SUPLIDOR")}
-            className={`font-semibold gap-1.5 cursor-pointer transition-colors ${
-              tabActual === "POR_SUPLIDOR" ? "bg-[#1B4B73] hover:bg-[#133857] text-white" : ""
-            }`}
-          >
-            <Users className="h-4 w-4" />
-            <span>Por Suplidor</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
-              {suplidoresConDeuda.length}
-            </Badge>
-          </Button>
-
           <Button
             variant={tabActual === "SUPLIDORES" ? "default" : "ghost"}
-            size="sm"
             onClick={() => setTabActual("SUPLIDORES")}
-            className={`font-semibold gap-1.5 cursor-pointer transition-colors ${
-              tabActual === "SUPLIDORES" ? "bg-[#1B4B73] hover:bg-[#133857] text-white" : ""
-            }`}
+            className={`h-11 rounded-xl px-4 font-bold gap-2 ${tabActual === "SUPLIDORES" ? "bg-primary text-primary-foreground hover:bg-primary/90" : ""}`}
           >
             <Building2 className="h-4 w-4" />
-            <span>Directorio de Suplidores</span>
-            <Badge variant="secondary" className="ml-1 text-xs">
-              {suplidores.length}
-            </Badge>
-          </Button>
-
-          <Button
-            variant={tabActual === "SALDADAS" ? "default" : "ghost"}
-            size="sm"
-            onClick={() => setTabActual("SALDADAS")}
-            className={`font-semibold gap-1.5 cursor-pointer transition-colors ${
-              tabActual === "SALDADAS" ? "bg-[#1B4B73] hover:bg-[#133857] text-white" : ""
-            }`}
-          >
-            <CheckCircle2 className="h-4 w-4" />
-            <span>Facturas Saldadas</span>
+            <span>Suplidores</span>
           </Button>
         </div>
-
-        {/* Barra de Filtros y Búsqueda perfectamente alineada a la derecha con fondo blanco */}
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <div className="relative flex-1 md:w-64">
+        {tabActual !== "SUPLIDORES" && (
+          <div className="flex flex-wrap items-center gap-1">
+            {[
+              { value: "FACTURAS", label: "Pendientes", count: facturasPendientes.length },
+              { value: "POR_SUPLIDOR", label: "Por suplidor", count: suplidoresConDeuda.length },
+              { value: "SALDADAS", label: "Saldadas", count: facturasSaldadas.length },
+            ].map((view) => (
+              <Button
+                key={view.value}
+                type="button"
+                variant="ghost"
+                onClick={() => setTabActual(view.value as typeof tabActual)}
+                className={`h-10 rounded-xl px-3.5 font-bold transition-colors ${
+                  tabActual === view.value
+                    ? "bg-primary text-primary-foreground shadow-xs hover:bg-primary/90 hover:text-primary-foreground"
+                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                }`}
+              >
+                {view.label}
+                <Badge
+                  variant="secondary"
+                  className={`ml-1.5 min-w-7 justify-center border-0 ${
+                    tabActual === view.value
+                      ? "bg-white/20 text-white hover:bg-white/20"
+                      : "bg-amber-400 text-primary hover:bg-amber-400"
+                  }`}
+                >
+                  {view.count}
+                </Badge>
+              </Button>
+            ))}
+          </div>
+        )}
+        </div>
+        <div className="mt-3 flex flex-col gap-2 border-t border-slate-200 pt-3 sm:flex-row sm:items-center dark:border-slate-800">
+          <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
               placeholder="Buscar suplidor, NCF o factura..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="pl-9 pr-7 text-sm h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
+              className="h-11 rounded-xl bg-white pl-9 pr-9 text-sm dark:bg-slate-900"
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch("")}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer p-0.5"
+                aria-label="Limpiar búsqueda"
+                className="absolute right-1.5 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-lg text-slate-400 hover:bg-muted hover:text-foreground"
               >
                 <X className="h-3.5 w-3.5" />
               </button>
@@ -868,7 +829,7 @@ function CuentasPorPagarPage() {
 
           {tabActual === "FACTURAS" && (
             <Select value={filtroMora} onValueChange={setFiltroMora}>
-              <SelectTrigger className="w-40 h-10 text-xs rounded-xl bg-white dark:bg-slate-900 border border-slate-300 dark:border-slate-700 text-slate-900 dark:text-slate-100 shadow-2xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20">
+              <SelectTrigger className="h-11 w-full rounded-xl bg-white text-sm sm:w-48 dark:bg-slate-900">
                 <SelectValue placeholder="Estado Mora" />
               </SelectTrigger>
               <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
@@ -881,31 +842,42 @@ function CuentasPorPagarPage() {
             </Select>
           )}
         </div>
-      </div>
+      </Card>
 
       {/* CONTENIDO TAB 1: FACTURAS PENDIENTES */}
       {tabActual === "FACTURAS" && (
         <div className="space-y-4">
+          <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-foreground">Facturas por pagar</h2>
+              <p className="text-sm text-muted-foreground">Prioriza vencimientos y registra pagos sin perder el contexto.</p>
+            </div>
+            <span className="text-sm font-semibold text-muted-foreground">{facturasFiltradas.length} resultado(s)</span>
+          </div>
           {facturasFiltradas.length === 0 ? (
             <Card className="p-12 text-center text-muted-foreground border-dashed">
               <Receipt className="h-10 w-10 mx-auto text-slate-400 mb-3" />
               <p className="text-base font-medium">No hay facturas pendientes con estos filtros.</p>
-              <p className="text-xs mt-1">¡Excelente! Tu lavandería está al día con sus proveedores.</p>
+              <p className="text-xs mt-1">Prueba limpiando la búsqueda o cambiando el filtro de estado.</p>
             </Card>
           ) : (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs bg-card">
+            <div className="overflow-hidden rounded-3xl border border-slate-200 bg-card shadow-xs dark:border-slate-800">
               <div className="overflow-x-auto">
-                <table className="w-full text-left text-sm">
+                <table className="w-full min-w-[900px] table-fixed text-left text-sm">
+                  <colgroup>
+                    <col className="w-[25%]" />
+                    <col className="w-[18%]" />
+                    <col className="w-[19%]" />
+                    <col className="w-[17%]" />
+                    <col className="w-[21%]" />
+                  </colgroup>
                   <thead className="bg-muted/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                     <tr>
-                      <th className="py-3 px-4">Suplidor / RNC</th>
-                      <th className="py-3 px-4">Factura &amp; NCF</th>
-                      <th className="py-3 px-4">Emisión / Vence</th>
-                      <th className="py-3 px-4">Estado Mora</th>
-                      <th className="py-3 px-4 text-right">Total Factura</th>
-                      <th className="py-3 px-4 text-right">Abonado</th>
-                      <th className="py-3 px-4 text-right">Saldo Pendiente</th>
-                      <th className="py-3 px-4 text-center">Acciones</th>
+                      <th className="px-4 py-3">Suplidor</th>
+                      <th className="px-4 py-3">Factura</th>
+                      <th className="px-4 py-3">Vencimiento y estado</th>
+                      <th className="px-4 py-3 text-right">Balance</th>
+                      <th className="px-4 py-3 text-center">Acciones</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
@@ -915,68 +887,70 @@ function CuentasPorPagarPage() {
 
                       return (
                         <tr key={f.id} className="hover:bg-muted/30 transition-colors">
-                          <td className="py-3 px-4 font-medium">
-                            <div className="text-foreground font-semibold">
+                          <td className="px-4 py-3.5 align-middle font-medium">
+                            <div className="truncate font-bold text-foreground">
                               {f.suplidor?.nombre_comercial || "Suplidor"}
                             </div>
-                            <div className="text-xs text-muted-foreground flex items-center gap-1 mt-0.5">
-                              <span>RNC: {f.suplidor?.rnc_cedula || "N/D"}</span>
-                              <span>•</span>
-                              <span className="capitalize">{f.categoria_gasto}</span>
+                            <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+                              <span className="whitespace-nowrap tabular-nums">RNC: {f.suplidor?.rnc_cedula || "N/D"}</span>
+                              <span className="truncate rounded-md bg-muted px-1.5 py-0.5 font-semibold capitalize text-foreground/70">
+                                {f.categoria_gasto}
+                              </span>
                             </div>
                           </td>
 
-                          <td className="py-3 px-4">
+                          <td className="px-4 py-3.5 align-middle">
                             <div className="font-bold text-foreground tabular-nums">
                               #{f.numero_factura}
                             </div>
                             {f.ncf && (
-                              <div className="text-xs font-semibold text-blue-600 dark:text-blue-400 tabular-nums">
-                                {f.ncf}
+                              <div className="text-xs font-semibold text-primary tabular-nums">
+                                NCF: {f.ncf}
                               </div>
                             )}
+                            <div className="mt-1 text-xs text-muted-foreground tabular-nums">Emitida: {formatFechaDMY(f.fecha_emision)}</div>
                           </td>
 
-                          <td className="py-3 px-4 text-xs">
-                            <div className="text-muted-foreground">Emisión: {formatFechaDMY(f.fecha_emision)}</div>
-                            <div className="font-medium text-foreground mt-0.5 flex items-center gap-1">
-                              <Calendar className="h-3 w-3 text-slate-400" />
-                              Vence: {formatFechaDMY(f.fecha_vencimiento)}
+                          <td className="px-4 py-3.5 align-middle text-xs">
+                            <div className="flex items-center gap-1.5 whitespace-nowrap font-bold text-foreground">
+                              <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
+                              {formatFechaDMY(f.fecha_vencimiento)}
+                            </div>
+                            <div className="mt-1.5 flex items-center gap-2">
+                              <Badge
+                                variant="outline"
+                                className={`gap-1.5 px-2 py-0.5 text-xs font-semibold ${cfg.color}`}
+                              >
+                                <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
+                                {cfg.label}
+                              </Badge>
+                              {(f.dias_vencida || 0) > 0 ? (
+                                <span className="whitespace-nowrap text-[11px] font-semibold text-rose-500">
+                                  +{f.dias_vencida} días
+                                </span>
+                              ) : (
+                                <span className="whitespace-nowrap text-[11px] text-muted-foreground">
+                                  Plazo {f.plazo_dias} días
+                                </span>
+                              )}
                             </div>
                           </td>
 
-                          <td className="py-3 px-4">
-                            <Badge
-                              variant="outline"
-                              className={`gap-1.5 font-semibold text-xs py-0.5 px-2 ${cfg.color}`}
-                            >
-                              <span className={`h-1.5 w-1.5 rounded-full ${cfg.dot}`} />
-                              {cfg.label}
-                            </Badge>
-                            {(f.dias_vencida || 0) > 0 && (
-                              <div className="text-[11px] text-rose-500 font-semibold mt-0.5">
-                                +{f.dias_vencida} días vencida
-                              </div>
-                            )}
+                          <td className="px-4 py-3.5 text-right align-middle">
+                            <div className="text-base font-black text-foreground tabular-nums">{formatRD(f.saldo_pendiente)}</div>
+                            <div className="mt-1 whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+                              Total {formatRD(f.total)}
+                            </div>
+                            <div className="whitespace-nowrap text-[11px] text-muted-foreground tabular-nums">
+                              Pagado {formatRD(f.monto_pagado)}
+                            </div>
                           </td>
 
-                          <td className="py-3 px-4 text-right font-medium text-muted-foreground">
-                            {formatRD(f.total)}
-                          </td>
-
-                          <td className="py-3 px-4 text-right font-medium text-emerald-600 dark:text-emerald-400">
-                            {formatRD(f.monto_pagado)}
-                          </td>
-
-                          <td className="py-3 px-4 text-right font-bold text-foreground text-base">
-                            {formatRD(f.saldo_pendiente)}
-                          </td>
-
-                          <td className="py-3 px-4 text-center">
-                            <div className="flex items-center justify-center gap-1.5">
+                          <td className="px-4 py-3.5 text-center align-middle">
+                            <div className="flex items-center justify-end gap-1">
                               <Button
                                 size="sm"
-                                className="h-8 gap-1 bg-emerald-600 hover:bg-emerald-700 text-white font-medium text-xs px-2.5"
+                                className="h-9 gap-1.5 whitespace-nowrap rounded-xl bg-primary px-3 font-bold text-primary-foreground hover:bg-primary/90"
                                 onClick={() => {
                                   setFacturaSeleccionada(f);
                                   setAbonoForm((prev) => ({
@@ -987,13 +961,13 @@ function CuentasPorPagarPage() {
                                 }}
                               >
                                 <Banknote className="h-3.5 w-3.5" />
-                                <span>Abonar</span>
+                                <span>Registrar pago</span>
                               </Button>
 
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-slate-500 hover:text-foreground"
+                                className="h-9 w-9 shrink-0 rounded-xl text-slate-500 hover:bg-muted hover:text-foreground"
                                 title="Ver Historial de Abonos"
                                 onClick={() => {
                                   setFacturaSeleccionada(f);
@@ -1006,7 +980,7 @@ function CuentasPorPagarPage() {
                               <Button
                                 size="icon"
                                 variant="ghost"
-                                className="h-8 w-8 text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
+                                className="h-9 w-9 shrink-0 rounded-xl text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40"
                                 title="Eliminar Factura"
                                 onClick={() => handleEliminarFactura(f)}
                               >
@@ -1144,72 +1118,74 @@ function CuentasPorPagarPage() {
       {/* CONTENIDO TAB 3: DIRECTORIO DE SUPLIDORES */}
       {tabActual === "SUPLIDORES" && (
         <div className="space-y-4">
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-semibold uppercase tracking-wider text-muted-foreground">
-              Catálogo de Proveedores Registrados
-            </h3>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <h2 className="text-xl font-black text-foreground">Directorio de suplidores</h2>
+              <p className="text-sm text-muted-foreground">Consulta sus condiciones de crédito, contacto y deuda activa.</p>
+            </div>
             <Button
-              size="sm"
               onClick={() => setModalSuplidorOpen(true)}
-              className="gap-1.5 font-bold text-xs cursor-pointer bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#d4a300] shadow-xs hover:shadow transition-all active:scale-95"
+              className="h-11 rounded-xl bg-primary px-4 font-bold text-primary-foreground hover:bg-primary/90"
             >
               <Plus className="h-4 w-4" />
-              <span>Nuevo Suplidor</span>
+              <span>Nuevo suplidor</span>
             </Button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            {suplidores.map((s) => (
-              <Card key={s.id} className="p-4 space-y-3 border-slate-200 dark:border-slate-800">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <h4 className="font-bold text-base text-foreground">{s.nombre_comercial}</h4>
-                    {s.razon_social && (
-                      <p className="text-xs text-muted-foreground">{s.razon_social}</p>
-                    )}
-                  </div>
-                  <Badge variant="secondary" className="text-xs font-medium">
-                    {s.dias_credito_default} días crédito
-                  </Badge>
-                </div>
-
-                <div className="space-y-1 text-xs text-muted-foreground">
-                  <div>
-                    <strong className="text-foreground font-medium">RNC/Cédula:</strong>{" "}
-                    {s.rnc_cedula || "N/D"}
-                  </div>
-                  {s.telefono && (
-                    <div className="flex items-center gap-1">
-                      <strong className="text-foreground font-medium">Tel:</strong> {s.telefono}
-                    </div>
-                  )}
-                  {s.direccion && (
-                    <div>
-                      <strong className="text-foreground font-medium">Dirección:</strong> {s.direccion}
-                    </div>
-                  )}
-                  <div>
-                    <strong className="text-foreground font-medium">Insumo:</strong>{" "}
-                    {CATEGORIAS_INSUMO.find((c) => c.value === s.categoria_insumo)?.label || s.categoria_insumo}
-                  </div>
-                </div>
-
-                <div className="pt-2 border-t border-slate-100 dark:border-slate-800 flex justify-between items-center">
-                  <span className="text-xs text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-1">
-                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                    Activo
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 text-xs text-rose-500 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 cursor-pointer"
-                    onClick={() => setSuplidorToDelete(s)}
-                  >
-                    Eliminar
-                  </Button>
-                </div>
-              </Card>
-            ))}
+          <div className="overflow-x-auto rounded-3xl border border-slate-200 bg-card shadow-xs dark:border-slate-800">
+            <table className="w-full min-w-[850px] text-left text-sm">
+              <thead className="border-b border-slate-200 bg-muted/60 text-xs font-bold uppercase tracking-wider text-muted-foreground dark:border-slate-800">
+                <tr>
+                  <th className="px-5 py-3.5">Suplidor</th>
+                  <th className="px-5 py-3.5">Contacto</th>
+                  <th className="px-5 py-3.5">Categoría</th>
+                  <th className="px-5 py-3.5 text-center">Crédito</th>
+                  <th className="px-5 py-3.5 text-right">Deuda activa</th>
+                  <th className="px-5 py-3.5 text-center">Acción</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {suplidores
+                  .filter((s) => {
+                    const q = search.trim().toLowerCase();
+                    return !q || s.nombre_comercial.toLowerCase().includes(q) || s.rnc_cedula?.includes(q) || s.telefono?.includes(q);
+                  })
+                  .map((s) => {
+                    const pendientes = facturasPendientes.filter((f) => f.suplidor_id === s.id);
+                    const deuda = pendientes.reduce((total, f) => total + f.saldo_pendiente, 0);
+                    return (
+                      <tr key={s.id} className="hover:bg-muted/20">
+                        <td className="px-5 py-4">
+                          <div className="font-bold text-foreground">{s.nombre_comercial}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">RNC: {s.rnc_cedula || "N/D"}</div>
+                        </td>
+                        <td className="px-5 py-4">
+                          <div className="font-medium">{s.telefono || "Sin teléfono"}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{s.email || s.direccion || "Sin información adicional"}</div>
+                        </td>
+                        <td className="px-5 py-4 font-medium">{CATEGORIAS_INSUMO.find((c) => c.value === s.categoria_insumo)?.label || s.categoria_insumo}</td>
+                        <td className="px-5 py-4 text-center"><Badge variant="secondary">{s.dias_credito_default} días</Badge></td>
+                        <td className="px-5 py-4 text-right">
+                          <div className="font-black tabular-nums">{formatRD(deuda)}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{pendientes.length} pendiente(s)</div>
+                        </td>
+                        <td className="px-5 py-4 text-center">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            title="Eliminar suplidor"
+                            className="h-10 w-10 rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-600 dark:hover:bg-rose-950/30"
+                            onClick={() => setSuplidorToDelete(s)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -1217,14 +1193,19 @@ function CuentasPorPagarPage() {
       {/* CONTENIDO TAB 4: SALDADAS */}
       {tabActual === "SALDADAS" && (
         <div className="space-y-4">
+          <div>
+            <h2 className="text-xl font-black text-foreground">Facturas saldadas</h2>
+            <p className="text-sm text-muted-foreground">Historial de obligaciones completamente pagadas.</p>
+          </div>
           {facturasFiltradas.length === 0 ? (
             <Card className="p-12 text-center text-muted-foreground border-dashed">
               <CheckCircle2 className="h-10 w-10 mx-auto text-emerald-500 mb-3" />
               <p className="text-base font-medium">No hay facturas saldadas registradas aún.</p>
             </Card>
           ) : (
-            <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs bg-card">
-              <table className="w-full text-left text-sm">
+            <div className="border border-slate-200 dark:border-slate-800 rounded-3xl overflow-hidden shadow-xs bg-card">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[760px] text-left text-sm">
                 <thead className="bg-muted/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Suplidor</th>
@@ -1245,8 +1226,8 @@ function CuentasPorPagarPage() {
                       <td className="py-3 px-4 text-xs text-muted-foreground">
                         {formatFechaDMY(f.fecha_emision)} al {formatFechaDMY(f.fecha_vencimiento)}
                       </td>
-                      <td className="py-3 px-4 text-right font-medium">{formatRD(f.total)}</td>
-                      <td className="py-3 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400">
+                      <td className="py-3 px-4 text-right font-medium tabular-nums">{formatRD(f.total)}</td>
+                      <td className="py-3 px-4 text-right font-bold text-emerald-600 dark:text-emerald-400 tabular-nums">
                         {formatRD(f.monto_pagado)}
                       </td>
                       <td className="py-3 px-4 text-center">
@@ -1258,6 +1239,7 @@ function CuentasPorPagarPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>
