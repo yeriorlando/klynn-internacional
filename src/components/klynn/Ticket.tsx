@@ -424,16 +424,9 @@ export function Ticket({
 
       {/* 3. METADATOS DE LA ORDEN CON ICONOS */}
       <div className="space-y-1 text-[11px] pr-2">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-1.5 min-w-0">
-            <ClipboardList className="h-4 w-4 shrink-0 text-black" />
-            <span className="text-[13px]"><b>Orden No°:</b> <span className="font-black tabular-nums ml-0.5">{orden.numero}</span></span>
-          </div>
-          {orden.es_urgente && (
-            <span className="font-bold text-[9px] bg-black text-white px-1.5 py-0.5 rounded-xs uppercase shrink-0">
-              ★ URGENTE ★
-            </span>
-          )}
+        <div className="flex items-center gap-1.5">
+          <ClipboardList className="h-4 w-4 shrink-0 text-black" />
+          <span className="text-[13px]"><b>Orden No°:</b> <span className="font-black tabular-nums ml-0.5">{orden.numero}</span></span>
         </div>
 
         {orden.nota_credito_ncf || orden.nota_debito_ncf ? (
@@ -900,6 +893,17 @@ export function Ticket({
           </div>
           <span className="font-black uppercase tracking-wide truncate">{orden.estado.replace("_", " ")}</span>
         </div>
+
+        {orden.es_urgente && (
+          <div className="mt-2 py-1.5 px-2 bg-black text-white text-center rounded-xs border border-black">
+            <div className="text-[12px] font-black tracking-wider uppercase leading-tight text-white">
+              ★ PEDIDO EXPRESS ★
+            </div>
+            <div className="text-[9px] font-bold text-white uppercase tracking-wide mt-0.5">
+              Entrega prioritaria garantizada
+            </div>
+          </div>
+        )}
       </div>
 
       {/* CONTROL DE MARBETE (Solo visible en Copia de Caja o Copia de Taller) */}
