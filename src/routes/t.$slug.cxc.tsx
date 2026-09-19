@@ -12,7 +12,7 @@ import { supabase } from "@/lib/supabase";
 import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveTenant, formatDateTimeRD } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
-import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { sendWhatsAppMessage, removerIconosWhatsApp } from "@/lib/whatsapp";
 import { toast } from "sonner";
 import { useCajaAbierta, useOrdenes, useClientes, useMovimientos } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -406,21 +406,44 @@ function CuentasPorCobrarPage() {
       toast.info("No hay conexión a internet para enviar recordatorios de WhatsApp.");
       return;
     }
-    const waConfig = user.tenant.config?.whatsapp;
-    if (!waConfig?.enabled) {
-      toast.error("WhatsApp no está configurado. Actívalo en Configuración."); return;
-    }
     if (!cli.cliente_telefono) {
       toast.error("Este cliente no tiene teléfono registrado."); return;
     }
+
+    const ordenesStr = cli.ordenes.map(o =>
+      `* Orden ${o.numero} (${new Date(o.creado_en).toLocaleDateString("es-DO")}): ${o.items?.map(i => `${i.descripcion} x${i.cantidad}`).join(", ") || "Servicio"} — Saldo: ${formatRD(o.saldo)} (${o.dias_antiguedad} ${o.dias_antiguedad === 1 ? "día" : "días"})`
+    ).join("\n\n");
+    const msg = `Estimado/a *${cli.cliente_nombre}${cli.cliente_apellido ? " " + cli.cliente_apellido : ""}*,\n\nLe contactamos de parte de *${user.tenant.nombre}* para recordarle que tiene un saldo pendiente de pago.\n\n*Detalle de órdenes pendientes:*\n\n${ordenesStr}\n\n*Total adeudado: ${formatRD(cli.total_deuda)}*\nDías de la deuda más antigua: ${cli.dias_max} ${cli.dias_max === 1 ? "día" : "días"}\n\n💳 *¿Deseas pagar por transferencia bancaria o reportar un abono? Responde con la palabra "CUENTA" para enviarte nuestros datos o adjunta tu comprobante por aquí.*\n\n_${user.tenant.nombre}${user.tenant.telefono ? " — " + user.tenant.telefono : ""}_`;
+
+    const waConfig = user.tenant.config?.whatsapp;
+    const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+    const allowManual = (user.tenant.config?.whatsapp_web_manual ?? true) !== false;
+
+    if (!isAutomatedActive) {
+      if (!allowManual) {
+        toast.error("WhatsApp no está configurado ni activado en Configuración.");
+        return;
+      }
+      const cleanPhone = cli.cliente_telefono.replace(/\D/g, "");
+      const normalizedPhone = cleanPhone.length === 10 ? `1${cleanPhone}` : cleanPhone;
+      window.open(`https://wa.me/${normalizedPhone}?text=${encodeURIComponent(removerIconosWhatsApp(msg))}`, "_blank");
+      toast.success(`Abriendo WhatsApp Web con el recordatorio para ${cli.cliente_nombre} 📱`);
+      return;
+    }
+
     setEnviando(cli.cliente_id);
     try {
-      const ordenesStr = cli.ordenes.map(o =>
-        `* Orden ${o.numero} (${new Date(o.creado_en).toLocaleDateString("es-DO")}): ${o.items?.map(i => `${i.descripcion} x${i.cantidad}`).join(", ") || "Servicio"} — Saldo: ${formatRD(o.saldo)} (${o.dias_antiguedad} ${o.dias_antiguedad === 1 ? "día" : "días"})`
-      ).join("\n\n");
-      const msg = `Estimado/a *${cli.cliente_nombre}${cli.cliente_apellido ? " " + cli.cliente_apellido : ""}*,\n\nLe contactamos de parte de *${user.tenant.nombre}* para recordarle que tiene un saldo pendiente de pago.\n\n*Detalle de órdenes pendientes:*\n\n${ordenesStr}\n\n*Total adeudado: ${formatRD(cli.total_deuda)}*\nDías de la deuda más antigua: ${cli.dias_max} ${cli.dias_max === 1 ? "día" : "días"}\n\n💳 *¿Deseas pagar por transferencia bancaria o reportar un abono? Responde con la palabra "CUENTA" para enviarte nuestros datos o adjunta tu comprobante por aquí.*\n\n_${user.tenant.nombre}${user.tenant.telefono ? " — " + user.tenant.telefono : ""}_`;
       const result = await sendWhatsAppMessage(user.tenant, cli.cliente_telefono, { text: msg });
-      if (!result.ok) throw new Error(result.reason || "No se pudo enviar el recordatorio");
+      if (!result.ok) {
+        if (allowManual) {
+          const cleanPhone = cli.cliente_telefono.replace(/\D/g, "");
+          const normalizedPhone = cleanPhone.length === 10 ? `1${cleanPhone}` : cleanPhone;
+          window.open(`https://wa.me/${normalizedPhone}?text=${encodeURIComponent(removerIconosWhatsApp(msg))}`, "_blank");
+          toast.info(`Envío automático falló. Abriendo WhatsApp Web para ${cli.cliente_nombre} 📱`);
+          return;
+        }
+        throw new Error(result.reason || "No se pudo enviar el recordatorio");
+      }
       toast.success(`Recordatorio enviado a ${cli.cliente_nombre} ✅`);
     } catch (e: any) {
       toast.error("Error al enviar: " + e.message);

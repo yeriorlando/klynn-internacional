@@ -256,6 +256,7 @@ export interface TenantConfig {
   ultimo_marbete_secuencia?: number;
   bloqueo_inactividad_minutos?: number;
   descuento_cliente_activo?: boolean;
+  whatsapp_web_manual?: boolean;
 }
 
 export interface WeeklySummaryConfig {
@@ -1126,6 +1127,7 @@ export const DEFAULT_CONFIG: TenantConfig = {
   habilitar_control_marbetes: false,
   bloqueo_inactividad_minutos: 0,
   descuento_cliente_activo: true,
+  whatsapp_web_manual: true,
   whatsapp: {
     enabled: false,
     api_key: "",

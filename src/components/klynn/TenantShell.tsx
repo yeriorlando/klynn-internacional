@@ -2565,14 +2565,20 @@ function UserMenu({ empleado, onLogout, onLock }: { empleado: any; onLogout: () 
           </DropdownMenuItem>
 
           <DropdownMenuItem
-            onSelect={() => toast.info("Tutoriales y guías próximamente 🚀")}
+            onSelect={() =>
+              window.open(
+                "https://docs.klynn.com.do/",
+                "_blank",
+                "noopener,noreferrer",
+              )
+            }
             className="group cursor-pointer gap-2.5 rounded-lg px-2 py-1.5 focus:bg-blue-50 focus:text-slate-950 dark:focus:bg-blue-950/30 dark:focus:text-white"
           >
             <span className="grid h-7.5 w-7.5 shrink-0 place-items-center rounded-lg bg-blue-50 text-blue-600 ring-1 ring-blue-100 transition-colors group-focus:bg-blue-100 dark:bg-blue-950/50 dark:text-blue-400 dark:ring-blue-900">
               <BookOpen className="h-3.5 w-3.5" strokeWidth={2} />
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-xs font-bold leading-tight">Tutoriales y guías</span>
+              <span className="block text-xs font-bold leading-tight">Documentación y guías</span>
               <span className="block text-[9.5px] leading-tight text-slate-500 dark:text-slate-400 truncate mt-0.5">
                 Guías de uso de Klynn
               </span>

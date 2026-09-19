@@ -43,7 +43,8 @@ import {
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
 import { usePlans, useOrdenes, useClientes, useEmpleados, useServicios, useMetasServicios } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
-import { notificarWhatsApp, calcularDiasEnAlmacen } from "@/lib/whatsapp";
+import { notificarWhatsApp, calcularDiasEnAlmacen, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
+import { WhatsAppOfficialIcon, showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -134,6 +135,29 @@ export function ProcesosPage() {
   const [diasAlmacen, setDiasAlmacen] = useState<number>(
     user?.tenant?.config?.dias_almacenamiento_sin_retirar || user?.tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5
   );
+  const [limiteVisiblePorFase, setLimiteVisiblePorFase] = useState<Record<string, number>>({
+    recibida: 50,
+    proceso: 50,
+    lista: 50,
+  });
+
+  const getServiciosDeOrden = (o: Orden): string[] => {
+    const srvSet = new Set<string>();
+    if (Array.isArray(o.servicios)) {
+      o.servicios.forEach((s) => {
+        const name = typeof s === "string" ? s.trim() : (s as any)?.nombre?.trim();
+        if (name) srvSet.add(name);
+      });
+    }
+    if (Array.isArray(o.items)) {
+      o.items.forEach((it) => {
+        if (it.servicio_origen && it.servicio_origen.trim()) {
+          srvSet.add(it.servicio_origen.trim());
+        }
+      });
+    }
+    return Array.from(srvSet);
+  };
 
   const handleFiltrarLote = (servicioNombre: string, limite?: number) => {
     setServicioFilter(servicioNombre);
@@ -160,10 +184,7 @@ export function ProcesosPage() {
       if (o.estado === "ENTREGADA" || o.estado === "ANULADA" || o.estado === "PAGADA") {
         return false;
       }
-      const tieneArrayServicios = Array.isArray(o.servicios) && o.servicios.length > 0;
-      const tieneItemServicios =
-        Array.isArray(o.items) && o.items.some((it) => !!it.servicio_origen);
-      return tieneArrayServicios || tieneItemServicios;
+      return true;
     });
   }, [rawOrdenes]);
 
@@ -354,107 +375,82 @@ export function ProcesosPage() {
     }
   };
 
-  const showManualWhatsAppToast = (cli: Cliente, numLimpio: string) => {
-    toast.custom(
-      (t) => (
-        <motion.div
-          initial={{ opacity: 0, y: 12, scale: 0.96 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -8, scale: 0.96 }}
-          transition={{ duration: 0.2, ease: "easeOut" }}
-          className="flex items-center gap-3 rounded-full bg-white dark:bg-slate-900 text-slate-900 dark:text-white py-2 px-3.5 shadow-xl border border-slate-200/90 dark:border-slate-800 shrink-0 whitespace-nowrap"
-        >
-          {/* Icono de WhatsApp en verde */}
-          <div className="h-7 w-7 rounded-full bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0">
-            <MessageCircle className="h-4 w-4 text-emerald-600 dark:text-emerald-400 fill-emerald-600/20" />
-          </div>
-
-          {/* Contenido en una sola línea */}
-          <div className="flex items-center gap-1.5 text-xs font-bold whitespace-nowrap">
-            <span className="text-slate-900 dark:text-white">¡Orden {numLimpio} lista!</span>
-            <span className="text-slate-400 font-normal">•</span>
-            <span className="text-slate-600 dark:text-slate-300 font-medium">
-              Notificar a{" "}
-              <strong className="font-bold text-slate-900 dark:text-white">
-                {[cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") ||
-                  "Consumidor Final"}
-              </strong>
-            </span>
-          </div>
-
-          {/* Botones de acción */}
-          <div className="flex items-center gap-1 shrink-0 ml-1">
-            <Button
-              size="sm"
-              className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-full px-3 h-7 text-xs shadow-2xs active:scale-95 transition-all cursor-pointer flex items-center gap-1 border-none"
-              onClick={() => {
-                toast.dismiss(t);
-                const msg = encodeURIComponent(
-                  `Hola ${cli.nombre} 👋, tu orden ${numLimpio} en ${user?.tenant?.nombre || "la lavandería"} ya está LISTA para retirar. ¡Te esperamos!`,
-                );
-                window.open(
-                  `https://wa.me/${cli.telefono.replace(/\D/g, "")}?text=${msg}`,
-                  "_blank",
-                );
-              }}
-            >
-              <MessageCircle className="h-3 w-3 fill-white text-white" />
-              <span>Enviar WA</span>
-            </Button>
-
-            <button
-              type="button"
-              onClick={() => toast.dismiss(t)}
-              className="h-6 w-6 rounded-full text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 hover:bg-slate-100 dark:hover:bg-slate-800 flex items-center justify-center text-xs font-bold transition-colors cursor-pointer ml-0.5"
-              title="Cerrar aviso"
-            >
-              ✕
-            </button>
-          </div>
-        </motion.div>
-      ),
-      {
-        duration: 9000,
-        unstyled: true,
-      },
-    );
+  const showManualWhatsAppToast = async (cli: Cliente, numLimpio: string, ordenObj?: Orden) => {
+    let msg = `Hola ${cli.nombre} 👋, tu orden ${numLimpio} en ${user?.tenant?.nombre || "la lavandería"} ya está LISTA para retirar. ¡Te esperamos!`;
+    if (user?.tenant && ordenObj) {
+      try {
+        msg = await construirMensajeWhatsAppPredeterminado(user.tenant, cli, ordenObj, "lista");
+      } catch (e) {
+        console.error("Error al construir plantilla whatsapp:", e);
+      }
+    }
+    const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre || "Consumidor Final";
+    showWhatsAppManualToast({
+      title: "¡Orden lista!",
+      actionText: "Notificar a",
+      clienteNombre,
+      telefono: cli.telefono,
+      mensaje: msg,
+    });
   };
 
   // Avanzar una orden a la siguiente fase operativa en 3 columnas
   const handleAvanzarFase = async (orden: Orden, faseActualId: string) => {
+    let siguienteFaseId = "recibida";
+    let nuevoEstado: EstadoOrden = "EN_PROCESO";
+    let etiquetaUbicacion = orden.ubicacion_ropa || "";
+
+    if (faseActualId === "recibida") {
+      siguienteFaseId = "proceso";
+      nuevoEstado = "EN_PROCESO";
+      etiquetaUbicacion = "Área de Trabajo";
+    } else if (faseActualId === "proceso") {
+      siguienteFaseId = "lista";
+      nuevoEstado = "LISTA";
+      etiquetaUbicacion = "Mostrador";
+    }
+
+    const nomFase =
+      FASES_OPERATIVAS.find((f) => f.id === siguienteFaseId)?.titulo || siguienteFaseId;
+    const numLimpio = orden.numero.replace(/^#/, "");
+    const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+
+    const ordenActualizada: Orden = {
+      ...orden,
+      estado: nuevoEstado,
+      ubicacion_ropa: etiquetaUbicacion,
+    };
+
+    // 1. ACTUALIZACIÓN INSTANTÁNEA OPTIMISTA (0 ms de espera en pantalla)
+    queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (old) => {
+      if (!old) return [ordenActualizada];
+      return old.map((item) => (item.id === orden.id ? ordenActualizada : item));
+    });
+    queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) => {
+      if (!old) return old;
+      return old.map((item) => (item.id === orden.id ? ordenActualizada : item));
+    });
+
+    toast.success(`Orden ${numLimpio} movida a "${nomFase}"${isOffline ? " (guardada en local)" : ""}`);
+
     setProcessingId(orden.id);
     try {
-      let siguienteFaseId = "recibida";
-      let nuevoEstado: EstadoOrden = "EN_PROCESO";
-      let etiquetaUbicacion = orden.ubicacion_ropa || "";
-
-      if (faseActualId === "recibida") {
-        siguienteFaseId = "proceso";
-        nuevoEstado = "EN_PROCESO";
-        etiquetaUbicacion = "Área de Trabajo";
-      } else if (faseActualId === "proceso") {
-        siguienteFaseId = "lista";
-        nuevoEstado = "LISTA";
-        etiquetaUbicacion = "Mostrador";
-      }
-
       await updateOrdenEstado(orden.id, nuevoEstado, etiquetaUbicacion);
-      queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
-
-      const nomFase =
-        FASES_OPERATIVAS.find((f) => f.id === siguienteFaseId)?.titulo || siguienteFaseId;
-      const numLimpio = orden.numero.replace(/^#/, "");
-      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-      toast.success(`Orden ${numLimpio} movida a "${nomFase}"${isOffline ? " (guardada en local)" : ""}`);
 
       if (nuevoEstado === "LISTA") {
         const cli = clienteMap.get(orden.cliente_id);
-        if (cli?.telefono) {
+        const isConsumidorFinal = !cli || 
+          (cli.nombre === "Consumidor" && cli.apellido === "Final") ||
+          (cli.id && cli.id.includes("f000"));
+        const rawPhone = (cli?.telefono || "").replace(/---/g, "").trim().replace(/\D/g, "");
+        const hasClientPhone = rawPhone.length >= 10;
+
+        if (!isConsumidorFinal && hasClientPhone && cli) {
           if (isOffline) {
             toast.info(`Orden ${numLimpio} lista (guardada en local). Notificación de WhatsApp pendiente.`);
           } else if (autoSendWhatsApp && user?.tenant) {
             toast.loading("Enviando WhatsApp a " + cli.nombre + "...", { id: `wa-${orden.id}` });
-            const res = await notificarWhatsApp(user.tenant, cli, orden, "lista");
+            const res = await notificarWhatsApp(user.tenant, cli, ordenActualizada, "lista");
             toast.dismiss(`wa-${orden.id}`);
 
             if (res.ok) {
@@ -466,15 +462,24 @@ export function ProcesosPage() {
               toast.error(`WhatsApp no enviado: ${res.reason || "Error de API"}`, {
                 description: "Puedes enviarlo manualmente a continuación.",
               });
-              showManualWhatsAppToast(cli, numLimpio);
+              showManualWhatsAppToast(cli, numLimpio, ordenActualizada);
             }
           } else {
-            showManualWhatsAppToast(cli, numLimpio);
+            showManualWhatsAppToast(cli, numLimpio, ordenActualizada);
           }
         }
       }
     } catch (err) {
       console.error("Error al mover fase:", err);
+      // Revertir optimismo en caso de error
+      queryClient.setQueryData<Orden[]>(["ordenes", tenantId], (old) => {
+        if (!old) return [orden];
+        return old.map((item) => (item.id === orden.id ? orden : item));
+      });
+      queryClient.setQueriesData({ queryKey: ["ordenes"] }, (old: Orden[] | undefined) => {
+        if (!old) return old;
+        return old.map((item) => (item.id === orden.id ? orden : item));
+      });
       toast.error("No se pudo actualizar el estado de la orden");
     } finally {
       setProcessingId(null);
@@ -859,6 +864,9 @@ export function ProcesosPage() {
         {FASES_OPERATIVAS.map((fase) => {
           const Icon = fase.icon;
           const ordenesEnFase = ordenesFiltradas.filter((o) => getFaseOrden(o) === fase.id);
+          const limite = limiteVisiblePorFase[fase.id] || 50;
+          const ordenesVisibles = ordenesEnFase.slice(0, limite);
+          const ordenesRestantes = Math.max(0, ordenesEnFase.length - ordenesVisibles.length);
 
           return (
             <div
@@ -898,7 +906,7 @@ export function ProcesosPage() {
                       <p className="text-xs font-medium">Sin órdenes en esta fase</p>
                     </div>
                   ) : (
-                    ordenesEnFase.map((orden) => {
+                    ordenesVisibles.map((orden) => {
                       const cliente = clienteMap.get(orden.cliente_id);
                       const clienteNombreCompleto = cliente
                         ? [cliente.nombre, cliente.apellido]
@@ -907,6 +915,7 @@ export function ProcesosPage() {
                         : "Consumidor Final";
                       const isProcessing = processingId === orden.id;
                       const tieneNota = !!orden.notas || orden.items?.some((it) => !!it.notas);
+                      const serviciosDeEstaOrden = getServiciosDeOrden(orden);
 
                       const ubicacionRaw = orden.ubicacion_ropa || fase.etiquetaUbicacion || "";
                       const ubicacionLimpia = ubicacionRaw.replace(
@@ -917,11 +926,10 @@ export function ProcesosPage() {
                       return (
                         <motion.div
                           key={orden.id}
-                          layout
-                          initial={{ opacity: 0, y: 8 }}
+                          initial={{ opacity: 0, y: 6 }}
                           animate={{ opacity: 1, y: 0 }}
                           exit={{ opacity: 0, scale: 0.95 }}
-                          transition={{ duration: 0.2, ease: "easeOut" }}
+                          transition={{ duration: 0.15, ease: "easeOut" }}
                           className={`relative rounded-xl border bg-white dark:bg-slate-900 p-3 shadow-xs transition-all hover:shadow-md ${
                             orden.es_urgente
                               ? "border-rose-400 dark:border-rose-700 ring-2 ring-rose-500/20"
@@ -961,7 +969,7 @@ export function ProcesosPage() {
 
                             <div className="flex items-center gap-1.5 shrink-0">
                               <span className="text-[10px] font-medium text-slate-400 flex items-center gap-1">
-                                <Clock className="h-3 w-3" />
+                                <Clock className="h-3.5 w-3.5" />
                                 {new Date(orden.creado_en).toLocaleTimeString([], {
                                   hour: "2-digit",
                                   minute: "2-digit",
@@ -978,18 +986,43 @@ export function ProcesosPage() {
                             </div>
                           </div>
 
-                          {/* LISTADO COMPLETO DE PRENDAS Y SERVICIOS (SIN TRUNCAR) */}
+                          {/* SERVICIOS DE LA ORDEN */}
+                          {serviciosDeEstaOrden.length > 0 && (
+                            <div className="flex flex-wrap items-center gap-1.5 mb-2.5">
+                              {serviciosDeEstaOrden.map((srv, sIdx) => (
+                                <span
+                                  key={sIdx}
+                                  className="inline-flex items-center gap-1 rounded-md bg-[#1B4B73]/10 dark:bg-sky-950/60 text-[#1B4B73] dark:text-sky-300 border border-[#1B4B73]/25 dark:border-sky-800/60 px-2 py-0.5 text-[10px] font-black uppercase tracking-wider"
+                                >
+                                  <Tag className="h-2.5 w-2.5 text-[#F0B900] stroke-[2.5]" />
+                                  <span>{srv}</span>
+                                </span>
+                              ))}
+                            </div>
+                          )}
+
+                          {/* LISTADO COMPLETO DE PRENDAS Y SERVICIOS */}
                           <div className="space-y-1 mb-3 bg-slate-50 dark:bg-slate-950 p-2 rounded-lg border border-slate-100 dark:border-slate-800 max-h-52 overflow-y-auto">
                             {orden.items.map((it, idx) => (
                               <div
                                 key={idx}
-                                className="flex items-center justify-between text-[11px] py-0.5 border-b last:border-b-0 border-slate-100 dark:border-slate-800/60"
+                                className="flex items-center justify-between text-[11px] py-1 border-b last:border-b-0 border-slate-100 dark:border-slate-800/60 gap-1.5"
                               >
-                                <span className="font-medium text-slate-700 dark:text-slate-300">
-                                  {it.cantidad}x {it.descripcion}
-                                </span>
+                                <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                  <span className="font-bold text-slate-800 dark:text-slate-200 shrink-0">
+                                    {it.cantidad}x
+                                  </span>
+                                  <span className="font-medium text-slate-700 dark:text-slate-300 truncate">
+                                    {it.descripcion.replace(/^↳\s*/, "")}
+                                  </span>
+                                  {it.servicio_origen && (
+                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-sky-100 dark:bg-sky-950 text-sky-800 dark:text-sky-300 border border-sky-200 dark:border-sky-800 shrink-0">
+                                      {it.servicio_origen}
+                                    </span>
+                                  )}
+                                </div>
                                 {it.notas && (
-                                  <span className="text-[9px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5 rounded font-mono truncate max-w-[90px]">
+                                  <span className="text-[9px] bg-amber-100 text-amber-800 dark:bg-amber-900/40 dark:text-amber-300 px-1.5 py-0.5 rounded font-mono truncate max-w-[90px] shrink-0">
                                     {it.notas}
                                   </span>
                                 )}
@@ -1024,7 +1057,7 @@ export function ProcesosPage() {
                                 size="sm"
                                 disabled={isProcessing}
                                 onClick={() => handleAvanzarFase(orden, fase.id)}
-                                className={`h-7 px-2.5 text-[10px] font-bold rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95 shrink-0 ${
+                                className={`h-7 px-2.5 text-[10px] font-bold rounded-lg transition-all shadow-xs flex items-center gap-1 active:scale-95 shrink-0 cursor-pointer ${
                                   fase.id === "recibida"
                                     ? "bg-emerald-600 hover:bg-emerald-700 text-white"
                                     : "bg-rose-600 hover:bg-rose-700 text-white"
@@ -1044,6 +1077,24 @@ export function ProcesosPage() {
                         </motion.div>
                       );
                     })
+                  )}
+                  {ordenesRestantes > 0 && (
+                    <div className="pt-2 pb-1 text-center">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() =>
+                          setLimiteVisiblePorFase((prev) => ({
+                            ...prev,
+                            [fase.id]: (prev[fase.id] || 50) + 50,
+                          }))
+                        }
+                        className="w-full text-xs font-bold rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 h-8 shadow-2xs transition-all cursor-pointer"
+                      >
+                        Mostrar más ({ordenesRestantes} órdenes restantes)
+                      </Button>
+                    </div>
                   )}
                 </AnimatePresence>
               </div>

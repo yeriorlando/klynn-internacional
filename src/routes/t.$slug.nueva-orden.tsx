@@ -139,7 +139,8 @@ import {
   can,
 } from "@/lib/storage";
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
-import { notificarWhatsApp } from "@/lib/whatsapp";
+import { notificarWhatsApp, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
+import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { PlanLimitModal } from "@/components/klynn/PlanLimitModal";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
@@ -2949,31 +2950,99 @@ function getMarbeteColorStyle(colorName?: string) {
       releaseOrderCreation();
       toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
 
-      // Notificación automática de WhatsApp al cliente (Recibo / Ticket digital)
-      // Se difiere unos segundos para permitir que el modal de cobro se cierre fluidamente y e-CF/DGII finalice sin colisiones
-      if (targetCliente && targetCliente.telefono && targetCliente.telefono.trim() !== "" && targetCliente.telefono !== "---") {
+      // Notificación de WhatsApp al cliente (Recibo / Ticket digital)
+      // CONDICIÓN: Solo para clientes registrados con teléfono válido. JAMÁS para Consumidor Final genérico.
+      const isConsumidorFinal = !targetCliente || 
+        (targetCliente.nombre === "Consumidor" && targetCliente.apellido === "Final") ||
+        (targetCliente.id && targetCliente.id.includes("f000"));
+      const rawPhone = (targetCliente?.telefono || "").replace(/---/g, "").trim().replace(/\D/g, "");
+      const hasValidPhone = rawPhone.length >= 10;
+      const esClienteRegistradoConTelefono = !isConsumidorFinal && hasValidPhone && Boolean(targetCliente);
+
+      if (esClienteRegistradoConTelefono && targetCliente) {
         const montoRecibido = recibido > 0 ? recibido : pagado;
         const tenantSnapshot = { ...tenant };
         const clienteSnapshot = { ...targetCliente };
         const ordenSnapshot = { ...ordenActualizada };
+        const waConfig = tenant.config?.whatsapp;
+        const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+        const allowManual = (tenant.config?.whatsapp_web_manual ?? DEFAULT_CONFIG.whatsapp_web_manual ?? true) !== false;
+        const clienteNombre = [clienteSnapshot.nombre, clienteSnapshot.apellido].filter((x) => x && x !== "null").join(" ") || clienteSnapshot.nombre;
 
-        setTimeout(() => {
-          notificarWhatsApp(
-            tenantSnapshot,
-            clienteSnapshot,
-            ordenSnapshot,
-            "creada",
-            montoRecibido
-          ).then((res) => {
-            if (res.ok) {
-              toast.success("Recibo digital enviado por WhatsApp al cliente 📱");
-            } else if (res.reason && !res.reason.includes("desactivad") && !res.reason.includes("deshabilitad")) {
-              console.warn("WhatsApp no enviado:", res.reason);
+        if (isAutomatedActive) {
+          setTimeout(() => {
+            notificarWhatsApp(
+              tenantSnapshot,
+              clienteSnapshot,
+              ordenSnapshot,
+              "creada",
+              montoRecibido
+            ).then(async (res) => {
+              if (res.ok) {
+                toast.success("Recibo digital enviado por WhatsApp al cliente 📱");
+              } else {
+                if (res.reason && !res.reason.includes("desactivad") && !res.reason.includes("deshabilitad")) {
+                  console.warn("WhatsApp automático no enviado:", res.reason);
+                }
+                if (allowManual) {
+                  const receiptMsg = await construirMensajeWhatsAppPredeterminado(
+                    tenantSnapshot,
+                    clienteSnapshot,
+                    ordenSnapshot,
+                    "creada",
+                    montoRecibido
+                  );
+                  showWhatsAppManualToast({
+                    title: "¡Orden creada!",
+                    actionText: "Enviar comprobante a",
+                    clienteNombre,
+                    telefono: clienteSnapshot.telefono,
+                    mensaje: receiptMsg,
+                  });
+                }
+              }
+            }).catch(async (err) => {
+              console.error("Error al notificar por WhatsApp al crear orden:", err);
+              if (allowManual) {
+                const receiptMsg = await construirMensajeWhatsAppPredeterminado(
+                  tenantSnapshot,
+                  clienteSnapshot,
+                  ordenSnapshot,
+                  "creada",
+                  montoRecibido
+                );
+                showWhatsAppManualToast({
+                  title: "¡Orden creada!",
+                  actionText: "Enviar comprobante a",
+                  clienteNombre,
+                  telefono: clienteSnapshot.telefono,
+                  mensaje: receiptMsg,
+                });
+              }
+            });
+          }, 2000);
+        } else if (allowManual) {
+          setTimeout(async () => {
+            try {
+              const receiptMsg = await construirMensajeWhatsAppPredeterminado(
+                tenantSnapshot,
+                clienteSnapshot,
+                ordenSnapshot,
+                "creada",
+                montoRecibido
+              );
+              showWhatsAppManualToast({
+                title: "¡Orden creada!",
+                actionText: "Enviar comprobante a",
+                clienteNombre,
+                telefono: clienteSnapshot.telefono,
+                mensaje: receiptMsg,
+              });
+            } catch (err) {
+              console.error("Error al construir comprobante WhatsApp manual:", err);
             }
-          }).catch((err) => {
-            console.error("Error al notificar por WhatsApp al crear orden:", err);
-          });
-        }, 2500);
+          }, 600);
+        }
       }
 
       // Auto-impresión al cobrar: dispara el diálogo nativo del navegador al instante

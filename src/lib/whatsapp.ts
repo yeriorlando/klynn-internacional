@@ -23,7 +23,7 @@ export type WhatsAppSendResult = {
   data?: any;
 };
 
-function normalizePhoneRD(tel: string): string {
+export function normalizePhoneRD(tel: string): string {
   const d = tel.replace(/\D/g, "");
   if (d.length === 10) return "1" + d; // RD: 1 + 10 dígitos
   return d;
@@ -56,6 +56,30 @@ export function isDummyPhoneNumber(phone: string): boolean {
 export function sanitizeWhatsAppText(text?: string): string {
   if (!text) return "";
   return text.replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F-\u009F]/g, "").trim();
+}
+
+/**
+ * Remueve iconos y emojis del mensaje para enlaces manuales de WhatsApp Web (wa.me)
+ * evitando que los navegadores o WhatsApp Web los corrompan en el carácter de reemplazo ''.
+ */
+export function removerIconosWhatsApp(texto: string): string {
+  if (!texto) return "";
+
+  // 1. Eliminar emojis usando Unicode property escapes y bloques suplementarios
+  let limpio = texto
+    .replace(/\p{Extended_Pictographic}/gu, "")
+    .replace(/[\uFE00-\uFE0F\u200D\u20E3]/g, "")
+    .replace(/[\u{1F300}-\u{1F9FF}\u{1FA00}-\u{1FAFF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}]/gu, "");
+
+  // 2. Limpieza de espaciado residual por línea (espacios iniciales dejados por el emoji y dentro de asteriscos)
+  const lineas = limpio.split("\n").map((linea) => {
+    let l = linea.trimStart();
+    l = l.replace(/^\*\s+/, "*").replace(/\s+\*$/, "*");
+    return l.trimEnd();
+  });
+
+  // 3. Normalizar saltos de línea repetidos
+  return lineas.join("\n").replace(/\n{3,}/g, "\n\n").trim();
 }
 
 /**
@@ -285,42 +309,15 @@ function humanizeDate(dateStr?: string, showTime = true): string {
   return d.toLocaleString("es-DO", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", hour12: true });
 }
 
-export async function notificarWhatsApp(
+export async function construirMensajeWhatsAppPredeterminado(
   tenant: Tenant,
   cliente: Cliente,
   orden: Orden,
   evento: Evento,
   pagoRecibido?: number,
-): Promise<{ ok: boolean; reason?: string }> {
-  if (typeof window !== "undefined" && !navigator.onLine) {
-    return { ok: false, reason: "Sin conexión a internet (modo offline)" };
-  }
-
-  // 1. Verificar Límites del Plan (0 = Ilimitado / Sin restricción)
-  const plan = getTenantPlan(tenant);
-  const currentCount = tenant.whatsapp_sent_month || 0;
-  const limit = plan.limite_whatsapp_mes ?? 0;
-
-  if (limit > 0 && currentCount >= limit) {
-    return { ok: false, reason: `Límite de mensajes alcanzado (${currentCount}/${limit}). Mejore su plan para enviar más.` };
-  }
-
+  sinIconos = false,
+): Promise<string> {
   const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
-  if (!wa?.enabled) return { ok: false, reason: "WhatsApp deshabilitado" };
-  
-  if (!cliente.telefono || cliente.telefono.trim() === "" || cliente.telefono === "---") {
-    return { ok: false, reason: "Cliente sin teléfono registrado" };
-  }
-
-  const flag =
-    evento === "creada" ? (wa.notif_orden_creada !== false) :
-    evento === "lista" ? (wa.notif_orden_lista !== false) :
-    evento === "en_camino" ? true : // Activado por defecto para logística
-    evento === "sin_retirar" ? (wa.notif_orden_sin_retirar !== false) :
-    (wa.notif_orden_entregada === true);
-
-  if (!flag) return { ok: false, reason: "Notificación desactivada en configuración" };
-
   const tpl =
     evento === "creada" ? (wa.plantilla_creada || DEFAULT_CONFIG.whatsapp?.plantilla_creada || "") :
     evento === "lista" ? (wa.plantilla_lista || DEFAULT_CONFIG.whatsapp?.plantilla_lista || "") :
@@ -382,19 +379,16 @@ export async function notificarWhatsApp(
 
   let templatePrepared = tpl;
   if (isElectronic) {
-    // Reemplaza automáticamente NCF por e-NCF si la lavandería tiene facturación electrónica
     templatePrepared = templatePrepared
       .replace(/\*NCF:\*/g, "*e-NCF:*")
       .replace(/\bNCF:/g, "e-NCF:");
   }
 
   if (!orden.ncf) {
-    // Si la orden no tiene NCF, omite las líneas de NCF y vencimiento para no dejar campos vacíos
     templatePrepared = templatePrepared
       .replace(/^[^\n]*\b(NCF|e-NCF):[^\n]*\n?/gim, "")
       .replace(/^[^\n]*\bVencimiento:[^\n]*\n?/gim, "");
   } else if (!orden.ncf_vencimiento) {
-    // Si no hay vencimiento (como en e-CF de consumo), omite la línea de vencimiento vacía
     templatePrepared = templatePrepared.replace(/^[^\n]*\bVencimiento:[^\n]*\n?/gim, "");
   }
 
@@ -405,7 +399,6 @@ export async function notificarWhatsApp(
   const promoAhorro = tieneDescuento ? `\n*¡Te ahorraste ${descMonto} en esta orden!*` : "";
 
   if (tieneDescuento) {
-    // Si la plantilla no incluye explícitamente {descuento} o {promocion}, inyectar antes y después de TOTAL
     if (!templatePrepared.includes("{descuento}") && !templatePrepared.includes("{promocion}")) {
       if (templatePrepared.includes("*TOTAL:*")) {
         templatePrepared = templatePrepared.replace(/([^\n]*\*TOTAL:\*[^\n]*)/, `${promoLinea}$1${promoAhorro}`);
@@ -458,9 +451,9 @@ export async function notificarWhatsApp(
   });
 
   let mensajeFinal = mensaje;
-  
+  const lower = mensaje.toLowerCase();
+
   // Anti-ban & Inbound First: Asegurar que cada mensaje tenga un incentivo de respuesta
-  // Si la plantilla personalizada del usuario no incluye la pregunta interactiva, se inyecta como seguro
   if (evento === "creada") {
     if (!lower.includes("responde")) {
       mensajeFinal += '\n\n📲 *¿Deseas que te avisemos por este mismo chat tan pronto tu ropa esté 100% lista para retirar? Responde "SÍ" para confirmarlo.*';
@@ -494,6 +487,50 @@ export async function notificarWhatsApp(
     mensajeFinal += "\n";
   }
 
+  if (sinIconos) {
+    return removerIconosWhatsApp(mensajeFinal);
+  }
+
+  return mensajeFinal;
+}
+
+export async function notificarWhatsApp(
+  tenant: Tenant,
+  cliente: Cliente,
+  orden: Orden,
+  evento: Evento,
+  pagoRecibido?: number,
+): Promise<{ ok: boolean; reason?: string }> {
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    return { ok: false, reason: "Sin conexión a internet (modo offline)" };
+  }
+
+  // 1. Verificar Límites del Plan (0 = Ilimitado / Sin restricción)
+  const plan = getTenantPlan(tenant);
+  const currentCount = tenant.whatsapp_sent_month || 0;
+  const limit = plan.limite_whatsapp_mes ?? 0;
+
+  if (limit > 0 && currentCount >= limit) {
+    return { ok: false, reason: `Límite de mensajes alcanzado (${currentCount}/${limit}). Mejore su plan para enviar más.` };
+  }
+
+  const wa = tenant.config?.whatsapp ?? DEFAULT_CONFIG.whatsapp!;
+  if (!wa?.enabled) return { ok: false, reason: "WhatsApp deshabilitado" };
+  
+  if (!cliente.telefono || cliente.telefono.trim() === "" || cliente.telefono === "---") {
+    return { ok: false, reason: "Cliente sin teléfono registrado" };
+  }
+
+  const flag =
+    evento === "creada" ? (wa.notif_orden_creada !== false) :
+    evento === "lista" ? (wa.notif_orden_lista !== false) :
+    evento === "en_camino" ? true : // Activado por defecto para logística
+    evento === "sin_retirar" ? (wa.notif_orden_sin_retirar !== false) :
+    (wa.notif_orden_entregada === true);
+
+  if (!flag) return { ok: false, reason: "Notificación desactivada en configuración" };
+
+  const mensajeFinal = await construirMensajeWhatsAppPredeterminado(tenant, cliente, orden, evento, pagoRecibido);
   const phone = normalizePhoneRD(cliente.telefono);
 
   try {

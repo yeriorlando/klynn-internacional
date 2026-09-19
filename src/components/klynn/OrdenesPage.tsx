@@ -2,7 +2,8 @@ import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag, MapPin, Layers, Copy } from "lucide-react";
-import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy } from "@/lib/whatsapp";
+import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
+import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -531,11 +532,52 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         ANULADA: "Orden anulada",
       };
       toast.success(labels[estado]);
-      // Notificar silenciosamente por WhatsApp si aplica
-      if (estado === "LISTA" || estado === "ENTREGADA") {
+      // Notificar por WhatsApp si aplica
+      if (estado === "LISTA") {
+        const cli = clientes.find((c) => c.id === o.cliente_id);
+        const isConsumidorFinal = !cli || 
+          (cli.nombre === "Consumidor" && cli.apellido === "Final") ||
+          (cli.id && cli.id.includes("f000"));
+        const rawPhone = (cli?.telefono || "").replace(/---/g, "").trim().replace(/\D/g, "");
+        const hasClientPhone = rawPhone.length >= 10;
+
+        if (!isConsumidorFinal && hasClientPhone && cli) {
+          const waConfig = tenant.config?.whatsapp;
+          const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+          const allowManual = (tenant.config?.whatsapp_web_manual ?? true) !== false;
+          const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
+
+          if (isAutomatedActive) {
+            notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then(async (res) => {
+              if (res.ok) {
+                toast.success("WhatsApp enviado al cliente ✅");
+              } else if (allowManual) {
+                const msg = await construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista");
+                showWhatsAppManualToast({
+                  title: "¡Orden lista!",
+                  actionText: "Notificar a",
+                  clienteNombre,
+                  telefono: cli.telefono,
+                  mensaje: msg,
+                });
+              }
+            });
+          } else if (allowManual) {
+            construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista").then((msg) => {
+              showWhatsAppManualToast({
+                title: "¡Orden lista!",
+                actionText: "Notificar a",
+                clienteNombre,
+                telefono: cli.telefono,
+                mensaje: msg,
+              });
+            });
+          }
+        }
+      } else if (estado === "ENTREGADA") {
         const cli = clientes.find((c) => c.id === o.cliente_id);
         if (cli) {
-          notificarWhatsApp(tenant, cli, ordenActualizada, estado === "LISTA" ? "lista" : "entregada");
+          notificarWhatsApp(tenant, cli, ordenActualizada, "entregada");
         }
       }
       return true;
@@ -571,10 +613,44 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       
       const cli = clientes.find((c) => c.id === conveyorOrden.cliente_id);
-      if (cli) {
-        notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then((r) => {
-          if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
-        });
+      const isConsumidorFinal = !cli || 
+        (cli.nombre === "Consumidor" && cli.apellido === "Final") ||
+        (cli.id && cli.id.includes("f000"));
+      const rawPhone = (cli?.telefono || "").replace(/---/g, "").trim().replace(/\D/g, "");
+      const hasClientPhone = rawPhone.length >= 10;
+
+      if (!isConsumidorFinal && hasClientPhone && cli) {
+        const waConfig = tenant.config?.whatsapp;
+        const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+        const allowManual = (tenant.config?.whatsapp_web_manual ?? true) !== false;
+        const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
+
+        if (isAutomatedActive) {
+          notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then(async (r) => {
+            if (r.ok) {
+              toast.success("WhatsApp enviado al cliente ✅");
+            } else if (allowManual) {
+              const msg = await construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista");
+              showWhatsAppManualToast({
+                title: "¡Orden lista!",
+                actionText: "Notificar a",
+                clienteNombre,
+                telefono: cli.telefono,
+                mensaje: msg,
+              });
+            }
+          });
+        } else if (allowManual) {
+          construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista").then((msg) => {
+            showWhatsAppManualToast({
+              title: "¡Orden lista!",
+              actionText: "Notificar a",
+              clienteNombre,
+              telefono: cli.telefono,
+              mensaje: msg,
+            });
+          });
+        }
       }
       toast.success("Orden marcada como Lista ✓");
       setConveyorOrden(null);

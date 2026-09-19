@@ -41,6 +41,7 @@ import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Ticket } from "@/components/klynn/Ticket";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
+import { WhatsAppOfficialIcon } from "@/components/klynn/WhatsAppManualToast";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
@@ -1622,6 +1623,26 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                     className="shrink-0"
                     checked={cfg.ticket_imprimir_marquillas_auto || false} 
                     onCheckedChange={(v) => updateCfg({ ticket_imprimir_marquillas_auto: v })} 
+                  />
+                </div>
+
+                <div className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0 pr-2">
+                    <div className="h-9 w-9 rounded-xl bg-[#25D366] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <WhatsAppOfficialIcon className="h-4.5 w-4.5 fill-white" />
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-xs font-bold text-foreground block">Avisos por WhatsApp Web</span>
+                      <p className="text-[11px] text-muted-foreground mt-0.5">Avisos rápidos con 1 clic al crear órdenes o cobrar.</p>
+                    </div>
+                  </div>
+                  <Switch 
+                    className="shrink-0"
+                    checked={cfg.whatsapp_web_manual ?? true} 
+                    onCheckedChange={async (v) => {
+                      updateCfg({ whatsapp_web_manual: v });
+                      await saveCfg({ whatsapp_web_manual: v });
+                    }} 
                   />
                 </div>
               </div>
