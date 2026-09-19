@@ -1,0 +1,13 @@
+{
+  "date": "2026-09-18",
+  "framework": "React 19 + TanStack Start",
+  "styling": "Tailwind CSS 4 with existing semantic tokens",
+  "fonts": ["Geist", "Geist Mono"],
+  "brand": {
+    "primary": "var(--primary)",
+    "secondary": "var(--secondary)"
+  },
+  "dark_mode": true,
+  "motion": "Existing project primitives; restrained for the gastos workbench",
+  "assets": "Existing Lucide icon system; no new decorative media"
+}

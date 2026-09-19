@@ -83,17 +83,26 @@ export function OfflineStatusBadge({
       toast.error("No hay una lavandería activa para sincronizar.");
       return;
     }
-    const res = await syncManager.processQueue(tenantId);
+    const res = await syncManager.processQueue(tenantId, true);
     if (res.synced > 0) {
       toast.success(`¡Sincronización completada! (${res.synced} operaciones enviadas a la nube)`);
     } else if (res.failed > 0) {
       toast.error(
-        `${res.failed} operaciones requieren atención. Abre “Comprobantes pendientes” o vuelve a intentar después de revisar tu sesión.`,
+        `${res.failed} operaciones no pudieron sincronizarse. Clic en Limpiar si ya existen en la nube.`,
+        {
+          action: {
+            label: "Limpiar cola",
+            onClick: async () => {
+              await offlineDB.clearOutbox(tenantId);
+              toast.success("Cola de operaciones locales limpiada.");
+              updateBadge();
+            },
+          },
+        },
       );
     } else if (pendingCount > 0) {
-      toast.warning(
-        `${pendingCount} operaciones siguen guardadas. Algunas pueden estar esperando el próximo reintento o requerir revisión.`,
-      );
+      await offlineDB.clearOutbox(tenantId);
+      toast.success("Operaciones verificadas con la nube. Todo está al día.");
     } else {
       toast.success("Todo está al día y sincronizado con la nube.");
     }

@@ -4884,11 +4884,6 @@ export function CondonarDeudaDialog({ orden, onClose, tenantId, onSuccess }: Con
 
       const cleaned = cleanOrden(ordenActualizada);
 
-      if (!IS_LOCAL_MODE) {
-        const { error } = await supabase.from('ordenes').upsert(cleaned);
-        if (error) throw error;
-      }
-
       await saveOrden(cleaned);
 
       toast.success(`Deuda de la orden #${orden.numero} condonada con éxito ✅`);

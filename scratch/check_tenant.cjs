@@ -1,13 +1,26 @@
-const { createClient } = require('@supabase/supabase-js');
+const fs = require('fs');
+const envFile = fs.readFileSync('.env', 'utf-8');
+const url = envFile.match(/VITE_SUPABASE_URL=(.*)/)[1].trim();
+const key = envFile.match(/SUPABASE_SERVICE_ROLE_KEY=(.*)/)[1].trim();
 
-const supabase = createClient(
-  "https://lqtjwcphidbwiwrnqbac.supabase.co",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImxxdGp3Y3BoaWRid2l3cm5xYmFjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgwMjc4NjUsImV4cCI6MjA5MzYwMzg2NX0.ZX6X1marjaOCaTt9gM2sVN9u07Qp7YmqsDR5sd71DE0"
-);
-
-async function check() {
-  const { data: tenant } = await supabase.from("tenants").select("*").eq("id", "41109a25-9e3f-4c9e-8221-2c0555df9cd8").single();
-  console.log("Tenant data:", tenant);
+async function sql(q) {
+  const res = await fetch(url + '/pg/query', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'apikey': key, 'Authorization': 'Bearer ' + key },
+    body: JSON.stringify({ query: q })
+  });
+  return res.json();
 }
 
-check();
+async function run() {
+  const tenants = await sql("SELECT id, slug, nombre FROM tenants WHERE slug = 'reynita';");
+  console.log('Tenant:', tenants);
+  if (tenants && tenants[0]) {
+    const tid = tenants[0].id;
+    const cats = await sql(`SELECT count(*) FROM gasto_categorias WHERE tenant_id = '${tid}';`);
+    const gastos = await sql(`SELECT count(*) FROM gastos WHERE tenant_id = '${tid}';`);
+    const plantillas = await sql(`SELECT count(*) FROM gasto_plantillas WHERE tenant_id = '${tid}';`);
+    console.log('Counts:', { cats, gastos, plantillas });
+  }
+}
+run();

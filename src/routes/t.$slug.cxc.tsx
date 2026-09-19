@@ -402,6 +402,10 @@ function CuentasPorCobrarPage() {
   }
 
   async function enviarRecordatorio(cli: ClienteDeuda) {
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      toast.info("No hay conexión a internet para enviar recordatorios de WhatsApp.");
+      return;
+    }
     const waConfig = user.tenant.config?.whatsapp;
     if (!waConfig?.enabled) {
       toast.error("WhatsApp no está configurado. Actívalo en Configuración."); return;
@@ -860,6 +864,7 @@ function CuentasPorCobrarPage() {
           tenantId={tenantId}
           tenant={user.tenant}
           cajaAbierta={cajaAbierta}
+          clientes={dbClients}
           queryClient={queryClient}
           onSuccess={() => {
             cargar();
@@ -909,10 +914,11 @@ interface CobrarDeudaClienteDialogProps {
   tenant: any;
   cajaAbierta: any;
   queryClient: any;
+  clientes?: Cliente[];
   onSuccess: () => void;
 }
 
-function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbierta, queryClient, onSuccess }: CobrarDeudaClienteDialogProps) {
+function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbierta, queryClient, clientes, onSuccess }: CobrarDeudaClienteDialogProps) {
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
   const [recibido, setRecibido] = useState<number>(cliente.total_deuda);
   const [loading, setLoading] = useState<boolean>(false);
@@ -956,12 +962,19 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
       const montoAPagar = Math.min(recibido, cliente.total_deuda);
       let restante = montoAPagar;
 
-      // Obtener el cliente full para la facturación fiscal
-      const { data: clienteFull } = await supabase
-        .from("clientes")
-        .select("*")
-        .eq("id", cliente.cliente_id)
-        .single();
+      // Obtener el cliente full para la facturación fiscal (primero en memoria local/prop)
+      const clienteLocal = (clientes || []).find((c) => c.id === cliente.cliente_id);
+      let clienteFull: Cliente | undefined = clienteLocal;
+      if (!clienteFull && (typeof navigator === "undefined" || navigator.onLine)) {
+        try {
+          const { data } = await supabase
+            .from("clientes")
+            .select("*")
+            .eq("id", cliente.cliente_id)
+            .maybeSingle();
+          if (data) clienteFull = data;
+        } catch {}
+      }
 
       const fiscalConfig = await getECFConfig(tenantId);
       const isElectronic = !!fiscalConfig?.is_active;
@@ -1122,7 +1135,8 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
         restante = Number((restante - montoAPagarOrden).toFixed(2));
       }
 
-      toast.success(`Se cobraron RD$${montoAPagar.toFixed(2)} de la deuda de ${cliente.cliente_nombre} ✅`);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      toast.success(`Se cobraron RD$${montoAPagar.toFixed(2)} de la deuda de ${cliente.cliente_nombre}${isOffline ? " (guardado en local)" : ""} ✅`);
       
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });

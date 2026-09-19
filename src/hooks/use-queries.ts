@@ -5,7 +5,8 @@ import {
   getECFConfig, getCajas, getECFDocuments, getPlans, 
   getGlobalConfig, getECFSequences, getMetasServicios,
   getPromociones, getSuplidores, getFacturasCXP, getAbonosCXP,
-  getPeriodosNomina, getDetallesNomina, getAnticiposNomina
+  getPeriodosNomina, getDetallesNomina, getAnticiposNomina,
+  getGastoCategorias, getGastoPlantillas
 } from "@/lib/storage";
 
 export function usePromociones(tenantId: string) {
@@ -69,6 +70,22 @@ export function useGastos(tenantId: string) {
     queryKey: ['gastos', tenantId],
     queryFn: () => getGastos(tenantId),
     enabled: !!tenantId && tenantId !== '__loading__',
+  });
+}
+
+export function useGastoCategorias(tenantId: string) {
+  return useQuery({
+    queryKey: ["gasto-categorias", tenantId],
+    queryFn: () => getGastoCategorias(tenantId),
+    enabled: !!tenantId && tenantId !== "__loading__",
+  });
+}
+
+export function useGastoPlantillas(tenantId: string) {
+  return useQuery({
+    queryKey: ["gasto-plantillas", tenantId],
+    queryFn: () => getGastoPlantillas(tenantId),
+    enabled: !!tenantId && tenantId !== "__loading__",
   });
 }
 
@@ -164,6 +181,8 @@ export function useSuplidores(tenantId: string) {
     queryKey: ['suplidores', tenantId],
     queryFn: () => getSuplidores(tenantId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -172,6 +191,8 @@ export function useFacturasCXP(tenantId: string) {
     queryKey: ['facturas-cxp', tenantId],
     queryFn: () => getFacturasCXP(tenantId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -180,6 +201,8 @@ export function useAbonosCXP(tenantId: string, facturaId?: string) {
     queryKey: ['abonos-cxp', tenantId, facturaId],
     queryFn: () => getAbonosCXP(tenantId, facturaId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -188,6 +211,8 @@ export function useAnticiposNomina(tenantId: string, empleadoId?: string) {
     queryKey: ['anticipos-nomina', tenantId, empleadoId],
     queryFn: () => getAnticiposNomina(tenantId, empleadoId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -196,6 +221,8 @@ export function usePeriodosNomina(tenantId: string) {
     queryKey: ['periodos-nomina', tenantId],
     queryFn: () => getPeriodosNomina(tenantId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -204,6 +231,8 @@ export function useDetallesNomina(tenantId: string, periodoId?: string) {
     queryKey: ['detalles-nomina', tenantId, periodoId],
     queryFn: () => getDetallesNomina(tenantId, periodoId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 60_000,
+    gcTime: 300_000,
   });
 }
 
@@ -222,6 +251,10 @@ export function prefetchTenantData(queryClient: QueryClient, tenantId: string) {
     queryClient.prefetchQuery({ queryKey: ["caja-abierta", tenantId], queryFn: () => getCajaAbierta(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["gastos", tenantId], queryFn: () => getGastos(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["empleados", tenantId], queryFn: () => getEmpleados(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["suplidores", tenantId], queryFn: () => getSuplidores(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["facturas-cxp", tenantId], queryFn: () => getFacturasCXP(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["periodos-nomina", tenantId], queryFn: () => getPeriodosNomina(tenantId) });
+    queryClient.prefetchQuery({ queryKey: ["anticipos-nomina", tenantId], queryFn: () => getAnticiposNomina(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["conversations", tenantId], queryFn: () => getConversations(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["ecf-config", tenantId], queryFn: () => getECFConfig(tenantId) });
     queryClient.prefetchQuery({ queryKey: ["global-config"], queryFn: () => getGlobalConfig() });
@@ -230,7 +263,6 @@ export function prefetchTenantData(queryClient: QueryClient, tenantId: string) {
     console.warn("Aviso en prefetchTenantData:", e);
   }
 }
-
 
 
 

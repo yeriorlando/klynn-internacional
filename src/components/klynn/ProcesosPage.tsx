@@ -208,7 +208,8 @@ export function ProcesosPage() {
         },
       };
       await saveTenant(updatedTenant);
-      toast.success(`Días de almacenamiento actualizados a ${nuevoVal} días`);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      toast.success(`Días de almacenamiento actualizados a ${nuevoVal} días${isOffline ? " (guardado en local)" : ""}`);
     } catch (err) {
       console.error("Error guardando días de almacenamiento:", err);
       toast.error("No se pudo guardar la configuración");
@@ -337,15 +338,19 @@ export function ProcesosPage() {
         },
       };
       await saveTenant(updatedTenant);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      const offlineSuffix = isOffline ? " (guardado en local)" : "";
       toast.success(
         newValue
-          ? "Envío automático por WhatsApp ACTIVADO"
-          : "Envío automático por WhatsApp DESACTIVADO",
+          ? `Envío automático por WhatsApp ACTIVADO${offlineSuffix}`
+          : `Envío automático por WhatsApp DESACTIVADO${offlineSuffix}`,
       );
     } catch (err) {
-      console.error("Error al guardar preferencia de WhatsApp en Supabase:", err);
-      setLocalAutoSend(!newValue);
-      toast.error("No se pudo guardar la preferencia en Supabase");
+      console.error("Error al guardar preferencia de WhatsApp:", err);
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        setLocalAutoSend(!newValue);
+        toast.error("No se pudo guardar la preferencia");
+      }
     }
   };
 
@@ -439,12 +444,15 @@ export function ProcesosPage() {
       const nomFase =
         FASES_OPERATIVAS.find((f) => f.id === siguienteFaseId)?.titulo || siguienteFaseId;
       const numLimpio = orden.numero.replace(/^#/, "");
-      toast.success(`Orden ${numLimpio} movida a "${nomFase}"`);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      toast.success(`Orden ${numLimpio} movida a "${nomFase}"${isOffline ? " (guardada en local)" : ""}`);
 
       if (nuevoEstado === "LISTA") {
         const cli = clienteMap.get(orden.cliente_id);
         if (cli?.telefono) {
-          if (autoSendWhatsApp && user?.tenant) {
+          if (isOffline) {
+            toast.info(`Orden ${numLimpio} lista (guardada en local). Notificación de WhatsApp pendiente.`);
+          } else if (autoSendWhatsApp && user?.tenant) {
             toast.loading("Enviando WhatsApp a " + cli.nombre + "...", { id: `wa-${orden.id}` });
             const res = await notificarWhatsApp(user.tenant, cli, orden, "lista");
             toast.dismiss(`wa-${orden.id}`);

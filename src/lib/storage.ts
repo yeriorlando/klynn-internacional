@@ -650,6 +650,54 @@ export interface Gasto {
   ecf_status?: string;
   ecf_track_id?: string;
   ecf_qr?: string;
+  categoria_id?: string;
+  plantilla_id?: string;
+  suplidor_id?: string;
+  origen?: "OPERATIVO" | "CAJA_CHICA" | "FISCAL_E41";
+  estado?: "REGISTRADO" | "BORRADOR";
+}
+
+export interface SaveGastoResult {
+  synced: boolean;
+  queued: boolean;
+  error?: string;
+  errorCode?: string;
+}
+
+export interface GastoCategoria {
+  id: string;
+  tenant_id: string;
+  nombre: string;
+  icono: string;
+  color: string;
+  activo: boolean;
+  orden: number;
+  creado_en: string;
+  actualizado_en?: string;
+}
+
+export type FrecuenciaGasto = "SEMANAL" | "MENSUAL" | "TRIMESTRAL" | "ANUAL";
+
+export interface GastoPlantilla {
+  id: string;
+  tenant_id: string;
+  nombre: string;
+  descripcion?: string;
+  categoria_id?: string;
+  categoria_nombre: string;
+  suplidor_id?: string;
+  proveedor_nombre?: string;
+  metodo_pago: string;
+  monto_predeterminado?: number;
+  es_recurrente: boolean;
+  frecuencia?: FrecuenciaGasto;
+  dia_vencimiento?: number;
+  proxima_fecha?: string;
+  activo: boolean;
+  usos: number;
+  ultimo_uso_en?: string;
+  creado_en: string;
+  actualizado_en?: string;
 }
 
 export interface CatalogoItem {
@@ -857,6 +905,8 @@ export const KEY = {
   cajas: "lvx:cajas",
   movimientos: "lvx:movimientos",
   gastos: "lvx:gastos",
+  gastos_categorias: "lvx:gastos_categorias",
+  gastos_plantillas: "lvx:gastos_plantillas",
   catalogo: "lvx:catalogo",
   servicios: "lvx:servicios",
   active: "lvx:activeTenant",
@@ -1991,6 +2041,8 @@ export async function deleteTenant(id: string) {
     "movimientos_caja",
     "cajas",
     "gastos",
+    "gasto_plantillas",
+    "gasto_categorias",
     "messages",
     "conversations",
     "notificaciones",
@@ -3874,11 +3926,23 @@ export async function getMovimientos(
   const realId = resolveTenantId(tenant_id);
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<MovimientoCaja[]>(KEY.movimientos, []);
-    return local.filter(
+    const filtered = local.filter(
       (m) =>
         (m.tenant_id === realId || m.tenant_id === tenant_id) &&
         (!caja_id || m.caja_id === caja_id),
     );
+    if (filtered.length > 0) return filtered;
+    try {
+      const idb = await offlineDB.getAll<MovimientoCaja>("movimientos_caja");
+      if (idb && idb.length > 0) {
+        return idb.filter(
+          (m) =>
+            (m.tenant_id === realId || m.tenant_id === tenant_id) &&
+            (!caja_id || m.caja_id === caja_id),
+        );
+      }
+    } catch {}
+    return filtered;
   }
 
   try {
@@ -3999,10 +4063,30 @@ export async function getGastos(tenant_id: string): Promise<Gasto[]> {
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
+      let merged = data as Gasto[];
+
+      // La respuesta remota todavia no contiene las mutaciones que estan en la
+      // bandeja offline. Conservarlas evita que un gasto recien registrado
+      // desaparezca de la tabla mientras Supabase termina de sincronizarlo.
+      try {
+        const pending = (await offlineDB.getOutboxItems(realId))
+          .filter((item) => item.table_name === "gastos" && item.status !== "synced")
+          .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+        const byId = new Map(merged.map((item) => [item.id, item]));
+        for (const operation of pending) {
+          if (operation.action === "DELETE") byId.delete(operation.entity_id);
+          else if (operation.payload?.id)
+            byId.set(operation.entity_id, operation.payload as Gasto);
+        }
+        merged = Array.from(byId.values()).sort(
+          (a, b) => Date.parse(b.fecha) - Date.parse(a.fecha),
+        );
+      } catch {}
+
       const local = read<Gasto[]>(KEY.gastos, []);
       const otherGastos = local.filter((g) => g.tenant_id !== realId && g.tenant_id !== tenant_id);
-      write(KEY.gastos, [...data, ...otherGastos]);
-      return data;
+      write(KEY.gastos, [...merged, ...otherGastos]);
+      return merged;
     }
   } catch (e) {}
 
@@ -4011,7 +4095,7 @@ export async function getGastos(tenant_id: string): Promise<Gasto[]> {
   );
 }
 
-export async function saveGasto(g: Gasto) {
+export async function saveGasto(g: Gasto): Promise<SaveGastoResult> {
   const realId = resolveTenantId(g.tenant_id);
   const gastoToSave = { ...g, tenant_id: realId };
   try {
@@ -4033,13 +4117,18 @@ export async function saveGasto(g: Gasto) {
       payload: gastoToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
-    return;
+    return {
+      synced: false,
+      queued: true,
+      error: "Sin conexion. El gasto quedo pendiente de sincronizacion.",
+    };
   }
 
   try {
     const { error } = await supabase.from("gastos").upsert(gastoToSave);
     if (error) throw error;
-  } catch (err) {
+    return { synced: true, queued: false };
+  } catch (err: any) {
     await offlineDB.addToOutbox({
       id: gastoToSave.id,
       tenant_id: realId,
@@ -4048,6 +4137,12 @@ export async function saveGasto(g: Gasto) {
       payload: gastoToSave,
     });
     window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+    return {
+      synced: false,
+      queued: true,
+      error: err?.message || "Supabase no pudo guardar el gasto.",
+      errorCode: err?.code,
+    };
   }
 }
 
@@ -4063,36 +4158,241 @@ export async function deleteGasto(id: string, tenant_id?: string) {
     );
   try {
     await offlineDB.delete("gastos", id);
+    await offlineDB.removeOutboxForEntity("gastos", id, resolvedTenantId);
   } catch {}
+
+  // Borrar movimientos vinculados en caja
+  try {
+    await supabase.from("movimientos_caja").delete().eq("referencia", id);
+  } catch (e) {}
+
   if (typeof window !== "undefined" && !navigator.onLine) {
     if (resolvedTenantId) {
       await offlineDB.addToOutbox({
-        id,
+        entity_id: id,
         tenant_id: resolvedTenantId,
         table_name: "gastos",
         action: "DELETE",
-        payload: { id },
+        payload: { id, tenant_id: resolvedTenantId },
       });
     }
     return;
   }
+
   try {
-    await supabase.from("movimientos_caja").delete().eq("referencia", id);
-  } catch (e) {}
-  try {
-    const { error } = await supabase.from("gastos").delete().eq("id", id);
+    let q = supabase.from("gastos").delete().eq("id", id);
+    if (resolvedTenantId) q = q.eq("tenant_id", resolvedTenantId);
+    const { error } = await q;
     if (error) throw error;
   } catch (error) {
     if (resolvedTenantId) {
       await offlineDB.addToOutbox({
-        id,
+        entity_id: id,
         tenant_id: resolvedTenantId,
         table_name: "gastos",
         action: "DELETE",
-        payload: { id },
+        payload: { id, tenant_id: resolvedTenantId },
       });
     }
   }
+}
+
+const GASTO_CATEGORIAS_INICIALES = [
+  { nombre: "Suministros", icono: "package", color: "teal" },
+  { nombre: "Servicios básicos", icono: "zap", color: "amber" },
+  { nombre: "Mantenimiento", icono: "wrench", color: "blue" },
+  { nombre: "Alquiler", icono: "building", color: "rose" },
+  { nombre: "Nómina y salarios", icono: "users", color: "indigo" },
+  { nombre: "Transporte", icono: "truck", color: "orange" },
+  { nombre: "Marketing", icono: "megaphone", color: "purple" },
+  { nombre: "Oficina", icono: "file-text", color: "slate" },
+  { nombre: "Otros", icono: "tag", color: "slate" },
+] as const;
+
+function buildInitialGastoCategories(tenantId: string): GastoCategoria[] {
+  const now = new Date().toISOString();
+  return GASTO_CATEGORIAS_INICIALES.map((item, index) => ({
+    id: uid("gcat"),
+    tenant_id: tenantId,
+    nombre: item.nombre,
+    icono: item.icono,
+    color: item.color,
+    activo: true,
+    orden: index,
+    creado_en: now,
+    actualizado_en: now,
+  }));
+}
+
+export async function getGastoCategorias(tenantId: string): Promise<GastoCategoria[]> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<GastoCategoria[]>(KEY.gastos_categorias, []);
+  const local = allLocal.filter((item) => item.tenant_id === realId || item.tenant_id === tenantId);
+
+  if (typeof window !== "undefined" && !navigator.onLine) {
+    if (local.length > 0) return local.sort((a, b) => a.orden - b.orden);
+    const seeded = buildInitialGastoCategories(realId);
+    write(KEY.gastos_categorias, [...allLocal, ...seeded]);
+    for (const item of seeded) {
+      await offlineDB.addToOutbox({
+        entity_id: item.id,
+        tenant_id: realId,
+        table_name: "gasto_categorias",
+        action: "UPSERT",
+        payload: item,
+      });
+    }
+    return seeded;
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("gasto_categorias")
+      .select("*")
+      .eq("tenant_id", realId)
+      .order("orden", { ascending: true });
+    if (error) throw error;
+
+    let remote = (data || []) as GastoCategoria[];
+    if (remote.length === 0) {
+      remote = buildInitialGastoCategories(realId);
+      const { error: seedError } = await supabase.from("gasto_categorias").upsert(remote);
+      if (seedError) throw seedError;
+    }
+
+    const others = allLocal.filter((item) => item.tenant_id !== realId && item.tenant_id !== tenantId);
+    write(KEY.gastos_categorias, [...remote, ...others]);
+    return remote;
+  } catch (error) {
+    console.warn("getGastoCategorias error, using local:", error);
+    if (local.length > 0) return local.sort((a, b) => a.orden - b.orden);
+    const seeded = buildInitialGastoCategories(realId);
+    write(KEY.gastos_categorias, [...allLocal, ...seeded]);
+    return seeded;
+  }
+}
+
+export async function saveGastoCategoria(categoria: GastoCategoria): Promise<void> {
+  const realId = resolveTenantId(categoria.tenant_id);
+  const item = { ...categoria, tenant_id: realId, actualizado_en: new Date().toISOString() };
+  const local = read<GastoCategoria[]>(KEY.gastos_categorias, []);
+  const index = local.findIndex((row) => row.id === item.id);
+  if (index >= 0) local[index] = item;
+  else local.push(item);
+  write(KEY.gastos_categorias, local);
+
+  try {
+    if (typeof window !== "undefined" && !navigator.onLine) throw new Error("offline");
+    const { error } = await supabase.from("gasto_categorias").upsert(item);
+    if (error) throw error;
+  } catch {
+    await offlineDB.addToOutbox({
+      entity_id: item.id,
+      tenant_id: realId,
+      table_name: "gasto_categorias",
+      action: "UPSERT",
+      payload: item,
+    });
+  }
+}
+
+export async function deleteGastoCategoria(id: string, tenantId: string): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<GastoCategoria[]>(KEY.gastos_categorias, []);
+  const next = allLocal.filter((item) => item.id !== id);
+  write(KEY.gastos_categorias, next);
+
+  try {
+    await offlineDB.delete("gasto_categorias", id);
+    await offlineDB.removeOutboxForEntity("gasto_categorias", id, realId);
+  } catch {}
+
+  try {
+    if (typeof window !== "undefined" && !navigator.onLine) throw new Error("offline");
+    const { error } = await supabase.from("gasto_categorias").delete().eq("id", id).eq("tenant_id", realId);
+    if (error) throw error;
+  } catch {
+    await offlineDB.addToOutbox({
+      entity_id: id,
+      tenant_id: realId,
+      table_name: "gasto_categorias",
+      action: "DELETE",
+      payload: { id, tenant_id: realId },
+    });
+  }
+}
+
+export async function getGastoPlantillas(tenantId: string): Promise<GastoPlantilla[]> {
+  const realId = resolveTenantId(tenantId);
+  const allLocal = read<GastoPlantilla[]>(KEY.gastos_plantillas, []);
+  const local = allLocal.filter((item) => item.tenant_id === realId || item.tenant_id === tenantId);
+  if (typeof window !== "undefined" && !navigator.onLine) return local;
+
+  try {
+    const { data, error } = await supabase
+      .from("gasto_plantillas")
+      .select("*")
+      .eq("tenant_id", realId)
+      .order("usos", { ascending: false })
+      .order("nombre", { ascending: true });
+    if (error) throw error;
+    let remote = (data || []) as GastoPlantilla[];
+
+    // Una plantilla pendiente de sincronizacion sigue siendo valida para el
+    // usuario. Fusionarla con la respuesta remota evita que desaparezca justo
+    // despues de usarla o editarla mientras la outbox termina de procesarla.
+    try {
+      const pending = (await offlineDB.getOutboxItems(realId))
+        .filter((item) => item.table_name === "gasto_plantillas" && item.status !== "synced")
+        .sort((a, b) => Date.parse(a.timestamp) - Date.parse(b.timestamp));
+      const byId = new Map(remote.map((item) => [item.id, item]));
+      for (const operation of pending) {
+        if (operation.action === "DELETE") byId.delete(operation.entity_id);
+        else if (operation.payload?.id)
+          byId.set(operation.entity_id, operation.payload as GastoPlantilla);
+      }
+      remote = Array.from(byId.values()).sort(
+        (a, b) => (b.usos || 0) - (a.usos || 0) || a.nombre.localeCompare(b.nombre),
+      );
+    } catch {}
+
+    const others = allLocal.filter((item) => item.tenant_id !== realId && item.tenant_id !== tenantId);
+    write(KEY.gastos_plantillas, [...remote, ...others]);
+    return remote;
+  } catch (error) {
+    console.warn("getGastoPlantillas error, using local:", error);
+    return local;
+  }
+}
+
+export async function saveGastoPlantilla(plantilla: GastoPlantilla): Promise<void> {
+  const realId = resolveTenantId(plantilla.tenant_id);
+  const item = { ...plantilla, tenant_id: realId, actualizado_en: new Date().toISOString() };
+  const local = read<GastoPlantilla[]>(KEY.gastos_plantillas, []);
+  const index = local.findIndex((row) => row.id === item.id);
+  if (index >= 0) local[index] = item;
+  else local.push(item);
+  write(KEY.gastos_plantillas, local);
+
+  try {
+    if (typeof window !== "undefined" && !navigator.onLine) throw new Error("offline");
+    const { error } = await supabase.from("gasto_plantillas").upsert(item);
+    if (error) throw error;
+  } catch {
+    await offlineDB.addToOutbox({
+      entity_id: item.id,
+      tenant_id: realId,
+      table_name: "gasto_plantillas",
+      action: "UPSERT",
+      payload: item,
+    });
+  }
+}
+
+export async function archiveGastoPlantilla(id: string, tenantId: string): Promise<void> {
+  const current = read<GastoPlantilla[]>(KEY.gastos_plantillas, []).find((item) => item.id === id);
+  if (!current) return;
+  await saveGastoPlantilla({ ...current, tenant_id: tenantId, activo: false });
 }
 
 // ============ Catálogo (Supabase) ============
@@ -6710,11 +7010,17 @@ export async function getSuplidores(tenantId: string): Promise<Suplidor[]> {
   }
 
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from("suplidores")
       .select("*")
       .eq("tenant_id", realId)
       .order("nombre_comercial", { ascending: true });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2500),
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
       const mapped: Suplidor[] = data.map((item: any) => ({
@@ -6794,11 +7100,17 @@ export async function getFacturasCXP(tenantId: string): Promise<FacturaCXP[]> {
   }
 
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from("facturas_cxp")
       .select("*, suplidores(*)")
       .eq("tenant_id", realId)
       .order("fecha_vencimiento", { ascending: true });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2500),
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
       const mapped: FacturaCXP[] = data.map((item: any) => ({
@@ -6932,7 +7244,12 @@ export async function getAbonosCXP(tenantId: string, facturaId?: string): Promis
     if (facturaId) {
       query = query.eq("factura_cxp_id", facturaId);
     }
-    const { data, error } = await query.order("creado_en", { ascending: false });
+    const fetchPromise = query.order("creado_en", { ascending: false });
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2500),
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
       const mapped: AbonoFacturaCXP[] = data.map((item: any) => ({
@@ -7076,7 +7393,27 @@ export function calcularTarifaHoraExtra(salarioMensual: number): {
   return { salarioDiario, horaOrdinaria, horaExtra35 };
 }
 
-export async function getAnticiposNomina(tenantId: string, empleadoId?: string): Promise<AnticipoNomina[]> {
+export function calcularValorHoraExtraRD(
+  salarioMensual: number,
+  horasExtras: number = 0,
+  esFeriado: boolean = false
+): { valorHoraNormal: number; valorHoraExtra: number; totalPagarHorasExtras: number } {
+  if (!salarioMensual || salarioMensual <= 0 || !horasExtras || horasExtras <= 0) {
+    return { valorHoraNormal: 0, valorHoraExtra: 0, totalPagarHorasExtras: 0 };
+  }
+  const salarioDiario = salarioMensual / 23.83;
+  const valorHoraNormal = +(salarioDiario / 8).toFixed(2);
+  const factor = esFeriado ? 2.0 : 1.35;
+  const valorHoraExtra = +(valorHoraNormal * factor).toFixed(2);
+  const totalPagarHorasExtras = +(valorHoraExtra * horasExtras).toFixed(2);
+
+  return { valorHoraNormal, valorHoraExtra, totalPagarHorasExtras };
+}
+
+export async function getAnticiposNomina(
+  tenantId: string,
+  empleadoId?: string,
+): Promise<AnticipoNomina[]> {
   const realId = resolveTenantId(tenantId);
   let local = read<AnticipoNomina[]>(KEY.anticipos_nomina, []).filter(
     (a) => a.tenant_id === realId || a.tenant_id === tenantId,
@@ -7090,16 +7427,23 @@ export async function getAnticiposNomina(tenantId: string, empleadoId?: string):
   }
 
   try {
-    let query = supabase.from("anticipos_nomina").select("*, empleados(*)").eq("tenant_id", realId);
+    let query = supabase.from("anticipos_nomina").select("*").eq("tenant_id", realId);
     if (empleadoId) {
       query = query.eq("empleado_id", empleadoId);
     }
-    const { data, error } = await query.order("fecha", { ascending: false });
+    const fetchPromise = query.order("fecha", { ascending: false });
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2500),
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
+      const emps = await getEmpleados(realId);
+      const empMap = new Map(emps.map((e) => [e.id, e]));
       const mapped: AnticipoNomina[] = data.map((item: any) => ({
         ...item,
-        empleado: item.empleados || undefined,
+        empleado: empMap.get(item.empleado_id) || item.empleados || undefined,
       }));
       const allLocal = read<AnticipoNomina[]>(KEY.anticipos_nomina, []);
       const others = allLocal.filter(
@@ -7166,11 +7510,17 @@ export async function getPeriodosNomina(tenantId: string): Promise<PeriodoNomina
   }
 
   try {
-    const { data, error } = await supabase
+    const fetchPromise = supabase
       .from("periodos_nomina")
       .select("*")
       .eq("tenant_id", realId)
       .order("fecha_inicio", { ascending: false });
+
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2500),
+    );
+
+    const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
     if (!error && data) {
       const allLocal = read<PeriodoNomina[]>(KEY.periodos_nomina, []);
@@ -7240,16 +7590,21 @@ export async function getDetallesNomina(tenantId: string, periodoId?: string): P
   }
 
   try {
-    let query = supabase.from("detalles_nomina").select("*, empleados(*)").eq("tenant_id", realId);
+    let query = supabase.from("detalles_nomina").select("*").eq("tenant_id", realId);
     if (periodoId) {
       query = query.eq("periodo_id", periodoId);
     }
-    const { data, error } = await query;
+    const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2500),
+    );
+    const { data, error } = await Promise.race([query, timeoutPromise]);
 
     if (!error && data) {
+      const emps = await getEmpleados(realId);
+      const empMap = new Map(emps.map((e) => [e.id, e]));
       const mapped: DetalleNomina[] = data.map((item: any) => ({
         ...item,
-        empleado: item.empleados || undefined,
+        empleado: empMap.get(item.empleado_id) || item.empleados || undefined,
       }));
       const allLocal = read<DetalleNomina[]>(KEY.detalles_nomina, []);
       const others = allLocal.filter(

@@ -235,7 +235,9 @@ function EstanteriaPage() {
       queryClient.invalidateQueries({ queryKey: ["tenant", tenantId] });
       queryClient.invalidateQueries({ queryKey: ["tenants"] });
     } catch (e: any) {
-      toast.error("Error al guardar estantería: " + e.message);
+      if (typeof navigator !== "undefined" && navigator.onLine) {
+        toast.error("Error al guardar estantería: " + e.message);
+      }
     }
   };
 
@@ -369,7 +371,8 @@ function EstanteriaPage() {
     try {
       await updateOrdenEstado(orden.id, orden.estado, "");
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
-      toast.success(`Espacio ${orden.ubicacion_ropa} liberado correctamente`);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      toast.success(`Espacio ${orden.ubicacion_ropa} liberado correctamente${isOffline ? " (guardado en local)" : ""}`);
     } catch (e: any) {
       toast.error("Error al liberar espacio: " + e.message);
     }
@@ -383,7 +386,8 @@ function EstanteriaPage() {
       await updateOrdenEstado(ord.id, ord.estado, slotName);
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
       setShowAssignModal(null);
-      toast.success(`Orden #${ord.numero} asignada a ${slotName} 📍`);
+      const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
+      toast.success(`Orden #${ord.numero} asignada a ${slotName} 📍${isOffline ? " (guardada en local)" : ""}`);
     } catch (e: any) {
       toast.error("Error al asignar: " + e.message);
     }

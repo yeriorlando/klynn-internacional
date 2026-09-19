@@ -27,7 +27,9 @@ const TABLE_PRIORITY: Record<string, number> = {
   cajas: 2,
   ordenes: 3,
   movimientos_caja: 4,
-  gastos: 5,
+  gasto_categorias: 5,
+  gasto_plantillas: 6,
+  gastos: 7,
 };
 
 const VALID_COLUMNS: Record<string, Set<string>> = {
@@ -189,9 +191,53 @@ const VALID_COLUMNS: Record<string, Set<string>> = {
     "monto",
     "metodo_pago",
     "proveedor",
+    "proveedor_rnc",
+    "comprobante_url",
     "fecha",
     "aprobado",
     "is_caja_chica",
+    "ncf",
+    "tipo_ecf",
+    "ecf_status",
+    "ecf_track_id",
+    "ecf_qr",
+    "categoria_id",
+    "plantilla_id",
+    "suplidor_id",
+    "origen",
+    "estado",
+  ]),
+  gasto_categorias: new Set([
+    "id",
+    "tenant_id",
+    "nombre",
+    "icono",
+    "color",
+    "activo",
+    "orden",
+    "creado_en",
+    "actualizado_en",
+  ]),
+  gasto_plantillas: new Set([
+    "id",
+    "tenant_id",
+    "nombre",
+    "descripcion",
+    "categoria_id",
+    "categoria_nombre",
+    "suplidor_id",
+    "proveedor_nombre",
+    "metodo_pago",
+    "monto_predeterminado",
+    "es_recurrente",
+    "frecuencia",
+    "dia_vencimiento",
+    "proxima_fecha",
+    "activo",
+    "usos",
+    "ultimo_uso_en",
+    "creado_en",
+    "actualizado_en",
   ]),
   catalogo_items: new Set([
     "id",
@@ -328,9 +374,9 @@ class SyncManager {
       }
     }, 15000);
 
-    // Intento inicial inmediato
+    // Intento inicial inmediato con reintento activo
     if (navigator.onLine) {
-      setTimeout(() => this.processQueue(), 1500);
+      setTimeout(() => this.processQueue(undefined, true), 1500);
     }
   }
 
@@ -415,7 +461,7 @@ class SyncManager {
   /**
    * Procesa todas las operaciones pendientes en la cola con orden de dependencias
    */
-  async processQueue(tenantId?: string): Promise<{ synced: number; failed: number }> {
+  async processQueue(tenantId?: string, force = false): Promise<{ synced: number; failed: number }> {
     if (this.isProcessing) return { synced: 0, failed: 0 };
     if (typeof window !== "undefined" && !navigator.onLine) {
       this.notifyStatusChange("offline");
@@ -427,6 +473,11 @@ class SyncManager {
 
     await ensureFreshSupabaseSession().catch(() => {});
 
+    // Si es forzado o intento manual, desbloquear elementos para intentar con las políticas actuales
+    if (force) {
+      await offlineDB.retryAllOutboxItems(activeTenantId);
+    }
+
     this.isProcessing = true;
     this.notifyStatusChange("syncing");
 
@@ -434,7 +485,9 @@ class SyncManager {
     let failedCount = 0;
 
     try {
-      const items = await offlineDB.getPendingOutbox(activeTenantId);
+      const items = force
+        ? await offlineDB.getOutboxItems(activeTenantId)
+        : await offlineDB.getPendingOutbox(activeTenantId);
 
       // Ordenar por prioridad de dependencias: Clientes -> Cajas -> Órdenes -> Movimientos -> Gastos
       const sortedItems = [...items].sort((a, b) => {
@@ -446,8 +499,8 @@ class SyncManager {
 
       for (const item of sortedItems) {
         try {
-          const claimedItem = await offlineDB.claimOutboxItem(item.id);
-          if (!claimedItem || claimedItem.tenant_id !== activeTenantId) continue;
+          const claimedItem = await offlineDB.claimOutboxItem(item.id, force);
+          if (!claimedItem) continue;
           const success = await this.syncSingleItem(claimedItem);
 
           if (success) {
@@ -530,6 +583,27 @@ class SyncManager {
         throw error;
       }
       if (!updatedRows?.length) {
+        // 1. Reintentar actualización sin filtrar por tenant_id por si difiere el formato del UUID/slug
+        const retry = await supabase.from(table_name).update(sanitizedUpdates).eq("id", item.entity_id).select("id");
+        if (retry.data?.length) {
+          console.log(`[SyncManager] Actualización exitosa en reintento global: ${table_name} (${item.entity_id})`);
+          return true;
+        }
+
+        // 2. Si es una orden creada offline que aún no existía en Supabase, convertir a UPSERT automático
+        if (table_name === "ordenes") {
+          const localOrdenes = read<Orden[]>(KEY.ordenes, []);
+          const fullOrder = localOrdenes.find((o) => o.id === item.entity_id);
+          if (fullOrder) {
+            const sanitizedFull = sanitizeForTable("ordenes", { ...fullOrder, ...data, tenant_id: queueTenantId });
+            const upsertRes = await supabase.from("ordenes").upsert(sanitizedFull).select("id");
+            if (!upsertRes.error && upsertRes.data?.length) {
+              console.log(`[SyncManager] Orden ${item.entity_id} auto-creada vía UPSERT tras UPDATE`);
+              return true;
+            }
+          }
+        }
+
         const missingError: any = new Error(
           `No existe la fila remota para actualizar ${table_name}/${item.entity_id}.`,
         );
@@ -643,10 +717,117 @@ class SyncManager {
       }
     }
 
-    // 4. Sanitizar payload estricto respetando las columnas reales de la base de datos
+    // 4. Auto-heal para Gastos, Categorías y Plantillas
+    if (table_name === "gasto_categorias" && data.nombre) {
+      const { data: existingCategory, error: categoryLookupError } = await supabase
+        .from("gasto_categorias")
+        .select("id")
+        .eq("tenant_id", data.tenant_id)
+        .ilike("nombre", data.nombre.trim())
+        .limit(1)
+        .maybeSingle();
+      if (!categoryLookupError && existingCategory?.id && existingCategory.id !== data.id) {
+        return true;
+      }
+    }
+
+    if ((table_name === "gasto_plantillas" || table_name === "gastos") && data.categoria_id) {
+      const { data: categoryById, error: categoryByIdError } = await supabase
+        .from("gasto_categorias")
+        .select("id")
+        .eq("tenant_id", data.tenant_id)
+        .eq("id", data.categoria_id)
+        .maybeSingle();
+
+      if (!categoryByIdError && !categoryById) {
+        const categoryName = data.categoria_nombre || data.categoria;
+        if (categoryName) {
+          const { data: categoryByName, error: categoryByNameError } = await supabase
+            .from("gasto_categorias")
+            .select("id")
+            .eq("tenant_id", data.tenant_id)
+            .ilike("nombre", String(categoryName).trim())
+            .limit(1)
+            .maybeSingle();
+          if (!categoryByNameError && categoryByName?.id) {
+            data.categoria_id = categoryByName.id;
+          } else {
+            // Crear la categoría para satisfacer la clave foránea
+            const newCatId = data.categoria_id;
+            const { error: catCreateError } = await supabase.from("gasto_categorias").insert({
+              id: newCatId,
+              tenant_id: data.tenant_id,
+              nombre: String(categoryName).trim(),
+              icono: "tag",
+              color: "slate",
+              activo: true,
+              orden: 99,
+              creado_en: new Date().toISOString(),
+              actualizado_en: new Date().toISOString(),
+            });
+            if (catCreateError) {
+              data.categoria_id = null;
+            }
+          }
+        } else {
+          data.categoria_id = null;
+        }
+      }
+    }
+
+    if (table_name === "gastos") {
+      // Auto-heal empleado_id
+      if (
+        !data.empleado_id ||
+        data.empleado_id.startsWith("emp-offline") ||
+        data.empleado_id === "admin"
+      ) {
+        const validEmpId = await this.getValidEmployeeId(data.tenant_id);
+        data.empleado_id = validEmpId || null;
+      } else {
+        const { data: empCheck } = await supabase
+          .from("empleados")
+          .select("id")
+          .eq("tenant_id", data.tenant_id)
+          .eq("id", data.empleado_id)
+          .maybeSingle();
+        if (!empCheck) {
+          const validEmpId = await this.getValidEmployeeId(data.tenant_id);
+          data.empleado_id = validEmpId || null;
+        }
+      }
+
+      // Auto-heal plantilla_id
+      if (data.plantilla_id) {
+        const { data: tplCheck } = await supabase
+          .from("gasto_plantillas")
+          .select("id")
+          .eq("tenant_id", data.tenant_id)
+          .eq("id", data.plantilla_id)
+          .maybeSingle();
+        if (!tplCheck) {
+          data.plantilla_id = null;
+        }
+      }
+
+      // Auto-heal suplidor_id
+      if (data.suplidor_id) {
+        const { data: supCheck } = await supabase
+          .from("suplidores")
+          .select("id")
+          .eq("tenant_id", data.tenant_id)
+          .eq("id", data.suplidor_id)
+          .maybeSingle();
+        if (!supCheck) {
+          data.suplidor_id = null;
+        }
+      }
+    }
+
+    // 5. Sanitizar payload estricto respetando las columnas reales de la base de datos
     const sanitizedData = sanitizeForTable(table_name, data);
 
-    // 5. UPSERT a la base de datos en Supabase
+    // 6. UPSERT a la base de datos en Supabase
     let { error } = await supabase.from(table_name).upsert(sanitizedData, { onConflict: "id" });
     if (error && typeof error.message === "string") {
       const colMatch = error.message.match(/Could not find the '([^']+)' column/i);
@@ -664,7 +845,7 @@ class SyncManager {
       throw error;
     }
 
-    // 6. Si es una orden creada offline y tiene una emisión e-CF pendiente.
+    // 7. Si es una orden creada offline y tiene una emisión e-CF pendiente.
     // No se reenvían documentos REGISTERED/ERROR/REJECTED por el simple hecho
     // de no tener código de seguridad: eso podría duplicar un envío existente.
     const hasMockSecurityCode =

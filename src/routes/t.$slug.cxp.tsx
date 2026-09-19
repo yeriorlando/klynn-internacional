@@ -24,6 +24,8 @@ import {
   Lock,
   Sparkles,
   Tag,
+  Landmark,
+  MapPin,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -649,7 +651,8 @@ function CuentasPorPagarPage() {
     return abonos.filter((a) => a.factura_cxp_id === facturaSeleccionada.id);
   }, [abonos, facturaSeleccionada]);
 
-  if (loadingSuplidores || loadingFacturas) {
+  const hasLoadedAny = suplidores.length > 0 || facturas.length > 0;
+  if (!hasLoadedAny && (loadingSuplidores || loadingFacturas)) {
     return <GlobalPageLoader />;
   }
 
@@ -1262,145 +1265,188 @@ function CuentasPorPagarPage() {
 
       {/* DIALOG: REGISTRAR ABONO / PAGO */}
       <Dialog open={modalAbonoOpen} onOpenChange={setModalAbonoOpen}>
-        <DialogContent className="sm:max-w-[520px] bg-background text-foreground rounded-2xl p-5 sm:p-6 border-none shadow-2xl">
-          <DialogHeader className="space-y-1 pb-1">
-            <DialogTitle className="flex items-center gap-2 text-foreground font-bold text-base sm:text-lg">
-              <Banknote className="h-5 w-5 text-emerald-600" />
-              <span>Registrar Pago a Factura</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Abono a la factura #{facturaSeleccionada?.numero_factura} de{" "}
-              <strong>{facturaSeleccionada?.suplidor?.nombre_comercial}</strong>
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-lg flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center border border-emerald-500/20 shadow-xs shrink-0">
+                <Banknote className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
+                  Registrar Pago a Factura
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
+                  Abono a factura #{facturaSeleccionada?.numero_factura} · <span className="font-semibold text-foreground">{facturaSeleccionada?.suplidor?.nombre_comercial}</span>
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
 
           {facturaSeleccionada && (
-            <form onSubmit={handleRegistrarAbono} className="space-y-3 pt-1">
-              <div className="p-3 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 shadow-xs text-xs sm:text-sm flex justify-between items-center">
-                <span className="text-muted-foreground font-medium">Saldo Pendiente Actual:</span>
-                <span className="text-lg font-black text-rose-600 dark:text-rose-400">
-                  {formatRD(facturaSeleccionada.saldo_pendiente)}
-                </span>
-              </div>
+            <form onSubmit={handleRegistrarAbono} className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
+                {/* Balance pendiente */}
+                <div className="p-3 bg-rose-50/70 dark:bg-rose-950/30 rounded-2xl border border-rose-200/80 dark:border-rose-900/50 shadow-xs flex justify-between items-center">
+                  <div className="flex items-center gap-2 text-rose-700 dark:text-rose-300">
+                    <Receipt className="h-4 w-4 shrink-0 opacity-75" />
+                    <span className="text-xs sm:text-sm font-semibold">Saldo Pendiente Actual:</span>
+                  </div>
+                  <span className="text-base sm:text-lg font-black text-rose-600 dark:text-rose-400 tabular-nums">
+                    {formatRD(facturaSeleccionada.saldo_pendiente)}
+                  </span>
+                </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="monto_abono" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Monto a Pagar (RD$)*
-                </Label>
-                <PriceInput
-                  id="monto_abono"
-                  value={abonoForm.monto || 0}
-                  onChange={(val) =>
-                    setAbonoForm((prev) => ({ ...prev, monto: val }))
-                  }
-                  placeholder="0.00"
-                  required
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs text-base font-bold tabular-nums focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+                {/* Monto a abonar */}
                 <div className="space-y-1.5">
-                  <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Método de Pago*</Label>
-                  <Select
-                    value={abonoForm.metodo_pago}
-                    onValueChange={(val: any) =>
-                      setAbonoForm((prev) => ({ ...prev, metodo_pago: val }))
-                    }
-                  >
-                    <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                      <SelectItem value="TRANSFERENCIA" className="cursor-pointer text-xs sm:text-sm">Transferencia</SelectItem>
-                      <SelectItem value="EFECTIVO" className="cursor-pointer text-xs sm:text-sm">Efectivo</SelectItem>
-                      <SelectItem value="CHEQUE" className="cursor-pointer text-xs sm:text-sm">Cheque</SelectItem>
-                    </SelectContent>
-                  </Select>
+                  <Label htmlFor="monto_abono" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Monto a Pagar (RD$)*
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
+                      RD$
+                    </span>
+                    <PriceInput
+                      id="monto_abono"
+                      value={abonoForm.monto || 0}
+                      onChange={(val) =>
+                        setAbonoForm((prev) => ({ ...prev, monto: val }))
+                      }
+                      placeholder="0.00"
+                      required
+                      className="h-10 pl-11 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs text-sm sm:text-base font-bold tabular-nums focus-visible:border-emerald-600 focus-visible:ring-emerald-600/20"
+                    />
+                  </div>
+                </div>
+
+                {/* Método de pago y banco */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Método de Pago*</Label>
+                    <div className="relative">
+                      <CreditCard className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                      <Select
+                        value={abonoForm.metodo_pago}
+                        onValueChange={(val: any) =>
+                          setAbonoForm((prev) => ({ ...prev, metodo_pago: val }))
+                        }
+                      >
+                        <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-emerald-600 focus:ring-emerald-600/20 text-xs sm:text-sm font-medium">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900">
+                          <SelectItem value="TRANSFERENCIA" className="cursor-pointer text-xs sm:text-sm">Transferencia</SelectItem>
+                          <SelectItem value="EFECTIVO" className="cursor-pointer text-xs sm:text-sm">Efectivo</SelectItem>
+                          <SelectItem value="CHEQUE" className="cursor-pointer text-xs sm:text-sm">Cheque</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {abonoForm.metodo_pago === "TRANSFERENCIA" && (
+                    <div className="space-y-1.5">
+                      <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Banco de Salida</Label>
+                      <div className="relative">
+                        <Landmark className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                        <Select
+                          value={abonoForm.banco_origen}
+                          onValueChange={(val) =>
+                            setAbonoForm((prev) => ({ ...prev, banco_origen: val }))
+                          }
+                        >
+                          <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-emerald-600 focus:ring-emerald-600/20 text-xs sm:text-sm font-medium">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900">
+                            <SelectItem value="BANCO_POPULAR" className="cursor-pointer text-xs sm:text-sm">Banco Popular</SelectItem>
+                            <SelectItem value="BANRESERVAS" className="cursor-pointer text-xs sm:text-sm">Banreservas</SelectItem>
+                            <SelectItem value="BANCO_BHD" className="cursor-pointer text-xs sm:text-sm">Banco BHD</SelectItem>
+                            <SelectItem value="OTRO" className="cursor-pointer text-xs sm:text-sm">Otro Banco</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 {abonoForm.metodo_pago === "TRANSFERENCIA" && (
                   <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Banco de Salida</Label>
-                    <Select
-                      value={abonoForm.banco_origen}
-                      onValueChange={(val) =>
-                        setAbonoForm((prev) => ({ ...prev, banco_origen: val }))
-                      }
-                    >
-                      <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                        <SelectItem value="BANCO_POPULAR" className="cursor-pointer text-xs sm:text-sm">Banco Popular</SelectItem>
-                        <SelectItem value="BANRESERVAS" className="cursor-pointer text-xs sm:text-sm">Banreservas</SelectItem>
-                        <SelectItem value="BANCO_BHD" className="cursor-pointer text-xs sm:text-sm">Banco BHD</SelectItem>
-                        <SelectItem value="OTRO" className="cursor-pointer text-xs sm:text-sm">Otro Banco</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label htmlFor="ref_bancaria" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                      Número de Confirmación / Referencia
+                    </Label>
+                    <div className="relative">
+                      <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                      <Input
+                        id="ref_bancaria"
+                        placeholder="Ej. TR-92841"
+                        value={abonoForm.referencia_bancaria}
+                        onChange={(e) =>
+                          setAbonoForm((prev) => ({ ...prev, referencia_bancaria: e.target.value }))
+                        }
+                        className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-emerald-600 focus-visible:ring-emerald-600/20 text-xs sm:text-sm font-medium"
+                      />
+                    </div>
                   </div>
                 )}
-              </div>
 
-              {abonoForm.metodo_pago === "TRANSFERENCIA" && (
+                {abonoForm.metodo_pago === "EFECTIVO" && (
+                  <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl flex items-start gap-2.5 shadow-xs">
+                    <Checkbox
+                      id="descontar_caja"
+                      checked={abonoForm.descontar_caja}
+                      onCheckedChange={(c) =>
+                        setAbonoForm((prev) => ({ ...prev, descontar_caja: !!c }))
+                      }
+                      className="mt-0.5 cursor-pointer"
+                    />
+                    <div className="text-xs">
+                      <label htmlFor="descontar_caja" className="font-bold text-foreground cursor-pointer">
+                        Descontar dinero de la Caja Abierta del Turno
+                      </label>
+                      <p className="text-muted-foreground mt-0.5 text-[11px] leading-relaxed">
+                        Registra automáticamente una salida de efectivo y egreso en la caja activa del turno actual.
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                {/* Notas */}
                 <div className="space-y-1.5">
-                  <Label htmlFor="ref_bancaria" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                    Número de Confirmación / Referencia
+                  <Label htmlFor="notas_abono" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Notas o Concepto (Opcional)
                   </Label>
-                  <Input
-                    id="ref_bancaria"
-                    placeholder="Ej. TR-92841"
-                    value={abonoForm.referencia_bancaria}
-                    onChange={(e) =>
-                      setAbonoForm((prev) => ({ ...prev, referencia_bancaria: e.target.value }))
-                    }
-                    className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                  />
-                </div>
-              )}
-
-              {abonoForm.metodo_pago === "EFECTIVO" && (
-                <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2.5">
-                  <Checkbox
-                    id="descontar_caja"
-                    checked={abonoForm.descontar_caja}
-                    onCheckedChange={(c) =>
-                      setAbonoForm((prev) => ({ ...prev, descontar_caja: !!c }))
-                    }
-                    className="mt-0.5 cursor-pointer"
-                  />
-                  <div className="text-xs">
-                    <label htmlFor="descontar_caja" className="font-semibold text-foreground cursor-pointer">
-                      Descontar dinero de la Caja Abierta del Turno
-                    </label>
-                    <p className="text-muted-foreground mt-0.5 text-[11px]">
-                      Registra automáticamente una salida de efectivo y gasto en la caja activa de la lavandería.
-                    </p>
+                  <div className="relative">
+                    <Receipt className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Input
+                      id="notas_abono"
+                      placeholder="Detalle o nota adicional..."
+                      value={abonoForm.notas}
+                      onChange={(e) => setAbonoForm((prev) => ({ ...prev, notas: e.target.value }))}
+                      className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-emerald-600 focus-visible:ring-emerald-600/20 text-xs sm:text-sm font-medium"
+                    />
                   </div>
                 </div>
-              )}
-
-              <div className="space-y-1.5">
-                <Label htmlFor="notas_abono" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Notas o Concepto
-                </Label>
-                <Input
-                  id="notas_abono"
-                  placeholder="Detalle opcional..."
-                  value={abonoForm.notas}
-                  onChange={(e) => setAbonoForm((prev) => ({ ...prev, notas: e.target.value }))}
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                />
               </div>
 
-              <DialogFooter className="pt-3 gap-2 sm:gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => setModalAbonoOpen(false)} className="cursor-pointer h-9 text-xs sm:text-sm px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs rounded-xl">
+              {/* MODAL FOOTER */}
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setModalAbonoOpen(false)}
+                  className="h-9.5 rounded-xl px-3.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer"
+                >
                   Cancelar
                 </Button>
-                <Button type="submit" size="sm" className="bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-xs hover:shadow h-9 text-xs sm:text-sm px-5 rounded-xl">
+                <Button
+                  type="submit"
+                  size="sm"
+                  className="h-9.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer shadow-xs active:translate-y-px px-4 text-xs sm:text-sm whitespace-nowrap"
+                >
                   Registrar Pago ({formatRD(abonoForm.monto || 0)})
                 </Button>
-              </DialogFooter>
+              </div>
             </form>
           )}
         </DialogContent>
@@ -1408,486 +1454,582 @@ function CuentasPorPagarPage() {
 
       {/* DIALOG: REGISTRAR NUEVA FACTURA CXP */}
       <Dialog open={modalFacturaOpen} onOpenChange={setModalFacturaOpen}>
-        <DialogContent className="sm:max-w-[620px] bg-background text-foreground rounded-2xl p-5 sm:p-6 border-none shadow-2xl">
-          <DialogHeader className="space-y-1 pb-1">
-            <DialogTitle className="flex items-center gap-2 text-foreground font-bold text-base sm:text-lg">
-              <Plus className="h-5 w-5 text-[#1B4B73]" />
-              <span>Registrar Factura de Compra a Crédito</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Ingresa la factura del proveedor con su plazo de pago y NCF de República Dominicana.
-            </DialogDescription>
-          </DialogHeader>
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-xl flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/50 dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/20 shadow-xs shrink-0">
+                <FileText className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
+                  Registrar Factura a Crédito
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
+                  Ingresa la factura del proveedor con su plazo de pago y NCF de República Dominicana.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
 
-          <form onSubmit={handleGuardarFactura} className="space-y-3.5 pt-1">
-            {/* Fila 1: Suplidor (col-span-2) + Plazo de Crédito (col-span-1) */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="sm:col-span-2 space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Suplidor / Proveedor*
-                </Label>
-                <Select
-                  value={facturaForm.suplidor_id}
-                  onValueChange={(val) => {
-                    const sup = suplidores.find((s) => s.id === val);
-                    setFacturaForm((prev) => ({
-                      ...prev,
-                      suplidor_id: val,
-                      plazo_dias: sup?.dias_credito_default ?? 30,
-                      categoria_gasto: sup?.categoria_insumo || "INSUMOS",
-                    }));
-                  }}
-                >
-                  <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                    <SelectValue placeholder="Seleccione un suplidor..." />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                    {suplidores.map((s) => (
-                      <SelectItem key={s.id} value={s.id} className="cursor-pointer text-xs sm:text-sm">
-                        {s.nombre_comercial} ({s.dias_credito_default}d)
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+          <form onSubmit={handleGuardarFactura} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
+              {/* Fila 1: Suplidor (col-span-2) + Plazo de Crédito (col-span-1) */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2 space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Suplidor / Proveedor*
+                  </Label>
+                  <div className="relative">
+                    <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Select
+                      value={facturaForm.suplidor_id}
+                      onValueChange={(val) => {
+                        const sup = suplidores.find((s) => s.id === val);
+                        setFacturaForm((prev) => ({
+                          ...prev,
+                          suplidor_id: val,
+                          plazo_dias: sup?.dias_credito_default ?? 30,
+                          categoria_gasto: sup?.categoria_insumo || "INSUMOS",
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium">
+                        <SelectValue placeholder="Seleccione un suplidor..." />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900 max-h-56">
+                        {suplidores.map((s) => (
+                          <SelectItem key={s.id} value={s.id} className="cursor-pointer text-xs sm:text-sm">
+                            {s.nombre_comercial} ({s.dias_credito_default}d)
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="plazo_dias" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Plazo Crédito
+                  </Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Select
+                      value={String(facturaForm.plazo_dias)}
+                      onValueChange={(val) =>
+                        setFacturaForm((prev) => ({ ...prev, plazo_dias: Number(val) }))
+                      }
+                    >
+                      <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900">
+                        <SelectItem value="15" className="cursor-pointer text-xs sm:text-sm">15 días de crédito</SelectItem>
+                        <SelectItem value="30" className="cursor-pointer text-xs sm:text-sm">30 días de crédito</SelectItem>
+                        <SelectItem value="45" className="cursor-pointer text-xs sm:text-sm">45 días de crédito</SelectItem>
+                        <SelectItem value="60" className="cursor-pointer text-xs sm:text-sm">60 días de crédito</SelectItem>
+                        <SelectItem value="90" className="cursor-pointer text-xs sm:text-sm">90 días de crédito</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
 
+              {/* Fila 2: Número de Factura, NCF, Fecha Emisión */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="num_factura" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Número Factura*
+                  </Label>
+                  <div className="relative">
+                    <Receipt className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Input
+                      id="num_factura"
+                      placeholder="Ej. F-10294"
+                      value={facturaForm.numero_factura}
+                      onChange={(e) =>
+                        setFacturaForm((prev) => ({ ...prev, numero_factura: e.target.value }))
+                      }
+                      required
+                      className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="ncf_factura" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    NCF (Opcional)
+                  </Label>
+                  <div className="relative">
+                    <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Input
+                      id="ncf_factura"
+                      placeholder="Ej. B0100000042"
+                      value={facturaForm.ncf}
+                      onChange={(e) => setFacturaForm((prev) => ({ ...prev, ncf: e.target.value }))}
+                      className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="fecha_emision" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Fecha Emisión
+                  </Label>
+                  <DMYDatePicker
+                    id="fecha_emision"
+                    className="h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-xs sm:text-sm font-medium px-3"
+                    value={facturaForm.fecha_emision}
+                    onChange={(val) =>
+                      setFacturaForm((prev) => ({ ...prev, fecha_emision: val }))
+                    }
+                  />
+                </div>
+              </div>
+
+              {/* Fila 3: Subtotal, ITBIS 18%, Total */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="subtotal" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Subtotal (RD$)
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
+                      RD$
+                    </span>
+                    <PriceInput
+                      id="subtotal"
+                      value={facturaForm.subtotal || 0}
+                      placeholder="0.00"
+                      onChange={(sub) => {
+                        const itbis = +(sub * 0.18).toFixed(2);
+                        setFacturaForm((prev) => ({
+                          ...prev,
+                          subtotal: sub,
+                          itbis,
+                          total: +(sub + itbis).toFixed(2),
+                        }));
+                      }}
+                      className="h-10 pl-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-bold tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="itbis" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    ITBIS 18% (RD$)
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
+                      RD$
+                    </span>
+                    <PriceInput
+                      id="itbis"
+                      value={facturaForm.itbis || 0}
+                      placeholder="0.00"
+                      onChange={(itbis) => {
+                        setFacturaForm((prev) => ({
+                          ...prev,
+                          itbis,
+                          total: +(Number(prev.subtotal) + itbis).toFixed(2),
+                        }));
+                      }}
+                      className="h-10 pl-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-bold tabular-nums"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="total" className="text-xs font-bold text-[#1B4B73] dark:text-blue-300">
+                    Total Factura*
+                  </Label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#1B4B73] dark:text-blue-400 pointer-events-none select-none z-10">
+                      RD$
+                    </span>
+                    <PriceInput
+                      id="total"
+                      value={facturaForm.total || 0}
+                      placeholder="0.00"
+                      onChange={(tot) =>
+                        setFacturaForm((prev) => ({ ...prev, total: tot }))
+                      }
+                      required
+                      className="h-10 pl-10 rounded-xl bg-blue-50/40 dark:bg-blue-950/30 border border-[#1B4B73]/40 dark:border-blue-700 text-slate-900 dark:text-slate-100 shadow-xs font-black tabular-nums focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Fila 4: Descripción de Artículos Comprados */}
               <div className="space-y-1.5">
-                <Label htmlFor="plazo_dias" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Plazo Crédito
+                <Label htmlFor="descripcion" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Descripción de Artículos Comprados (Opcional)
                 </Label>
-                <Select
-                  value={String(facturaForm.plazo_dias)}
-                  onValueChange={(val) =>
-                    setFacturaForm((prev) => ({ ...prev, plazo_dias: Number(val) }))
-                  }
-                >
-                  <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                    <SelectItem value="15" className="cursor-pointer text-xs sm:text-sm">15 días de crédito</SelectItem>
-                    <SelectItem value="30" className="cursor-pointer text-xs sm:text-sm">30 días de crédito</SelectItem>
-                    <SelectItem value="45" className="cursor-pointer text-xs sm:text-sm">45 días de crédito</SelectItem>
-                    <SelectItem value="60" className="cursor-pointer text-xs sm:text-sm">60 días de crédito</SelectItem>
-                    <SelectItem value="90" className="cursor-pointer text-xs sm:text-sm">90 días de crédito</SelectItem>
-                  </SelectContent>
-                </Select>
+                <div className="relative">
+                  <Tag className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                  <Input
+                    id="descripcion"
+                    placeholder="Ej. 10 Galones Detergente Industrial, 5 Cajas Ganchos..."
+                    value={facturaForm.descripcion}
+                    onChange={(e) =>
+                      setFacturaForm((prev) => ({ ...prev, descripcion: e.target.value }))
+                    }
+                    className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                  />
+                </div>
               </div>
             </div>
 
-            {/* Fila 2: Número de Factura, NCF, Fecha Emisión */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="num_factura" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Número Factura*
-                </Label>
-                <Input
-                  id="num_factura"
-                  placeholder="Ej. F-10294"
-                  value={facturaForm.numero_factura}
-                  onChange={(e) =>
-                    setFacturaForm((prev) => ({ ...prev, numero_factura: e.target.value }))
-                  }
-                  required
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="ncf_factura" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  NCF (Opcional)
-                </Label>
-                <Input
-                  id="ncf_factura"
-                  placeholder="Ej. B0100000042"
-                  value={facturaForm.ncf}
-                  onChange={(e) => setFacturaForm((prev) => ({ ...prev, ncf: e.target.value }))}
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="fecha_emision" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Fecha Emisión
-                </Label>
-                <DMYDatePicker
-                  id="fecha_emision"
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs text-xs sm:text-sm px-3"
-                  value={facturaForm.fecha_emision}
-                  onChange={(val) =>
-                    setFacturaForm((prev) => ({ ...prev, fecha_emision: val }))
-                  }
-                />
-              </div>
-            </div>
-
-            {/* Fila 3: Subtotal, ITBIS 18%, Total */}
-            <div className="grid grid-cols-3 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="subtotal" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Subtotal (RD$)
-                </Label>
-                <PriceInput
-                  id="subtotal"
-                  value={facturaForm.subtotal || 0}
-                  placeholder="0.00"
-                  onChange={(sub) => {
-                    const itbis = +(sub * 0.18).toFixed(2);
-                    setFacturaForm((prev) => ({
-                      ...prev,
-                      subtotal: sub,
-                      itbis,
-                      total: +(sub + itbis).toFixed(2),
-                    }));
-                  }}
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-bold tabular-nums"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="itbis" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  ITBIS 18% (RD$)
-                </Label>
-                <PriceInput
-                  id="itbis"
-                  value={facturaForm.itbis || 0}
-                  placeholder="0.00"
-                  onChange={(itbis) => {
-                    setFacturaForm((prev) => ({
-                      ...prev,
-                      itbis,
-                      total: +(Number(prev.subtotal) + itbis).toFixed(2),
-                    }));
-                  }}
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-bold tabular-nums"
-                />
-              </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="total" className="text-xs font-bold text-[#1B4B73] dark:text-blue-300">
-                  Total Factura*
-                </Label>
-                <PriceInput
-                  id="total"
-                  value={facturaForm.total || 0}
-                  placeholder="0.00"
-                  onChange={(tot) =>
-                    setFacturaForm((prev) => ({ ...prev, total: tot }))
-                  }
-                  required
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-[#1B4B73]/40 dark:border-blue-700 text-slate-900 dark:text-slate-100 shadow-xs font-bold tabular-nums focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                />
-              </div>
-            </div>
-
-            {/* Fila 4: Descripción de Artículos Comprados */}
-            <div className="space-y-1.5">
-              <Label htmlFor="descripcion" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Descripción de Artículos Comprados (Opcional)
-              </Label>
-              <Input
-                id="descripcion"
-                placeholder="Ej. 10 Galones Detergente Industrial, 5 Cajas Ganchos Alambre..."
-                value={facturaForm.descripcion}
-                onChange={(e) =>
-                  setFacturaForm((prev) => ({ ...prev, descripcion: e.target.value }))
-                }
-                className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-              />
-            </div>
-
-            <DialogFooter className="pt-3 gap-2 sm:gap-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalFacturaOpen(false)} className="cursor-pointer h-9 text-xs sm:text-sm px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs rounded-xl">
+            {/* MODAL FOOTER */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalFacturaOpen(false)}
+                className="h-9.5 rounded-xl px-3.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer"
+              >
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-[#1B4B73] hover:bg-[#133857] text-white font-bold cursor-pointer shadow-xs hover:shadow h-9 text-xs sm:text-sm px-5 rounded-xl">
+              <Button
+                type="submit"
+                size="sm"
+                className="h-9.5 rounded-xl bg-[#1B4B73] hover:bg-[#133857] text-white font-bold cursor-pointer shadow-xs active:translate-y-px px-5 text-xs sm:text-sm whitespace-nowrap"
+              >
                 Guardar Factura a Crédito
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
 
       {/* DIALOG: REGISTRAR NUEVO SUPLIDOR */}
       <Dialog open={modalSuplidorOpen} onOpenChange={setModalSuplidorOpen}>
-        <DialogContent className="sm:max-w-[560px] bg-background text-foreground rounded-2xl p-5 sm:p-6 border-none shadow-2xl">
-          <DialogHeader className="space-y-1 pb-1">
-            <DialogTitle className="flex items-center gap-2 text-foreground font-bold text-base sm:text-lg">
-              <Building2 className="h-5 w-5 text-[#F0B900]" />
-              <span>Nuevo Suplidor / Proveedor</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Registra los datos fiscales y condiciones de crédito de tu proveedor de insumos.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleGuardarSuplidor} className="space-y-3.5 pt-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="nom_comercial" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Nombre Comercial*
-              </Label>
-              <Input
-                id="nom_comercial"
-                placeholder="Ej. Distribuidora Química Dominicana"
-                value={suplidorForm.nombre_comercial}
-                onChange={(e) =>
-                  setSuplidorForm((prev) => ({ ...prev, nombre_comercial: e.target.value }))
-                }
-                required
-                className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label htmlFor="rnc_suplidor" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  RNC o Cédula (RD)
-                </Label>
-                <Input
-                  id="rnc_suplidor"
-                  placeholder="Ej. 131-00000-0"
-                  value={suplidorForm.rnc_cedula}
-                  onChange={(e) =>
-                    setSuplidorForm((prev) => ({ ...prev, rnc_cedula: e.target.value }))
-                  }
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                />
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-lg flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-[#F0B900]/15 text-[#b08800] dark:text-[#F0B900] flex items-center justify-center border border-[#F0B900]/25 shadow-xs shrink-0">
+                <Building2 className="h-4.5 w-4.5" />
               </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="tel_suplidor" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Teléfono / WhatsApp
-                </Label>
-                <Input
-                  id="tel_suplidor"
-                  placeholder="809-000-0000"
-                  value={suplidorForm.telefono}
-                  onChange={(e) =>
-                    setSuplidorForm((prev) => ({ ...prev, telefono: e.target.value }))
-                  }
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-                />
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
+                  Nuevo Suplidor / Proveedor
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
+                  Registra los datos fiscales y condiciones de crédito de tu proveedor de insumos.
+                </DialogDescription>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleGuardarSuplidor} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
               <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">Tipo de Insumo</Label>
-                <Select
-                  value={suplidorForm.categoria_insumo}
-                  onValueChange={(val: any) => {
-                    setSuplidorForm((prev) => ({ ...prev, categoria_insumo: val }));
-                    if (val !== "OTROS") {
-                      setInsumoPersonalizado("");
+                <Label htmlFor="nom_comercial" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Nombre Comercial*
+                </Label>
+                <div className="relative">
+                  <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                  <Input
+                    id="nom_comercial"
+                    placeholder="Ej. Distribuidora Química Dominicana"
+                    value={suplidorForm.nombre_comercial}
+                    onChange={(e) =>
+                      setSuplidorForm((prev) => ({ ...prev, nombre_comercial: e.target.value }))
                     }
-                  }}
-                >
-                  <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                    <SelectValue placeholder="Seleccione insumo" />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg max-h-64">
-                    {CATEGORIAS_INSUMO.map((cat) => (
-                      <SelectItem key={cat.value} value={cat.value} className="cursor-pointer text-xs sm:text-sm">
-                        {cat.label}
-                      </SelectItem>
-                    ))}
-                    {categoriasPersonalizadas.length > 0 && (
-                      <>
-                        <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-t border-slate-100 dark:border-slate-800 mt-1 pt-1">
-                          Insumos Personalizados
-                        </div>
-                        {categoriasPersonalizadas.map((custom) => (
-                          <SelectItem
-                            key={custom}
-                            value={custom}
-                            className="cursor-pointer text-xs sm:text-sm font-medium text-[#1B4B73] dark:text-blue-300"
-                          >
-                            🏷️ {custom}
+                    required
+                    className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="rnc_suplidor" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    RNC o Cédula (RD)
+                  </Label>
+                  <div className="relative">
+                    <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Input
+                      id="rnc_suplidor"
+                      placeholder="Ej. 131-00000-0"
+                      value={suplidorForm.rnc_cedula}
+                      onChange={(e) =>
+                        setSuplidorForm((prev) => ({ ...prev, rnc_cedula: e.target.value }))
+                      }
+                      className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="tel_suplidor" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Teléfono / WhatsApp
+                  </Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Input
+                      id="tel_suplidor"
+                      placeholder="809-000-0000"
+                      value={suplidorForm.telefono}
+                      onChange={(e) =>
+                        setSuplidorForm((prev) => ({ ...prev, telefono: e.target.value }))
+                      }
+                      className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Tipo de Insumo</Label>
+                  <div className="relative">
+                    <Tag className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Select
+                      value={suplidorForm.categoria_insumo}
+                      onValueChange={(val: any) => {
+                        setSuplidorForm((prev) => ({ ...prev, categoria_insumo: val }));
+                        if (val !== "OTROS") {
+                          setInsumoPersonalizado("");
+                        }
+                      }}
+                    >
+                      <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium">
+                        <SelectValue placeholder="Seleccione insumo" />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900 max-h-64">
+                        {CATEGORIAS_INSUMO.map((cat) => (
+                          <SelectItem key={cat.value} value={cat.value} className="cursor-pointer text-xs sm:text-sm">
+                            {cat.label}
                           </SelectItem>
                         ))}
-                      </>
-                    )}
-                  </SelectContent>
-                </Select>
+                        {categoriasPersonalizadas.length > 0 && (
+                          <>
+                            <div className="px-2 py-1 text-[10px] font-bold text-slate-400 uppercase tracking-wider border-t border-slate-100 dark:border-slate-800 mt-1 pt-1">
+                              Insumos Personalizados
+                            </div>
+                            {categoriasPersonalizadas.map((custom) => (
+                              <SelectItem
+                                key={custom}
+                                value={custom}
+                                className="cursor-pointer text-xs sm:text-sm font-medium text-[#1B4B73] dark:text-blue-300"
+                              >
+                                🏷️ {custom}
+                              </SelectItem>
+                            ))}
+                          </>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="dias_defecto" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Días Crédito Habituales
+                  </Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Select
+                      value={String(suplidorForm.dias_credito_default)}
+                      onValueChange={(val) =>
+                        setSuplidorForm((prev) => ({ ...prev, dias_credito_default: Number(val) }))
+                      }
+                    >
+                      <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900">
+                        <SelectItem value="15" className="cursor-pointer text-xs sm:text-sm">15 días</SelectItem>
+                        <SelectItem value="30" className="cursor-pointer text-xs sm:text-sm">30 días</SelectItem>
+                        <SelectItem value="45" className="cursor-pointer text-xs sm:text-sm">45 días</SelectItem>
+                        <SelectItem value="60" className="cursor-pointer text-xs sm:text-sm">60 días</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
               </div>
+
+              {/* Insumo personalizado al seleccionar 'Otros Insumos' */}
+              {suplidorForm.categoria_insumo === "OTROS" && (
+                <div className="space-y-1.5 p-3.5 rounded-2xl bg-blue-50/70 dark:bg-blue-950/25 border border-blue-200 dark:border-blue-900/50 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="insumo_personalizado" className="text-xs font-bold text-[#1B4B73] dark:text-blue-300 flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-[#F0B900]" />
+                      ¿Qué tipo de insumo provee?*
+                    </Label>
+                    <span className="text-[10px] text-blue-600/80 dark:text-blue-300 font-medium">Insumo personalizado</span>
+                  </div>
+                  <div className="relative">
+                    <Tag className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-blue-500 pointer-events-none z-10" />
+                    <Input
+                      id="insumo_personalizado"
+                      autoFocus
+                      placeholder="Ej. Etiquetas Térmicas, Papelería, Hilos & Agujas..."
+                      value={insumoPersonalizado}
+                      onChange={(e) => setInsumoPersonalizado(e.target.value)}
+                      required={suplidorForm.categoria_insumo === "OTROS"}
+                      className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                    />
+                  </div>
+                </div>
+              )}
 
               <div className="space-y-1.5">
-                <Label htmlFor="dias_defecto" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Días Crédito Habituales
+                <Label htmlFor="dir_suplidor" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Dirección
                 </Label>
-                <Select
-                  value={String(suplidorForm.dias_credito_default)}
-                  onValueChange={(val) =>
-                    setSuplidorForm((prev) => ({ ...prev, dias_credito_default: Number(val) }))
-                  }
-                >
-                  <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                    <SelectItem value="15" className="cursor-pointer text-xs sm:text-sm">15 días</SelectItem>
-                    <SelectItem value="30" className="cursor-pointer text-xs sm:text-sm">30 días</SelectItem>
-                    <SelectItem value="45" className="cursor-pointer text-xs sm:text-sm">45 días</SelectItem>
-                    <SelectItem value="60" className="cursor-pointer text-xs sm:text-sm">60 días</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            {/* Insumo personalizado al seleccionar 'Otros Insumos' */}
-            {suplidorForm.categoria_insumo === "OTROS" && (
-              <div className="space-y-1.5 p-3 rounded-xl bg-blue-50/70 dark:bg-blue-950/25 border border-blue-200 dark:border-blue-900/50 animate-in fade-in slide-in-from-top-1 duration-200">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="insumo_personalizado" className="text-xs font-bold text-[#1B4B73] dark:text-blue-300 flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5 text-[#F0B900]" />
-                    ¿Qué tipo de insumo provee?*
-                  </Label>
-                  <span className="text-[10px] text-blue-600/80 dark:text-blue-300 font-medium">Insumo personalizado</span>
+                <div className="relative">
+                  <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                  <Input
+                    id="dir_suplidor"
+                    placeholder="Calle, Sector, Ciudad..."
+                    value={suplidorForm.direccion}
+                    onChange={(e) =>
+                      setSuplidorForm((prev) => ({ ...prev, direccion: e.target.value }))
+                    }
+                    className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                  />
                 </div>
-                <Input
-                  id="insumo_personalizado"
-                  autoFocus
-                  placeholder="Ej. Etiquetas Térmicas, Papelería, Hilos & Agujas..."
-                  value={insumoPersonalizado}
-                  onChange={(e) => setInsumoPersonalizado(e.target.value)}
-                  required={suplidorForm.categoria_insumo === "OTROS"}
-                  className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-blue-300 dark:border-blue-700 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
-                />
               </div>
-            )}
-
-            <div className="space-y-1.5">
-              <Label htmlFor="dir_suplidor" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Dirección
-              </Label>
-              <Input
-                id="dir_suplidor"
-                placeholder="Calle, Sector, Ciudad..."
-                value={suplidorForm.direccion}
-                onChange={(e) =>
-                  setSuplidorForm((prev) => ({ ...prev, direccion: e.target.value }))
-                }
-                className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-              />
             </div>
 
-            <DialogFooter className="pt-3 gap-2 sm:gap-3">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalSuplidorOpen(false)} className="cursor-pointer h-9 text-xs sm:text-sm px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs rounded-xl">
+            {/* MODAL FOOTER */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalSuplidorOpen(false)}
+                className="h-9.5 rounded-xl px-3.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer"
+              >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                className="bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#d4a300] font-extrabold cursor-pointer shadow-xs hover:shadow h-9 text-xs sm:text-sm px-5 rounded-xl"
+                className="h-9.5 rounded-xl bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#d4a300] font-extrabold cursor-pointer shadow-xs active:translate-y-px px-5 text-xs sm:text-sm whitespace-nowrap"
               >
                 Registrar Suplidor
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
 
       {/* DIALOG: HISTORIAL DE ABONOS */}
       <Dialog open={modalHistorialOpen} onOpenChange={setModalHistorialOpen}>
-        <DialogContent className="sm:max-w-lg w-full bg-white dark:bg-slate-900 text-foreground rounded-2xl p-4 sm:p-5 border border-slate-200 dark:border-slate-800 shadow-xl transition-all">
-          <DialogHeader className="space-y-1 pb-1.5 border-b border-slate-100 dark:border-slate-800">
-            <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-lg bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/50 dark:text-sky-400 flex items-center justify-center shrink-0">
-                <FileText className="h-4 w-4" />
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-lg flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/50 dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/20 shadow-xs shrink-0">
+                <Clock className="h-4.5 w-4.5" />
               </div>
-              <div className="flex-1 min-w-0">
-                <DialogTitle className="text-base font-bold tracking-tight text-slate-900 dark:text-white">
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
                   Historial de Pagos
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
-                  Factura #{facturaSeleccionada?.numero_factura} · {facturaSeleccionada?.suplidor?.nombre_comercial || "Suplidor"}
+                  Factura #{facturaSeleccionada?.numero_factura} · <span className="font-semibold text-foreground">{facturaSeleccionada?.suplidor?.nombre_comercial || "Suplidor"}</span>
                 </DialogDescription>
               </div>
             </div>
-          </DialogHeader>
-
-          {/* Mini-resumen compacto de la factura */}
-          <div className="grid grid-cols-3 gap-2 pt-1 text-center">
-            <div className="py-1.5 px-2 rounded-xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/70 dark:border-slate-800">
-              <span className="text-[10px] font-semibold text-slate-500 uppercase block">Total</span>
-              <span className="text-xs sm:text-sm font-bold text-slate-900 dark:text-white block truncate">
-                {formatRD(facturaSeleccionada?.total || 0)}
-              </span>
-            </div>
-
-            <div className="py-1.5 px-2 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/70 dark:border-emerald-900/50">
-              <span className="text-[10px] font-semibold text-emerald-700 dark:text-emerald-400 uppercase block">Abonado</span>
-              <span className="text-xs sm:text-sm font-bold text-emerald-700 dark:text-emerald-300 block truncate">
-                {formatRD(facturaSeleccionada?.monto_pagado || 0)}
-              </span>
-            </div>
-
-            <div className="py-1.5 px-2 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200/70 dark:border-rose-900/50">
-              <span className="text-[10px] font-semibold text-rose-700 dark:text-rose-400 uppercase block">Pendiente</span>
-              <span className="text-xs sm:text-sm font-bold text-rose-700 dark:text-rose-300 block truncate">
-                {formatRD(facturaSeleccionada?.saldo_pendiente || 0)}
-              </span>
-            </div>
           </div>
 
-          {/* Detalle de abonos o estado vacío compacto */}
-          <div className="space-y-1.5 pt-1">
-            {abonosDeFacturaSeleccionada.length === 0 ? (
-              <div className="py-5 px-3 text-center rounded-xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/40 dark:bg-slate-900/40 flex flex-col items-center justify-center space-y-2">
-                <p className="text-xs text-muted-foreground">
-                  No hay pagos registrados para esta factura aún.
-                </p>
-                {facturaSeleccionada && (facturaSeleccionada.saldo_pendiente || 0) > 0 && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
-                    onClick={() => {
-                      setModalHistorialOpen(false);
-                      setAbonoForm((prev) => ({
-                        ...prev,
-                        monto: facturaSeleccionada.saldo_pendiente,
-                      }));
-                      setModalAbonoOpen(true);
-                    }}
-                  >
-                    <Plus className="h-3 w-3" />
-                    <span>Registrar Abono</span>
-                  </Button>
-                )}
+          <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
+            {/* Mini-resumen compacto de la factura */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="py-2 px-2.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 shadow-2xs">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Total</span>
+                <span className="text-xs sm:text-sm font-black text-slate-900 dark:text-white block truncate tabular-nums mt-0.5">
+                  {formatRD(facturaSeleccionada?.total || 0)}
+                </span>
               </div>
-            ) : (
-              <div className="border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-xs bg-white dark:bg-slate-900 max-h-[220px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
-                {abonosDeFacturaSeleccionada.map((a) => (
-                  <div
-                    key={a.id}
-                    className="p-2.5 text-xs flex justify-between items-center hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
-                  >
-                    <div>
-                      <div className="font-bold text-foreground text-xs">{formatRD(a.monto)}</div>
-                      <div className="text-[10px] text-muted-foreground flex items-center gap-1.5 mt-0.5">
-                        <Badge variant="outline" className="text-[9px] py-0 px-1">
-                          {a.metodo_pago}
-                        </Badge>
-                        {a.referencia_bancaria && <span>Ref: {a.referencia_bancaria}</span>}
+
+              <div className="py-2 px-2.5 rounded-2xl bg-emerald-50/80 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-900/50 shadow-2xs">
+                <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase tracking-wider block">Abonado</span>
+                <span className="text-xs sm:text-sm font-black text-emerald-700 dark:text-emerald-300 block truncate tabular-nums mt-0.5">
+                  {formatRD(facturaSeleccionada?.monto_pagado || 0)}
+                </span>
+              </div>
+
+              <div className="py-2 px-2.5 rounded-2xl bg-rose-50/80 dark:bg-rose-950/40 border border-rose-200/80 dark:border-rose-900/50 shadow-2xs">
+                <span className="text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase tracking-wider block">Pendiente</span>
+                <span className="text-xs sm:text-sm font-black text-rose-700 dark:text-rose-300 block truncate tabular-nums mt-0.5">
+                  {formatRD(facturaSeleccionada?.saldo_pendiente || 0)}
+                </span>
+              </div>
+            </div>
+
+            {/* Detalle de abonos o estado vacío */}
+            <div className="space-y-1.5 pt-1">
+              <p className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                Pagos Realizados ({abonosDeFacturaSeleccionada.length})
+              </p>
+
+              {abonosDeFacturaSeleccionada.length === 0 ? (
+                <div className="py-7 px-3 text-center rounded-2xl border border-dashed border-slate-200 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 flex flex-col items-center justify-center space-y-2">
+                  <Banknote className="h-8 w-8 text-slate-400/60" />
+                  <p className="text-xs text-muted-foreground font-medium">
+                    No hay pagos registrados para esta factura aún.
+                  </p>
+                  {facturaSeleccionada && (facturaSeleccionada.saldo_pendiente || 0) > 0 && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-8.5 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs px-3.5 rounded-xl cursor-pointer shadow-xs active:scale-95 transition-all mt-1"
+                      onClick={() => {
+                        setModalHistorialOpen(false);
+                        setAbonoForm((prev) => ({
+                          ...prev,
+                          monto: facturaSeleccionada.saldo_pendiente,
+                        }));
+                        setModalAbonoOpen(true);
+                      }}
+                    >
+                      <Plus className="h-3.5 w-3.5" />
+                      <span>Registrar Primer Abono</span>
+                    </Button>
+                  )}
+                </div>
+              ) : (
+                <div className="border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-xs bg-white dark:bg-slate-900 max-h-[240px] overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
+                  {abonosDeFacturaSeleccionada.map((a) => (
+                    <div
+                      key={a.id}
+                      className="p-3 text-xs flex justify-between items-center hover:bg-slate-50/60 dark:hover:bg-slate-800/40 transition-colors"
+                    >
+                      <div className="space-y-0.5">
+                        <div className="font-bold text-foreground text-xs sm:text-sm tabular-nums">{formatRD(a.monto)}</div>
+                        <div className="text-[11px] text-muted-foreground flex items-center gap-1.5">
+                          <Badge variant="outline" className="text-[9px] py-0 px-1.5 font-bold rounded-md bg-slate-50 dark:bg-slate-800">
+                            {a.metodo_pago}
+                          </Badge>
+                          {a.referencia_bancaria && <span className="font-mono">Ref: {a.referencia_bancaria}</span>}
+                        </div>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground text-right tabular-nums font-medium">
+                        {formatFechaDMY(a.fecha_pago)}
                       </div>
                     </div>
-                    <div className="text-[11px] text-muted-foreground text-right tabular-nums">
-                      {formatFechaDMY(a.fecha_pago)}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
-          <DialogFooter className="pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between gap-2">
+          {/* MODAL FOOTER */}
+          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3">
             <Button
               type="button"
               variant="outline"
               size="sm"
               onClick={() => setModalHistorialOpen(false)}
-              className="cursor-pointer h-8 text-xs px-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg"
+              className="cursor-pointer h-9.5 text-xs sm:text-sm px-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl font-semibold"
             >
               Cerrar
             </Button>
@@ -1896,7 +2038,7 @@ function CuentasPorPagarPage() {
               <Button
                 type="button"
                 size="sm"
-                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs h-8 px-3 rounded-lg cursor-pointer shadow-xs active:scale-95 transition-all"
+                className="gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs sm:text-sm h-9.5 px-4 rounded-xl cursor-pointer shadow-xs active:translate-y-px transition-all"
                 onClick={() => {
                   setModalHistorialOpen(false);
                   setAbonoForm((prev) => ({
@@ -1906,11 +2048,11 @@ function CuentasPorPagarPage() {
                   setModalAbonoOpen(true);
                 }}
               >
-                <Banknote className="h-3.5 w-3.5" />
+                <Banknote className="h-4 w-4" />
                 <span>Nuevo Abono</span>
               </Button>
             )}
-          </DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
 
@@ -1919,12 +2061,12 @@ function CuentasPorPagarPage() {
         open={Boolean(facturaToDelete)}
         onOpenChange={(open) => !open && setFacturaToDelete(null)}
       >
-        <AlertDialogContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5">
+        <AlertDialogContent className="rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5 sm:p-6">
           <AlertDialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50">
+            <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50 shadow-xs">
               <Trash2 className="h-5 w-5" />
             </div>
-            <AlertDialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               ¿Eliminar factura de compra?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
@@ -1935,13 +2077,13 @@ function CuentasPorPagarPage() {
               de {facturaToDelete?.suplidor?.nombre_comercial || "este suplidor"}. Esta acción es irreversible.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2 pt-2">
-            <AlertDialogCancel className="rounded-xl h-9 text-xs font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
+          <AlertDialogFooter className="gap-2 sm:gap-2 pt-3">
+            <AlertDialogCancel className="rounded-xl h-9.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDeleteFactura}
-              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9 text-xs font-bold shadow-xs cursor-pointer border-none"
+              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs cursor-pointer border-none"
             >
               Sí, eliminar factura
             </AlertDialogAction>
@@ -1954,12 +2096,12 @@ function CuentasPorPagarPage() {
         open={Boolean(suplidorToDelete)}
         onOpenChange={(open) => !open && setSuplidorToDelete(null)}
       >
-        <AlertDialogContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5">
+        <AlertDialogContent className="rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5 sm:p-6">
           <AlertDialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50">
+            <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50 shadow-xs">
               <Trash2 className="h-5 w-5" />
             </div>
-            <AlertDialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               ¿Eliminar suplidor / proveedor?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
@@ -1970,13 +2112,13 @@ function CuentasPorPagarPage() {
               .
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2 pt-2">
-            <AlertDialogCancel className="rounded-xl h-9 text-xs font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
+          <AlertDialogFooter className="gap-2 sm:gap-2 pt-3">
+            <AlertDialogCancel className="rounded-xl h-9.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDeleteSuplidor}
-              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9 text-xs font-bold shadow-xs cursor-pointer border-none"
+              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs cursor-pointer border-none"
             >
               Sí, eliminar suplidor
             </AlertDialogAction>

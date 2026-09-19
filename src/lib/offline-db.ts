@@ -1,7 +1,7 @@
 /** Persistencia offline y outbox durable de Klynn. */
 
 const DB_NAME = "klynn_pos_offline_db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 const OUTBOX_STORE = "sync_outbox_v2";
 const LEGACY_OUTBOX_STORE = "sync_outbox";
 const PROCESSING_LEASE_MS = 60_000;
@@ -13,6 +13,8 @@ export type SyncTableName =
   | "cajas"
   | "movimientos_caja"
   | "gastos"
+  | "gasto_categorias"
+  | "gasto_plantillas"
   | "catalogo_items"
   | "servicios";
 export type SyncAction = "INSERT" | "UPDATE" | "UPSERT" | "DELETE";
@@ -118,6 +120,8 @@ class OfflineDBManager {
           ensureTenantStore("cajas");
           ensureTenantStore("movimientos_caja", [["caja_id", "caja_id"]]);
           ensureTenantStore("gastos");
+          ensureTenantStore("gasto_categorias");
+          ensureTenantStore("gasto_plantillas");
           ensureTenantStore("auth_cache", [["email", "email"]]);
 
           if (!db.objectStoreNames.contains(LEGACY_OUTBOX_STORE)) {
@@ -282,7 +286,15 @@ class OfflineDBManager {
   }
 
   async getOutboxItems(tenantId?: string): Promise<SyncOutboxItem[]> {
-    return this.getAll<SyncOutboxItem>(OUTBOX_STORE, tenantId);
+    const all = await this.getAll<SyncOutboxItem>(OUTBOX_STORE);
+    if (!tenantId) return all;
+    return all.filter((item) => {
+      if (!item.tenant_id) return true;
+      if (item.tenant_id === tenantId) return true;
+      const c1 = String(item.tenant_id).replace("ten-", "").replace("tenant-", "").toLowerCase();
+      const c2 = String(tenantId).replace("ten-", "").replace("tenant-", "").toLowerCase();
+      return c1 === c2;
+    });
   }
 
   async getPendingOutbox(tenantId: string, maxAttempts = 5): Promise<SyncOutboxItem[]> {
@@ -308,7 +320,7 @@ class OfflineDBManager {
     return all.filter((item) => item.status !== "synced").length;
   }
 
-  async claimOutboxItem(id: string): Promise<SyncOutboxItem | null> {
+  async claimOutboxItem(id: string, force = false): Promise<SyncOutboxItem | null> {
     const db = await this.getDB();
     return new Promise((resolve, reject) => {
       const tx = db.transaction(OUTBOX_STORE, "readwrite");
@@ -322,7 +334,8 @@ class OfflineDBManager {
           item.status === "processing" &&
           item.locked_at &&
           Date.now() - Date.parse(item.locked_at) < PROCESSING_LEASE_MS;
-        if (freshLease || item.status === "blocked" || item.status === "synced") return;
+        if (!force && (freshLease || item.status === "blocked" || item.status === "synced")) return;
+        if (force && item.status === "synced") return;
         claimed = { ...item, status: "processing", locked_at: new Date().toISOString() };
         store.put(claimed);
       };
@@ -348,10 +361,63 @@ class OfflineDBManager {
       window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
   }
 
+  async retryAllOutboxItems(tenantId?: string): Promise<number> {
+    const all = await this.getOutboxItems(tenantId);
+    let count = 0;
+    for (const item of all) {
+      if (item.status !== "synced") {
+        await this.put(OUTBOX_STORE, {
+          ...item,
+          status: "pending",
+          attempts: 0,
+          error_message: undefined,
+          error_code: undefined,
+          locked_at: undefined,
+          next_attempt_at: undefined,
+        });
+        count++;
+      }
+    }
+    if (typeof window !== "undefined")
+      window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
+    return count;
+  }
+
+  async clearOutbox(tenantId?: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    if (!tenantId) {
+      await this.clear(OUTBOX_STORE);
+    } else {
+      const all = await this.getOutboxItems(tenantId);
+      for (const item of all) {
+        await this.delete(OUTBOX_STORE, item.id);
+      }
+    }
+    if (typeof window !== "undefined")
+      window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
+  }
+
   async removeOutboxItem(id: string): Promise<void> {
     await this.delete(OUTBOX_STORE, id);
     if (typeof window !== "undefined")
       window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
+  }
+
+  async removeOutboxForEntity(tableName: string, entityId: string, tenantId?: string): Promise<void> {
+    if (!this.isAvailable()) return;
+    try {
+      const all = await this.getOutboxItems(tenantId);
+      for (const item of all) {
+        if (
+          item.table_name === tableName &&
+          (item.entity_id === entityId || item.payload?.id === entityId)
+        ) {
+          await this.delete(OUTBOX_STORE, item.id);
+        }
+      }
+      if (typeof window !== "undefined")
+        window.dispatchEvent(new CustomEvent("klynn-outbox-updated"));
+    } catch {}
   }
 
   async markOutboxFailed(

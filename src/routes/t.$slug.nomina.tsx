@@ -1,5 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
+import { supabase } from "@/lib/supabase";
 import {
   Users,
   Plus,
@@ -22,6 +23,10 @@ import {
   Lock,
   Calculator,
   SlidersHorizontal,
+  Receipt,
+  Wallet,
+  Sparkles,
+  Tag,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -163,8 +168,11 @@ function NominaPage() {
     descontar_caja: true,
   });
 
-  // Empleados activos
-  const empleadosActivos = useMemo(() => empleados.filter((e) => e.activo), [empleados]);
+  // Empleados activos para nómina (EL ADMINISTRADOR NUNCA APARECE EN NÓMINA)
+  const empleadosActivos = useMemo(
+    () => empleados.filter((e) => e.activo && e.rol?.toUpperCase() !== "ADMIN"),
+    [empleados]
+  );
 
   // Anticipos pendientes de descontar
   const anticiposPendientes = useMemo(
@@ -177,11 +185,176 @@ function NominaPage() {
     [anticiposPendientes]
   );
 
-  // Detalles del período seleccionado
+  // Detalles del período seleccionado enriquecidos con datos del empleado (excluyendo administradores)
   const detallesDelPeriodo = useMemo(() => {
     if (!periodoSeleccionado) return [];
-    return todosDetalles.filter((d) => d.periodo_id === periodoSeleccionado.id);
-  }, [todosDetalles, periodoSeleccionado]);
+    return todosDetalles
+      .filter((d) => d.periodo_id === periodoSeleccionado.id)
+      .map((d) => {
+        const emp = d.empleado || empleados.find((e) => e.id === d.empleado_id);
+        return {
+          ...d,
+          empleado: emp,
+        };
+      })
+      .filter((d) => d.empleado?.rol?.toUpperCase() !== "ADMIN");
+  }, [todosDetalles, periodoSeleccionado, empleados]);
+
+  // Sincronizar automáticamente colaboradores de /personal con períodos en borrador
+  const sincronizarEmpleadosConBorrador = async (periodo: PeriodoNomina, feedbackManual = false) => {
+    if (periodo.estado !== "BORRADOR" || !tenantId) return;
+
+    // Empleados que ya tienen detalle en esta nómina
+    const detallesActuales = todosDetalles
+      .filter((d) => d.periodo_id === periodo.id)
+      .map((d) => ({
+        ...d,
+        empleado: d.empleado || empleados.find((e) => e.id === d.empleado_id),
+      }))
+      .filter((d) => d.empleado?.rol?.toUpperCase() !== "ADMIN");
+
+    // Identificar activos de /personal que no están en la planilla
+    const faltantes = empleadosActivos.filter(
+      (emp) => !detallesActuales.some((d) => d.empleado_id === emp.id)
+    );
+
+    // Verificar si hay filas de administradores que deben eliminarse
+    const adminDetalles = todosDetalles.filter(
+      (d) =>
+        d.periodo_id === periodo.id &&
+        empleados.find((e) => e.id === d.empleado_id)?.rol?.toUpperCase() === "ADMIN"
+    );
+
+    if (faltantes.length === 0 && adminDetalles.length === 0) {
+      if (feedbackManual) {
+        toast.info("La nómina ya tiene todos los colaboradores activos de /personal.");
+      }
+      return;
+    }
+
+    const divisorFrecuencia =
+      periodo.frecuencia === "QUINCENAL" ? 2 : periodo.frecuencia === "SEMANAL" ? 4 : 1;
+
+    const nuevosDetalles: DetalleNomina[] = faltantes.map((emp) => {
+      const sueldoMensual = emp.salario_base || 0;
+      const sueldoPeriodo = +(sueldoMensual / divisorFrecuencia).toFixed(2);
+
+      const anticiposEmp = anticiposPendientes.filter((a) => a.empleado_id === emp.id);
+      const totalAnticipos = anticiposEmp.reduce((acc, a) => acc + a.monto, 0);
+
+      let tssAfp = 0;
+      let tssSfs = 0;
+      let isrRetencion = 0;
+
+      if (emp.aplica_tss) {
+        const { afp, sfs } = calcularTSS(sueldoPeriodo);
+        tssAfp = afp;
+        tssSfs = sfs;
+      }
+
+      if (emp.aplica_isr) {
+        const tssTotal = tssAfp + tssSfs;
+        const isrMensual = calcularISRDGII(sueldoMensual, tssTotal * divisorFrecuencia);
+        isrRetencion = +(isrMensual / divisorFrecuencia).toFixed(2);
+      }
+
+      const totalIngresos = sueldoPeriodo;
+      const deducciones = +(totalAnticipos + tssAfp + tssSfs + isrRetencion).toFixed(2);
+      const netoPagar = Math.max(0, +(totalIngresos - deducciones).toFixed(2));
+
+      return {
+        id: uid(),
+        tenant_id: tenantId,
+        periodo_id: periodo.id,
+        empleado_id: emp.id,
+        salario_base_periodo: sueldoPeriodo,
+        comisiones_destajo: 0,
+        horas_extras: 0,
+        bonos_incentivos: 0,
+        otros_ingresos: 0,
+        total_ingresos: totalIngresos,
+        anticipos_descontados: totalAnticipos,
+        tss_afp: tssAfp,
+        tss_sfs: tssSfs,
+        isr_retencion: isrRetencion,
+        otras_deducciones: 0,
+        total_deducciones: deducciones,
+        neto_pagar: netoPagar,
+        metodo_pago: (emp.metodo_pago as any) || (emp.numero_cuenta_banco ? "TRANSFERENCIA" : "EFECTIVO"),
+        pagado: false,
+        creado_en: new Date().toISOString(),
+        empleado: emp,
+      };
+    });
+
+    if (nuevosDetalles.length > 0) {
+      await saveDetallesNomina(nuevosDetalles);
+    }
+
+    if (adminDetalles.length > 0) {
+      for (const ad of adminDetalles) {
+        try {
+          await supabase.from("detalles_nomina").delete().eq("id", ad.id);
+        } catch (e) {
+          console.error("Error al remover admin de detalles_nomina:", e);
+        }
+      }
+    }
+
+    const listaActualizada = [...detallesActuales, ...nuevosDetalles];
+    const totalBruto = listaActualizada.reduce((a, b) => a + b.total_ingresos, 0);
+    const totalDeducciones = listaActualizada.reduce((a, b) => a + b.total_deducciones, 0);
+    const totalNeto = listaActualizada.reduce((a, b) => a + b.neto_pagar, 0);
+
+    const periodoActualizado: PeriodoNomina = {
+      ...periodo,
+      total_bruto: +(totalBruto).toFixed(2),
+      total_deducciones: +(totalDeducciones).toFixed(2),
+      total_neto: +(totalNeto).toFixed(2),
+      total_empleados: listaActualizada.length,
+    };
+
+    await savePeriodoNomina(periodoActualizado);
+    setPeriodoSeleccionado(periodoActualizado);
+
+    await queryClient.invalidateQueries({ queryKey: ["detalles-nomina", tenantId] });
+    await queryClient.invalidateQueries({ queryKey: ["periodos-nomina", tenantId] });
+
+    if (nuevosDetalles.length > 0) {
+      toast.success(
+        `Se sincronizaron ${nuevosDetalles.length} colaborador(es) activos desde /personal`
+      );
+    }
+  };
+
+  const handleAbrirPeriodo = async (p: PeriodoNomina) => {
+    setPeriodoSeleccionado(p);
+    setTabActual("PROCESADOR");
+    if (p.estado === "BORRADOR") {
+      await sincronizarEmpleadosConBorrador(p);
+    }
+  };
+
+  // Auto-sincronización al montar o tener seleccionado un borrador vacío
+  useEffect(() => {
+    if (
+      periodoSeleccionado &&
+      periodoSeleccionado.estado === "BORRADOR" &&
+      !loadingEmpleados &&
+      !loadingDetalles &&
+      empleadosActivos.length > 0 &&
+      detallesDelPeriodo.length === 0
+    ) {
+      sincronizarEmpleadosConBorrador(periodoSeleccionado);
+    }
+  }, [
+    periodoSeleccionado?.id,
+    periodoSeleccionado?.estado,
+    loadingEmpleados,
+    loadingDetalles,
+    empleadosActivos.length,
+    detallesDelPeriodo.length,
+  ]);
 
   // Modo adaptable: visibilidad inteligente de columnas de deducciones
   const [mostrarTodasColumnas, setMostrarTodasColumnas] = useState(false);
@@ -767,7 +940,8 @@ function NominaPage() {
     });
   };
 
-  if (loadingEmpleados || loadingPeriodos || loadingDetalles || loadingAnticipos) {
+  const hasLoadedAny = empleados.length > 0 || periodos.length > 0;
+  if (!hasLoadedAny && (loadingEmpleados || loadingPeriodos || loadingDetalles || loadingAnticipos)) {
     return <GlobalPageLoader />;
   }
 
@@ -916,9 +1090,12 @@ function NominaPage() {
           size="sm"
           onClick={() => {
             if (!periodoSeleccionado && periodos.length > 0) {
-              setPeriodoSeleccionado(periodos[0]);
+              handleAbrirPeriodo(periodos[0]);
+            } else if (periodoSeleccionado) {
+              handleAbrirPeriodo(periodoSeleccionado);
+            } else {
+              setTabActual("PROCESADOR");
             }
-            setTabActual("PROCESADOR");
           }}
           className={`font-semibold gap-1.5 cursor-pointer transition-colors ${
             tabActual === "PROCESADOR" ? "bg-[#1B4B73] hover:bg-[#133857] text-white" : ""
@@ -1045,10 +1222,7 @@ function NominaPage() {
                       <Button
                         size="sm"
                         className="flex-1 gap-1 cursor-pointer bg-[#1B4B73] hover:bg-[#133857] text-white font-semibold"
-                        onClick={() => {
-                          setPeriodoSeleccionado(p);
-                          setTabActual("PROCESADOR");
-                        }}
+                        onClick={() => handleAbrirPeriodo(p)}
                       >
                         <span>Abrir Nómina</span>
                         <ArrowRight className="h-3.5 w-3.5" />
@@ -1160,16 +1334,32 @@ function NominaPage() {
                   ) : null}
                 </div>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setMostrarTodasColumnas(!mostrarTodasColumnas)}
-                  className="h-7 text-xs font-semibold gap-1.5 cursor-pointer border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs"
-                >
-                  <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
-                  <span>{mostrarTodasColumnas ? "Ocultar Columnas Vacías" : "Ver Todas las Columnas"}</span>
-                </Button>
+                <div className="flex items-center gap-2">
+                  {periodoSeleccionado?.estado === "BORRADOR" && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => sincronizarEmpleadosConBorrador(periodoSeleccionado, true)}
+                      className="h-7 text-xs font-semibold gap-1.5 cursor-pointer border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs text-[#1B4B73] dark:text-sky-300"
+                      title="Sincronizar colaboradores activos desde /personal"
+                    >
+                      <Sparkles className="h-3.5 w-3.5 text-[#F0B900]" />
+                      <span>Sincronizar Personal ({empleadosActivos.length})</span>
+                    </Button>
+                  )}
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setMostrarTodasColumnas(!mostrarTodasColumnas)}
+                    className="h-7 text-xs font-semibold gap-1.5 cursor-pointer border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 shadow-2xs"
+                  >
+                    <SlidersHorizontal className="h-3.5 w-3.5 text-slate-500" />
+                    <span>{mostrarTodasColumnas ? "Ocultar Columnas Vacías" : "Ver Todas las Columnas"}</span>
+                  </Button>
+                </div>
               </div>
 
               {/* Tabla de Empleados y Liquidación */}
@@ -1193,7 +1383,29 @@ function NominaPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
-                      {detallesDelPeriodo.map((d) => {
+                      {detallesDelPeriodo.length === 0 ? (
+                        <tr>
+                          <td colSpan={10} className="py-12 text-center text-muted-foreground text-xs">
+                            <div className="flex flex-col items-center justify-center gap-2.5">
+                              <Users className="h-10 w-10 text-slate-400" />
+                              <p className="font-semibold text-slate-600 dark:text-slate-300 text-sm">
+                                No hay colaboradores en esta planilla todavía.
+                              </p>
+                              {periodoSeleccionado.estado === "BORRADOR" && empleadosActivos.length > 0 ? (
+                                <Button
+                                  size="sm"
+                                  onClick={() => sincronizarEmpleadosConBorrador(periodoSeleccionado, true)}
+                                  className="bg-[#1B4B73] hover:bg-[#133857] text-white font-bold gap-2 text-xs mt-1 cursor-pointer"
+                                >
+                                  <Sparkles className="h-3.5 w-3.5 text-[#F0B900]" />
+                                  <span>Cargar {empleadosActivos.length} colaboradores desde /personal</span>
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ) : (
+                        detallesDelPeriodo.map((d) => {
                         const emp = d.empleado;
                         const nombreCompleto = emp
                           ? `${emp.nombre} ${emp.apellido || ""}`.trim()
@@ -1346,7 +1558,7 @@ function NominaPage() {
                             </td>
                           </tr>
                         );
-                      })}
+                      }))}
                     </tbody>
                   </table>
                 </div>
@@ -1513,345 +1725,417 @@ function NominaPage() {
 
       {/* DIALOG: GENERAR NUEVO PERÍODO */}
       <Dialog open={modalNuevoPeriodo} onOpenChange={setModalNuevoPeriodo}>
-        <DialogContent className="sm:max-w-[560px] bg-background text-foreground rounded-2xl p-5 sm:p-6 border-none shadow-2xl">
-          <DialogHeader className="space-y-1 pb-1">
-            <DialogTitle className="flex items-center gap-2 text-foreground font-bold text-base sm:text-lg">
-              <Calendar className="h-5 w-5 text-[#1B4B73]" />
-              <span>Generar Nuevo Período de Nómina</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Carga automáticamente los salarios de tus empleados activos y descuenta los vales de caja pendientes.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCrearPeriodo} className="space-y-3.5 pt-1">
-            <div className="space-y-1.5">
-              <Label htmlFor="nombre_periodo" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Nombre del Período*
-              </Label>
-              <Input
-                id="nombre_periodo"
-                value={periodoForm.nombre}
-                onChange={(e) => setPeriodoForm((prev) => ({ ...prev, nombre: e.target.value }))}
-                required
-                placeholder="Ej. 1ra Quincena septiembre"
-                className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Frecuencia de Pago*
-                </Label>
-                <Select
-                  value={periodoForm.frecuencia}
-                  onValueChange={(val: any) => handleFrecuenciaChange(val)}
-                >
-                  <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                    <SelectItem value="QUINCENAL" className="cursor-pointer text-xs sm:text-sm">Quincenal (Días 15 y 30)</SelectItem>
-                    <SelectItem value="SEMANAL" className="cursor-pointer text-xs sm:text-sm">Semanal (Operarios)</SelectItem>
-                    <SelectItem value="MENSUAL" className="cursor-pointer text-xs sm:text-sm">Mensual</SelectItem>
-                  </SelectContent>
-                </Select>
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-lg flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/50 dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/20 shadow-xs shrink-0">
+                <Calendar className="h-4.5 w-4.5" />
               </div>
-
-              <div className="space-y-1.5">
-                <Label htmlFor="fecha_pago" className="text-xs font-bold text-slate-700 dark:text-slate-300 flex items-center justify-between">
-                  <span>Fecha de Pago Programada*</span>
-                </Label>
-                <DMYDatePicker
-                  id="fecha_pago"
-                  className="h-9 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs"
-                  value={periodoForm.fecha_pago}
-                  onChange={handleFechaPagoChange}
-                  onMonthChange={handleMonthNavigate}
-                />
-                <p className="text-[10px] text-muted-foreground leading-tight">Día que se entrega el dinero (efectivo o banco).</p>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
+                  Generar Período de Nómina
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
+                  Carga automáticamente los salarios de tus empleados y deducciones vigentes.
+                </DialogDescription>
               </div>
             </div>
+          </div>
 
-            <div className="grid grid-cols-2 gap-3">
+          <form onSubmit={handleCrearPeriodo} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
               <div className="space-y-1.5">
-                <Label htmlFor="fecha_inicio" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Fecha Inicio (Corte)
+                <Label htmlFor="nombre_periodo" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Nombre del Período*
                 </Label>
-                <DMYDatePicker
-                  id="fecha_inicio"
-                  className="h-9 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs"
-                  value={periodoForm.fecha_inicio}
-                  onChange={handleFechaInicioChange}
-                  onMonthChange={handleMonthNavigate}
-                />
-                <p className="text-[10px] text-muted-foreground leading-tight">Primer día laborado de la nómina.</p>
+                <div className="relative">
+                  <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                  <Input
+                    id="nombre_periodo"
+                    value={periodoForm.nombre}
+                    onChange={(e) => setPeriodoForm((prev) => ({ ...prev, nombre: e.target.value }))}
+                    required
+                    placeholder="Ej. 1ra Quincena septiembre"
+                    className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                  />
+                </div>
               </div>
 
-              <div className="space-y-1.5">
-                <Label htmlFor="fecha_fin" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                  Fecha Fin (Corte)
-                </Label>
-                <DMYDatePicker
-                  id="fecha_fin"
-                  className="h-9 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs"
-                  value={periodoForm.fecha_fin}
-                  onChange={(val) =>
-                    setPeriodoForm((prev) => ({ ...prev, fecha_fin: val }))
-                  }
-                  onMonthChange={handleMonthNavigate}
-                />
-                <p className="text-[10px] text-muted-foreground leading-tight">Último día laborado del corte.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Frecuencia de Pago*
+                  </Label>
+                  <div className="relative">
+                    <Clock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                    <Select
+                      value={periodoForm.frecuencia}
+                      onValueChange={(val: any) => handleFrecuenciaChange(val)}
+                    >
+                      <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900">
+                        <SelectItem value="QUINCENAL" className="cursor-pointer text-xs sm:text-sm">Quincenal (Días 15 y 30)</SelectItem>
+                        <SelectItem value="SEMANAL" className="cursor-pointer text-xs sm:text-sm">Semanal (Operarios)</SelectItem>
+                        <SelectItem value="MENSUAL" className="cursor-pointer text-xs sm:text-sm">Mensual</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="fecha_pago" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Fecha de Pago Programada*
+                  </Label>
+                  <DMYDatePicker
+                    id="fecha_pago"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs font-medium px-3"
+                    value={periodoForm.fecha_pago}
+                    onChange={handleFechaPagoChange}
+                    onMonthChange={handleMonthNavigate}
+                  />
+                  <p className="text-[10px] text-muted-foreground leading-tight">Día que se entrega el dinero (efectivo o banco).</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="fecha_inicio" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Fecha Inicio (Corte)
+                  </Label>
+                  <DMYDatePicker
+                    id="fecha_inicio"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs font-medium px-3"
+                    value={periodoForm.fecha_inicio}
+                    onChange={handleFechaInicioChange}
+                    onMonthChange={handleMonthNavigate}
+                  />
+                  <p className="text-[10px] text-muted-foreground leading-tight">Primer día laborado del corte.</p>
+                </div>
+
+                <div className="space-y-1.5">
+                  <Label htmlFor="fecha_fin" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                    Fecha Fin (Corte)
+                  </Label>
+                  <DMYDatePicker
+                    id="fecha_fin"
+                    className="h-10 rounded-xl text-xs sm:text-sm bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs font-medium px-3"
+                    value={periodoForm.fecha_fin}
+                    onChange={(val) =>
+                      setPeriodoForm((prev) => ({ ...prev, fecha_fin: val }))
+                    }
+                    onMonthChange={handleMonthNavigate}
+                  />
+                  <p className="text-[10px] text-muted-foreground leading-tight">Último día laborado del corte.</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/80 dark:border-blue-900/50 rounded-2xl text-xs space-y-1 text-blue-900 dark:text-blue-200 shadow-xs">
+                <p className="font-bold flex items-center gap-1.5 text-xs sm:text-sm">
+                  <ShieldCheck className="h-4 w-4 text-[#1B4B73] shrink-0" />
+                  Cálculo Inteligente Automatizado
+                </p>
+                <p className="text-[11px] text-muted-foreground leading-relaxed">
+                  Se incluirán {empleadosActivos.length} empleado(s) activos y se aplicarán automáticamente las retenciones de TSS / ISR configuradas y los vales de caja pendientes.
+                </p>
               </div>
             </div>
 
-            <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-xl text-xs space-y-1 text-blue-900 dark:text-blue-200">
-              <p className="font-bold flex items-center gap-1.5 text-xs sm:text-sm">
-                <ShieldCheck className="h-4 w-4 text-[#1B4B73]" />
-                Cálculo Inteligente
-              </p>
-              <p className="text-[11px] text-muted-foreground leading-relaxed">
-                Se incluirán {empleadosActivos.length} empleado(s) activos y se aplicarán automáticamente las retenciones de TSS / ISR configuradas y los vales de caja pendientes.
-              </p>
-            </div>
-
-            <DialogFooter className="pt-2 gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalNuevoPeriodo(false)} className="cursor-pointer h-9 px-4 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            {/* MODAL FOOTER */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalNuevoPeriodo(false)}
+                className="h-9.5 rounded-xl px-3.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer"
+              >
                 Cancelar
               </Button>
-              <Button type="submit" size="sm" className="bg-[#1B4B73] hover:bg-[#133857] text-white font-bold cursor-pointer shadow-xs hover:shadow h-9 px-4 text-xs sm:text-sm rounded-xl">
+              <Button
+                type="submit"
+                size="sm"
+                className="h-9.5 rounded-xl bg-[#1B4B73] hover:bg-[#133857] text-white font-bold cursor-pointer shadow-xs active:translate-y-px px-5 text-xs sm:text-sm whitespace-nowrap"
+              >
                 Generar Nómina
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
 
       {/* DIALOG: REGISTRAR VALE / ANTICIPO */}
       <Dialog open={modalNuevoAnticipo} onOpenChange={setModalNuevoAnticipo}>
-        <DialogContent className="max-w-[420px] sm:max-w-[420px] bg-background text-foreground rounded-2xl p-5 border-none shadow-2xl">
-          <DialogHeader className="space-y-1 pb-1">
-            <DialogTitle className="flex items-center gap-2 text-foreground font-bold text-base sm:text-lg">
-              <Banknote className="h-5 w-5 text-[#F0B900]" />
-              <span>Registrar Vale / Anticipo de Sueldo</span>
-            </DialogTitle>
-            <DialogDescription className="text-xs text-muted-foreground">
-              Entrega un adelanto de sueldo y descuéntalo automáticamente en la próxima nómina.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleCrearAnticipo} className="space-y-3.5 pt-1">
-            <div className="space-y-1.5">
-              <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Empleado Beneficiario*
-              </Label>
-              <Select
-                value={anticipoForm.empleado_id}
-                onValueChange={(val) =>
-                  setAnticipoForm((prev) => ({ ...prev, empleado_id: val }))
-                }
-              >
-                <SelectTrigger className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm">
-                  <SelectValue placeholder="Seleccione el empleado..." />
-                </SelectTrigger>
-                <SelectContent className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                  {empleadosActivos.map((emp) => (
-                    <SelectItem key={emp.id} value={emp.id} className="cursor-pointer text-xs sm:text-sm">
-                      {emp.nombre} {emp.apellido || ""} ({emp.rol})
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-md flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-[#F0B900]/15 text-[#b08800] dark:text-[#F0B900] flex items-center justify-center border border-[#F0B900]/25 shadow-xs shrink-0">
+                <Banknote className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
+                  Registrar Vale / Anticipo
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
+                  Entrega un adelanto de sueldo y descuéntalo en la nómina correspondiente.
+                </DialogDescription>
+              </div>
             </div>
+          </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="monto_anticipo" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Monto del Adelanto (RD$)*
-              </Label>
-              <PriceInput
-                id="monto_anticipo"
-                value={anticipoForm.monto || 0}
-                onChange={(val) =>
-                  setAnticipoForm((prev) => ({ ...prev, monto: val }))
-                }
-                placeholder="0.00"
-                required
-                className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs text-base font-bold tabular-nums focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
-              />
-            </div>
+          <form onSubmit={handleCrearAnticipo} className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
+              <div className="space-y-1.5">
+                <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Empleado Beneficiario*
+                </Label>
+                <div className="relative">
+                  <Users className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                  <Select
+                    value={anticipoForm.empleado_id}
+                    onValueChange={(val) =>
+                      setAnticipoForm((prev) => ({ ...prev, empleado_id: val }))
+                    }
+                  >
+                    <SelectTrigger className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs cursor-pointer focus:border-[#1B4B73] focus:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium">
+                      <SelectValue placeholder="Seleccione el empleado..." />
+                    </SelectTrigger>
+                    <SelectContent className="rounded-xl border border-slate-200 dark:border-slate-800 shadow-lg bg-white dark:bg-slate-900 max-h-56">
+                      {empleadosActivos.map((emp) => (
+                        <SelectItem key={emp.id} value={emp.id} className="cursor-pointer text-xs sm:text-sm">
+                          {emp.nombre} {emp.apellido || ""} ({emp.rol})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
 
-            <div className="space-y-1.5">
-              <Label htmlFor="motivo_anticipo" className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                Motivo / Concepto
-              </Label>
-              <Input
-                id="motivo_anticipo"
-                placeholder="Ej. Adelanto semanal, emergencia médica..."
-                value={anticipoForm.motivo}
-                onChange={(e) =>
-                  setAnticipoForm((prev) => ({ ...prev, motivo: e.target.value }))
-                }
-                className="h-9 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm"
-              />
-            </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="monto_anticipo" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Monto del Adelanto (RD$)*
+                </Label>
+                <div className="relative">
+                  <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
+                    RD$
+                  </span>
+                  <PriceInput
+                    id="monto_anticipo"
+                    value={anticipoForm.monto || 0}
+                    onChange={(val) =>
+                      setAnticipoForm((prev) => ({ ...prev, monto: val }))
+                    }
+                    placeholder="0.00"
+                    required
+                    className="h-10 pl-11 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs text-sm sm:text-base font-bold tabular-nums focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20"
+                  />
+                </div>
+              </div>
 
-            <div className="p-3 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl flex items-start gap-2.5">
-              <Checkbox
-                id="descontar_caja_vale"
-                checked={anticipoForm.descontar_caja}
-                onCheckedChange={(c) =>
-                  setAnticipoForm((prev) => ({ ...prev, descontar_caja: !!c }))
-                }
-                className="mt-0.5 cursor-pointer"
-              />
-              <div className="text-xs">
-                <label htmlFor="descontar_caja_vale" className="font-bold text-foreground cursor-pointer text-xs sm:text-sm">
-                  Entregar efectivo desde la Caja Abierta del Turno
-                </label>
-                <p className="text-muted-foreground mt-0.5 text-[11px] leading-relaxed">
-                  Genera una salida de caja registrada en el cuadre del turno actual.
-                </p>
+              <div className="space-y-1.5">
+                <Label htmlFor="motivo_anticipo" className="text-xs font-bold text-slate-600 dark:text-slate-400">
+                  Motivo / Concepto (Opcional)
+                </Label>
+                <div className="relative">
+                  <Receipt className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
+                  <Input
+                    id="motivo_anticipo"
+                    placeholder="Ej. Adelanto semanal, emergencia médica..."
+                    value={anticipoForm.motivo}
+                    onChange={(e) =>
+                      setAnticipoForm((prev) => ({ ...prev, motivo: e.target.value }))
+                    }
+                    className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
+                  />
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 rounded-2xl flex items-start gap-2.5 shadow-xs">
+                <Checkbox
+                  id="descontar_caja_vale"
+                  checked={anticipoForm.descontar_caja}
+                  onCheckedChange={(c) =>
+                    setAnticipoForm((prev) => ({ ...prev, descontar_caja: !!c }))
+                  }
+                  className="mt-0.5 cursor-pointer"
+                />
+                <div className="text-xs">
+                  <label htmlFor="descontar_caja_vale" className="font-bold text-foreground cursor-pointer text-xs sm:text-sm">
+                    Entregar efectivo desde la Caja Abierta del Turno
+                  </label>
+                  <p className="text-muted-foreground mt-0.5 text-[11px] leading-relaxed">
+                    Genera automáticamente una salida de caja registrada en el cuadre del turno activo actual.
+                  </p>
+                </div>
               </div>
             </div>
 
-            <DialogFooter className="pt-2 gap-2">
-              <Button type="button" variant="outline" size="sm" onClick={() => setModalNuevoAnticipo(false)} className="cursor-pointer h-9 px-4 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+            {/* MODAL FOOTER */}
+            <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setModalNuevoAnticipo(false)}
+                className="h-9.5 rounded-xl px-3.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer"
+              >
                 Cancelar
               </Button>
               <Button
                 type="submit"
                 size="sm"
-                className="bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#d4a300] font-extrabold cursor-pointer shadow-xs hover:shadow h-9 px-4 text-xs sm:text-sm rounded-xl"
+                className="h-9.5 rounded-xl bg-[#F0B900] hover:bg-[#d9a700] text-[#1B4B73] border border-[#d4a300] font-extrabold cursor-pointer shadow-xs active:translate-y-px px-4 text-xs sm:text-sm whitespace-nowrap"
               >
                 Registrar Vale ({formatRD(anticipoForm.monto || 0)})
               </Button>
-            </DialogFooter>
+            </div>
           </form>
         </DialogContent>
       </Dialog>
 
       {/* DIALOG: RECIBO DE PAGO IMPRIMIBLE */}
       <Dialog open={modalReciboImpresion} onOpenChange={setModalReciboImpresion}>
-        <DialogContent className="sm:max-w-[560px] print:max-w-none bg-background text-foreground rounded-2xl p-5 sm:p-6 border-none shadow-2xl">
-          <DialogHeader className="space-y-1 pb-1">
-            <DialogTitle className="flex items-center gap-2 text-foreground font-bold text-base sm:text-lg">
-              <Printer className="h-5 w-5 text-primary" />
-              <span>Recibo de Pago de Nómina</span>
-            </DialogTitle>
-          </DialogHeader>
+        <DialogContent className="flex max-h-[92vh] w-[94vw] max-w-lg print:max-w-none flex-col gap-0 overflow-hidden rounded-3xl border-none bg-background p-0 shadow-2xl text-foreground">
+          {/* MODAL HEADER */}
+          <div className="shrink-0 bg-slate-50/80 dark:bg-slate-900/60 p-3.5 sm:p-4 pb-3 relative border-b border-slate-100 dark:border-slate-800/60 print:hidden">
+            <div className="flex items-center gap-3 pr-8">
+              <div className="h-9 w-9 rounded-2xl bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950/50 dark:text-sky-400 flex items-center justify-center border border-[#1B4B73]/20 shadow-xs shrink-0">
+                <Printer className="h-4.5 w-4.5" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <DialogTitle className="text-base sm:text-lg font-display font-bold text-foreground">
+                  Recibo de Pago de Nómina
+                </DialogTitle>
+                <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
+                  Volante de pago y conformidad salarial imprimible.
+                </DialogDescription>
+              </div>
+            </div>
+          </div>
 
           {detalleParaRecibo && (
-            <div className="space-y-4">
-              {/* Formato Recibo Térmico */}
-              <div
-                id="recibo-nomina-print"
-                className="p-4 bg-white text-black font-sans text-xs border rounded-lg shadow-inner space-y-3"
-              >
-                <div className="text-center space-y-1">
-                  <h4 className="font-black text-sm uppercase">{user?.tenant?.nombre || "Klynn Lavandería"}</h4>
-                  <p className="text-[10px]">RNC: {user?.tenant?.rnc || "N/D"}</p>
-                  <p className="text-[10px] font-bold border-t border-b border-dashed py-1">
-                    VOLANTE DE PAGO DE NÓMINA
-                  </p>
-                  <p className="text-[10px]">{periodoSeleccionado?.nombre}</p>
-                </div>
-
-                <div className="space-y-1 border-b border-dashed pb-2">
-                  <p>
-                    <strong>Empleado:</strong> {detalleParaRecibo.empleado?.nombre} {detalleParaRecibo.empleado?.apellido || ""}
-                  </p>
-                  <p>
-                    <strong>Puesto:</strong> {detalleParaRecibo.empleado?.rol}
-                  </p>
-                  <p>
-                    <strong>Fecha Pago:</strong> {formatFechaDMY(periodoSeleccionado?.fecha_pago)}
-                  </p>
-                </div>
-
-                <div className="space-y-1">
-                  <p className="font-bold">INGRESOS:</p>
-                  <div className="flex justify-between">
-                    <span>Sueldo Base Período:</span>
-                    <span>{formatRD(detalleParaRecibo.salario_base_periodo)}</span>
+            <div className="flex min-h-0 flex-1 flex-col">
+              <div className="min-h-0 flex-1 space-y-3.5 overflow-y-auto px-4 sm:px-5 py-3.5">
+                {/* Formato Recibo Térmico */}
+                <div
+                  id="recibo-nomina-print"
+                  className="p-5 bg-white text-black font-sans text-xs border border-slate-200 rounded-2xl shadow-inner space-y-3"
+                >
+                  <div className="text-center space-y-1">
+                    <h4 className="font-black text-sm uppercase tracking-wide">{user?.tenant?.nombre || "Klynn Lavandería"}</h4>
+                    <p className="text-[10px] text-slate-500">RNC: {user?.tenant?.rnc || "N/D"}</p>
+                    <p className="text-[10px] font-black border-t border-b border-dashed border-slate-300 py-1.5 uppercase tracking-wider">
+                      VOLANTE DE PAGO DE NÓMINA
+                    </p>
+                    <p className="text-[11px] font-bold">{periodoSeleccionado?.nombre}</p>
                   </div>
-                  {detalleParaRecibo.horas_extras > 0 && (
-                    <div className="flex justify-between">
-                      <span>
-                        Horas Extras {detalleParaRecibo.cantidad_horas_extras ? `(${detalleParaRecibo.cantidad_horas_extras}h)` : ""}:
-                      </span>
-                      <span>{formatRD(detalleParaRecibo.horas_extras)}</span>
-                    </div>
-                  )}
-                  {detalleParaRecibo.comisiones_destajo > 0 && (
-                    <div className="flex justify-between">
-                      <span>Comisiones / Piezas:</span>
-                      <span>{formatRD(detalleParaRecibo.comisiones_destajo)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold border-t pt-1">
-                    <span>TOTAL BRUTO:</span>
-                    <span>{formatRD(detalleParaRecibo.total_ingresos)}</span>
+
+                  <div className="space-y-1 border-b border-dashed border-slate-300 pb-2">
+                    <p>
+                      <strong>Empleado:</strong> {detalleParaRecibo.empleado?.nombre} {detalleParaRecibo.empleado?.apellido || ""}
+                    </p>
+                    <p>
+                      <strong>Puesto:</strong> {detalleParaRecibo.empleado?.rol}
+                    </p>
+                    <p>
+                      <strong>Fecha Pago:</strong> {formatFechaDMY(periodoSeleccionado?.fecha_pago)}
+                    </p>
                   </div>
-                </div>
 
-                <div className="space-y-1">
-                  <p className="font-bold">DEDUCCIONES:</p>
-                  {detalleParaRecibo.anticipos_descontados > 0 && (
-                    <div className="flex justify-between text-red-600">
-                      <span>Anticipos / Vales:</span>
-                      <span>-{formatRD(detalleParaRecibo.anticipos_descontados)}</span>
-                    </div>
-                  )}
-                  {detalleParaRecibo.tss_afp > 0 && (
+                  <div className="space-y-1">
+                    <p className="font-bold text-[11px]">INGRESOS:</p>
                     <div className="flex justify-between">
-                      <span>AFP (2.87%):</span>
-                      <span>-{formatRD(detalleParaRecibo.tss_afp)}</span>
+                      <span>Sueldo Base Período:</span>
+                      <span className="font-bold tabular-nums">{formatRD(detalleParaRecibo.salario_base_periodo)}</span>
                     </div>
-                  )}
-                  {detalleParaRecibo.tss_sfs > 0 && (
-                    <div className="flex justify-between">
-                      <span>SFS (3.04%):</span>
-                      <span>-{formatRD(detalleParaRecibo.tss_sfs)}</span>
+                    {detalleParaRecibo.horas_extras > 0 && (
+                      <div className="flex justify-between">
+                        <span>
+                          Horas Extras {detalleParaRecibo.cantidad_horas_extras ? `(${detalleParaRecibo.cantidad_horas_extras}h)` : ""}:
+                        </span>
+                        <span className="font-bold tabular-nums">{formatRD(detalleParaRecibo.horas_extras)}</span>
+                      </div>
+                    )}
+                    {detalleParaRecibo.comisiones_destajo > 0 && (
+                      <div className="flex justify-between">
+                        <span>Comisiones / Piezas:</span>
+                        <span className="font-bold tabular-nums">{formatRD(detalleParaRecibo.comisiones_destajo)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold border-t border-slate-300 pt-1">
+                      <span>TOTAL BRUTO:</span>
+                      <span className="tabular-nums">{formatRD(detalleParaRecibo.total_ingresos)}</span>
                     </div>
-                  )}
-                  {detalleParaRecibo.isr_retencion > 0 && (
-                    <div className="flex justify-between">
-                      <span>ISR Retenido (DGII):</span>
-                      <span>-{formatRD(detalleParaRecibo.isr_retencion)}</span>
-                    </div>
-                  )}
-                  <div className="flex justify-between font-bold border-t pt-1">
-                    <span>TOTAL DEDUCCIONES:</span>
-                    <span>-{formatRD(detalleParaRecibo.total_deducciones)}</span>
                   </div>
-                </div>
 
-                <div className="flex justify-between font-black text-sm border-t-2 border-b-2 py-1.5">
-                  <span>NETO A RECIBIR:</span>
-                  <span>{formatRD(detalleParaRecibo.neto_pagar)}</span>
-                </div>
+                  <div className="space-y-1">
+                    <p className="font-bold text-[11px]">DEDUCCIONES:</p>
+                    {detalleParaRecibo.anticipos_descontados > 0 && (
+                      <div className="flex justify-between text-red-600 font-medium">
+                        <span>Anticipos / Vales:</span>
+                        <span className="tabular-nums">-{formatRD(detalleParaRecibo.anticipos_descontados)}</span>
+                      </div>
+                    )}
+                    {detalleParaRecibo.tss_afp > 0 && (
+                      <div className="flex justify-between">
+                        <span>AFP (2.87%):</span>
+                        <span className="tabular-nums">-{formatRD(detalleParaRecibo.tss_afp)}</span>
+                      </div>
+                    )}
+                    {detalleParaRecibo.tss_sfs > 0 && (
+                      <div className="flex justify-between">
+                        <span>SFS (3.04%):</span>
+                        <span className="tabular-nums">-{formatRD(detalleParaRecibo.tss_sfs)}</span>
+                      </div>
+                    )}
+                    {detalleParaRecibo.isr_retencion > 0 && (
+                      <div className="flex justify-between">
+                        <span>ISR Retenido (DGII):</span>
+                        <span className="tabular-nums">-{formatRD(detalleParaRecibo.isr_retencion)}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between font-bold border-t border-slate-300 pt-1">
+                      <span>TOTAL DEDUCCIONES:</span>
+                      <span className="tabular-nums text-rose-600">-{formatRD(detalleParaRecibo.total_deducciones)}</span>
+                    </div>
+                  </div>
 
-                <div className="pt-8 text-center space-y-1">
-                  <div className="border-t border-black w-48 mx-auto" />
-                  <p className="text-[10px]">Firma de Conformidad del Empleado</p>
+                  <div className="flex justify-between font-black text-sm border-t-2 border-b-2 border-slate-900 py-1.5">
+                    <span>NETO A RECIBIR:</span>
+                    <span className="tabular-nums">{formatRD(detalleParaRecibo.neto_pagar)}</span>
+                  </div>
+
+                  <div className="pt-8 text-center space-y-1">
+                    <div className="border-t border-black w-48 mx-auto" />
+                    <p className="text-[10px] text-slate-600">Firma de Conformidad del Empleado</p>
+                  </div>
                 </div>
               </div>
 
-              <DialogFooter className="gap-2">
-                <Button variant="outline" onClick={() => setModalReciboImpresion(false)} className="cursor-pointer h-9 px-4 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+              {/* MODAL FOOTER */}
+              <div className="flex shrink-0 items-center justify-end gap-2 border-t border-slate-100 dark:border-slate-800/60 bg-slate-50/70 dark:bg-slate-900/60 px-4 sm:px-5 py-3 print:hidden">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setModalReciboImpresion(false)}
+                  className="cursor-pointer h-9.5 px-4 text-xs sm:text-sm font-semibold rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
+                >
                   Cerrar
                 </Button>
                 <Button
+                  type="button"
                   onClick={() => {
                     window.print();
                   }}
-                  className="gap-1.5 font-bold cursor-pointer bg-[#1B4B73] hover:bg-[#133857] text-white shadow-xs hover:shadow h-9 px-4 text-xs sm:text-sm rounded-xl"
+                  className="gap-2 font-bold cursor-pointer bg-[#1B4B73] hover:bg-[#133857] text-white shadow-xs active:translate-y-px h-9.5 px-5 text-xs sm:text-sm rounded-xl whitespace-nowrap"
                 >
                   <Printer className="h-4 w-4" />
                   <span>Imprimir Volante</span>
                 </Button>
-              </DialogFooter>
+              </div>
             </div>
           )}
         </DialogContent>
@@ -1862,12 +2146,12 @@ function NominaPage() {
         open={Boolean(periodoToDelete)}
         onOpenChange={(open) => !open && setPeriodoToDelete(null)}
       >
-        <AlertDialogContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5">
+        <AlertDialogContent className="rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5 sm:p-6">
           <AlertDialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50">
+            <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50 shadow-xs">
               <Trash2 className="h-5 w-5" />
             </div>
-            <AlertDialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               ¿Eliminar período de nómina?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
@@ -1878,13 +2162,13 @@ function NominaPage() {
               . Esta acción eliminará el registro de este corte y sus líneas asociadas.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2 pt-2">
-            <AlertDialogCancel className="rounded-xl h-9 text-xs font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
+          <AlertDialogFooter className="gap-2 sm:gap-2 pt-3">
+            <AlertDialogCancel className="rounded-xl h-9.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDeletePeriodo}
-              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9 text-xs font-bold shadow-xs cursor-pointer border-none"
+              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs cursor-pointer border-none"
             >
               Sí, eliminar nómina
             </AlertDialogAction>
@@ -1897,12 +2181,12 @@ function NominaPage() {
         open={Boolean(anticipoToDelete)}
         onOpenChange={(open) => !open && setAnticipoToDelete(null)}
       >
-        <AlertDialogContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5">
+        <AlertDialogContent className="rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[420px] p-5 sm:p-6">
           <AlertDialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50">
+            <div className="h-10 w-10 rounded-2xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 flex items-center justify-center mb-1 border border-rose-100 dark:border-rose-900/50 shadow-xs">
               <Trash2 className="h-5 w-5" />
             </div>
-            <AlertDialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               ¿Anular este vale de caja?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
@@ -1913,13 +2197,13 @@ function NominaPage() {
               . Ya no será descontado en la nómina.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2 pt-2">
-            <AlertDialogCancel className="rounded-xl h-9 text-xs font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
+          <AlertDialogFooter className="gap-2 sm:gap-2 pt-3">
+            <AlertDialogCancel className="rounded-xl h-9.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmDeleteAnticipo}
-              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9 text-xs font-bold shadow-xs cursor-pointer border-none"
+              className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs cursor-pointer border-none"
             >
               Sí, anular vale
             </AlertDialogAction>
@@ -1932,12 +2216,12 @@ function NominaPage() {
         open={Boolean(periodoToPagar)}
         onOpenChange={(open) => !open && setPeriodoToPagar(null)}
       >
-        <AlertDialogContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[440px] p-5">
+        <AlertDialogContent className="rounded-3xl border border-slate-200 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 max-w-[440px] p-5 sm:p-6">
           <AlertDialogHeader>
-            <div className="h-10 w-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mb-1 border border-emerald-100 dark:border-emerald-900/50">
+            <div className="h-10 w-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600 flex items-center justify-center mb-1 border border-emerald-100 dark:border-emerald-900/50 shadow-xs">
               <Banknote className="h-5 w-5" />
             </div>
-            <AlertDialogTitle className="text-base font-bold text-slate-900 dark:text-slate-100">
+            <AlertDialogTitle className="text-base sm:text-lg font-bold text-slate-900 dark:text-slate-100">
               ¿Aprobar y Pagar Nómina?
             </AlertDialogTitle>
             <AlertDialogDescription className="text-xs text-muted-foreground leading-relaxed">
@@ -1946,19 +2230,19 @@ function NominaPage() {
                 "{periodoToPagar?.nombre}"
               </strong>{" "}
               por un total neto de{" "}
-              <strong className="text-emerald-600 dark:text-emerald-400 font-bold">
+              <strong className="text-emerald-600 dark:text-emerald-400 font-bold tabular-nums">
                 {formatRD(periodoToPagar?.total_neto || 0)}
               </strong>
               . Se registrará el egreso contable en gastos de la empresa automáticamente.
             </AlertDialogDescription>
           </AlertDialogHeader>
-          <AlertDialogFooter className="gap-2 sm:gap-2 pt-2">
-            <AlertDialogCancel className="rounded-xl h-9 text-xs font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
+          <AlertDialogFooter className="gap-2 sm:gap-2 pt-3">
+            <AlertDialogCancel className="rounded-xl h-9.5 text-xs sm:text-sm font-semibold border-slate-200 dark:border-slate-800 cursor-pointer">
               Cancelar
             </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmarPagarNomina}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9 text-xs font-bold shadow-xs cursor-pointer border-none"
+              className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl h-9.5 text-xs sm:text-sm font-bold shadow-xs cursor-pointer border-none px-4"
             >
               Confirmar y Pagar
             </AlertDialogAction>
