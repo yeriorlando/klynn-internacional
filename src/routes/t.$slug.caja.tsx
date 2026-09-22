@@ -34,6 +34,11 @@ import {
   History,
   KeyRound,
   Building2,
+  Receipt,
+  ShoppingBag,
+  Calendar,
+  X,
+  User,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -1922,8 +1927,29 @@ function HistoricoCierresDialog({
   }
 
   const selectedEmpleado = empleados.find((e) => e.id === empId);
-  const totalPages = Math.ceil(cierres.length / 5);
-  const currentCierres = cierres.slice((page - 1) * 5, page * 5);
+  const pageSize = 6;
+  const totalPages = Math.max(1, Math.ceil(cierres.length / pageSize));
+  const currentCierres = cierres.slice((page - 1) * pageSize, page * pageSize);
+
+  const kpiTotalCierres = cierres.length;
+  const kpiTotalEfectivo = useMemo(() => {
+    return cierres.reduce((s, c) => s + (c.monto_contado_efectivo || 0), 0);
+  }, [cierres]);
+  const kpiTotalEsperado = useMemo(() => {
+    return cierres.reduce((s, c) => s + (c.monto_esperado_efectivo || 0), 0);
+  }, [cierres]);
+  const kpiDiferenciaNeta = useMemo(() => {
+    return cierres.reduce(
+      (s, c) => s + ((c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0)),
+      0
+    );
+  }, [cierres]);
+
+  useEffect(() => {
+    if (open) {
+      handleSearch();
+    }
+  }, [empId]);
 
   if (showPrint) {
     return (
@@ -1943,166 +1969,333 @@ function HistoricoCierresDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="bg-primary/10 p-2 rounded-lg">
-              <FileText className="h-5 w-5 text-primary" />
+      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0 rounded-3xl overflow-hidden shadow-2xl border border-border/70 bg-background">
+        {/* Header */}
+        <div className="px-6 py-4.5 pr-14 sm:pr-16 border-b border-border/60 bg-surface/50 backdrop-blur-xs flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary shrink-0">
+              <FileText className="h-5 w-5" />
             </div>
-            <DialogTitle className="text-2xl font-display">Historial de Cierres</DialogTitle>
-          </div>
-        </DialogHeader>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-accent/5 p-4 rounded-2xl border border-border/50 mb-6">
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-              Empleado / Cajero
-            </Label>
-            <Select value={empId} onValueChange={setEmpId}>
-              <SelectTrigger className="bg-white border-border/60">
-                <SelectValue placeholder="Seleccionar empleado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los empleados</SelectItem>
-                {empleados.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nombre} {e.apellido}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-              Desde
-            </Label>
-            <Input
-              type="date"
-              value={desde}
-              onChange={(e) => setDesde(e.target.value)}
-              className="bg-white border-border/60"
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-              Hasta
-            </Label>
-            <div className="flex gap-2">
-              <Input
-                type="date"
-                value={hasta}
-                onChange={(e) => setHasta(e.target.value)}
-                className="bg-white border-border/60"
-              />
-              <Button onClick={handleSearch} size="icon" className="shrink-0">
-                <Search className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          {loading ? (
-            <div className="py-20 text-center text-muted-foreground animate-pulse">
-              Cargando histórico...
-            </div>
-          ) : cierres.length === 0 ? (
-            <div className="py-20 text-center border-2 border-dashed border-border rounded-2xl">
-              <Search className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
-              <p className="text-muted-foreground font-medium">
-                No se encontraron cierres para estos filtros.
+            <div>
+              <DialogTitle className="text-lg sm:text-xl font-display font-black text-foreground tracking-tight flex items-center gap-2">
+                <span>Historial de Cierres</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  Auditoría
+                </span>
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Registro histórico de turnos, arqueos de caja y diferencias de efectivo.
               </p>
             </div>
-          ) : (
-            <>
-              <div className="border border-border rounded-xl overflow-hidden">
-                <table className="w-full text-sm">
-                  <thead className="bg-accent/5 border-b border-border text-xs uppercase font-bold text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 text-left">Apertura / Cierre</th>
-                      <th className="px-4 py-3 text-left">Empleado</th>
-                      <th className="px-4 py-3 text-right">Efectivo</th>
-                      <th className="px-4 py-3 text-right">Diferencia</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border">
-                    {currentCierres.map((c) => {
-                      const emp = empleados.find((e) => e.id === c.empleado_id);
-                      return (
-                        <tr key={c.id} className="hover:bg-accent/5 transition-colors">
-                          <td className="px-4 py-3">
-                            <div className="font-medium">{formatDateTimeRD(c.abierta_en)}</div>
-                            <div className="text-[10px] text-muted-foreground">
-                              {c.cerrada_en ? formatDateTimeRD(c.cerrada_en) : "No cerrado"}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 font-medium">
-                            {emp ? `${emp.nombre}` : "Desconocido"}
-                          </td>
-                          <td className="px-4 py-3 text-right font-bold text-primary">
-                            {formatRD(c.monto_contado_efectivo || 0)}
-                          </td>
-                          {(() => {
-                            const difEf =
-                              (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
-                            return (
-                              <td
-                                className={`px-4 py-3 text-right font-bold ${difEf < 0 ? "text-destructive" : difEf > 0 ? "text-success" : "text-muted-foreground"}`}
-                              >
-                                {formatRD(difEf)}
-                              </td>
-                            );
-                          })()}
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between px-2 py-2 mt-2">
-                  <span className="text-xs text-muted-foreground">
-                    Mostrando {(page - 1) * 5 + 1} al {Math.min(page * 5, cierres.length)} de{" "}
-                    {cierres.length}
-                  </span>
-                  <div className="flex gap-1">
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.max(1, p - 1))}
-                      disabled={page === 1}
-                      className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
-                    >
-                      <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                      disabled={page === totalPages}
-                      className="h-8 rounded-xl text-xs font-bold transition-all active:scale-[0.98] bg-primary text-white hover:bg-primary/90"
-                    >
-                      Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
-              )}
-            </>
-          )}
+          </div>
         </div>
 
-        <DialogFooter className="mt-6 gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cerrar
-          </Button>
-          <Button
-            onClick={() => setShowPrint(true)}
-            disabled={cierres.length === 0}
-            className="bg-gradient-primary text-white gap-2"
-          >
-            <Printer className="h-4 w-4" /> Generar Reporte Imprimible
-          </Button>
-        </DialogFooter>
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+          {/* Barra de Filtros */}
+          <div className="p-3.5 bg-slate-50/80 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-end">
+              {/* Filtro de Empleado */}
+              <div className="sm:col-span-5 space-y-1">
+                <span className="text-[11px] font-bold text-muted-foreground whitespace-nowrap flex items-center gap-1.5 ml-0.5">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Filtrar empleado:</span>
+                </span>
+                <Select
+                  value={empId}
+                  onValueChange={(val) => {
+                    setEmpId(val);
+                    setPage(1);
+                  }}
+                >
+                  <SelectTrigger className="h-9 text-xs bg-white dark:bg-slate-800 rounded-xl font-semibold border-slate-200 dark:border-slate-700 shadow-2xs">
+                    <SelectValue placeholder="Todos los empleados" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los empleados</SelectItem>
+                    {empleados.map((e) => (
+                      <SelectItem key={e.id} value={e.id}>
+                        {e.nombre} {e.apellido || ""}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Rango Desde */}
+              <div className="sm:col-span-3 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block ml-0.5">
+                  Desde
+                </span>
+                <Input
+                  type="date"
+                  value={desde}
+                  onChange={(e) => setDesde(e.target.value)}
+                  className="h-9 text-xs bg-white dark:bg-slate-800 rounded-xl border-slate-200 dark:border-slate-700 shadow-2xs"
+                />
+              </div>
+
+              {/* Rango Hasta */}
+              <div className="sm:col-span-3 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block ml-0.5">
+                  Hasta
+                </span>
+                <Input
+                  type="date"
+                  value={hasta}
+                  onChange={(e) => setHasta(e.target.value)}
+                  className="h-9 text-xs bg-white dark:bg-slate-800 rounded-xl border-slate-200 dark:border-slate-700 shadow-2xs"
+                />
+              </div>
+
+              {/* Botón Buscar */}
+              <div className="sm:col-span-1">
+                <Button
+                  type="button"
+                  onClick={handleSearch}
+                  className="h-9 w-full text-xs font-bold rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white flex items-center justify-center shadow-xs active:scale-95 transition-all cursor-pointer p-0"
+                  title="Consultar"
+                >
+                  <Search className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          </div>
+
+          {/* Tarjetas KPI de Resumen */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800">
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
+                Total Cierres
+              </span>
+              <span className="text-base sm:text-lg font-black text-foreground block mt-0.5">
+                {kpiTotalCierres}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 block mt-0.5">
+                {kpiTotalCierres === 1 ? "Turno registrado" : "Turnos registrados"}
+              </span>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">
+                Efectivo Contado
+              </span>
+              <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                {formatRD(kpiTotalEfectivo)}
+              </span>
+              <span className="text-[10px] font-semibold text-emerald-600/80 block mt-0.5">
+                Arqueo físico total
+              </span>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40">
+              <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 block">
+                Esperado en Caja
+              </span>
+              <span className="text-base sm:text-lg font-black text-blue-600 dark:text-blue-400 block mt-0.5">
+                {formatRD(kpiTotalEsperado)}
+              </span>
+              <span className="text-[10px] font-semibold text-blue-600/80 block mt-0.5">
+                Calculado por sistema
+              </span>
+            </div>
+
+            <div
+              className={`p-3 rounded-2xl border ${
+                kpiDiferenciaNeta < 0
+                  ? "bg-rose-50/70 dark:bg-rose-950/30 border-rose-200/60 dark:border-rose-900/40"
+                  : kpiDiferenciaNeta > 0
+                  ? "bg-blue-50/70 dark:bg-blue-950/30 border-blue-200/60 dark:border-blue-900/40"
+                  : "bg-slate-50 dark:bg-slate-900/50 border-slate-200/80 dark:border-slate-800"
+              }`}
+            >
+              <span
+                className={`text-[10px] font-black uppercase tracking-wider block ${
+                  kpiDiferenciaNeta < 0
+                    ? "text-rose-700 dark:text-rose-300"
+                    : kpiDiferenciaNeta > 0
+                    ? "text-blue-700 dark:text-blue-300"
+                    : "text-muted-foreground"
+                }`}
+              >
+                Diferencia Neta
+              </span>
+              <span
+                className={`text-base sm:text-lg font-black block mt-0.5 ${
+                  kpiDiferenciaNeta < 0
+                    ? "text-rose-600 dark:text-rose-400"
+                    : kpiDiferenciaNeta > 0
+                    ? "text-blue-600 dark:text-blue-400"
+                    : "text-foreground"
+                }`}
+              >
+                {kpiDiferenciaNeta > 0 ? "+" : ""}
+                {formatRD(kpiDiferenciaNeta)}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 block mt-0.5">
+                {kpiDiferenciaNeta === 0
+                  ? "Sin descuadres"
+                  : kpiDiferenciaNeta < 0
+                  ? "Faltante neto"
+                  : "Sobrante neto"}
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla de Cierres */}
+          <div className="space-y-2.5">
+            {loading ? (
+              <div className="py-14 text-center text-muted-foreground text-xs flex flex-col items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span>Cargando histórico de cierres...</span>
+              </div>
+            ) : cierres.length === 0 ? (
+              <div className="py-12 text-center border-2 border-dashed border-border/80 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                <p className="text-xs text-muted-foreground font-semibold">
+                  No se encontraron cierres registrados en este período.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="border border-border/80 rounded-2xl overflow-hidden max-h-[260px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 border-b border-border/80 text-[10px] uppercase font-bold text-muted-foreground z-10">
+                      <tr>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Apertura / Cierre</th>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Cajero / Turno</th>
+                        <th className="px-3.5 py-2.5 text-right font-extrabold">Efectivo</th>
+                        <th className="px-3.5 py-2.5 text-right font-extrabold">Diferencia</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 bg-background">
+                      {currentCierres.map((c) => {
+                        const emp = empleados.find((e) => e.id === c.empleado_id);
+                        const turnoStr = c.notas_apertura
+                          ? c.notas_apertura.replace("Turno:", "").trim()
+                          : "";
+                        const difEf =
+                          (c.monto_contado_efectivo || 0) - (c.monto_esperado_efectivo || 0);
+                        return (
+                          <tr
+                            key={c.id}
+                            className="hover:bg-slate-50/70 dark:hover:bg-slate-900/50 transition-colors"
+                          >
+                            <td className="px-3.5 py-2.5">
+                              <div className="font-bold text-foreground flex items-center gap-1.5">
+                                <Clock className="h-3 w-3 text-blue-600 shrink-0" />
+                                {formatDateTimeRD(c.abierta_en)}
+                              </div>
+                              <div className="text-[10px] text-muted-foreground ml-4.5">
+                                {c.cerrada_en ? `Cierre: ${formatDateTimeRD(c.cerrada_en)}` : "Turno Abierto"}
+                              </div>
+                            </td>
+                            <td className="px-3.5 py-2.5">
+                              <div className="font-bold text-foreground">
+                                {emp ? `${emp.nombre} ${emp.apellido || ""}` : "Desconocido"}
+                              </div>
+                              {turnoStr && (
+                                <div className="inline-flex items-center gap-1 text-[10px] text-slate-500 font-semibold mt-0.5">
+                                  {turnoStr.toLowerCase().includes("noche") ? (
+                                    <Moon className="h-2.5 w-2.5 text-indigo-500" />
+                                  ) : (
+                                    <Sun className="h-2.5 w-2.5 text-amber-500" />
+                                  )}
+                                  Turno {turnoStr}
+                                </div>
+                              )}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right font-black text-foreground">
+                              {formatRD(c.monto_contado_efectivo || 0)}
+                            </td>
+                            <td className="px-3.5 py-2.5 text-right">
+                              {difEf === 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300">
+                                  RD$0.00
+                                </span>
+                              ) : difEf < 0 ? (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
+                                  {formatRD(difEf)}
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 dark:bg-blue-950/40 dark:text-blue-300">
+                                  +{formatRD(difEf)}
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Paginación */}
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-between px-1 py-1">
+                    <span className="text-[11px] text-muted-foreground font-medium">
+                      Mostrando {(page - 1) * pageSize + 1} al {Math.min(page * pageSize, cierres.length)} de{" "}
+                      {cierres.length} cierres
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.max(1, p - 1))}
+                        disabled={page === 1}
+                        className="h-8 px-2.5 rounded-xl text-xs font-bold border-slate-200 cursor-pointer"
+                      >
+                        <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
+                      </Button>
+                      <span className="text-xs font-bold text-muted-foreground px-2">
+                        {page} / {totalPages}
+                      </span>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                        disabled={page === totalPages}
+                        className="h-8 px-2.5 rounded-xl text-xs font-bold border-slate-200 cursor-pointer"
+                      >
+                        Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-3.5 border-t border-border/60 bg-slate-50/90 dark:bg-slate-900/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground font-medium">Total arqueado:</span>
+            <span className="font-black text-sm text-[#1B4B73] dark:text-sky-300">
+              {formatRD(kpiTotalEfectivo)}
+            </span>
+          </div>
+
+          <div className="flex items-center justify-end gap-2.5">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-9.5 px-4 text-xs font-bold rounded-xl border-slate-200 cursor-pointer"
+            >
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setShowPrint(true)}
+              disabled={cierres.length === 0}
+              className="bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold h-9.5 px-5 rounded-xl text-xs flex items-center gap-2 shadow-xs active:scale-95 transition-all cursor-pointer"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Generar Reporte Imprimible</span>
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -2287,6 +2480,44 @@ function ReporteCierrePrint({
   );
 }
 
+function getCuadreEstadoBadge(estado: string) {
+  switch (estado) {
+    case "RECIBIDA":
+      return <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 rounded-lg bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300">Recibida</Badge>;
+    case "EN_PROCESO":
+      return <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 rounded-lg bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300">En proceso</Badge>;
+    case "LISTA":
+      return <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 rounded-lg bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300">Lista</Badge>;
+    case "ENTREGADA":
+      return <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 rounded-lg bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300">Entregada</Badge>;
+    case "ANULADA":
+      return <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 rounded-lg bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">Anulada</Badge>;
+    default:
+      return <Badge variant="outline" className="text-[10px] font-black uppercase px-2 py-0.5 rounded-lg bg-slate-50 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300">{estado}</Badge>;
+  }
+}
+
+function getCuadreMetodoBadge(metodo?: string) {
+  if (!metodo) return <span className="text-muted-foreground text-xs">—</span>;
+  const m = metodo.toUpperCase();
+  if (m === "EFECTIVO") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/70 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800/60">Efectivo</span>;
+  }
+  if (m === "TARJETA") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200/70 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800/60">Tarjeta</span>;
+  }
+  if (m === "TRANSFERENCIA") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200/70 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-800/60">Transfer</span>;
+  }
+  if (m === "CREDITO") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200/70 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800/60">Crédito</span>;
+  }
+  if (m === "PAGO_AL_RETIRAR") {
+    return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-orange-50 text-orange-700 border border-orange-200/70 dark:bg-orange-950/40 dark:text-orange-300 dark:border-orange-800/60">Al retirar</span>;
+  }
+  return <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300">{metodo.replace(/_/g, " ")}</span>;
+}
+
 function HistoricoCuadreDialog({
   open,
   onOpenChange,
@@ -2309,8 +2540,16 @@ function HistoricoCuadreDialog({
   const [empleados, setEmpleados] = useState<Empleado[]>([]);
   const [loading, setLoading] = useState(false);
   const [showPrint, setShowPrint] = useState(false);
+  const [activeTab, setActiveTab] = useState<"ordenes" | "movimientos">("ordenes");
+  const [formato, setFormato] = useState<"57mm" | "80mm">(
+    tenant.config?.formato_ticket === "57mm" ? "57mm" : "80mm"
+  );
 
-  const formato = tenant.config?.formato_ticket || "80mm";
+  useEffect(() => {
+    if (open && tenant.config?.formato_ticket) {
+      setFormato(tenant.config.formato_ticket === "57mm" ? "57mm" : "80mm");
+    }
+  }, [open, tenant.config?.formato_ticket]);
 
   useEffect(() => {
     if (open) {
@@ -2334,14 +2573,6 @@ function HistoricoCuadreDialog({
       });
     }
   }, [open, tenant.id, empleadoId]);
-
-  async function handleSearchToday() {
-    setLoading(true);
-    const startRange = new Date().toISOString().split("T")[0];
-    const endRange = new Date().toISOString().split("T")[0] + "T23:59:59Z";
-    await fetchOrdersAndMovs(startRange, endRange);
-    setLoading(false);
-  }
 
   async function handleSearchForCierre(cierreObj: Caja) {
     setLoading(true);
@@ -2407,8 +2638,38 @@ function HistoricoCuadreDialog({
 
   const selectedEmpleado = empleados.find((e) => e.id === empId);
 
+  const activeCierre = useMemo(() => {
+    return cierres.find((c) => c.id === selectedCierreId);
+  }, [cierres, selectedCierreId]);
+
+  const kpiTotalFacturado = useMemo(() => {
+    return ordenes.reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [ordenes]);
+
+  const kpiEfectivo = useMemo(() => {
+    return ordenes
+      .filter((o) => o.metodo_pago === "EFECTIVO")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [ordenes]);
+
+  const kpiTarjetaTransf = useMemo(() => {
+    return ordenes
+      .filter((o) => o.metodo_pago === "TARJETA" || o.metodo_pago === "TRANSFERENCIA")
+      .reduce((sum, o) => sum + (o.total || 0), 0);
+  }, [ordenes]);
+
+  const filteredMovsList = useMemo(() => {
+    return movimientos.filter((m) => !m.concepto.startsWith("Venta orden #"));
+  }, [movimientos]);
+
+  const kpiMovimientosNeto = useMemo(() => {
+    return filteredMovsList.reduce((acc, m) => {
+      const isNegative = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
+      return isNegative ? acc - (m.monto || 0) : acc + (m.monto || 0);
+    }, 0);
+  }, [filteredMovsList]);
+
   if (showPrint) {
-    const activeCierre = cierres.find((c) => c.id === selectedCierreId);
     const printedRange = activeCierre
       ? `${formatDateTimeRD(activeCierre.abierta_en)} al ${formatDateTimeRD(activeCierre.cerrada_en!)}`
       : `${formatDateTimeRD(desde)} al ${formatDateTimeRD(hasta)}`;
@@ -2434,280 +2695,481 @@ function HistoricoCuadreDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
-          <div className="flex items-center gap-2">
-            <div className="bg-accent/10 p-2 rounded-lg">
-              <FileText className="h-5 w-5 text-accent-foreground" />
+      <DialogContent className="max-w-3xl max-h-[88vh] flex flex-col p-0 gap-0 rounded-3xl overflow-hidden shadow-2xl border border-border/70 bg-background">
+        {/* Header */}
+        <div className="px-6 py-4.5 pr-14 sm:pr-16 border-b border-border/60 bg-surface/50 backdrop-blur-xs flex items-center justify-between gap-4 shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary shrink-0">
+              <Receipt className="h-5 w-5" />
             </div>
-            <DialogTitle className="text-2xl font-display">Imprimir Cuadre POS</DialogTitle>
-          </div>
-        </DialogHeader>
-
-        <div
-          className={`grid grid-cols-1 ${filtrarFechas ? "md:grid-cols-5" : "md:grid-cols-4"} gap-4 bg-accent/5 p-4 rounded-2xl border border-border/50 mb-6 items-end`}
-        >
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-              Empleado / Cajero
-            </Label>
-            <Select value={empId} onValueChange={setEmpId}>
-              <SelectTrigger className="bg-white border-border/60">
-                <SelectValue placeholder="Seleccionar empleado" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">Todos los empleados</SelectItem>
-                {empleados.map((e) => (
-                  <SelectItem key={e.id} value={e.id}>
-                    {e.nombre} {e.apellido}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <div>
+              <DialogTitle className="text-lg sm:text-xl font-display font-black text-foreground tracking-tight flex items-center gap-2">
+                <span>Imprimir Cuadre POS</span>
+                <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+                  Térmico
+                </span>
+              </DialogTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Resumen de ventas y balance de caja para emisión de ticket térmico.
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-1.5">
-            <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-              Cierre de Caja
-            </Label>
-            <Select
-              value={selectedCierreId}
-              onValueChange={handleCierreChange}
-              disabled={filtrarFechas}
+          {/* Formato Selector */}
+          <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shrink-0 mr-4 sm:mr-6">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground px-1.5 flex items-center gap-1 hidden sm:flex">
+              <Printer className="h-3 w-3" />
+              Rollo:
+            </span>
+            <button
+              type="button"
+              onClick={() => setFormato("80mm")}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                formato === "80mm"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
             >
-              <SelectTrigger className="bg-white border-border/60">
-                <SelectValue placeholder="Seleccionar Cierre" />
-              </SelectTrigger>
-              <SelectContent>
-                {cierres.map((c, idx) => (
-                  <SelectItem key={c.id} value={c.id}>
-                    {idx === 0 ? "Último Cierre" : `Cierre #${cierres.length - idx}`} (
-                    {new Date(c.cerrada_en!).toLocaleDateString("es-DO")}{" "}
-                    {new Date(c.cerrada_en!).toLocaleTimeString("es-DO", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                    )
-                  </SelectItem>
-                ))}
-                {cierres.length === 0 && (
-                  <SelectItem value="none" disabled>
-                    Sin cierres
-                  </SelectItem>
-                )}
-              </SelectContent>
-            </Select>
+              80mm
+            </button>
+            <button
+              type="button"
+              onClick={() => setFormato("57mm")}
+              className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                formato === "57mm"
+                  ? "bg-white dark:bg-slate-900 text-foreground shadow-2xs"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              57mm
+            </button>
           </div>
+        </div>
 
-          <div className="space-y-1.5">
-            <div className="flex items-center gap-2 mb-2">
-              <Switch checked={filtrarFechas} onCheckedChange={setFiltrarFechas} id="f-fechas" />
-              <Label htmlFor="f-fechas" className="text-xs font-bold uppercase cursor-pointer">
-                Filtrar por fechas
-              </Label>
-            </div>
-            <div className="p-2 bg-white rounded-lg border border-border/60 text-center text-xs">
-              <span className="text-muted-foreground uppercase font-bold">Formato:</span>{" "}
-              <span className="font-black text-primary">{formato}</span>
-            </div>
-          </div>
-
-          {filtrarFechas ? (
-            <div className="grid grid-cols-2 gap-2 col-span-2">
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-                  Desde
-                </Label>
-                <Input
-                  type="date"
-                  value={desde}
-                  onChange={(e) => setDesde(e.target.value)}
-                  className="bg-white border-border/60"
-                />
+        {/* Scrollable Body */}
+        <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-4">
+          {/* Barra de Filtros */}
+          <div className="p-3.5 bg-slate-50/80 dark:bg-slate-900/60 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+              {/* Selector de Modo */}
+              <div className="flex items-center gap-1 p-1 bg-white dark:bg-slate-800 rounded-xl border border-slate-200/80 dark:border-slate-700/80 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setFiltrarFechas(false)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    !filtrarFechas
+                      ? "bg-[#1B4B73] text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <History className="h-3.5 w-3.5" />
+                  <span>Por Cierre</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setFiltrarFechas(true)}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                    filtrarFechas
+                      ? "bg-[#1B4B73] text-white shadow-xs"
+                      : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  <Calendar className="h-3.5 w-3.5" />
+                  <span>Por Fechas</span>
+                </button>
               </div>
-              <div className="space-y-1.5">
-                <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground ml-1">
-                  Hasta
-                </Label>
-                <div className="flex gap-1">
+
+              {/* Filtro de Empleado */}
+              <div className="flex items-center gap-2 sm:max-w-[300px] w-full sm:w-auto">
+                <span className="text-[11px] font-bold text-muted-foreground whitespace-nowrap flex items-center gap-1.5 shrink-0">
+                  <User className="h-3.5 w-3.5 text-muted-foreground" />
+                  <span>Filtrar empleado:</span>
+                </span>
+                <div className="flex-1 min-w-[150px]">
+                  <Select value={empId} onValueChange={setEmpId}>
+                    <SelectTrigger className="h-9 text-xs bg-white dark:bg-slate-800 rounded-xl font-semibold border-slate-200 dark:border-slate-700">
+                      <SelectValue placeholder="Todos los empleados" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">Todos los empleados</SelectItem>
+                      {empleados.map((e) => (
+                        <SelectItem key={e.id} value={e.id}>
+                          {e.nombre} {e.apellido || ""}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            {/* Opciones según el modo */}
+            {!filtrarFechas ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-200/60 dark:border-slate-800 items-start">
+                {/* Columna 1: Cierre de Turno */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300"
+                    >
+                      <History className="h-3 w-3 mr-1 inline" />
+                      Cierre de Turno
+                    </Badge>
+                  </div>
+                  <Select
+                    value={selectedCierreId}
+                    onValueChange={handleCierreChange}
+                  >
+                    <SelectTrigger className="h-10 text-xs bg-white dark:bg-slate-800 rounded-xl font-bold border-slate-200 dark:border-slate-700 shadow-2xs">
+                      <SelectValue placeholder="Seleccionar Cierre" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-60">
+                      {cierres.map((c, idx) => {
+                        const dateStr = new Date(c.cerrada_en || c.abierta_en).toLocaleDateString("es-DO", { day: "2-digit", month: "short" });
+                        const timeStr = c.cerrada_en ? new Date(c.cerrada_en).toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" }) : "";
+                        const turno = c.notas_apertura ? c.notas_apertura.replace("Turno:", "").trim() : "";
+                        return (
+                          <SelectItem key={c.id} value={c.id}>
+                            {idx === 0 ? "★ Último Cierre" : `Cierre #${cierres.length - idx}`} · {dateStr} {timeStr ? `(${timeStr})` : ""} {turno ? `· Turno ${turno}` : ""}
+                          </SelectItem>
+                        );
+                      })}
+                      {cierres.length === 0 && (
+                        <SelectItem value="none" disabled>
+                          Sin cierres registrados
+                        </SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Columna 2: Horario y Turno */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between gap-1.5">
+                    <Badge
+                      variant="outline"
+                      className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300"
+                    >
+                      <Clock className="h-3 w-3 mr-1 inline" />
+                      Horario y Balance
+                    </Badge>
+                    {activeCierre?.notas_apertura && (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black bg-amber-50 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200/80 uppercase">
+                        {activeCierre.notas_apertura.toLowerCase().includes("noche") ? (
+                          <Moon className="h-3 w-3 text-indigo-500 shrink-0" />
+                        ) : (
+                          <Sun className="h-3 w-3 text-amber-500 shrink-0" />
+                        )}
+                        Turno {activeCierre.notas_apertura.replace("Turno:", "").trim()}
+                      </span>
+                    )}
+                  </div>
+                  {activeCierre ? (
+                    <div className="h-10 px-3 flex items-center justify-between gap-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-xs shadow-2xs">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 whitespace-nowrap flex items-center gap-1.5 text-[11px]">
+                        <Clock className="h-3.5 w-3.5 text-blue-600 shrink-0" />
+                        {new Date(activeCierre.abierta_en).toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" })}
+                        {" → "}
+                        {activeCierre.cerrada_en ? new Date(activeCierre.cerrada_en).toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit" }) : "Abierta"}
+                      </span>
+                      {activeCierre.monto_inicial !== undefined && (
+                        <div className="text-right shrink-0 whitespace-nowrap">
+                          <span className="text-[10px] text-muted-foreground mr-1">Fondo inicial:</span>
+                          <span className="font-black text-slate-900 dark:text-slate-100 text-[11px]">
+                            {formatRD(activeCierre.monto_inicial)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  ) : (
+                    <div className="h-10 px-3 flex items-center justify-center rounded-xl bg-white dark:bg-slate-800 border border-dashed border-slate-200 text-xs text-muted-foreground">
+                      Sin cierre seleccionado
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-5 gap-2 pt-1 border-t border-slate-200/60 dark:border-slate-800 items-end">
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Desde
+                  </label>
+                  <Input
+                    type="date"
+                    value={desde}
+                    onChange={(e) => setDesde(e.target.value)}
+                    className="h-9 text-xs bg-white dark:bg-slate-800 rounded-xl"
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    Hasta
+                  </label>
                   <Input
                     type="date"
                     value={hasta}
                     onChange={(e) => setHasta(e.target.value)}
-                    className="bg-white border-border/60"
+                    className="h-9 text-xs bg-white dark:bg-slate-800 rounded-xl"
                   />
-                  <Button onClick={handleSearch} size="icon" className="shrink-0">
-                    <Search className="h-4 w-4" />
-                  </Button>
                 </div>
+                <Button
+                  type="button"
+                  onClick={handleSearch}
+                  className="h-9 text-xs font-bold rounded-xl bg-[#1B4B73] hover:bg-[#143a59] text-white flex items-center justify-center gap-1.5 active:scale-95 transition-all cursor-pointer"
+                >
+                  <Search className="h-3.5 w-3.5" />
+                  <span>Consultar</span>
+                </Button>
               </div>
-            </div>
-          ) : (
-            <div className="p-3 bg-primary/5 rounded-xl border border-primary/10 text-center col-span-1">
-              <p className="text-xs font-medium text-primary">
-                {(() => {
-                  const c = cierres.find((x) => x.id === selectedCierreId);
-                  if (c) {
-                    const dateStr = new Date(c.cerrada_en || c.abierta_en).toLocaleDateString(
-                      "es-DO",
-                    );
-                    const turno = c.notas_apertura
-                      ? c.notas_apertura.replace("Turno:", "").trim()
-                      : "";
-                    return `Mostrando último cierre: ${dateStr} ${turno ? `y el turno del ultimo cierre: ${turno}` : ""}`;
-                  }
-                  return "Sin cierres";
-                })()}
-              </p>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        <div className="space-y-4">
-          {loading ? (
-            <div className="py-20 text-center text-muted-foreground animate-pulse">
-              Cargando órdenes...
+          {/* Tarjetas KPI de Resumen */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900/50 border border-slate-200/80 dark:border-slate-800">
+              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
+                Total Facturado
+              </span>
+              <span className="text-base sm:text-lg font-black text-foreground block mt-0.5">
+                {formatRD(kpiTotalFacturado)}
+              </span>
+              <span className="text-[10px] font-semibold text-slate-500 block mt-0.5">
+                {ordenes.length} {ordenes.length === 1 ? "orden" : "órdenes"}
+              </span>
             </div>
-          ) : ordenes.length === 0 ? (
-            <div className="py-20 text-center border-2 border-dashed border-border rounded-2xl">
-              <Search className="h-10 w-10 text-muted-foreground/20 mx-auto mb-3" />
-              <p className="text-muted-foreground font-medium">
-                No se encontraron órdenes para este periodo.
-              </p>
-            </div>
-          ) : (
-            <div className="border border-border rounded-xl overflow-hidden">
-              <table className="w-full text-sm">
-                <thead className="bg-accent/5 border-b border-border text-xs uppercase font-bold text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Orden</th>
-                    <th className="px-4 py-3 text-left">Fecha</th>
-                    <th className="px-4 py-3 text-right">Total</th>
-                    <th className="px-4 py-3 text-right">Estado</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {ordenes.map((o) => (
-                    <tr key={o.id} className="hover:bg-accent/5 transition-colors">
-                      <td className="px-4 py-3 font-bold">#{o.numero}</td>
-                      <td className="px-4 py-3">{formatDateTimeRD(o.creado_en)}</td>
-                      <td className="px-4 py-3 text-right font-bold text-primary">
-                        {formatRD(o.total)}
-                      </td>
-                      <td className="px-4 py-3 text-right text-xs uppercase font-medium">
-                        {o.estado}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
 
-          {/* Movimientos de Caja Section */}
-          <div className="space-y-3 mt-6">
-            <div className="flex items-center gap-2 border-b border-border/60 pb-2">
-              <Coins className="h-4.5 w-4.5 text-amber-500" />
-              <h4 className="text-sm font-black uppercase tracking-wider text-foreground">
-                Movimientos del Turno
-              </h4>
-              <Badge
-                variant="secondary"
-                className="rounded-lg text-[10px] font-bold px-2 py-0.5 ml-auto"
-              >
-                {movimientos.length} movs
-              </Badge>
+            <div className="p-3 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200/60 dark:border-emerald-900/40">
+              <span className="text-[10px] font-black uppercase tracking-wider text-emerald-700 dark:text-emerald-300 block">
+                En Efectivo
+              </span>
+              <span className="text-base sm:text-lg font-black text-emerald-600 dark:text-emerald-400 block mt-0.5">
+                {formatRD(kpiEfectivo)}
+              </span>
+              <span className="text-[10px] font-semibold text-emerald-600/80 block mt-0.5">
+                Ventas de contado
+              </span>
             </div>
+
+            <div className="p-3 rounded-2xl bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40">
+              <span className="text-[10px] font-black uppercase tracking-wider text-blue-700 dark:text-blue-300 block">
+                Tarjeta / Transf.
+              </span>
+              <span className="text-base sm:text-lg font-black text-blue-600 dark:text-blue-400 block mt-0.5">
+                {formatRD(kpiTarjetaTransf)}
+              </span>
+              <span className="text-[10px] font-semibold text-blue-600/80 block mt-0.5">
+                Cobro electrónico
+              </span>
+            </div>
+
+            <div className="p-3 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/60 dark:border-amber-900/40">
+              <span className="text-[10px] font-black uppercase tracking-wider text-amber-700 dark:text-amber-300 block">
+                Movimientos Caja
+              </span>
+              <span className={`text-base sm:text-lg font-black block mt-0.5 ${kpiMovimientosNeto < 0 ? "text-rose-600" : "text-amber-600 dark:text-amber-400"}`}>
+                {kpiMovimientosNeto > 0 ? "+" : ""}{formatRD(kpiMovimientosNeto)}
+              </span>
+              <span className="text-[10px] font-semibold text-amber-600/80 block mt-0.5">
+                {filteredMovsList.length} registros
+              </span>
+            </div>
+          </div>
+
+          {/* Selector de pestañas */}
+          <div className="space-y-2.5">
+            <div className="flex items-center justify-between border-b border-border/60 pb-2">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("ordenes")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "ordenes"
+                      ? "bg-[#1B4B73] text-white shadow-xs"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+                  }`}
+                >
+                  <ShoppingBag className="h-3.5 w-3.5" />
+                  <span>Órdenes</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    activeTab === "ordenes" ? "bg-white/20 text-white" : "bg-black/10 dark:bg-white/10"
+                  }`}>
+                    {ordenes.length}
+                  </span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setActiveTab("movimientos")}
+                  className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                    activeTab === "movimientos"
+                      ? "bg-[#1B4B73] text-white shadow-xs"
+                      : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200"
+                  }`}
+                >
+                  <Coins className="h-3.5 w-3.5" />
+                  <span>Movimientos</span>
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                    activeTab === "movimientos" ? "bg-white/20 text-white" : "bg-black/10 dark:bg-white/10"
+                  }`}>
+                    {filteredMovsList.length}
+                  </span>
+                </button>
+              </div>
+
+              <span className="text-[11px] text-muted-foreground hidden sm:inline-block">
+                {activeTab === "ordenes" ? "Detalle de ventas incluidas en el cuadre" : "Abonos, gastos y retiros del turno"}
+              </span>
+            </div>
+
+            {/* Contenido de pestaña */}
             {loading ? (
-              <div className="py-10 text-center text-muted-foreground animate-pulse text-xs">
-                Cargando movimientos...
+              <div className="py-14 text-center text-muted-foreground text-xs flex flex-col items-center justify-center gap-2">
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                <span>Cargando datos del cuadre...</span>
               </div>
-            ) : movimientos.length === 0 ? (
-              <div className="py-8 text-center border border-dashed border-border rounded-xl bg-accent/5">
-                <p className="text-xs text-muted-foreground font-medium">
-                  No se registraron abonos, ingresos o gastos en este periodo.
-                </p>
-              </div>
+            ) : activeTab === "ordenes" ? (
+              ordenes.length === 0 ? (
+                <div className="py-12 text-center border-2 border-dashed border-border/80 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                  <Search className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    No se encontraron órdenes registradas en este período.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-border/80 rounded-2xl overflow-hidden max-h-[260px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 border-b border-border/80 text-[10px] uppercase font-bold text-muted-foreground z-10">
+                      <tr>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Orden</th>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Fecha y Hora</th>
+                        <th className="px-3.5 py-2.5 text-center font-extrabold">Pago</th>
+                        <th className="px-3.5 py-2.5 text-center font-extrabold">Estado</th>
+                        <th className="px-3.5 py-2.5 text-right font-extrabold">Total</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 bg-background">
+                      {ordenes.map((o) => (
+                        <tr key={o.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/50 transition-colors">
+                          <td className="px-3.5 py-2.5 font-mono font-bold text-foreground">
+                            #{o.numero}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap">
+                            {formatDateTimeRD(o.creado_en)}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-center">
+                            {getCuadreMetodoBadge(o.metodo_pago)}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-center">
+                            {getCuadreEstadoBadge(o.estado)}
+                          </td>
+                          <td className="px-3.5 py-2.5 text-right font-black text-foreground">
+                            {formatRD(o.total)}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )
             ) : (
-              <div className="border border-border rounded-xl overflow-hidden bg-background">
-                <table className="w-full text-xs">
-                  <thead className="bg-accent/5 border-b border-border text-[10px] uppercase font-bold text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-2.5 text-left">Hora</th>
-                      <th className="px-4 py-2.5 text-left">Tipo</th>
-                      <th className="px-4 py-2.5 text-left">Concepto</th>
-                      <th className="px-4 py-2.5 text-left">Método</th>
-                      <th className="px-4 py-2.5 text-right">Monto</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border font-medium">
-                    {movimientos
-                      .filter((m) => !m.concepto.startsWith("Venta orden #"))
-                      .map((m) => {
-                        const isNegative = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(
-                          m.tipo,
-                        );
+              filteredMovsList.length === 0 ? (
+                <div className="py-12 text-center border-2 border-dashed border-border/80 rounded-2xl bg-slate-50/50 dark:bg-slate-900/30">
+                  <Coins className="h-8 w-8 text-muted-foreground/30 mx-auto mb-2" />
+                  <p className="text-xs text-muted-foreground font-semibold">
+                    No se registraron abonos, ingresos o gastos en este período.
+                  </p>
+                </div>
+              ) : (
+                <div className="border border-border/80 rounded-2xl overflow-hidden max-h-[260px] overflow-y-auto">
+                  <table className="w-full text-xs">
+                    <thead className="sticky top-0 bg-slate-100 dark:bg-slate-800 border-b border-border/80 text-[10px] uppercase font-bold text-muted-foreground z-10">
+                      <tr>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Hora</th>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Tipo</th>
+                        <th className="px-3.5 py-2.5 text-left font-extrabold">Concepto</th>
+                        <th className="px-3.5 py-2.5 text-center font-extrabold">Método</th>
+                        <th className="px-3.5 py-2.5 text-right font-extrabold">Monto</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60 bg-background">
+                      {filteredMovsList.map((m) => {
+                        const isNegative = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
+                        const isAbono = m.tipo === "ABONO" || m.concepto.includes("Abono");
                         return (
-                          <tr key={m.id} className="hover:bg-accent/5 transition-colors">
-                            <td className="px-4 py-2.5 text-muted-foreground">
-                              {formatDateTimeRD(m.creado_en).split(",")[1]?.trim() || "---"}
+                          <tr key={m.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-900/50 transition-colors">
+                            <td className="px-3.5 py-2.5 text-muted-foreground whitespace-nowrap font-medium">
+                              {formatDateTimeRD(m.creado_en).split(",")[1]?.trim() || "—"}
                             </td>
-                            <td className="px-4 py-2.5">
-                              {(() => {
-                                const isAbonoInicial = m.concepto.includes("Abono inicial orden");
-                                const displayTipo = isAbonoInicial ? "CRÉDITO" : m.tipo;
-                                return (
-                                  <Badge
-                                    variant="outline"
-                                    className={`text-[9px] font-black rounded-lg py-0 px-1.5 uppercase ${
-                                      m.tipo === "ABONO" || isAbonoInicial
-                                        ? "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/20 dark:text-blue-400"
-                                        : m.tipo === "INGRESO"
-                                          ? "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/20 dark:text-emerald-400"
-                                          : isNegative
-                                            ? "bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/20 dark:text-rose-400"
-                                            : "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/20 dark:text-amber-400"
-                                    }`}
-                                  >
-                                    {displayTipo}
-                                  </Badge>
-                                );
-                              })()}
+                            <td className="px-3.5 py-2.5">
+                              <Badge
+                                variant="outline"
+                                className={`text-[9px] font-black rounded-lg px-2 py-0.5 uppercase ${
+                                  isAbono
+                                    ? "bg-blue-50 text-blue-700 border-blue-200"
+                                    : m.tipo === "INGRESO"
+                                    ? "bg-emerald-50 text-emerald-700 border-emerald-200"
+                                    : isNegative
+                                    ? "bg-rose-50 text-rose-700 border-rose-200"
+                                    : "bg-amber-50 text-amber-700 border-amber-200"
+                                }`}
+                              >
+                                {isAbono ? "ABONO" : m.tipo}
+                              </Badge>
                             </td>
-                            <td className="px-4 py-2.5 max-w-xs truncate text-foreground font-semibold">
+                            <td className="px-3.5 py-2.5 max-w-xs truncate font-medium text-foreground" title={m.concepto}>
                               {m.concepto}
                             </td>
-                            <td className="px-4 py-2.5 text-muted-foreground uppercase text-[10px]">
-                              {m.metodo || "---"}
+                            <td className="px-3.5 py-2.5 text-center">
+                              {getCuadreMetodoBadge(m.metodo)}
                             </td>
-                            <td
-                              className={`px-4 py-2.5 text-right font-black ${isNegative ? "text-destructive" : "text-emerald-600"}`}
-                            >
-                              {isNegative ? "-" : "+"}
-                              {formatRD(m.monto)}
+                            <td className={`px-3.5 py-2.5 text-right font-black ${isNegative ? "text-rose-600" : "text-emerald-600"}`}>
+                              {isNegative ? "-" : "+"}{formatRD(m.monto)}
                             </td>
                           </tr>
                         );
                       })}
-                  </tbody>
-                </table>
-              </div>
+                    </tbody>
+                  </table>
+                </div>
+              )
             )}
           </div>
         </div>
 
-        <DialogFooter className="mt-6 gap-2">
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cerrar
-          </Button>
-          <Button
-            onClick={() => setShowPrint(true)}
-            disabled={ordenes.length === 0}
-            className="bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 gap-2"
-          >
-            <Printer className="h-4 w-4" /> Generar Cuadre Térmico
-          </Button>
-        </DialogFooter>
+        {/* Footer */}
+        <div className="px-6 py-3.5 border-t border-border/60 bg-slate-50/90 dark:bg-slate-900/90 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground font-medium">Total ventas:</span>
+            <span className="font-black text-sm text-[#1B4B73] dark:text-sky-300">
+              {formatRD(kpiTotalFacturado)}
+            </span>
+            <span className="text-slate-300 dark:text-slate-700">•</span>
+            <span className="text-[11px] text-muted-foreground">
+              Formato: <b className="text-foreground">{formato}</b>
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 self-end sm:self-auto">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => onOpenChange(false)}
+              className="h-9.5 px-4 rounded-xl font-bold text-xs"
+            >
+              Cerrar
+            </Button>
+            <Button
+              type="button"
+              onClick={() => setShowPrint(true)}
+              disabled={ordenes.length === 0 && movimientos.length === 0}
+              className="h-9.5 px-5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white shadow-xs active:scale-95 transition-all flex items-center gap-2 cursor-pointer disabled:opacity-50"
+            >
+              <Printer className="h-4 w-4" />
+              <span>Imprimir Cuadre Térmico</span>
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

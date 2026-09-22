@@ -11,6 +11,7 @@ import { Unlock, Banknote, Check, Loader2 } from "lucide-react";
 import {
   saveCaja,
   saveMovimiento,
+  getCajaAbierta,
   uid,
   formatAmountInput,
   parseAmount,
@@ -137,6 +138,16 @@ export function AperturaDialog({
     }
     setLoading(true);
     try {
+      // Validar si ya hay una caja abierta para evitar duplicados accidentales
+      const yaAbierta = await getCajaAbierta(tenantId);
+      if (yaAbierta) {
+        toast.info("Ya existe una caja abierta para esta sucursal");
+        await onDone();
+        onOpenChange(false);
+        setMontoStr("");
+        return;
+      }
+
       const cajaId = uid("caj");
       await saveCaja({
         id: cajaId,

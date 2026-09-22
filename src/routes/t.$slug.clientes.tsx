@@ -42,7 +42,6 @@ import {
   formatPhoneRD,
   type Cliente,
 } from "@/lib/storage";
-import { toast } from "sonner";
 import { 
   AlertDialog, 
   AlertDialogAction, 
@@ -54,8 +53,17 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
+import { ClienteDetalleModal } from "@/components/klynn/ClienteDetalleModal";
+import { getSectorOptions, normalizeText } from "@/lib/cliente-analytics";
 import { useClientes, useOrdenes } from "@/hooks/use-queries";
 
 export const Route = createFileRoute("/t/$slug/clientes")({ component: ClientesPage });
@@ -68,6 +76,8 @@ function ClientesPage() {
 
   const [q, setQ] = useState("");
   const [filterType, setFilterType] = useState<FilterType>("all");
+  const [sectorFilter, setSectorFilter] = useState<string>("all");
+  const [selectedClienteId, setSelectedClienteId] = useState<string | null>(null);
   const [edit, setEdit] = useState<Cliente | null>(null);
   const [showNew, setShowNew] = useState(false);
   const [isPrinting, setIsPrinting] = useState(false);
@@ -96,7 +106,15 @@ function ClientesPage() {
   const totalDeudaGlobal = useMemo(() => clientes.reduce((sum, c) => sum + deudaCliente(c.id), 0), [clientes, ordenes]);
   const totalVentasGlobal = useMemo(() => clientes.reduce((sum, c) => sum + totalGastado(c.id), 0), [clientes, ordenes]);
 
-  // Filtrado combinado (Texto + Tipo de Filtro)
+  const selectedCliente = useMemo(() => {
+    return clientes.find((c) => c.id === selectedClienteId) || null;
+  }, [clientes, selectedClienteId]);
+
+  const sectorOptions = useMemo(() => {
+    return getSectorOptions(clientes);
+  }, [clientes]);
+
+  // Filtrado combinado (Texto + Tipo de Filtro + Sector)
   const filteredList = useMemo(() => {
     return clientes.filter((c) => {
       const search = q.toLowerCase().trim();
@@ -106,9 +124,16 @@ function ClientesPage() {
         c.telefono.includes(search) ||
         (c.cedula && c.cedula.includes(search)) ||
         (c.email && c.email.toLowerCase().includes(search)) ||
+        (c.direccion && c.direccion.toLowerCase().includes(search)) ||
         (c.sector && c.sector.toLowerCase().includes(search));
 
       if (!matchSearch) return false;
+
+      // Filtro por Sector
+      if (sectorFilter !== "all") {
+        const clientSector = normalizeText(c.sector);
+        if (clientSector !== sectorFilter) return false;
+      }
 
       if (filterType === "empresa") return c.tipo === "Empresa";
       if (filterType === "persona") return c.tipo !== "Empresa";
@@ -117,7 +142,7 @@ function ClientesPage() {
 
       return true;
     });
-  }, [clientes, q, filterType, ordenes]);
+  }, [clientes, q, filterType, sectorFilter, ordenes]);
 
   if (!user || user.tenant.id === '__loading__' || (loading && clientes.length === 0)) {
     return <GlobalPageLoader text="Cargando directorio de clientes..." />;
@@ -224,125 +249,200 @@ function ClientesPage() {
         </Card>
       </div>
 
-      {/* BARRA DE BÚSQUEDA Y FILTROS TIPO RIBBON (ESTILO /GASTOS) */}
-      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3 bg-surface p-2.5 rounded-2xl border border-border/80 shadow-2xs">
-        {/* Input de Búsqueda */}
-        <div className="relative flex-1">
-          <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input 
-            value={q} 
-            onChange={(e) => setQ(e.target.value)} 
-            placeholder="Buscar por nombre, teléfono, RNC, email o sector..." 
-            className="pl-9.5 pr-8 h-10 rounded-xl bg-background border-border/60 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20" 
-          />
-          {q && (
-            <button
-              type="button"
-              onClick={() => setQ("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 cursor-pointer"
-            >
-              <XIcon className="h-3.5 w-3.5" />
-            </button>
-          )}
+      {/* BARRA DE BÚSQUEDA Y FILTROS INTEGRADOS (2 NIVELES ESPACIOSOS) */}
+      <div className="bg-surface p-3 sm:p-3.5 rounded-2xl border border-border/80 shadow-2xs space-y-2.5">
+        {/* NIVEL 1: BUSCADOR AMPLIO + SELECTOR DE SECTORES AMIGABLE */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+          {/* Input de Búsqueda (Espacioso, nunca comprimido) */}
+          <div className="relative flex-1 min-w-[240px]">
+            <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input 
+              value={q} 
+              onChange={(e) => setQ(e.target.value)} 
+              placeholder="Buscar por nombre, teléfono, RNC, cédula, email o dirección..." 
+              className="pl-9.5 pr-8 h-10 rounded-xl bg-background border-border/70 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20 w-full" 
+            />
+            {q && (
+              <button
+                type="button"
+                onClick={() => setQ("")}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 cursor-pointer"
+                title="Limpiar búsqueda"
+              >
+                <XIcon className="h-3.5 w-3.5" />
+              </button>
+            )}
+          </div>
+
+          {/* Selector de Sectores (Radix UI amigable, tamaño controlado, no empuja ni encoge la barra) */}
+          <div className="w-full sm:w-64 md:w-72 shrink-0">
+            <Select value={sectorFilter} onValueChange={setSectorFilter}>
+              <SelectTrigger className="h-10 rounded-xl border border-border/80 bg-background hover:bg-muted/40 text-xs sm:text-sm font-semibold px-3 shadow-2xs cursor-pointer transition-colors">
+                <div className="flex items-center gap-2 truncate">
+                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300">
+                    <MapPin className="h-3.5 w-3.5" />
+                  </span>
+                  <span className="truncate text-foreground">
+                    {sectorFilter === "all"
+                      ? "Todos los sectores"
+                      : (sectorOptions.find((s) => s.key === sectorFilter)?.label || "Sector")}
+                  </span>
+                  {sectorFilter !== "all" && (
+                    <span className="ml-auto rounded-full bg-[#1B4B73]/15 text-[#1B4B73] dark:bg-[#1B4B73]/30 dark:text-sky-300 px-1.5 py-0.2 text-[10px] font-black shrink-0">
+                      {sectorOptions.find((s) => s.key === sectorFilter)?.count || 0}
+                    </span>
+                  )}
+                </div>
+              </SelectTrigger>
+              <SelectContent className="rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-xl max-h-72">
+                <SelectItem value="all" className="cursor-pointer text-xs font-semibold py-2">
+                  <div className="flex items-center justify-between w-full gap-3">
+                    <span className="font-bold">Todos los sectores</span>
+                    <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                      {clientes.length}
+                    </span>
+                  </div>
+                </SelectItem>
+                {sectorOptions.length > 0 && (
+                  <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-t border-border/50 mt-1">
+                    Sectores ({sectorOptions.length})
+                  </div>
+                )}
+                {sectorOptions.map((sec) => (
+                  <SelectItem key={sec.key} value={sec.key} className="cursor-pointer text-xs py-2">
+                    <div className="flex items-center justify-between w-full gap-3">
+                      <span className="truncate font-medium">{sec.label}</span>
+                      <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full shrink-0">
+                        {sec.count} {sec.count === 1 ? "cliente" : "clientes"}
+                      </span>
+                    </div>
+                  </SelectItem>
+                ))}
+                {sectorOptions.length === 0 && (
+                  <div className="p-3 text-center text-xs text-muted-foreground italic">
+                    Sin sectores registrados
+                  </div>
+                )}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        {/* Píldoras de Filtro Rápido (Estilo /ordenes) */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
-          {/* Todos */}
-          <button
-            type="button"
-            onClick={() => setFilterType("all")}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
-              filterType === "all"
-                ? "bg-[#183659] text-white border-[#183659] shadow-md"
-                : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
-            }`}
-          >
-            <Users className="h-3.5 w-3.5 shrink-0" />
-            <span>Todos</span>
-            <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-              filterType === "all" ? "bg-white/25 text-white" : "bg-black/10 dark:bg-white/10 text-slate-800 dark:text-slate-200"
-            }`}>
-              {totalClientes}
-            </span>
-          </button>
-
-          {/* Empresas */}
-          <button
-            type="button"
-            onClick={() => setFilterType("empresa")}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
-              filterType === "empresa"
-                ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-md"
-                : "bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-300 border-[#1B4B73]/20 hover:bg-[#1B4B73]/20 dark:bg-[#1B4B73]/25"
-            }`}
-          >
-            <Building2 className="h-3.5 w-3.5 shrink-0" />
-            <span>Empresas</span>
-            <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-              filterType === "empresa" ? "bg-white/25 text-white" : "bg-[#1B4B73]/20 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
-            }`}>
-              {empresasCount}
-            </span>
-          </button>
-
-          {/* Personas */}
-          <button
-            type="button"
-            onClick={() => setFilterType("persona")}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
-              filterType === "persona"
-                ? "bg-[#F0B900] text-slate-900 border-[#F0B900] shadow-md"
-                : "bg-[#F0B900]/15 text-[#9E7300] dark:text-[#F0B900] border-[#F0B900]/30 hover:bg-[#F0B900]/25 dark:bg-[#F0B900]/20"
-            }`}
-          >
-            <User className="h-3.5 w-3.5 shrink-0" />
-            <span>Personas</span>
-            <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-              filterType === "persona" ? "bg-black/15 text-slate-900" : "bg-[#F0B900]/25 text-[#9E7300] dark:text-[#F0B900]"
-            }`}>
-              {personasCount}
-            </span>
-          </button>
-
-          {/* Con Deuda */}
-          <button
-            type="button"
-            onClick={() => setFilterType("deuda")}
-            className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
-              filterType === "deuda"
-                ? "bg-rose-600 text-white border-rose-600 shadow-md"
-                : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50"
-            }`}
-          >
-            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            <span>Con Deuda</span>
-            <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-              filterType === "deuda" ? "bg-white/25 text-white" : "bg-rose-200/70 dark:bg-rose-900/60 text-rose-900 dark:text-rose-100"
-            }`}>
-              {clientesConDeuda.length}
-            </span>
-          </button>
-
-          {/* Con Crédito */}
-          {clientesConCredito.length > 0 && (
+        {/* NIVEL 2: PÍLDORAS DE FILTRO RÁPIDO + BADGE DE SECTOR ACTIVO */}
+        <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50">
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
+            {/* Todos */}
             <button
               type="button"
-              onClick={() => setFilterType("credito")}
+              onClick={() => setFilterType("all")}
               className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
-                filterType === "credito"
-                  ? "bg-purple-600 text-white border-purple-600 shadow-md"
-                  : "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/50"
+                filterType === "all"
+                  ? "bg-[#183659] text-white border-[#183659] shadow-md"
+                  : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
               }`}
             >
-              <CreditCard className="h-3.5 w-3.5 shrink-0" />
-              <span>Con Crédito</span>
+              <Users className="h-3.5 w-3.5 shrink-0" />
+              <span>Todos</span>
               <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
-                filterType === "credito" ? "bg-white/25 text-white" : "bg-purple-200/70 dark:bg-purple-900/60 text-purple-900 dark:text-purple-100"
+                filterType === "all" ? "bg-white/25 text-white" : "bg-black/10 dark:bg-white/10 text-slate-800 dark:text-slate-200"
               }`}>
-                {clientesConCredito.length}
+                {totalClientes}
               </span>
             </button>
+
+            {/* Empresas */}
+            <button
+              type="button"
+              onClick={() => setFilterType("empresa")}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                filterType === "empresa"
+                  ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-md"
+                  : "bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-300 border-[#1B4B73]/20 hover:bg-[#1B4B73]/20 dark:bg-[#1B4B73]/25"
+              }`}
+            >
+              <Building2 className="h-3.5 w-3.5 shrink-0" />
+              <span>Empresas</span>
+              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                filterType === "empresa" ? "bg-white/25 text-white" : "bg-[#1B4B73]/20 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
+              }`}>
+                {empresasCount}
+              </span>
+            </button>
+
+            {/* Personas */}
+            <button
+              type="button"
+              onClick={() => setFilterType("persona")}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                filterType === "persona"
+                  ? "bg-[#F0B900] text-slate-900 border-[#F0B900] shadow-md"
+                  : "bg-[#F0B900]/15 text-[#9E7300] dark:text-[#F0B900] border-[#F0B900]/30 hover:bg-[#F0B900]/25 dark:bg-[#F0B900]/20"
+              }`}
+            >
+              <User className="h-3.5 w-3.5 shrink-0" />
+              <span>Personas</span>
+              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                filterType === "persona" ? "bg-black/15 text-slate-900" : "bg-[#F0B900]/25 text-[#9E7300] dark:text-[#F0B900]"
+              }`}>
+                {personasCount}
+              </span>
+            </button>
+
+            {/* Con Deuda */}
+            <button
+              type="button"
+              onClick={() => setFilterType("deuda")}
+              className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                filterType === "deuda"
+                  ? "bg-rose-600 text-white border-rose-600 shadow-md"
+                  : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50"
+              }`}
+            >
+              <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+              <span>Con Deuda</span>
+              <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                filterType === "deuda" ? "bg-white/25 text-white" : "bg-rose-200/70 dark:bg-rose-900/60 text-rose-900 dark:text-rose-100"
+              }`}>
+                {clientesConDeuda.length}
+              </span>
+            </button>
+
+            {/* Con Crédito */}
+            {clientesConCredito.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setFilterType("credito")}
+                className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                  filterType === "credito"
+                    ? "bg-purple-600 text-white border-purple-600 shadow-md"
+                    : "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/50"
+                }`}
+              >
+                <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                <span>Con Crédito</span>
+                <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                  filterType === "credito" ? "bg-white/25 text-white" : "bg-purple-200/70 dark:bg-purple-900/60 text-purple-900 dark:text-purple-100"
+                }`}>
+                  {clientesConCredito.length}
+                </span>
+              </button>
+            )}
+          </div>
+
+          {/* CHIP DE SECTOR ACTIVO CON BOTÓN DE QUITAR */}
+          {sectorFilter !== "all" && (
+            <div className="inline-flex items-center gap-1.5 rounded-full border border-[#1B4B73]/30 bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-300 px-3 py-1 text-xs font-bold shadow-2xs">
+              <MapPin className="h-3.5 w-3.5 text-[#1B4B73] dark:text-sky-400" />
+              <span>Sector: {sectorOptions.find((s) => s.key === sectorFilter)?.label || sectorFilter}</span>
+              <button
+                type="button"
+                onClick={() => setSectorFilter("all")}
+                className="ml-1 hover:bg-[#1B4B73]/20 dark:hover:bg-[#1B4B73]/40 rounded-full p-0.5 transition-colors cursor-pointer"
+                title="Quitar filtro de sector"
+              >
+                <XIcon className="h-3 w-3" />
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -358,7 +458,7 @@ function ClientesPage() {
           return (
             <Card 
               key={c.id} 
-              onClick={() => setEdit(c)}
+              onClick={() => setSelectedClienteId(c.id)}
               className="p-4 sm:p-5 rounded-2xl border border-border/80 bg-surface shadow-2xs hover:shadow-md hover:border-primary/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between h-full group cursor-pointer relative"
             >
               <div>
@@ -473,13 +573,30 @@ function ClientesPage() {
                     </div>
                   )}
 
-                  {/* Dirección */}
+                  {/* Dirección y Sector */}
                   {(c.direccion || c.sector) && (
                     <div className="flex items-start gap-1.5 min-w-0 pt-0.5">
                       <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
-                      <span className="truncate text-slate-600 dark:text-slate-300 font-medium" title={`${c.direccion || ''} ${c.sector || ''}`.trim()}>
-                        {c.sector ? `${c.sector} — ${c.direccion || ''}` : c.direccion}
-                      </span>
+                      <div className="truncate text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
+                        {c.sector && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSectorFilter(normalizeText(c.sector));
+                            }}
+                            className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-[#1B4B73]/10 text-[#1B4B73] hover:bg-[#1B4B73]/20 dark:bg-[#1B4B73]/25 dark:text-sky-300 transition-colors cursor-pointer"
+                            title={`Filtrar clientes de ${c.sector}`}
+                          >
+                            <span>{c.sector}</span>
+                          </button>
+                        )}
+                        {c.direccion && (
+                          <span className="truncate text-xs" title={c.direccion}>
+                            {c.direccion}
+                          </span>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>
@@ -518,16 +635,16 @@ function ClientesPage() {
               <Users className="h-10 w-10" />
             </div>
             <h3 className="font-display text-xl font-bold text-foreground">
-              {q || filterType !== "all" ? "No se encontraron clientes" : "¡Aún no hay clientes registrados!"}
+              {q || filterType !== "all" || sectorFilter !== "all" ? "No se encontraron clientes" : "¡Aún no hay clientes registrados!"}
             </h3>
             <p className="text-xs sm:text-sm text-muted-foreground max-w-md mt-2 leading-relaxed">
-              {q || filterType !== "all" 
-                ? "Prueba cambiando el término de búsqueda o seleccionando otro filtro en el selector superior."
+              {q || filterType !== "all" || sectorFilter !== "all" 
+                ? "Prueba cambiando el término de búsqueda o seleccionando otro filtro o sector en el panel superior."
                 : "Registra a tus clientes recurrentes para llevar el control de sus pedidos, saldos y recordatorios de pago de forma organizada."}
             </p>
-            {q || filterType !== "all" ? (
+            {q || filterType !== "all" || sectorFilter !== "all" ? (
               <Button 
-                onClick={() => { setQ(""); setFilterType("all"); }} 
+                onClick={() => { setQ(""); setFilterType("all"); setSectorFilter("all"); }} 
                 variant="outline" 
                 className="mt-5 font-bold rounded-xl cursor-pointer"
               >
@@ -545,6 +662,20 @@ function ClientesPage() {
         )}
       </div>
 
+      {/* MODAL DETALLE DE CLIENTE (HISTORIAL, SERVICIOS, PRENDAS Y LIBRAS) */}
+      <ClienteDetalleModal
+        open={!!selectedCliente}
+        onOpenChange={(open) => {
+          if (!open) setSelectedClienteId(null);
+        }}
+        cliente={selectedCliente}
+        ordenes={ordenes}
+        onEdit={(c) => {
+          setSelectedClienteId(null);
+          setEdit(c);
+        }}
+      />
+
       {/* DIALOG DE CLIENTE */}
       <ClienteDialog 
         open={showNew || !!edit} 
@@ -552,6 +683,7 @@ function ClientesPage() {
         cliente={edit} 
         tenant={tenant} 
         onDone={() => { setEdit(null); setShowNew(false); }} 
+        sectorSuggestions={sectorOptions.map((s) => s.label)}
       />
 
       {/* MODAL DE IMPORTAR CLIENTES */}

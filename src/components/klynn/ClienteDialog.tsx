@@ -33,9 +33,10 @@ interface ClienteDialogProps {
   cliente?: Cliente | null;
   tenant: any;
   onDone: (cliente?: Cliente) => void;
+  sectorSuggestions?: string[];
 }
 
-export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: ClienteDialogProps) {
+export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sectorSuggestions = [] }: ClienteDialogProps) {
   const queryClient = useQueryClient();
   const user = useRequireAuth();
   
@@ -247,7 +248,12 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
       toast.error("El teléfono debe tener al menos 10 dígitos");
       return;
     }
-    if (hasDelivery && !f.direccion?.trim()) {
+    const cleanedDir = String(f.direccion || "").trim().replace(/\s+/g, " ");
+    const cleanedSector = String(f.sector || "").trim().replace(/\s+/g, " ");
+    const cleanedApto = String(f.edificio_apto || "").trim().replace(/\s+/g, " ");
+    const cleanedRef = String(f.referencia || "").trim().replace(/\s+/g, " ");
+
+    if (hasDelivery && !cleanedDir) {
       toast.error("La dirección es requerida para envío a domicilio");
       setStep(2);
       return;
@@ -260,12 +266,12 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
         apellido: f.apellido || undefined, 
         telefono: f.telefono,
         email: f.email || undefined, 
-        direccion: hasDelivery ? f.direccion : undefined, 
-        sector: hasDelivery ? f.sector : undefined,
-        edificio_apto: hasDelivery ? f.edificio_apto : undefined,
-        referencia: hasDelivery ? f.referencia : undefined,
-        lat: hasDelivery ? f.lat : undefined,
-        lng: hasDelivery ? f.lng : undefined,
+        direccion: cleanedDir || undefined, 
+        sector: cleanedSector || undefined,
+        edificio_apto: cleanedApto || undefined,
+        referencia: cleanedRef || undefined,
+        lat: f.lat,
+        lng: f.lng,
         cedula: f.cedula || undefined,
         notas: f.notas || undefined, 
         tipo: f.tipo, 
@@ -595,91 +601,90 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone }: C
                   </div>
                   <div>
                     <span className="text-xs sm:text-sm font-bold text-foreground block leading-tight">Envío a Domicilio</span>
-                    <span className="text-[10.5px] text-muted-foreground">¿Requiere delivery habitualmente?</span>
+                    <span className="text-[10.5px] text-muted-foreground">Marcar si este cliente requiere servicio de entrega frecuente</span>
                   </div>
                 </div>
                 <Switch 
                   checked={hasDelivery} 
-                  onCheckedChange={(checked) => {
-                    setHasDelivery(checked);
-                    if (!checked) setF({ ...f, direccion: "" });
-                  }} 
+                  onCheckedChange={(checked) => setHasDelivery(checked)} 
                   className="scale-85 origin-right cursor-pointer"
                 />
               </div>
 
-              {hasDelivery ? (
-                <div className="space-y-2 animate-in fade-in duration-150">
-                  <AddressAutocomplete
-                    value={{
-                      direccion: f.direccion || "",
-                      sector: f.sector || "",
-                      edificio_apto: f.edificio_apto || "",
-                      referencia: f.referencia || "",
-                      lat: f.lat,
-                      lng: f.lng,
-                    }}
-                    onChange={(addr) => {
-                      setF({
-                        ...f,
-                        direccion: addr.direccion,
-                        sector: addr.sector || "",
-                        edificio_apto: addr.edificio_apto || "",
-                        referencia: addr.referencia || "",
-                        lat: addr.lat,
-                        lng: addr.lng,
-                      });
-                    }}
-                    label="Dirección de Entrega"
-                    required
-                    showDetails={false}
-                  />
+              {/* Formulario de Ubicación y Sector (Siempre disponible para registrar sector) */}
+              <div className="space-y-2 animate-in fade-in duration-150">
+                <AddressAutocomplete
+                  value={{
+                    direccion: f.direccion || "",
+                    sector: f.sector || "",
+                    edificio_apto: f.edificio_apto || "",
+                    referencia: f.referencia || "",
+                    lat: f.lat,
+                    lng: f.lng,
+                  }}
+                  onChange={(addr) => {
+                    setF({
+                      ...f,
+                      direccion: addr.direccion,
+                      sector: addr.sector || "",
+                      edificio_apto: addr.edificio_apto || "",
+                      referencia: addr.referencia || "",
+                      lat: addr.lat,
+                      lng: addr.lng,
+                    });
+                  }}
+                  label="Dirección y Ubicación"
+                  required={hasDelivery}
+                  showDetails={false}
+                />
 
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs font-bold text-slate-500">Edificio / Apto / Nivel</Label>
-                      <div className="relative">
-                        <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                        <Input
-                          value={f.edificio_apto || ""}
-                          onChange={(e) => setF({ ...f, edificio_apto: e.target.value })}
-                          placeholder="Torre / Apto 4B"
-                          className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                        />
-                      </div>
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs font-bold text-slate-500">Sector / Barrio</Label>
-                      <div className="relative">
-                        <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                        <Input
-                          value={f.sector || ""}
-                          onChange={(e) => setF({ ...f, sector: e.target.value })}
-                          placeholder="Ej. Piantini"
-                          className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                        />
-                      </div>
-                    </div>
-                  </div>
-
+                <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <Label className="text-xs font-bold text-slate-500">Punto de Referencia (Para el Repartidor)</Label>
+                    <Label className="text-xs font-bold text-slate-500">Edificio / Apto / Nivel</Label>
                     <div className="relative">
-                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                       <Input
-                        value={f.referencia || ""}
-                        onChange={(e) => setF({ ...f, referencia: e.target.value })}
-                        placeholder="Ej. Portón negro frente al parque, timbre 4B..."
+                        value={f.edificio_apto || ""}
+                        onChange={(e) => setF({ ...f, edificio_apto: e.target.value })}
+                        placeholder="Torre / Apto 4B"
                         className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
                       />
                     </div>
                   </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-bold text-slate-500 flex items-center gap-1">
+                      <span>Sector / Barrio</span>
+                      <span className="text-[10px] text-primary font-bold">(Para segmentación)</span>
+                    </Label>
+                    <div className="relative">
+                      <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Input
+                        value={f.sector || ""}
+                        onChange={(e) => setF({ ...f, sector: e.target.value })}
+                        placeholder="Ej. Piantini"
+                        list="cliente-sector-suggestions"
+                        className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                      />
+                      <datalist id="cliente-sector-suggestions">
+                        {sectorSuggestions.map((sector) => <option key={sector} value={sector} />)}
+                      </datalist>
+                    </div>
+                  </div>
                 </div>
-              ) : (
-                <div className="py-2.5 px-3.5 rounded-xl bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-800 text-center">
-                  <p className="text-xs text-muted-foreground">El cliente no tiene dirección de envío configurada. Retirará en el local.</p>
+
+                <div className="space-y-1">
+                  <Label className="text-xs font-bold text-slate-500">Punto de Referencia (Para el Repartidor)</Label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                    <Input
+                      value={f.referencia || ""}
+                      onChange={(e) => setF({ ...f, referencia: e.target.value })}
+                      placeholder="Ej. Portón negro frente al parque, timbre 4B..."
+                      className="h-10 pl-9.5 text-xs sm:text-sm rounded-xl bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
+                    />
+                  </div>
                 </div>
-              )}
+              </div>
 
               {/* Notas */}
               <div className="space-y-1">

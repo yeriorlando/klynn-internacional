@@ -1594,12 +1594,35 @@ export async function getTenants(): Promise<Tenant[]> {
   return data || [];
 }
 
+async function ensureLogoUploadedToStorage(tenantId: string, logoUrl?: string): Promise<string | undefined> {
+  if (!logoUrl || !logoUrl.startsWith("data:")) return logoUrl;
+  if (typeof window === "undefined" || !navigator.onLine) return logoUrl;
+  try {
+    const res = await fetch(logoUrl);
+    const blob = await res.blob();
+    const ext = blob.type.split("/")[1] || "webp";
+    const filePath = `logos/${tenantId}_${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from("catalogo")
+      .upload(filePath, blob, { contentType: blob.type, upsert: true });
+    if (!error) {
+      const { data } = supabase.storage.from("catalogo").getPublicUrl(filePath);
+      return data.publicUrl;
+    }
+  } catch (e) {
+    console.warn("No se pudo migrar base64 a storage:", e);
+  }
+  return logoUrl;
+}
+
 export async function saveTenant(t: Tenant) {
   const realId = resolveTenantId(t.id);
+  const finalLogoUrl = await ensureLogoUploadedToStorage(realId, t.logo_url);
   const branchName = t.nombre_sucursal || t.config?.nombre_sucursal || "Sucursal principal";
   const updatedTenant: Tenant = {
     ...t,
     id: realId,
+    logo_url: finalLogoUrl,
     nombre_sucursal: branchName,
     config: {
       ...DEFAULT_CONFIG,
@@ -1798,9 +1821,13 @@ export async function verifyOtpAndRegisterTenant(
   if (!user) throw new Error("No se pudo verificar el usuario");
 
   // 2. Guardar la lavandería
+  const realTenantId = resolveTenantId(tenant.id);
+  const finalLogoUrl = await ensureLogoUploadedToStorage(realTenantId, tenant.logo_url);
   const branchName = tenant.nombre_sucursal || "Sucursal principal";
   const tenantToSave: Tenant = {
     ...tenant,
+    id: realTenantId,
+    logo_url: finalLogoUrl,
     nombre_sucursal: branchName,
     config: {
       ...DEFAULT_CONFIG,
@@ -3766,7 +3793,7 @@ export async function getCajas(tenant_id: string): Promise<Caja[]> {
       .order("abierta_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 6000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3821,7 +3848,7 @@ export async function getHistoricoCierres(filters: {
 
     const fetchPromise = query.order("cerrada_en", { ascending: false });
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 6000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -3845,7 +3872,7 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
     return openCaja || null;
   }
 
-  // 2. Intentar buscar en Supabase con timeout de 2000ms
+  // 2. Intentar buscar en Supabase con timeout prudente de 6000ms
   try {
     const filter =
       realId !== tenant_id
@@ -3860,21 +3887,51 @@ export async function getCajaAbierta(tenant_id: string): Promise<Caja | null> {
       .order("abierta_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 6000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
-    if (!error && data && data.length > 0) {
+    if (!error && data) {
       const localCajas = read<Caja[]>(KEY.cajas, []);
-      const idx = localCajas.findIndex((c) => c.id === data[0].id);
-      if (idx >= 0) localCajas[idx] = data[0];
-      else localCajas.push(data[0]);
-      write(KEY.cajas, localCajas);
-      return data[0];
+      if (data.length > 0) {
+        const active = data[0];
+        // Sincronizar memoria local asegurando que solo esta caja esté ABIERTA para este tenant
+        const updatedLocal = localCajas.map((c) => {
+          if ((c.tenant_id === realId || c.tenant_id === tenant_id) && c.id !== active.id && c.estado === "ABIERTA") {
+            return { ...c, estado: "CERRADA" as const };
+          }
+          return c;
+        });
+        const idx = updatedLocal.findIndex((c) => c.id === active.id);
+        if (idx >= 0) updatedLocal[idx] = active;
+        else updatedLocal.unshift(active);
+        write(KEY.cajas, updatedLocal);
+        try {
+          offlineDB.put("cajas", active);
+        } catch {}
+        return active;
+      } else {
+        // Supabase confirmó explícitamente que NO hay caja abierta para este tenant
+        let changed = false;
+        const updatedLocal = localCajas.map((c) => {
+          if ((c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA") {
+            changed = true;
+            return { ...c, estado: "CERRADA" as const };
+          }
+          return c;
+        });
+        if (changed) {
+          write(KEY.cajas, updatedLocal);
+        }
+        return null;
+      }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.warn("[getCajaAbierta] Error o timeout consultando Supabase:", e);
+  }
 
+  // 3. Fallback a memoria local únicamente si Supabase falló de red o dio timeout
   const localCajas = read<Caja[]>(KEY.cajas, []);
   const openCaja = localCajas.find(
     (c) => (c.tenant_id === realId || c.tenant_id === tenant_id) && c.estado === "ABIERTA",
@@ -3959,7 +4016,7 @@ export async function getMovimientos(
     const fetchPromise = query.order("creado_en", { ascending: false });
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 6000),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);

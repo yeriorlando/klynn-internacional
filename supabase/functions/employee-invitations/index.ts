@@ -371,7 +371,7 @@ serve(async (req) => {
       tenant_id: tenantId,
       tenant_name: tenant.nombre,
       tenant_slug: tenant.slug,
-      tenant_logo_url: tenant.logo_url || null,
+      tenant_logo_url: tenant.logo_url && !tenant.logo_url.startsWith("data:") ? tenant.logo_url : null,
       rol: role,
       permisos: permissions,
     };

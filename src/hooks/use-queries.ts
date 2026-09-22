@@ -62,6 +62,9 @@ export function useCajaAbierta(tenantId: string) {
     queryKey: ['caja-abierta', tenantId],
     queryFn: () => getCajaAbierta(tenantId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 5000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -102,6 +105,9 @@ export function useMovimientos(tenantId: string, cajaId?: string) {
     queryKey: ['movimientos', tenantId, cajaId],
     queryFn: () => getMovimientos(tenantId, cajaId!),
     enabled: !!tenantId && tenantId !== '__loading__' && !!cajaId,
+    staleTime: 5000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 
@@ -118,6 +124,9 @@ export function useCajas(tenantId: string) {
     queryKey: ['cajas', tenantId],
     queryFn: () => getCajas(tenantId),
     enabled: !!tenantId && tenantId !== '__loading__',
+    staleTime: 10000,
+    refetchOnWindowFocus: true,
+    refetchOnReconnect: true,
   });
 }
 

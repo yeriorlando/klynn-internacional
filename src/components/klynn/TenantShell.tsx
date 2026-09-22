@@ -73,6 +73,7 @@ import {
 import {
   logout,
   getCajaAbierta,
+  resolveTenantId,
   formatRD,
   can,
   getTenantBranchName,
@@ -324,15 +325,32 @@ export function TenantShell() {
   }, []);
 
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
+    const handleOnline = () => {
+      setIsOnline(true);
+      if (tenantId && tenantId !== "__loading__") {
+        queryClient.invalidateQueries({ queryKey: ["caja-abierta", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["cajas", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+      }
+    };
     const handleOffline = () => setIsOnline(false);
+    const handleSyncCompleted = () => {
+      if (tenantId && tenantId !== "__loading__") {
+        queryClient.invalidateQueries({ queryKey: ["caja-abierta", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["cajas", tenantId] });
+        queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+      }
+    };
+
     window.addEventListener("online", handleOnline);
     window.addEventListener("offline", handleOffline);
+    window.addEventListener("klynn-sync-completed", handleSyncCompleted);
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      window.removeEventListener("klynn-sync-completed", handleSyncCompleted);
     };
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
     const handleFullscreenChange = () => {
@@ -749,7 +767,34 @@ export function TenantShell() {
       })
       .subscribe();
 
-    // 4. Browser BroadcastChannel (Garantizado entre pestañas del mismo navegador)
+    // 4. Supabase Postgres Realtime changes en CAJAS y MOVIMIENTOS (Apertura y Cierre en Tiempo Real)
+    const cajasChannel = supabase
+      .channel(`cajas-realtime-shell-${tenantId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "cajas" },
+        (payload) => {
+          const row = (payload.new || payload.old) as any;
+          if (row && (row.tenant_id === tenantId || resolveTenantId(row.tenant_id) === resolveTenantId(tenantId))) {
+            queryClient.invalidateQueries({ queryKey: ["caja-abierta", tenantId] });
+            queryClient.invalidateQueries({ queryKey: ["cajas", tenantId] });
+          }
+        },
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "movimientos_caja" },
+        (payload) => {
+          const row = (payload.new || payload.old) as any;
+          if (row && (row.tenant_id === tenantId || resolveTenantId(row.tenant_id) === resolveTenantId(tenantId))) {
+            queryClient.invalidateQueries({ queryKey: ["movimientos", tenantId] });
+            queryClient.invalidateQueries({ queryKey: ["caja-abierta", tenantId] });
+          }
+        },
+      )
+      .subscribe();
+
+    // 5. Browser BroadcastChannel (Garantizado entre pestañas del mismo navegador)
     let browserBc: BroadcastChannel | null = null;
     if (typeof window !== "undefined" && "BroadcastChannel" in window) {
       browserBc = new BroadcastChannel(`klynn_tenant_${tenantId}`);
@@ -760,7 +805,7 @@ export function TenantShell() {
       };
     }
 
-    // 5. Smart Polling periódico de respaldo (cada 4 segundos en producción)
+    // 6. Smart Polling periódico de respaldo (cada 4 segundos en producción)
     const pollInterval = setInterval(() => {
       loadNotificaciones();
     }, 4000);
@@ -770,6 +815,7 @@ export function TenantShell() {
       supabase.removeChannel(channel);
       supabase.removeChannel(ordersChannel);
       supabase.removeChannel(broadcastChannel);
+      supabase.removeChannel(cajasChannel);
       if (browserBc) browserBc.close();
     };
   }, [tenantId, user?.empleado?.rol]);

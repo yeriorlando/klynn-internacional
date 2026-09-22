@@ -1329,7 +1329,25 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                     const file = e.target.files?.[0];
                     if (file) {
                       try {
-                        const compressed = await compressImage(file, 512, 512, 0.7);
+                        const compressed = await compressImage(file, 512, 512, 0.8);
+                        if (navigator.onLine && tenant.id) {
+                          const res = await fetch(compressed);
+                          const blob = await res.blob();
+                          const ext = blob.type.split("/")[1] || "webp";
+                          const path = `logos/${tenant.id}_${Date.now()}.${ext}`;
+                          const { error: uploadErr } = await supabase.storage
+                            .from("catalogo")
+                            .upload(path, blob, { contentType: blob.type, upsert: true });
+
+                          if (!uploadErr) {
+                            const { data: { publicUrl } } = supabase.storage
+                              .from("catalogo")
+                              .getPublicUrl(path);
+                            setTenant({ ...tenant, logo_url: publicUrl });
+                            toast.success("Logotipo cargado correctamente");
+                            return;
+                          }
+                        }
                         setTenant({ ...tenant, logo_url: compressed });
                         toast.success("Logotipo cargado correctamente");
                       } catch {

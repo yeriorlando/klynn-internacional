@@ -1025,6 +1025,7 @@ function NuevaOrdenPage() {
   const activePlan = useMemo(() => plans.find((p) => p.id === tenant?.plan_id), [plans, tenant?.plan_id]);
   const hasFiscalModule = isModuleEnabled(tenant || null, "facturacion_fiscal", activePlan);
   const hasPromocionesModule = isModuleEnabled(tenant || null, "promociones", activePlan);
+  const hasLogistica = isModuleEnabled(tenant || null, "logistica", activePlan);
 
   const isElectronic = hasFiscalModule && Boolean(
     fiscalConfigData?.is_active || 
@@ -3393,16 +3394,18 @@ function getMarbeteColorStyle(colorName?: string) {
             <div className="flex w-full flex-wrap items-center justify-between gap-2.5 py-1 sm:justify-start">
               {/* Action Buttons Group */}
               <div className="flex min-w-0 flex-nowrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowDeliveryPOS(true)}
-                  className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${servicioDomicilio ? "bg-blue-700 text-white shadow-inner ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-background" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"}`}
-                >
-                  <Truck
-                    className={`h-4 w-4 transition-colors text-white ${servicioDomicilio ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
-                  />
-                  <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
-                </button>
+                {hasLogistica && (
+                  <button
+                    type="button"
+                    onClick={() => setShowDeliveryPOS(true)}
+                    className={`group inline-flex h-9 shrink-0 cursor-pointer items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-3 text-xs font-bold uppercase tracking-[0.015em] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/25 ${servicioDomicilio ? "bg-blue-700 text-white shadow-inner ring-2 ring-blue-400 ring-offset-1 dark:ring-offset-background" : "bg-blue-600 hover:bg-blue-700 text-white shadow-sm"}`}
+                  >
+                    <Truck
+                      className={`h-4 w-4 transition-colors text-white ${servicioDomicilio ? "opacity-100" : "opacity-90 group-hover:opacity-100"}`}
+                    />
+                    <span>{servicioDomicilio ? "Envío activo" : "Envío a domicilio"}</span>
+                  </button>
+                )}
 
                 <div className="flex items-center shadow-sm rounded-lg overflow-hidden">
                   <button
@@ -3536,43 +3539,45 @@ function getMarbeteColorStyle(colorName?: string) {
               authUser={user}
             />
 
-            <DeliveryPOSDialog
-              open={showDeliveryPOS}
-              onOpenChange={(isOpen) => {
-                setShowDeliveryPOS(isOpen);
-                if (!isOpen && cliente) {
-                  const isGenericClient =
-                    cliente.nombre === "Consumidor" && cliente.apellido === "Final";
-                  if (
-                    !isGenericClient &&
-                    (direccionData.direccion ||
-                      direccionData.sector ||
-                      direccionData.edificio_apto ||
-                      direccionData.referencia)
-                  ) {
-                    const updatedCliente: Cliente = {
-                      ...cliente,
-                      direccion: direccionData.direccion || cliente.direccion,
-                      sector: direccionData.sector || cliente.sector,
-                      edificio_apto: direccionData.edificio_apto || cliente.edificio_apto,
-                      referencia: direccionData.referencia || cliente.referencia,
-                      lat: direccionData.lat || cliente.lat,
-                      lng: direccionData.lng || cliente.lng,
-                    };
-                    setCliente(updatedCliente);
-                    saveCliente(updatedCliente).then(() => {
-                      queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
-                    });
+            {hasLogistica && (
+              <DeliveryPOSDialog
+                open={showDeliveryPOS}
+                onOpenChange={(isOpen) => {
+                  setShowDeliveryPOS(isOpen);
+                  if (!isOpen && cliente) {
+                    const isGenericClient =
+                      cliente.nombre === "Consumidor" && cliente.apellido === "Final";
+                    if (
+                      !isGenericClient &&
+                      (direccionData.direccion ||
+                        direccionData.sector ||
+                        direccionData.edificio_apto ||
+                        direccionData.referencia)
+                    ) {
+                      const updatedCliente: Cliente = {
+                        ...cliente,
+                        direccion: direccionData.direccion || cliente.direccion,
+                        sector: direccionData.sector || cliente.sector,
+                        edificio_apto: direccionData.edificio_apto || cliente.edificio_apto,
+                        referencia: direccionData.referencia || cliente.referencia,
+                        lat: direccionData.lat || cliente.lat,
+                        lng: direccionData.lng || cliente.lng,
+                      };
+                      setCliente(updatedCliente);
+                      saveCliente(updatedCliente).then(() => {
+                        queryClient.invalidateQueries({ queryKey: ["clientes", tenantId] });
+                      });
+                    }
                   }
-                }
-              }}
-              enabled={servicioDomicilio}
-              setEnabled={setServicioDomicilio}
-              addressData={direccionData}
-              setAddressData={setDireccionData}
-              cost={costoDomicilio}
-              setCost={setCostoDomicilio}
-            />
+                }}
+                enabled={servicioDomicilio}
+                setEnabled={setServicioDomicilio}
+                addressData={direccionData}
+                setAddressData={setDireccionData}
+                cost={costoDomicilio}
+                setCost={setCostoDomicilio}
+              />
+            )}
 
             <DiscountPOSDialog
               open={showDiscountPOS}
