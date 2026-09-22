@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildClienteAnalytics, getSectorOptions } from "./cliente-analytics.ts";
+import {
+  buildClienteAnalytics,
+  getPeriodoLabel,
+  getSectorOptions,
+  matchesPeriodo,
+} from "./cliente-analytics.ts";
 import type { Cliente, Orden } from "./storage.ts";
 
 const baseOrder: Orden = {
@@ -87,4 +92,35 @@ test("agrupa sectores ignorando espacios, mayúsculas y acentos", () => {
   ]);
 
   assert.deepEqual(sectors, [{ key: "piantini", label: "Piantini", count: 2 }]);
+});
+
+test("filtra órdenes por presets de fecha y rango personalizado", () => {
+  const refDate = new Date("2026-09-22T15:00:00.000Z");
+
+  // Hoy
+  assert.equal(matchesPeriodo("2026-09-22T10:00:00.000Z", "hoy", undefined, undefined, refDate), true);
+  assert.equal(matchesPeriodo("2026-09-21T23:59:59.000Z", "hoy", undefined, undefined, refDate), false);
+
+  // Esta semana (martes 22 sept 2026 -> semana del lunes 21 al dom 27)
+  assert.equal(matchesPeriodo("2026-09-21T08:00:00.000Z", "esta_semana", undefined, undefined, refDate), true);
+  assert.equal(matchesPeriodo("2026-09-15T08:00:00.000Z", "esta_semana", undefined, undefined, refDate), false);
+
+  // Este mes
+  assert.equal(matchesPeriodo("2026-09-01T12:00:00.000Z", "este_mes", undefined, undefined, refDate), true);
+  assert.equal(matchesPeriodo("2026-08-30T12:00:00.000Z", "este_mes", undefined, undefined, refDate), false);
+
+  // Últimos 30 días
+  assert.equal(matchesPeriodo("2026-09-01T12:00:00.000Z", "ultimos_30", undefined, undefined, refDate), true);
+  assert.equal(matchesPeriodo("2026-07-01T12:00:00.000Z", "ultimos_30", undefined, undefined, refDate), false);
+
+  // Rango personalizado
+  assert.equal(matchesPeriodo("2026-05-10T12:00:00.000Z", "personalizado", "2026-05-01", "2026-05-15", refDate), true);
+  assert.equal(matchesPeriodo("2026-05-20T12:00:00.000Z", "personalizado", "2026-05-01", "2026-05-15", refDate), false);
+  assert.equal(matchesPeriodo("2026-05-10T12:00:00.000Z", "personalizado", "2026-05-10", undefined, refDate), true);
+  assert.equal(matchesPeriodo("2026-05-09T12:00:00.000Z", "personalizado", "2026-05-10", undefined, refDate), false);
+
+  // Labels
+  assert.equal(getPeriodoLabel("todas"), "Todas las fechas");
+  assert.equal(getPeriodoLabel("hoy"), "Hoy");
+  assert.equal(getPeriodoLabel("personalizado", "2026-01-01", "2026-01-31"), "2026-01-01 a 2026-01-31");
 });

@@ -217,3 +217,115 @@ export function buildClienteAnalytics(allOrders: Orden[], clienteId: string): Cl
     tarifaPromedioLibra: totalLibras > 0 ? +(totalMontoLibras / totalLibras).toFixed(2) : 0,
   };
 }
+
+export type PeriodoFecha =
+  | "todas"
+  | "hoy"
+  | "esta_semana"
+  | "este_mes"
+  | "ultimos_30"
+  | "ultimos_90"
+  | "personalizado";
+
+export function isMismoDia(dateStr?: string, targetDate: Date = new Date()): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  return (
+    d.getFullYear() === targetDate.getFullYear() &&
+    d.getMonth() === targetDate.getMonth() &&
+    d.getDate() === targetDate.getDate()
+  );
+}
+
+export function isEnEstaSemana(dateStr?: string, now: Date = new Date()): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+  const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6, 23, 59, 59, 999);
+  return d >= startOfWeek && d <= endOfWeek;
+}
+
+export function isEnEsteMes(dateStr?: string, now: Date = new Date()): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
+export function isEnUltimosDias(dateStr?: string, days: number = 30, now: Date = new Date()): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  const cutoff = new Date(now.getFullYear(), now.getMonth(), now.getDate() - days, 0, 0, 0, 0);
+  return d >= cutoff && d <= now;
+}
+
+export function isEnRango(dateStr?: string, desde?: string, hasta?: string): boolean {
+  if (!dateStr) return false;
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return false;
+  if (desde) {
+    const [y, m, day] = desde.split("-").map(Number);
+    const start = new Date(y, m - 1, day, 0, 0, 0, 0);
+    if (d < start) return false;
+  }
+  if (hasta) {
+    const [y, m, day] = hasta.split("-").map(Number);
+    const end = new Date(y, m - 1, day, 23, 59, 59, 999);
+    if (d > end) return false;
+  }
+  return true;
+}
+
+export function matchesPeriodo(
+  dateStr?: string,
+  periodo: PeriodoFecha = "todas",
+  desde?: string,
+  hasta?: string,
+  now: Date = new Date()
+): boolean {
+  if (periodo === "todas") return true;
+  if (!dateStr) return false;
+  switch (periodo) {
+    case "hoy":
+      return isMismoDia(dateStr, now);
+    case "esta_semana":
+      return isEnEstaSemana(dateStr, now);
+    case "este_mes":
+      return isEnEsteMes(dateStr, now);
+    case "ultimos_30":
+      return isEnUltimosDias(dateStr, 30, now);
+    case "ultimos_90":
+      return isEnUltimosDias(dateStr, 90, now);
+    case "personalizado":
+      return isEnRango(dateStr, desde, hasta);
+    default:
+      return true;
+  }
+}
+
+export function getPeriodoLabel(periodo: PeriodoFecha, desde?: string, hasta?: string): string {
+  switch (periodo) {
+    case "hoy":
+      return "Hoy";
+    case "esta_semana":
+      return "Esta semana";
+    case "este_mes":
+      return "Este mes";
+    case "ultimos_30":
+      return "Últimos 30 días";
+    case "ultimos_90":
+      return "Últimos 90 días";
+    case "personalizado":
+      if (desde && hasta) return `${desde} a ${hasta}`;
+      if (desde) return `Desde ${desde}`;
+      if (hasta) return `Hasta ${hasta}`;
+      return "Personalizado";
+    default:
+      return "Todas las fechas";
+  }
+}
