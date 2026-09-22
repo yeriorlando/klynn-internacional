@@ -127,7 +127,7 @@ serve(async (req) => {
     if (action === "accept") {
       const newPassword = String(body?.password || "").trim();
 
-      const { data: invitation, error: invitationError } = await adminClient
+      let { data: invitation, error: invitationError } = await adminClient
         .from("employee_invitations")
         .select("id,tenant_id,email,status,rol,permisos,expires_at,auth_user_id")
         .eq("tenant_id", tenantId)
@@ -136,8 +136,22 @@ serve(async (req) => {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (invitationError || !invitation) return json({ error: "Invitación pendiente no encontrada" }, 404);
-      if (new Date(invitation.expires_at).getTime() <= Date.now()) {
+
+      if (!invitation) {
+        const { data: acceptedInv } = await adminClient
+          .from("employee_invitations")
+          .select("id,tenant_id,email,status,rol,permisos,expires_at,auth_user_id")
+          .eq("tenant_id", tenantId)
+          .eq("status", "accepted")
+          .or(`auth_user_id.eq.${caller.id},email.ilike.${email || caller.email || ""}`)
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+        if (acceptedInv) invitation = acceptedInv;
+      }
+
+      if (invitationError || !invitation) return json({ error: "Invitación no encontrada o ya no está disponible" }, 404);
+      if (invitation.status === "pending" && new Date(invitation.expires_at).getTime() <= Date.now()) {
         return json({ error: "La invitación ha vencido" }, 409);
       }
 
@@ -344,10 +358,13 @@ serve(async (req) => {
       const isResetPath = parsedRedirect.pathname === "/restablecer-contrasena";
       if (isAllowedHost && isResetPath) {
         parsedRedirect.searchParams.set("invitation", "1");
+        parsedRedirect.searchParams.set("email", email);
+        parsedRedirect.searchParams.set("tenant_id", tenantId);
+        parsedRedirect.searchParams.set("invitation_id", invitation.id);
         safeRedirect = parsedRedirect.toString();
       }
     } catch {
-      safeRedirect = defaultRedirect;
+      safeRedirect = `${defaultRedirect}&email=${encodeURIComponent(email)}&tenant_id=${encodeURIComponent(tenantId)}&invitation_id=${encodeURIComponent(invitation.id)}`;
     }
     const invitationMetadata = {
       employee_invitation_id: invitation.id,

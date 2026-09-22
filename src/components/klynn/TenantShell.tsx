@@ -1440,15 +1440,36 @@ export function TenantShell() {
           </button>
 
           <div className="flex flex-1 items-center gap-3">
-            <Badge
-              variant="outline"
-              className={`gap-1.5 ${cajaAbierta ? "border-success/40 bg-success/10 text-success" : "border-destructive/40 bg-destructive/10 text-destructive"}`}
+            <Link
+              to={`/t/${tenant.slug}/caja`}
+              title={
+                cajaAbierta
+                  ? "Caja abierta (Turno activo). Clic para ver arqueo y movimientos."
+                  : "Caja cerrada (Turno inactivo). Clic para iniciar turno de caja."
+              }
+              className={`group inline-flex items-center gap-2 px-3 py-1 rounded-full border text-xs font-semibold shadow-2xs transition-all cursor-pointer active:scale-95 ${
+                cajaAbierta
+                  ? "bg-emerald-500/10 dark:bg-emerald-500/15 border-emerald-500/30 text-emerald-700 dark:text-emerald-300 hover:bg-emerald-500/20 hover:border-emerald-400"
+                  : "bg-amber-500/10 dark:bg-amber-500/15 border-amber-500/30 text-amber-800 dark:text-amber-300 hover:bg-amber-500/20 hover:border-amber-400"
+              }`}
             >
-              <span
-                className={`h-1.5 w-1.5 rounded-full ${cajaAbierta ? "bg-success" : "bg-destructive"} animate-pulse`}
-              />
-              Caja {cajaAbierta ? "ABIERTA" : "CERRADA"}
-            </Badge>
+              {cajaAbierta ? (
+                <>
+                  <span className="relative flex h-2 w-2 shrink-0">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                  </span>
+                  <Wallet className="h-3.5 w-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>Caja abierta</span>
+                </>
+              ) : (
+                <>
+                  <span className="h-2 w-2 rounded-full bg-amber-500 shrink-0" />
+                  <Lock className="h-3.5 w-3.5 text-amber-600 dark:text-amber-400 group-hover:scale-110 shrink-0 transition-transform" />
+                  <span>Caja cerrada</span>
+                </>
+              )}
+            </Link>
             {tenant.estado === "TRIAL" && (
               <Badge
                 variant="outline"

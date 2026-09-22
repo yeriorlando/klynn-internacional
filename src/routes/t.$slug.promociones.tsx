@@ -1,6 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useState, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import {
   Sparkles,
   Plus,
@@ -24,6 +25,8 @@ import {
   Flame,
   Lock,
   Gift,
+  Scale,
+  Receipt,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -119,6 +122,10 @@ function PromocionesPage() {
   const [fechaFin, setFechaFin] = useState("");
   const [minPiezas, setMinPiezas] = useState<number>(0);
   const [minSubtotal, setMinSubtotal] = useState<number>(0);
+  const [minLibras, setMinLibras] = useState<number>(0);
+  const [hasMinPiezas, setHasMinPiezas] = useState(false);
+  const [hasMinLibras, setHasMinLibras] = useState(false);
+  const [hasMinSubtotal, setHasMinSubtotal] = useState(false);
   const [codigoCupon, setCodigoCupon] = useState("");
   const [esAutomatica, setEsAutomatica] = useState(true);
   const [formStep, setFormStep] = useState<1 | 2 | 3>(1);
@@ -190,6 +197,10 @@ function PromocionesPage() {
     setFechaFin("");
     setMinPiezas(0);
     setMinSubtotal(0);
+    setMinLibras(0);
+    setHasMinPiezas(false);
+    setHasMinLibras(false);
+    setHasMinSubtotal(false);
     setCodigoCupon("");
     setEsAutomatica(true);
     setSearchScopeItem("");
@@ -215,6 +226,10 @@ function PromocionesPage() {
     setFechaFin(p.fecha_fin || "");
     setMinPiezas(p.min_piezas || 0);
     setMinSubtotal(p.min_subtotal || 0);
+    setMinLibras(p.min_libras || 0);
+    setHasMinPiezas(Boolean(p.min_piezas && p.min_piezas > 0));
+    setHasMinLibras(Boolean(p.min_libras && p.min_libras > 0));
+    setHasMinSubtotal(Boolean(p.min_subtotal && p.min_subtotal > 0));
     setCodigoCupon(p.codigo_cupon || "");
     setEsAutomatica(p.es_automatica);
     setSearchScopeItem("");
@@ -279,8 +294,9 @@ function PromocionesPage() {
         dias_semana: diasSemana.length > 0 ? diasSemana : [0, 1, 2, 3, 4, 5, 6],
         fecha_inicio: fechaInicio || undefined,
         fecha_fin: fechaFin || undefined,
-        min_piezas: Number(minPiezas || 0),
-        min_subtotal: Number(minSubtotal || 0),
+        min_piezas: hasMinPiezas ? Number(minPiezas || 0) : 0,
+        min_subtotal: hasMinSubtotal ? Number(minSubtotal || 0) : 0,
+        min_libras: hasMinLibras ? Number(minLibras || 0) : 0,
         codigo_cupon: codigoCupon ? codigoCupon.trim().toUpperCase() : undefined,
         es_automatica: esAutomatica,
         activo: editingPromo ? editingPromo.activo : true,
@@ -620,9 +636,14 @@ function PromocionesPage() {
                     </div>
 
                     {/* CONDICIONES EXTRA */}
-                    {(((promo.min_piezas ?? 0) > 0) || ((promo.min_subtotal ?? 0) > 0) || promo.codigo_cupon) && (
+                    {(((promo.min_piezas ?? 0) > 0) || ((promo.min_subtotal ?? 0) > 0) || ((promo.min_libras ?? 0) > 0) || promo.codigo_cupon) && (
                       <div className="flex items-center gap-2 pt-1 flex-wrap text-[10px] text-muted-foreground">
                         {(promo.min_piezas ?? 0) > 0 && <span>Mín. {promo.min_piezas} piezas</span>}
+                        {(promo.min_libras ?? 0) > 0 && (
+                          <span className="inline-flex items-center gap-0.5 font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                            <Scale className="h-2.5 w-2.5" /> Mín. {promo.min_libras} lb
+                          </span>
+                        )}
                         {(promo.min_subtotal ?? 0) > 0 && <span>Mín. {formatRD(promo.min_subtotal || 0)}</span>}
                         {promo.codigo_cupon && (
                           <span className="font-mono font-bold text-foreground bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">
@@ -1466,30 +1487,205 @@ function PromocionesPage() {
                   </div>
                 </div>
 
-                {/* CONDICIONES DE MÍNIMOS */}
-                <div className="grid grid-cols-2 gap-2.5">
-                  <div>
-                    <Label className="text-[11px] font-bold">Mínimo de prendas (opcional)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="0 = Sin mínimo"
-                      value={minPiezas || ""}
-                      onChange={(e) => setMinPiezas(parseInt(e.target.value) || 0)}
-                      className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                    />
+                {/* CONDICIONES DE ACTIVACIÓN CON TOGGLES */}
+                <div className="space-y-2 pt-1">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[11px] font-bold text-foreground">
+                      Condiciones de la orden (opcional)
+                    </Label>
+                    <span className="text-[10px] text-muted-foreground">
+                      Activa solo las que apliquen
+                    </span>
                   </div>
 
-                  <div>
-                    <Label className="text-[11px] font-bold">Mínimo de subtotal RD$ (opcional)</Label>
-                    <Input
-                      type="number"
-                      min="0"
-                      placeholder="0 = Sin mínimo"
-                      value={minSubtotal || ""}
-                      onChange={(e) => setMinSubtotal(parseFloat(e.target.value) || 0)}
-                      className="mt-1 h-8 rounded-lg text-xs bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800"
-                    />
+                  {/* 1. MÍNIMO DE PRENDAS */}
+                  <div
+                    className={cn(
+                      "p-2.5 rounded-xl border transition-all",
+                      hasMinPiezas
+                        ? "bg-primary/5 border-primary/40 shadow-xs"
+                        : "bg-slate-50 dark:bg-slate-900/60 border-border/70"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={cn(
+                            "h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                            hasMinPiezas
+                              ? "bg-primary/15 text-primary"
+                              : "bg-slate-200/70 dark:bg-slate-800 text-slate-500"
+                          )}
+                        >
+                          <Shirt className="h-3.5 w-3.5" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block leading-tight">
+                            Mínimo de prendas
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            Requerir cierta cantidad de piezas en la orden
+                          </span>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={hasMinPiezas}
+                        onCheckedChange={(checked) => {
+                          setHasMinPiezas(checked);
+                          if (!checked) {
+                            setMinPiezas(0);
+                          } else if (!minPiezas || minPiezas <= 0) {
+                            setMinPiezas(3);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {hasMinPiezas && (
+                      <div className="mt-2 pt-2 border-t border-primary/15 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                        <span className="text-xs font-semibold text-foreground">Cantidad de prendas requeridas:</span>
+                        <div className="relative w-28 shrink-0">
+                          <Input
+                            type="number"
+                            min="1"
+                            value={minPiezas || ""}
+                            onChange={(e) => setMinPiezas(Math.max(1, parseInt(e.target.value) || 1))}
+                            className="h-8 pr-8 text-right font-black text-xs rounded-lg bg-white dark:bg-slate-900"
+                            autoFocus
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
+                            pzas
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 2. MÍNIMO DE LIBRAS */}
+                  <div
+                    className={cn(
+                      "p-2.5 rounded-xl border transition-all",
+                      hasMinLibras
+                        ? "bg-amber-500/10 border-amber-500/40 shadow-xs"
+                        : "bg-slate-50 dark:bg-slate-900/60 border-border/70"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={cn(
+                            "h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                            hasMinLibras
+                              ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
+                              : "bg-slate-200/70 dark:bg-slate-800 text-slate-500"
+                          )}
+                        >
+                          <Scale className="h-3.5 w-3.5" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block leading-tight">
+                            Mínimo de libras
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            Requerir un peso acumulado en prendas por libra
+                          </span>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={hasMinLibras}
+                        onCheckedChange={(checked) => {
+                          setHasMinLibras(checked);
+                          if (!checked) {
+                            setMinLibras(0);
+                          } else if (!minLibras || minLibras <= 0) {
+                            setMinLibras(10);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {hasMinLibras && (
+                      <div className="mt-2 pt-2 border-t border-amber-500/20 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                        <span className="text-xs font-semibold text-foreground">Peso mínimo en libras:</span>
+                        <div className="relative w-28 shrink-0">
+                          <Input
+                            type="number"
+                            step="0.5"
+                            min="0.5"
+                            value={minLibras || ""}
+                            onChange={(e) => setMinLibras(Math.max(0.1, parseFloat(e.target.value) || 0.1))}
+                            className="h-8 pr-7 text-right font-black text-xs rounded-lg bg-white dark:bg-slate-900"
+                            autoFocus
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
+                            lb
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 3. MÍNIMO DE SUBTOTAL */}
+                  <div
+                    className={cn(
+                      "p-2.5 rounded-xl border transition-all",
+                      hasMinSubtotal
+                        ? "bg-emerald-500/10 border-emerald-500/40 shadow-xs"
+                        : "bg-slate-50 dark:bg-slate-900/60 border-border/70"
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div
+                          className={cn(
+                            "h-7 w-7 rounded-lg flex items-center justify-center shrink-0 transition-colors",
+                            hasMinSubtotal
+                              ? "bg-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                              : "bg-slate-200/70 dark:bg-slate-800 text-slate-500"
+                          )}
+                        >
+                          <Receipt className="h-3.5 w-3.5" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block leading-tight">
+                            Mínimo de subtotal
+                          </span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            Monto mínimo en pesos (RD$) para aplicar
+                          </span>
+                        </div>
+                      </div>
+                      <Switch
+                        checked={hasMinSubtotal}
+                        onCheckedChange={(checked) => {
+                          setHasMinSubtotal(checked);
+                          if (!checked) {
+                            setMinSubtotal(0);
+                          } else if (!minSubtotal || minSubtotal <= 0) {
+                            setMinSubtotal(500);
+                          }
+                        }}
+                      />
+                    </div>
+
+                    {hasMinSubtotal && (
+                      <div className="mt-2 pt-2 border-t border-emerald-500/20 flex items-center justify-between gap-2 animate-in fade-in duration-150">
+                        <span className="text-xs font-semibold text-foreground">Monto mínimo en orden:</span>
+                        <div className="relative w-32 shrink-0">
+                          <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
+                            RD$
+                          </span>
+                          <Input
+                            type="number"
+                            min="1"
+                            value={minSubtotal || ""}
+                            onChange={(e) => setMinSubtotal(Math.max(1, parseFloat(e.target.value) || 1))}
+                            className="h-8 pl-8 pr-2.5 text-right font-black text-xs rounded-lg bg-white dark:bg-slate-900"
+                            autoFocus
+                          />
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
 

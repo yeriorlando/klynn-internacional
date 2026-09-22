@@ -60,20 +60,61 @@ export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
         invitationQuery = invitationQuery.eq("tenant_id", targetTenantId).ilike("email", userEmail);
       }
 
-      const { data: invitation, error: invErr } = await invitationQuery
+      let { data: invitation } = await invitationQuery
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
 
-      if (invErr || !invitation) {
-        throw new Error("Invitación pendiente no encontrada o ya procesada.");
+      // Si no se encontró como 'pending', el trigger de base de datos 'tr_accept_employee_invitation'
+      // pudo haberla marcado como 'accepted' al confirmar el correo en el primer clic.
+      // Permitimos encontrar la invitación 'accepted' reciente para poder asignarle la contraseña al usuario.
+      if (!invitation) {
+        let acceptedQuery = adminClient
+          .from("employee_invitations")
+          .select("id,tenant_id,email,status,rol,permisos,expires_at,auth_user_id")
+          .eq("status", "accepted");
+
+        if (targetInvitationId) {
+          acceptedQuery = acceptedQuery.eq("id", targetInvitationId);
+        } else if (targetTenantId && userEmail) {
+          acceptedQuery = acceptedQuery.eq("tenant_id", targetTenantId).ilike("email", userEmail);
+        } else if (userEmail) {
+          acceptedQuery = acceptedQuery.ilike("email", userEmail);
+        }
+
+        const { data: acceptedInv } = await acceptedQuery
+          .order("updated_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (acceptedInv) {
+          invitation = acceptedInv;
+        }
       }
 
-      if (new Date(invitation.expires_at).getTime() <= Date.now()) {
+      if (!invitation) {
+        throw new Error("Invitación no encontrada o ya no está disponible.");
+      }
+
+      if (invitation.status === "pending" && new Date(invitation.expires_at).getTime() <= Date.now()) {
         throw new Error("La invitación ha vencido. Solicita una nueva invitación.");
       }
 
-      const targetUserId = userId || invitation.auth_user_id;
+      let targetUserId = userId || invitation.auth_user_id;
+
+      // Si no se obtuvo el targetUserId desde el token o la invitación, buscarlo en public.empleados
+      if (!targetUserId && invitation.tenant_id && (userEmail || invitation.email)) {
+        const emailToFind = (userEmail || invitation.email).toLowerCase();
+        const { data: emp } = await adminClient
+          .from("empleados")
+          .select("id")
+          .eq("tenant_id", invitation.tenant_id)
+          .ilike("email", emailToFind)
+          .maybeSingle();
+        if (emp?.id) {
+          targetUserId = emp.id;
+        }
+      }
 
       if (password && targetUserId) {
         const { error: pwdErr } = await adminClient.auth.admin.updateUserById(targetUserId, {
@@ -103,12 +144,14 @@ export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
         });
       }
 
-      await adminClient.from("employee_invitations").update({
-        status: "accepted",
-        auth_user_id: targetUserId,
-        accepted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      }).eq("id", invitation.id);
+      if (invitation.status !== "accepted" || (!invitation.auth_user_id && targetUserId)) {
+        await adminClient.from("employee_invitations").update({
+          status: "accepted",
+          auth_user_id: targetUserId || invitation.auth_user_id,
+          accepted_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }).eq("id", invitation.id);
+      }
 
       const { data: tenant } = await adminClient
         .from("tenants")

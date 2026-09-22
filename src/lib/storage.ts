@@ -491,6 +491,7 @@ export interface Promocion {
   fecha_fin?: string;
   min_piezas?: number;
   min_subtotal?: number;
+  min_libras?: number;
   codigo_cupon?: string;
   es_automatica: boolean;
   activo: boolean;
@@ -6891,6 +6892,7 @@ export async function savePromocion(p: Partial<Promocion> & { tenant_id: string;
     fecha_fin: p.fecha_fin || undefined,
     min_piezas: Number(p.min_piezas || 0),
     min_subtotal: Number(p.min_subtotal || 0),
+    min_libras: Number(p.min_libras || 0),
     codigo_cupon: p.codigo_cupon ? p.codigo_cupon.trim().toUpperCase() : undefined,
     es_automatica: p.es_automatica ?? true,
     activo: p.activo ?? true,

@@ -56,6 +56,10 @@ function RestablecerContrasenaPage() {
     refreshToken: null,
   });
   const [userMetadataState, setUserMetadataState] = useState<any>(null);
+  const [invitationEmailParam, setInvitationEmailParam] = useState("");
+  const [invitationTenantIdParam, setInvitationTenantIdParam] = useState("");
+  const [invitationIdParam, setInvitationIdParam] = useState("");
+  const [linkExpiredError, setLinkExpiredError] = useState(false);
 
   // Verificar sesión y decodificar token de forma instantánea
   useEffect(() => {
@@ -63,6 +67,33 @@ function RestablecerContrasenaPage() {
     const hash = window.location.hash || "";
     const invitationFlag = searchParams.get("invitation") === "1" || hash.includes("type=invite");
     if (invitationFlag) setIsInvitation(true);
+
+    const emailFromQuery = searchParams.get("email") || "";
+    const tenantIdFromQuery = searchParams.get("tenant_id") || "";
+    const invitationIdFromQuery = searchParams.get("invitation_id") || "";
+    if (emailFromQuery) setInvitationEmailParam(emailFromQuery);
+    if (tenantIdFromQuery) setInvitationTenantIdParam(tenantIdFromQuery);
+    if (invitationIdFromQuery) setInvitationIdParam(invitationIdFromQuery);
+
+    if (hash.includes("error=")) {
+      try {
+        const hashParams = new URLSearchParams(hash.replace(/^#/, ""));
+        const errorCode = hashParams.get("error_code");
+        const errorDesc = hashParams.get("error_description");
+        if (!hash.includes("access_token=")) {
+          supabase.auth.getSession().then(({ data }) => {
+            if (!data?.session && !emailFromQuery) {
+              setLinkExpiredError(true);
+              if (errorCode === "otp_expired") {
+                setError("El enlace de invitación ha vencido o ya fue utilizado previamente. Si tu cuenta ya fue creada, solicita un enlace de acceso directo o usa '¿Olvidaste tu contraseña?'.");
+              } else if (errorDesc) {
+                setError(decodeURIComponent(errorDesc.replace(/\+/g, " ")));
+              }
+            }
+          });
+        }
+      } catch {}
+    }
 
     const processMetadata = async (metadata: any) => {
       if (!metadata) return;
@@ -162,14 +193,16 @@ function RestablecerContrasenaPage() {
         // En flujo de invitación: procesar contraseña y activación de forma segura en el servidor de la app
         const { data: sessionData } = await supabase.auth.getSession();
         const invitationMetadata = sessionData?.session?.user?.user_metadata || userMetadataState || {};
-        const emailToUse = sessionData?.session?.user?.email || invitationMetadata.email || "";
+        const emailToUse = sessionData?.session?.user?.email || invitationMetadata.email || invitationEmailParam || "";
+        const tenantIdToUse = invitationMetadata.tenant_id || invitationTenantIdParam || undefined;
+        const invitationIdToUse = invitationMetadata.employee_invitation_id || invitationIdParam || undefined;
 
         const result = await acceptEmployeeInvitationServer({
           data: {
             token: activeAccessToken,
             password: password,
-            tenantId: invitationMetadata.tenant_id,
-            invitationId: invitationMetadata.employee_invitation_id,
+            tenantId: tenantIdToUse,
+            invitationId: invitationIdToUse,
             email: emailToUse,
           },
         });
@@ -366,9 +399,40 @@ function RestablecerContrasenaPage() {
                     <motion.div 
                       initial={{ opacity: 0, y: -8 }}
                       animate={{ opacity: 1, y: 0 }}
-                      className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive"
+                      className="flex flex-col gap-2 rounded-xl border border-destructive/20 bg-destructive/5 p-3 text-xs text-destructive"
                     >
-                      <AlertCircle className="h-4 w-4 shrink-0" /> {error}
+                      <div className="flex items-center gap-2">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <span>{error}</span>
+                      </div>
+                      {(error.toLowerCase().includes("vencido") || error.toLowerCase().includes("expirado") || error.toLowerCase().includes("procesada") || linkExpiredError) && (
+                        <div className="pt-1 flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 text-xs font-semibold text-primary border-primary/30 hover:bg-primary/5 cursor-pointer"
+                            onClick={() => navigate({ to: "/recuperar-contrasena" })}
+                          >
+                            ¿Olvidaste tu contraseña?
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs font-semibold cursor-pointer"
+                            onClick={() => {
+                              if (invitationTenant.slug) {
+                                navigate({ to: `/t/${invitationTenant.slug}/login` });
+                              } else {
+                                navigate({ to: "/login" });
+                              }
+                            }}
+                          >
+                            Ir a Iniciar Sesión
+                          </Button>
+                        </div>
+                      )}
                     </motion.div>
                   )}
 

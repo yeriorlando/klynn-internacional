@@ -37,7 +37,7 @@ import {
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
 import { toast } from "sonner";
-import { AlertTriangle, Rocket, Building2, Zap, Calendar, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
+import { AlertTriangle, Rocket, Building2, Zap, Calendar, CalendarDays, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
 import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
 import { 
   DropdownMenu, 
@@ -52,6 +52,150 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
+
+export type PeriodoCreacion = 
+  | "todas"
+  | "hoy"
+  | "ayer"
+  | "esta_semana"
+  | "semana_pasada"
+  | "este_mes"
+  | "mes_pasado"
+  | "personalizado";
+
+function isCreadaHoy(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() &&
+         d.getMonth() === now.getMonth() &&
+         d.getDate() === now.getDate();
+}
+
+function isCreadaAyer(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  const ayer = new Date();
+  ayer.setDate(ayer.getDate() - 1);
+  return d.getFullYear() === ayer.getFullYear() &&
+         d.getMonth() === ayer.getMonth() &&
+         d.getDate() === ayer.getDate();
+}
+
+function isEstaSemana(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = day === 0 ? -6 : 1 - day;
+  const startOfWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+  const endOfWeek = new Date(startOfWeek.getFullYear(), startOfWeek.getMonth(), startOfWeek.getDate() + 6, 23, 59, 59, 999);
+  return d >= startOfWeek && d <= endOfWeek;
+}
+
+function isSemanaPasada(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  const now = new Date();
+  const day = now.getDay();
+  const diffToMonday = (day === 0 ? -6 : 1 - day) - 7;
+  const startOfLastWeek = new Date(now.getFullYear(), now.getMonth(), now.getDate() + diffToMonday, 0, 0, 0, 0);
+  const endOfLastWeek = new Date(startOfLastWeek.getFullYear(), startOfLastWeek.getMonth(), startOfLastWeek.getDate() + 6, 23, 59, 59, 999);
+  return d >= startOfLastWeek && d <= endOfLastWeek;
+}
+
+function isEsteMes(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  const now = new Date();
+  return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth();
+}
+
+function isMesPasado(fechaStr?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  const now = new Date();
+  const targetYear = now.getMonth() === 0 ? now.getFullYear() - 1 : now.getFullYear();
+  const targetMonth = now.getMonth() === 0 ? 11 : now.getMonth() - 1;
+  return d.getFullYear() === targetYear && d.getMonth() === targetMonth;
+}
+
+function isRangoPersonalizado(fechaStr?: string, desde?: string, hasta?: string): boolean {
+  if (!fechaStr) return false;
+  const d = new Date(fechaStr);
+  if (isNaN(d.getTime())) return false;
+  if (desde) {
+    const [y, m, day] = desde.split("-").map(Number);
+    const start = new Date(y, m - 1, day, 0, 0, 0, 0);
+    if (d < start) return false;
+  }
+  if (hasta) {
+    const [y, m, day] = hasta.split("-").map(Number);
+    const end = new Date(y, m - 1, day, 23, 59, 59, 999);
+    if (d > end) return false;
+  }
+  return true;
+}
+
+function matchesPeriodoCreacion(
+  fechaStr?: string,
+  periodo: PeriodoCreacion = "todas",
+  desde?: string,
+  hasta?: string
+): boolean {
+  if (periodo === "todas") return true;
+  if (!fechaStr) return false;
+  switch (periodo) {
+    case "hoy":
+      return isCreadaHoy(fechaStr);
+    case "ayer":
+      return isCreadaAyer(fechaStr);
+    case "esta_semana":
+      return isEstaSemana(fechaStr);
+    case "semana_pasada":
+      return isSemanaPasada(fechaStr);
+    case "este_mes":
+      return isEsteMes(fechaStr);
+    case "mes_pasado":
+      return isMesPasado(fechaStr);
+    case "personalizado":
+      return isRangoPersonalizado(fechaStr, desde, hasta);
+    default:
+      return true;
+  }
+}
+
+function formatLocalDateToInput(d: Date): string {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getPeriodoLabel(periodo: PeriodoCreacion, desde?: string, hasta?: string): string {
+  switch (periodo) {
+    case "hoy": return "Creadas hoy";
+    case "ayer": return "Creadas ayer";
+    case "esta_semana": return "Esta semana";
+    case "semana_pasada": return "Semana pasada";
+    case "este_mes": return "Este mes";
+    case "mes_pasado": return "Mes pasado";
+    case "personalizado": 
+      if (desde && hasta) return `Del ${desde} al ${hasta}`;
+      if (desde) return `Desde ${desde}`;
+      if (hasta) return `Hasta ${hasta}`;
+      return "Rango personalizado";
+    case "todas":
+    default:
+      return "Todas las fechas";
+  }
+}
 
 function esParaHoy(fechaStr?: string): boolean {
   if (!fechaStr) return false;
@@ -119,6 +263,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrden | "todos" | "hoy" | "urgente">("todos");
+  const [periodoCreacion, setPeriodoCreacion] = useState<PeriodoCreacion>("todas");
+  const [customFechaDesde, setCustomFechaDesde] = useState<string>("");
+  const [customFechaHasta, setCustomFechaHasta] = useState<string>("");
+  const [showCustomDateModal, setShowCustomDateModal] = useState(false);
+  const [tempDesde, setTempDesde] = useState<string>("");
+  const [tempHasta, setTempHasta] = useState<string>("");
   const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas" | "sin_retirar">("todas");
   const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar">("todas");
   const [filtroPago, setFiltroPago] = useState<"todas" | MetodoPago>("todas");
@@ -199,7 +349,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const { data: servicios = [] } = useServicios(tenantId);
   const { data: ecfConfig } = useECFConfig(tenantId);
   const { data: ecfSequences = [] } = useECFSequences(tenantId);
-  const searchParams = useSearch({ strict: false }) as { view?: string; action?: string; filter?: string };
+  const searchParams = useSearch({ strict: false }) as { view?: string; action?: string; filter?: string; periodo?: string };
 
   const hasPendingFiscalStatus = ordenes.some((order) =>
     (order.ncf?.startsWith("E") || order.tipo_ecf?.startsWith("E")) &&
@@ -226,7 +376,10 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
     if (searchParams.filter === "almacenadas" || searchParams.filter === "sin_retirar") {
       setFiltroEntrega("sin_retirar");
     }
-  }, [searchParams.filter]);
+    if (searchParams.periodo && ["hoy", "ayer", "esta_semana", "semana_pasada", "este_mes", "mes_pasado"].includes(searchParams.periodo)) {
+      setPeriodoCreacion(searchParams.periodo as PeriodoCreacion);
+    }
+  }, [searchParams.filter, searchParams.periodo]);
 
   const emp = user?.empleado;
   const hasNotaCredito = emp ? can(emp, "nota-credito") : false;
@@ -334,6 +487,11 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       } else if (filtroEstado !== "todos" && o.estado !== filtroEstado) {
         return false;
       }
+
+      // Filtro por fecha de creación (Período)
+      if (!matchesPeriodoCreacion(o.creado_en, periodoCreacion, customFechaDesde, customFechaHasta)) {
+        return false;
+      }
       
       // Filtro de entrega (Plazo)
       if (filtroEntrega === "hoy") {
@@ -391,7 +549,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
              totalStr.includes(searchLower) ||
              saldoStr.includes(searchLower);
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, zonas, q, isConveyorEnabled]);
+  }, [ordenes, clientes, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, zonas, q, isConveyorEnabled, periodoCreacion, customFechaDesde, customFechaHasta]);
 
   const pendientesCobroList = useMemo(() => {
     return ordenes
@@ -444,7 +602,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [filt.length, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, q]);
+  }, [filt.length, filtroEstado, filtroEntrega, filtroUrgencia, filtroPago, filtroUbicacion, periodoCreacion, customFechaDesde, customFechaHasta, q]);
 
   const exportData = useMemo(() => {
     return {
@@ -1273,6 +1431,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   try {
                     let filtroActivoDesc = "Todas las órdenes";
                     const partes: string[] = [];
+                    if (periodoCreacion !== "todas") partes.push(`Período: ${getPeriodoLabel(periodoCreacion, customFechaDesde, customFechaHasta)}`);
                     if (filtroEstado !== "todos") partes.push(`Estado: ${filtroEstado}`);
                     if (filtroEntrega !== "todas") partes.push(`Entrega: ${filtroEntrega}`);
                     if (filtroUrgencia !== "todas") partes.push(`Prioridad: ${filtroUrgencia}`);
@@ -1461,14 +1620,46 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar por número de orden, cliente, monto, fecha..." className="pl-10" />
         </div>
+        <Select 
+          value={periodoCreacion} 
+          onValueChange={(v: PeriodoCreacion) => {
+            if (v === "personalizado") {
+              setTempDesde(customFechaDesde || formatLocalDateToInput(new Date()));
+              setTempHasta(customFechaHasta || formatLocalDateToInput(new Date()));
+              setShowCustomDateModal(true);
+            } else {
+              setPeriodoCreacion(v);
+            }
+          }}
+        >
+          <SelectTrigger className="w-[185px] font-semibold text-xs shrink-0">
+            <Calendar className="h-4 w-4 text-primary shrink-0 mr-1.5" />
+            <SelectValue placeholder="Fecha de creación" />
+          </SelectTrigger>
+          <SelectContent className="min-w-[230px]">
+            <SelectItem value="todas">Todas las fechas</SelectItem>
+            <SelectItem value="hoy">Creadas hoy</SelectItem>
+            <SelectItem value="ayer">Creadas ayer</SelectItem>
+            <SelectItem value="esta_semana">Esta semana</SelectItem>
+            <SelectItem value="semana_pasada">Semana pasada</SelectItem>
+            <SelectItem value="este_mes">Este mes</SelectItem>
+            <SelectItem value="mes_pasado">Mes pasado</SelectItem>
+            <SelectItem value="personalizado">
+              {periodoCreacion === "personalizado" && (customFechaDesde || customFechaHasta)
+                ? `Personalizado (${customFechaDesde || "..."} - ${customFechaHasta || "..."})`
+                : "Rango personalizado..."}
+            </SelectItem>
+          </SelectContent>
+        </Select>
+
         <Select value={filtroEntrega} onValueChange={(v: any) => setFiltroEntrega(v)}>
           <SelectTrigger className="w-[175px] font-semibold text-xs shrink-0">
-            <Calendar className="h-4 w-4 text-primary shrink-0 mr-1.5" />
+            <Truck className="h-4 w-4 text-blue-600 shrink-0 mr-1.5" />
             <SelectValue />
           </SelectTrigger>
           <SelectContent className="min-w-[220px]">
-            <SelectItem value="todas">Todas</SelectItem>
-            <SelectItem value="hoy">Para hoy</SelectItem>
+            <SelectItem value="todas">Entregas: Todas</SelectItem>
+            <SelectItem value="hoy">Para entregar hoy</SelectItem>
             <SelectItem value="atrasadas">Atrasadas</SelectItem>
             <SelectItem value="sin_retirar">Sin retirar ({`> ${tenant?.config?.dias_almacenamiento_sin_retirar || tenant?.config?.whatsapp?.dias_recordatorio_sin_retirar || 5}d`})</SelectItem>
           </SelectContent>
@@ -1528,6 +1719,54 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           </Select>
         )}
       </Card>
+
+      {/* Banner informativo de período activo */}
+      {periodoCreacion !== "todas" && (
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-2xl bg-sky-50 dark:bg-sky-950/30 border border-sky-200 dark:border-sky-800/50 shadow-xs animate-in fade-in duration-200">
+          <div className="flex items-center gap-2.5 flex-wrap text-xs">
+            <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-sky-600 text-white font-bold shadow-xs">
+              <Calendar className="h-3.5 w-3.5" />
+              {getPeriodoLabel(periodoCreacion, customFechaDesde, customFechaHasta)}
+            </span>
+            <span className="font-semibold text-sky-950 dark:text-sky-200">
+              {filt.length} {filt.length === 1 ? "orden encontrada" : "órdenes encontradas"}
+            </span>
+            <span className="text-sky-400">•</span>
+            <span className="font-bold text-sky-950 dark:text-sky-100">
+              Total facturado: {formatRD(filt.reduce((acc, o) => acc + (o.total || 0), 0))}
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            {periodoCreacion === "personalizado" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setTempDesde(customFechaDesde || formatLocalDateToInput(new Date()));
+                  setTempHasta(customFechaHasta || formatLocalDateToInput(new Date()));
+                  setShowCustomDateModal(true);
+                }}
+                className="h-7 text-xs px-2.5 rounded-lg border-sky-300 dark:border-sky-700 hover:bg-sky-100 dark:hover:bg-sky-900/50 font-semibold text-sky-800 dark:text-sky-200"
+              >
+                Cambiar fechas
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPeriodoCreacion("todas");
+                setCustomFechaDesde("");
+                setCustomFechaHasta("");
+              }}
+              className="h-7 text-xs px-2.5 rounded-lg text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-sky-100 dark:hover:bg-sky-900/30 font-semibold"
+            >
+              <X className="h-3.5 w-3.5 mr-1" />
+              Ver todas las fechas
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Badge tabs de estado */}
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -2606,6 +2845,196 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         ordenesActivas={ordenes}
         ordenActualId={conveyorOrden?.id}
       />
+
+      {/* Modal de Rango de Fechas Personalizado */}
+      <Dialog open={showCustomDateModal} onOpenChange={setShowCustomDateModal}>
+        <DialogContent className="max-w-md rounded-2xl p-6 shadow-2xl">
+          <DialogHeader>
+            <div className="flex items-center gap-2.5 mb-1">
+              <div className="p-2 rounded-xl bg-primary/10 text-primary">
+                <CalendarDays className="h-5 w-5" />
+              </div>
+              <DialogTitle className="text-lg font-bold text-foreground">
+                Filtrar por rango de fechas
+              </DialogTitle>
+            </div>
+            <DialogDescription className="text-xs text-muted-foreground">
+              Selecciona el período de creación de las órdenes que deseas consultar.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-2">
+            {/* Accesos rápidos */}
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-2">
+                Accesos rápidos
+              </span>
+              <div className="grid grid-cols-3 gap-1.5">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => {
+                    const todayStr = formatLocalDateToInput(new Date());
+                    setTempDesde(todayStr);
+                    setTempHasta(todayStr);
+                  }}
+                >
+                  Hoy
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => {
+                    const ayer = new Date();
+                    ayer.setDate(ayer.getDate() - 1);
+                    const ayerStr = formatLocalDateToInput(ayer);
+                    setTempDesde(ayerStr);
+                    setTempHasta(ayerStr);
+                  }}
+                >
+                  Ayer
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => {
+                    const hoy = new Date();
+                    const d = new Date();
+                    d.setDate(d.getDate() - 7);
+                    setTempDesde(formatLocalDateToInput(d));
+                    setTempHasta(formatLocalDateToInput(hoy));
+                  }}
+                >
+                  Últimos 7 días
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => {
+                    const hoy = new Date();
+                    const d = new Date();
+                    d.setDate(d.getDate() - 15);
+                    setTempDesde(formatLocalDateToInput(d));
+                    setTempHasta(formatLocalDateToInput(hoy));
+                  }}
+                >
+                  Últimos 15 días
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => {
+                    const hoy = new Date();
+                    const d = new Date();
+                    d.setDate(d.getDate() - 30);
+                    setTempDesde(formatLocalDateToInput(d));
+                    setTempHasta(formatLocalDateToInput(hoy));
+                  }}
+                >
+                  Últimos 30 días
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  onClick={() => {
+                    const hoy = new Date();
+                    const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
+                    setTempDesde(formatLocalDateToInput(primerDia));
+                    setTempHasta(formatLocalDateToInput(hoy));
+                  }}
+                >
+                  Mes actual
+                </Button>
+              </div>
+            </div>
+
+            {/* Inputs de fecha */}
+            <div className="grid grid-cols-2 gap-3 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">
+                  Desde (Inicio)
+                </label>
+                <Input
+                  type="date"
+                  value={tempDesde}
+                  onChange={(e) => setTempDesde(e.target.value)}
+                  className="h-9 text-xs rounded-xl font-medium"
+                />
+              </div>
+              <div className="space-y-1.5">
+                <label className="text-xs font-bold text-foreground">
+                  Hasta (Fin)
+                </label>
+                <Input
+                  type="date"
+                  value={tempHasta}
+                  onChange={(e) => setTempHasta(e.target.value)}
+                  className="h-9 text-xs rounded-xl font-medium"
+                />
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-2 border-t">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setPeriodoCreacion("todas");
+                setCustomFechaDesde("");
+                setCustomFechaHasta("");
+                setShowCustomDateModal(false);
+              }}
+              className="text-xs font-medium text-muted-foreground hover:text-foreground mr-auto"
+            >
+              Restablecer
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setShowCustomDateModal(false)}
+              className="text-xs font-semibold rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                if (!tempDesde && !tempHasta) {
+                  toast.error("Selecciona al menos una fecha");
+                  return;
+                }
+                if (tempDesde && tempHasta && tempDesde > tempHasta) {
+                  toast.error("La fecha 'Desde' no puede ser posterior a 'Hasta'");
+                  return;
+                }
+                setCustomFechaDesde(tempDesde);
+                setCustomFechaHasta(tempHasta);
+                setPeriodoCreacion("personalizado");
+                setShowCustomDateModal(false);
+              }}
+              className="text-xs font-bold bg-primary text-primary-foreground hover:bg-primary/90 rounded-xl"
+            >
+              Aplicar rango
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

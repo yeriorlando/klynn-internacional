@@ -1,5 +1,6 @@
 import { createFileRoute, useLocation, useNavigate } from "@tanstack/react-router";
 import { compressImage } from "@/lib/compressImage";
+import { cn } from "@/lib/utils";
 import { useMemo, useState, useEffect } from "react";
 import {
   Plus,
@@ -23,6 +24,7 @@ import {
   Receipt,
   Layers,
   SlidersHorizontal,
+  ChevronDown,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -35,6 +37,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import {
   Dialog,
   DialogContent,
@@ -322,6 +325,9 @@ function CatalogoPage() {
                     });
                     const srvPrices = Array.from(srvMap.entries());
                     const hasSrvPrices = srvPrices.length > 0;
+                    const visibleServices = srvPrices.slice(0, 2);
+                    const remainingServices = srvPrices.slice(2);
+                    const hasMoreServices = remainingServices.length > 0;
 
                     return (
                       <Card
@@ -381,19 +387,117 @@ function CatalogoPage() {
                             </div>
                           </div>
 
-                          {/* Precios por Servicio (Matriz Destacada SGL) */}
+                          {/* Precios por Servicio (Matriz Destacada SGL - Máximo 2 visibles) */}
                           <div className="my-4.5 space-y-3 pt-2 border-t border-slate-100 dark:border-slate-800/80">
                             {hasSrvPrices ? (
-                              srvPrices.map(([srvName, srvPrice]) => (
-                                <div key={srvName} className="space-y-0.5">
-                                  <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
-                                    {srvName}
-                                  </span>
-                                  <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
-                                    {formatRD(srvPrice)}
-                                  </span>
-                                </div>
-                              ))
+                              <>
+                                {visibleServices.map(([srvName, srvPrice]) => {
+                                  const srvObj = servicios.find(
+                                    (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName
+                                  );
+                                  const isLb = srvObj?.por_libra || it.por_libra;
+                                  return (
+                                    <div key={srvName} className="space-y-0.5">
+                                      <div className="flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block truncate max-w-full">
+                                          {srvName}
+                                        </span>
+                                        {srvObj?.por_libra && (
+                                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">
+                                            <Scale className="h-2.5 w-2.5" /> lb
+                                          </span>
+                                        )}
+                                      </div>
+                                      <span className="text-lg sm:text-xl font-black font-display text-foreground tracking-tight block">
+                                        {formatRD(srvPrice)}
+                                        {isLb && (
+                                          <span className="text-xs font-semibold text-muted-foreground ml-1">/lb</span>
+                                        )}
+                                      </span>
+                                    </div>
+                                  );
+                                })}
+
+                                {hasMoreServices && (
+                                  <div className="pt-0.5">
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <button
+                                          type="button"
+                                          onClick={(e) => e.stopPropagation()}
+                                          className="inline-flex items-center gap-1.5 text-xs font-bold text-primary hover:text-primary/80 transition-colors py-1.5 px-3 rounded-xl bg-primary/10 hover:bg-primary/15 cursor-pointer shadow-2xs w-full justify-center border border-primary/20"
+                                        >
+                                          <span>+{remainingServices.length} servicio{remainingServices.length > 1 ? "s" : ""} más</span>
+                                          <ChevronDown className="h-3.5 w-3.5 shrink-0" />
+                                        </button>
+                                      </PopoverTrigger>
+                                      <PopoverContent
+                                        className="w-72 p-3.5 rounded-2xl shadow-xl border border-slate-200/90 dark:border-slate-800/90 bg-white/95 dark:bg-slate-900/95 backdrop-blur-md z-50"
+                                        align="start"
+                                        side="bottom"
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100 dark:border-slate-800">
+                                          <div>
+                                            <span className="text-xs font-bold text-foreground block">
+                                              Servicios de {it.nombre}
+                                            </span>
+                                            <span className="text-[10px] text-muted-foreground block">
+                                              {srvPrices.length} servicios asignados
+                                            </span>
+                                          </div>
+                                          <Badge variant="secondary" className="text-[10px] h-4.5 px-2 font-black">
+                                            {srvPrices.length} total
+                                          </Badge>
+                                        </div>
+                                        <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                                          {srvPrices.map(([srvName, srvPrice], idx) => {
+                                            const srvObj = servicios.find(
+                                              (s) => s.nombre.toLowerCase() === srvName.toLowerCase() || s.id === srvName
+                                            );
+                                            const isLb = srvObj?.por_libra || it.por_libra;
+                                            return (
+                                              <div
+                                                key={srvName}
+                                                className={cn(
+                                                  "flex items-center justify-between gap-2 p-2 rounded-xl text-xs transition-colors",
+                                                  idx < 2
+                                                    ? "bg-slate-50 dark:bg-slate-800/40 border border-slate-100 dark:border-slate-800/60"
+                                                    : "hover:bg-slate-50 dark:hover:bg-slate-800/60"
+                                                )}
+                                              >
+                                                <div className="min-w-0 flex-1">
+                                                  <div className="flex items-center gap-1.5">
+                                                    <span className="text-slate-800 dark:text-slate-200 font-semibold truncate block">
+                                                      {srvName}
+                                                    </span>
+                                                    {srvObj?.por_libra && (
+                                                      <span className="text-[9px] font-bold text-amber-600 dark:text-amber-400 bg-amber-500/10 px-1 rounded">
+                                                        lb
+                                                      </span>
+                                                    )}
+                                                  </div>
+                                                  {idx < 2 && (
+                                                    <span className="text-[9px] text-slate-400 dark:text-slate-500 font-medium block">
+                                                      Visible en tarjeta
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <span className="font-black font-display text-foreground shrink-0">
+                                                  {formatRD(srvPrice)}
+                                                  {isLb && (
+                                                    <span className="text-[10px] font-semibold text-muted-foreground ml-0.5">/lb</span>
+                                                  )}
+                                                </span>
+                                              </div>
+                                            );
+                                          })}
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                  </div>
+                                )}
+                              </>
                             ) : (
                               <div className="space-y-0.5">
                                 <span className="text-xs text-slate-500 dark:text-slate-400 font-medium block">
@@ -765,7 +869,7 @@ function ItemDialog({
       setIconSearch("");
       setServiceSearch("");
       setShowTreatmentsModal(false);
-      setHasFixedPrice(Boolean(initial?.precio && Number(initial.precio) > 0));
+      setHasFixedPrice(Boolean(initial?.precio && Number(initial.precio) > 0 && !initial?.por_libra));
       setIsSubmitting(false);
     }
   }, [open, initial]);
@@ -864,7 +968,7 @@ function ItemDialog({
       }
 
       const basePrecio =
-        hasFixedPrice && Number(f.precio) > 0
+        (hasFixedPrice || f.por_libra) && Number(f.precio) > 0
           ? Number(f.precio)
           : Object.values(cleanPreciosServicios)[0] || 0;
 
@@ -1186,7 +1290,11 @@ function ItemDialog({
                         checked={hasFixedPrice}
                         onCheckedChange={(v) => {
                           setHasFixedPrice(v);
-                          if (!v) setF((prev) => ({ ...prev, precio: 0 }));
+                          if (v) {
+                            setF((prev) => ({ ...prev, por_libra: false }));
+                          } else if (!f.por_libra) {
+                            setF((prev) => ({ ...prev, precio: 0 }));
+                          }
                         }}
                         className="data-[state=checked]:bg-primary"
                       />
@@ -1219,19 +1327,66 @@ function ItemDialog({
                   </div>
 
                   {/* COBRAR POR LIBRA */}
-                  <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
-                    <div className="flex items-center gap-2.5">
-                      <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                        <Scale className="h-3.5 w-3.5" />
+                  <div
+                    className={cn(
+                      "p-3 rounded-xl border transition-all duration-200",
+                      f.por_libra
+                        ? "bg-primary/5 border-primary/40 shadow-xs ring-1 ring-primary/20"
+                        : "bg-white dark:bg-slate-800/90 border-slate-200/80 dark:border-slate-700/80 shadow-2xs",
+                    )}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="h-7 w-7 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                          <Scale className="h-3.5 w-3.5" />
+                        </div>
+                        <div>
+                          <span className="text-xs font-bold text-foreground block">Cobrar por Libra</span>
+                          <span className="text-[10px] text-muted-foreground block">
+                            {f.por_libra ? "Tarifa por libra de la prenda" : "Habilitar cobro por peso / libra"}
+                          </span>
+                        </div>
                       </div>
-                      <span className="text-xs font-bold text-foreground">Cobrar por Libra</span>
+                      <Switch
+                        checked={!!f.por_libra}
+                        onCheckedChange={(v) => {
+                          if (v && hasFixedPrice) {
+                            setHasFixedPrice(false);
+                          }
+                          setF((prev) => ({ ...prev, por_libra: v }));
+                        }}
+                        className="data-[state=checked]:bg-primary"
+                      />
                     </div>
-                    <Switch
-                      checked={!!f.por_libra}
-                      onCheckedChange={(v) => setF({ ...f, por_libra: v })}
-                      className="data-[state=checked]:bg-primary"
-                    />
-                  </label>
+
+                    {f.por_libra && (
+                      <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 animate-in fade-in duration-150">
+                        <div className="relative">
+                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
+                            RD$
+                          </span>
+                          <Input
+                            id="item-libra-price"
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="0.00"
+                            value={f.precio ? formatAmountInput(String(f.precio)) : ""}
+                            onChange={(e) => {
+                              const raw = e.target.value.replace(/,/g, "");
+                              if (raw === "" || /^\d*\.?\d*$/.test(raw)) {
+                                setF({ ...f, precio: raw === "" ? 0 : Number(raw) || 0 });
+                              }
+                            }}
+                            className="h-9 rounded-xl bg-slate-50/70 dark:bg-slate-900 pl-11 pr-12 font-black text-foreground text-xs border-slate-300 dark:border-slate-700 focus-visible:ring-primary shadow-xs text-right"
+                            autoFocus
+                          />
+                          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-slate-400 select-none uppercase">
+                            / lb
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
 
                   {/* PRENDA ACTIVA EN POS */}
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
@@ -1599,9 +1754,16 @@ function ItemDialog({
                           )}
                         </div>
                         <div className="min-w-0">
-                          <span className="block text-sm font-bold text-foreground truncate leading-tight">
-                            {service.nombre}
-                          </span>
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="block text-sm font-bold text-foreground truncate leading-tight">
+                              {service.nombre}
+                            </span>
+                            {service.por_libra && (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-600 dark:text-amber-400 text-[10px] font-bold border border-amber-500/20">
+                                <Scale className="h-2.5 w-2.5" /> Cobro por Libra
+                              </span>
+                            )}
+                          </div>
                           {service.descripcion ? (
                             <span
                               className="block text-[11px] text-muted-foreground truncate mt-0.5"
@@ -1623,6 +1785,8 @@ function ItemDialog({
                           setF((prev) => {
                             const updated = { ...(prev.precios_servicios || {}) };
                             delete updated[service.id];
+                            let nextPorLibra = prev.por_libra;
+                            let nextPrecio = prev.precio;
                             if (!checked) {
                               delete updated[service.nombre];
                               const updatedPermitir = { ...((updated as any).__permitir_cantidad || {}) };
@@ -1634,12 +1798,24 @@ function ItemDialog({
                                 delete (updated as any).__permitir_cantidad;
                               }
                             } else {
-                              updated[service.nombre] =
+                              const srvPrice =
                                 Number(service.precio) > 0
                                   ? Number(service.precio)
                                   : Number(prev.precio) || 0;
+                              updated[service.nombre] = srvPrice;
+                              if (service.por_libra) {
+                                nextPorLibra = true;
+                                if (!nextPrecio || Number(nextPrecio) === 0) {
+                                  nextPrecio = srvPrice;
+                                }
+                              }
                             }
-                            return { ...prev, precios_servicios: updated };
+                            return {
+                              ...prev,
+                              precios_servicios: updated,
+                              por_libra: nextPorLibra,
+                              precio: nextPrecio,
+                            };
                           });
                         }}
                         className="data-[state=checked]:bg-primary"
@@ -1651,7 +1827,7 @@ function ItemDialog({
                       <div className="bg-primary/5 dark:bg-primary/10 border-t border-primary/15 px-3.5 py-2.5 flex items-center justify-between gap-3 animate-in fade-in duration-150">
                         <span className="text-xs font-bold text-foreground flex items-center gap-1.5">
                           <Tag className="h-3.5 w-3.5 text-primary" />
-                          Precio en caja:
+                          {service.por_libra ? "Precio por libra en caja:" : "Precio en caja:"}
                         </span>
                         <div className="relative w-36 shrink-0">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-slate-500 pointer-events-none select-none">
@@ -1678,9 +1854,14 @@ function ItemDialog({
                                 });
                               }
                             }}
-                            className="h-9 w-full pl-11 pr-3 text-right text-xs font-black rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-foreground focus-visible:ring-primary shadow-xs"
+                            className={`h-9 w-full pl-11 ${service.por_libra ? "pr-8" : "pr-3"} text-right text-xs font-black rounded-xl bg-white dark:bg-slate-900 border-slate-300 dark:border-slate-700 text-foreground focus-visible:ring-primary shadow-xs`}
                             autoFocus={isAssigned && !currentVal}
                           />
+                          {service.por_libra && (
+                            <span className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[9px] font-bold text-slate-400 select-none uppercase pointer-events-none">
+                              /lb
+                            </span>
+                          )}
                         </div>
                       </div>
                     )}
