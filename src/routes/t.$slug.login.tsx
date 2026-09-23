@@ -3,7 +3,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { 
   ArrowRight, ArrowLeft, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
-  MapPin, ShieldCheck, Laptop, RefreshCw, Copy, Check, Loader2, ShieldAlert, CheckCircle2
+  MapPin, ShieldCheck, Laptop, RefreshCw, Copy, Check, Loader2, ShieldAlert, CheckCircle2, Clock
 } from "lucide-react";
 import { toast } from "sonner";
 import { Logo } from "@/components/klynn/Logo";
@@ -13,7 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { 
   getTenantBySlug, login, setActiveTenant, type Tenant,
-  isCurrentTerminalAuthorized, createTerminalPairingRequest, checkTerminalPairingStatus 
+  isCurrentTerminalAuthorized, createTerminalPairingRequest, checkTerminalPairingStatus,
+  isWithinWorkingHours, formatTime12h, formatDaysList
 } from "@/lib/storage";
 
 export const Route = createFileRoute("/t/$slug/login")({
@@ -46,6 +47,26 @@ function TenantLoginPage() {
   const isTerminalControlActive = !!tenant?.config?.control_terminales_activo;
   const [terminalAuthorized, setTerminalAuthorized] = useState(() => isCurrentTerminalAuthorized(tenant));
   const [adminBypass, setAdminBypass] = useState(false);
+  const [horarioBlockedData, setHorarioBlockedData] = useState<{
+    apertura?: string;
+    cierre?: string;
+    dias?: number[];
+    mensaje?: string;
+  } | null>(() => {
+    if (typeof window !== "undefined") {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get("bloqueo") === "horario" && tenant?.config) {
+        const check = isWithinWorkingHours(tenant.config);
+        return {
+          apertura: check.apertura || tenant.config.horario_apertura || "08:00",
+          cierre: check.cierre || tenant.config.horario_cierre || "19:30",
+          dias: check.dias || tenant.config.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+          mensaje: check.mensaje,
+        };
+      }
+    }
+    return null;
+  });
   const [pairingCode, setPairingCode] = useState<string | null>(null);
   const [temporalToken, setTemporalToken] = useState<string | null>(null);
   const [generatingCode, setGeneratingCode] = useState(false);
@@ -131,7 +152,16 @@ function TenantLoginPage() {
       const r = await login(slug, email, password);
       setLoading(false);
       if (!r.ok) {
-        setError(r.error);
+        if ((r as any).fueraDeHorario) {
+          setHorarioBlockedData({
+            apertura: (r as any).horarioData?.apertura || "08:00",
+            cierre: (r as any).horarioData?.cierre || "19:30",
+            dias: (r as any).horarioData?.dias || [1, 2, 3, 4, 5, 6, 0],
+            mensaje: (r as any).horarioData?.mensaje,
+          });
+        } else {
+          setError(r.error);
+        }
       } else {
         setIsEntering(true);
         navigate({ to: "/t/$slug", params: { slug } });
@@ -219,18 +249,72 @@ function TenantLoginPage() {
       {/* Halo de resplandor ambiental suave centrado */}
       <div className="absolute w-[500px] h-[500px] rounded-full bg-[#1B4B73]/20 blur-[100px] pointer-events-none z-0" />
 
-      {/* Si el control de terminales está activo, este equipo no está autorizado y no estamos en bypass admin: TARJETA COMPACTA OTP */}
-      {isTerminalControlActive && !terminalAuthorized && !adminBypass ? (
+      {/* Si el acceso está bloqueado por horario laboral y no estamos en bypass admin: TARJETA FUERA DE HORARIO */}
+      {horarioBlockedData && !adminBypass ? (
+        <div 
+          className="w-full max-w-[360px] sm:max-w-[380px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/80 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300 text-center"
+        >
+          {/* Círculo Azul Añil (#1B4B73) con Reloj */}
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25">
+            <Clock className="h-8 w-8 text-white" />
+          </div>
+
+          {/* Badge Fuera de Horario */}
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold mb-3 shadow-2xs">
+            <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+            <span>Sucursal Fuera de Horario</span>
+          </div>
+
+          {/* Título & Subtítulo */}
+          <h1 className="text-xl font-black tracking-tight text-slate-900 leading-tight">
+            Acceso Restringido
+          </h1>
+          <p className="mt-1 text-xs text-slate-500 leading-relaxed max-w-[280px] mx-auto">
+            El acceso para empleados en <span className="font-bold text-[#1B4B73]">{tenant?.nombre || "la lavandería"}</span> está inhabilitado fuera de la jornada laboral.
+          </p>
+
+          {/* Caja con detalles de horario */}
+          <div className="my-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-left space-y-2.5">
+            <div>
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                Horario de Atención
+              </div>
+              <div className="text-sm font-black text-slate-800 flex items-center gap-1.5 mt-0.5">
+                <Clock className="h-4 w-4 text-[#1B4B73]" />
+                <span>
+                  {formatTime12h(horarioBlockedData.apertura || "08:00")} – {formatTime12h(horarioBlockedData.cierre || "19:30")}
+                </span>
+              </div>
+            </div>
+            <div className="pt-2 border-t border-slate-200/60">
+              <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                Días de Operación
+              </div>
+              <div className="text-xs font-bold text-slate-700 mt-0.5">
+                {formatDaysList(horarioBlockedData.dias)}
+              </div>
+            </div>
+          </div>
+
+          {/* Botón Principal: Entendido / Volver */}
+          <button
+            type="button"
+            onClick={() => {
+              setHorarioBlockedData(null);
+              setError("");
+            }}
+            className="group relative w-full h-11.5 rounded-2xl bg-[#1B4B73] hover:bg-[#153b5c] text-white font-display font-black text-xs uppercase tracking-wider shadow-md shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2 border-b-2 border-[#F0B900]"
+          >
+            <span>Entendido / Volver</span>
+          </button>
+        </div>
+      ) : isTerminalControlActive && !terminalAuthorized && !adminBypass ? (
         <div 
           className="w-full max-w-[350px] sm:max-w-[360px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/80 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300 text-center"
         >
-          {/* Círculo concéntrico OTP combinando Azul Añil (#1B4B73) y Amarillo Jabón (#F0B900) */}
-          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#1B4B73]/10 border-4 border-[#1B4B73]/20 shadow-inner relative">
-            <div className="h-14 w-14 rounded-full border-2 border-[#F0B900] bg-[#F0B900]/15 flex items-center justify-center shadow-2xs">
-              <div className="h-9 w-9 rounded-full bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shadow-md shadow-[#1B4B73]/30">
-                <Laptop className="h-4.5 w-4.5 text-[#F0B900]" />
-              </div>
-            </div>
+          {/* Círculo Azul Añil (#1B4B73) con Laptop */}
+          <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25">
+            <Laptop className="h-8 w-8 text-white" />
           </div>
 
           {/* Título & Subtítulo */}
@@ -397,16 +481,16 @@ function TenantLoginPage() {
               </div>
             )}
 
-            {/* Si estamos en bypass admin en una máquina no autorizada */}
-            {adminBypass && !terminalAuthorized && (
+            {/* Si estamos en bypass admin */}
+            {adminBypass && (
               <div className="mt-3 rounded-xl bg-amber-50/90 border border-amber-200/80 p-2.5 text-left text-xs text-amber-900 flex items-start justify-between gap-2 animate-in fade-in duration-200">
                 <div>
                   <p className="font-bold text-[11px] flex items-center gap-1 text-amber-800">
                     <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0" />
-                    Acceso para Administradores
+                    Acceso Exclusivo para Administradores
                   </p>
                   <p className="text-[10.5px] text-amber-700 mt-0.5 leading-snug">
-                    Ingresa con tu cuenta de administrador. Luego podrás autorizar este equipo en Configuración &gt; Seguridad.
+                    Ingresa con tus credenciales de administrador para operar la lavandería 24/7 sin restricciones de hardware u horario.
                   </p>
                 </div>
                 <button

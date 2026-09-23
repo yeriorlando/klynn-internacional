@@ -5,6 +5,8 @@ import {
   getEmpleadoById,
   getSession,
   getTenantById,
+  isWithinWorkingHours,
+  isCurrentTerminalAuthorized,
   type Empleado,
   type Tenant,
 } from "@/lib/storage";
@@ -236,6 +238,23 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
           );
           navigate({ to: "/t/$slug", params: { slug: u.tenant.slug } });
         } else {
+          // Comprobar seguridad de hardware y horario para empleados operativos
+          const isAdmin = u.empleado.rol?.toUpperCase() === "ADMIN";
+          if (!isAdmin) {
+            const checkHorario = isWithinWorkingHours(u.tenant.config);
+            if (!checkHorario.permitida) {
+              navigate({ 
+                to: "/t/$slug/login", 
+                params: { slug: u.tenant.slug },
+                search: { bloqueo: "horario" } as any,
+              });
+              return;
+            }
+            if (u.tenant.config?.control_terminales_activo && !isCurrentTerminalAuthorized(u.tenant)) {
+              navigate({ to: "/t/$slug/login", params: { slug: u.tenant.slug } });
+              return;
+            }
+          }
           setUser(u);
         }
       }

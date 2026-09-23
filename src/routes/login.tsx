@@ -1,18 +1,24 @@
 /* Hallmark · redesign: login-atmospheric · genre: modern-minimal · theme: custom (#1B4B73 / #F0B900) */
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { 
   ArrowRight, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
   UserPlus, LayoutDashboard, ShieldCheck, Sparkles, CheckCircle2,
-  Wallet, Truck, Receipt, MessageSquare, Layers, Gift, Rocket, Ticket
+  Wallet, Truck, Receipt, MessageSquare, Layers, Gift, Rocket, Ticket,
+  Laptop, RefreshCw, Copy, Check, Loader2, Clock
 } from "lucide-react";
+import { toast } from "sonner";
 import { Logo } from "@/components/klynn/Logo";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName } from "@/lib/storage";
+import { 
+  setActiveTenant, setSession, ADMIN_EMAILS, getTenantBranchName,
+  isCurrentTerminalAuthorized, isWithinWorkingHours, createTerminalPairingRequest,
+  checkTerminalPairingStatus, setTerminalToken, formatTime12h, formatDaysList, type Tenant
+} from "@/lib/storage";
 import { supabase } from "@/lib/supabase";
 import { getTenantsForUserServer } from "@/lib/server-auth";
 
@@ -35,6 +41,108 @@ function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [matchingAccounts, setMatchingAccounts] = useState<{ emp: any; tenant: any }[]>([]);
   const [isEntering, setIsEntering] = useState(false);
+
+  // Estados para vinculación de terminal física (Hardware Pinning)
+  const [pairingData, setPairingData] = useState<{
+    tenant: any;
+    empleado: any;
+    pairingCode: string;
+    temporalToken: string;
+  } | null>(null);
+  const [horarioBlockedData, setHorarioBlockedData] = useState<{
+    tenant: Tenant;
+    empleado?: any;
+    apertura?: string;
+    cierre?: string;
+    dias?: number[];
+    mensaje?: string;
+  } | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [checkingManual, setCheckingManual] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+
+  // Polling automático cada 3 segundos cuando se muestra el código de terminal en /login
+  useEffect(() => {
+    if (!pairingData) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await checkTerminalPairingStatus(
+          pairingData.tenant.slug,
+          pairingData.pairingCode,
+          pairingData.temporalToken
+        );
+        if (res.aprobada) {
+          clearInterval(interval);
+          setTerminalToken(pairingData.temporalToken);
+          setSession({
+            empleado_id: pairingData.empleado.id,
+            tenant_id: pairingData.tenant.id,
+            iniciado_en: new Date().toISOString(),
+          });
+          setActiveTenant(pairingData.tenant.slug);
+          toast.success("¡Terminal autorizada con éxito! Ingresando...");
+          setIsEntering(true);
+          navigate({ to: "/t/$slug", params: { slug: pairingData.tenant.slug } });
+        }
+      } catch {}
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [pairingData, navigate]);
+
+  async function handleCheckManual() {
+    if (!pairingData) return;
+    setCheckingManual(true);
+    try {
+      const res = await checkTerminalPairingStatus(
+        pairingData.tenant.slug,
+        pairingData.pairingCode,
+        pairingData.temporalToken
+      );
+      if (res.aprobada) {
+        setTerminalToken(pairingData.temporalToken);
+        setSession({
+          empleado_id: pairingData.empleado.id,
+          tenant_id: pairingData.tenant.id,
+          iniciado_en: new Date().toISOString(),
+        });
+        setActiveTenant(pairingData.tenant.slug);
+        toast.success("¡Terminal autorizada con éxito! Ingresando...");
+        setIsEntering(true);
+        navigate({ to: "/t/$slug", params: { slug: pairingData.tenant.slug } });
+      } else {
+        toast.error("La terminal aún no ha sido aprobada por el administrador.");
+      }
+    } catch {
+      toast.error("Error al comprobar vinculación");
+    } finally {
+      setCheckingManual(false);
+    }
+  }
+
+  async function generateNewPairingCode() {
+    if (!pairingData) return;
+    setGeneratingCode(true);
+    try {
+      const res = await createTerminalPairingRequest(pairingData.tenant.slug);
+      if (res.ok && res.codigo && res.temporalToken) {
+        setPairingData((prev) =>
+          prev
+            ? {
+                ...prev,
+                pairingCode: res.codigo!,
+                temporalToken: res.temporalToken!,
+              }
+            : null
+        );
+        toast.success("Nuevo código generado");
+      }
+    } catch {
+      toast.error("Error al generar nuevo código");
+    } finally {
+      setGeneratingCode(false);
+    }
+  }
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -143,6 +251,46 @@ function LoginPage() {
 
       if (userTenants.length === 1) {
         const { tenant, empleado: emp } = userTenants[0];
+
+        // Validaciones de seguridad de hardware y horario para empleados operativos
+        const isAdmin = emp.rol?.toUpperCase() === "ADMIN";
+        if (!isAdmin) {
+          // A. Control de Horario Operativo
+          const checkHorario = isWithinWorkingHours(tenant.config);
+          if (!checkHorario.permitida) {
+            await supabase.auth.signOut();
+            setLoading(false);
+            setHorarioBlockedData({
+              tenant,
+              empleado: emp,
+              apertura: checkHorario.apertura || tenant.config?.horario_apertura || "08:00",
+              cierre: checkHorario.cierre || tenant.config?.horario_cierre || "19:30",
+              dias: checkHorario.dias || tenant.config?.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+              mensaje: checkHorario.mensaje,
+            });
+            return;
+          }
+
+          // B. Control de Terminal Autorizada (Hardware Pinning)
+          if (tenant.config?.control_terminales_activo && !isCurrentTerminalAuthorized(tenant)) {
+            setLoading(true);
+            const req = await createTerminalPairingRequest(tenant.slug);
+            setLoading(false);
+            if (req.ok && req.codigo && req.temporalToken) {
+              setPairingData({
+                tenant,
+                empleado: emp,
+                pairingCode: req.codigo,
+                temporalToken: req.temporalToken,
+              });
+              return;
+            } else {
+              setError(req.error || "Esta computadora no está autorizada para operar en la lavandería.");
+              return;
+            }
+          }
+        }
+
         setSession({
           empleado_id: emp.id,
           tenant_id: tenant.id,
@@ -164,7 +312,42 @@ function LoginPage() {
     }
   }
 
-  const handleSelectAccount = (acc: { emp: any; tenant: any }) => {
+  const handleSelectAccount = async (acc: { emp: any; tenant: any }) => {
+    const isAdmin = acc.emp.rol?.toUpperCase() === "ADMIN";
+    if (!isAdmin) {
+      const checkHorario = isWithinWorkingHours(acc.tenant.config);
+      if (!checkHorario.permitida) {
+        setMatchingAccounts([]);
+        setHorarioBlockedData({
+          tenant: acc.tenant,
+          empleado: acc.emp,
+          apertura: checkHorario.apertura || acc.tenant.config?.horario_apertura || "08:00",
+          cierre: checkHorario.cierre || acc.tenant.config?.horario_cierre || "19:30",
+          dias: checkHorario.dias || acc.tenant.config?.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+          mensaje: checkHorario.mensaje,
+        });
+        return;
+      }
+      if (acc.tenant.config?.control_terminales_activo && !isCurrentTerminalAuthorized(acc.tenant)) {
+        setLoading(true);
+        const req = await createTerminalPairingRequest(acc.tenant.slug);
+        setLoading(false);
+        if (req.ok && req.codigo && req.temporalToken) {
+          setMatchingAccounts([]);
+          setPairingData({
+            tenant: acc.tenant,
+            empleado: acc.emp,
+            pairingCode: req.codigo,
+            temporalToken: req.temporalToken,
+          });
+          return;
+        } else {
+          toast.error(req.error || "Esta computadora no está autorizada para operar en la lavandería.");
+          return;
+        }
+      }
+    }
+
     setSession({
       empleado_id: acc.emp.id,
       tenant_id: acc.tenant.id,
@@ -283,16 +466,181 @@ function LoginPage() {
           </div>
 
           {/* Encabezado del Formulario Centrado */}
-          <div className="space-y-2 text-center">
-            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-display">
-              Iniciar sesión
-            </h2>
-            <p className="text-xs sm:text-sm text-slate-500">
-              Ingresa tus credenciales para acceder a tu panel de control.
-            </p>
-          </div>
+          {!pairingData && !horarioBlockedData && (
+            <div className="space-y-2 text-center">
+              <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 tracking-tight font-display">
+                Iniciar sesión
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500">
+                Ingresa tus credenciales para acceder a tu panel de control.
+              </p>
+            </div>
+          )}
 
-          {matchingAccounts.length > 0 ? (
+          {horarioBlockedData ? (
+            /* VISTA DE BLOQUEO POR HORARIO LABORAL EN /LOGIN */
+            <div className="w-full max-w-[360px] mx-auto bg-white rounded-3xl border border-slate-200/90 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.12)] p-6 sm:p-7 text-center animate-in fade-in zoom-in-95 duration-300">
+              {/* Círculo Azul Añil (#1B4B73) con Reloj */}
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25">
+                <Clock className="h-8 w-8 text-white" />
+              </div>
+
+              {/* Badge Fuera de Horario */}
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-rose-50 border border-rose-200 text-rose-700 text-[11px] font-bold mb-3 shadow-2xs">
+                <span className="h-2 w-2 rounded-full bg-rose-500 animate-pulse" />
+                <span>Sucursal Fuera de Horario</span>
+              </div>
+
+              <h1 className="text-xl font-black tracking-tight text-slate-900 leading-tight">
+                Acceso Restringido
+              </h1>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed max-w-[280px] mx-auto">
+                El acceso para empleados en <span className="font-bold text-[#1B4B73]">{horarioBlockedData.tenant.nombre}</span> está inhabilitado fuera de la jornada laboral.
+              </p>
+
+              {/* Caja de Detalles */}
+              <div className="my-4 p-4 rounded-2xl bg-slate-50 border border-slate-200/80 text-left space-y-2.5">
+                <div>
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                    Horario de Atención
+                  </div>
+                  <div className="text-sm font-black text-slate-800 flex items-center gap-1.5 mt-0.5">
+                    <Clock className="h-4 w-4 text-[#1B4B73]" />
+                    <span>
+                      {formatTime12h(horarioBlockedData.apertura || "08:00")} – {formatTime12h(horarioBlockedData.cierre || "19:30")}
+                    </span>
+                  </div>
+                </div>
+                <div className="pt-2 border-t border-slate-200/60">
+                  <div className="text-[10px] uppercase font-bold tracking-wider text-slate-400">
+                    Días de Operación
+                  </div>
+                  <div className="text-xs font-bold text-slate-700 mt-0.5">
+                    {formatDaysList(horarioBlockedData.dias)}
+                  </div>
+                </div>
+              </div>
+
+
+              <button
+                type="button"
+                onClick={() => {
+                  setHorarioBlockedData(null);
+                  setError("");
+                }}
+                className="group relative w-full h-11.5 rounded-2xl bg-[#1B4B73] hover:bg-[#153b5c] text-white font-display font-black text-xs uppercase tracking-wider shadow-md shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2 border-b-2 border-[#F0B900]"
+              >
+                <span>Entendido / Volver</span>
+              </button>
+            </div>
+          ) : pairingData ? (
+            /* VISTA DE VINCULACIÓN DE TERMINAL OTP EN /LOGIN */
+            <div className="w-full max-w-[360px] mx-auto bg-white rounded-3xl border border-slate-200/90 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.12)] p-6 sm:p-7 text-center animate-in fade-in zoom-in-95 duration-300">
+              {/* Círculo Azul Añil (#1B4B73) con Laptop */}
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-[#1B4B73] text-white shadow-lg shadow-[#1B4B73]/25">
+                <Laptop className="h-8 w-8 text-white" />
+              </div>
+
+              {/* Título & Lavandería */}
+              <h1 className="text-xl font-black tracking-tight text-slate-900 leading-tight">
+                Vincular Terminal
+              </h1>
+              <p className="mt-1 text-xs text-slate-500 leading-relaxed max-w-[280px] mx-auto">
+                Esta computadora no está vinculada a <span className="font-bold text-[#1B4B73]">{pairingData.tenant.nombre}</span>. Dicta este código de 6 dígitos al administrador en <span className="font-semibold text-slate-700">Configuración &gt; Seguridad</span>
+              </p>
+
+              {/* 6 Cajas OTP individuales */}
+              <div className="my-5 flex items-center justify-center gap-1.5 sm:gap-2">
+                {generatingCode ? (
+                  <div className="py-4 flex items-center justify-center gap-2 text-slate-400">
+                    <Loader2 className="h-5 w-5 animate-spin text-[#1B4B73]" />
+                    <span className="text-xs font-semibold">Generando código...</span>
+                  </div>
+                ) : (
+                  (pairingData.pairingCode || "------").split("").slice(0, 6).map((digit, i) => (
+                    <div
+                      key={i}
+                      className="w-10 h-13 sm:w-11 sm:h-14 rounded-xl border-2 border-[#1B4B73]/40 hover:border-[#F0B900] bg-white flex items-center justify-center text-xl sm:text-2xl font-black text-[#1B4B73] shadow-xs select-all transition-all duration-200"
+                    >
+                      {digit}
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Copiar código */}
+              <div className="-mt-2 mb-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigator.clipboard.writeText(pairingData.pairingCode);
+                    setCopiedCode(true);
+                    setTimeout(() => setCopiedCode(false), 2000);
+                    toast.success("Código copiado al portapapeles");
+                  }}
+                  className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#1B4B73] hover:text-[#153b5c] cursor-pointer py-1 px-2.5 rounded-lg hover:bg-[#F0B900]/15 transition-colors"
+                >
+                  {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-[#F0B900]" />}
+                  <span>{copiedCode ? "¡Código copiado!" : "Copiar código"}</span>
+                </button>
+              </div>
+
+              {/* Indicador esperando aprobación */}
+              <div className="inline-flex items-center justify-center gap-2 text-[11px] font-semibold text-slate-700 mb-4 bg-[#F0B900]/15 border border-[#F0B900]/40 py-1.5 px-3.5 rounded-full mx-auto shadow-2xs">
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F0B900] opacity-80"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-[#F0B900]"></span>
+                </span>
+                <span>Esperando aprobación del administrador...</span>
+              </div>
+
+              {/* Botón Comprobar */}
+              <button
+                type="button"
+                disabled={checkingManual || generatingCode}
+                onClick={handleCheckManual}
+                className="group relative w-full h-12 rounded-2xl bg-[#1B4B73] hover:bg-[#153b5c] text-white font-display font-black text-xs uppercase tracking-wider shadow-md shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2.5 border-b-2 border-[#F0B900] disabled:opacity-60"
+              >
+                {checkingManual ? (
+                  <div className="relative z-10 flex items-center justify-center gap-2">
+                    <Loader2 className="h-4.5 w-4.5 animate-spin text-[#F0B900]" />
+                    <span className="font-bold tracking-wider">COMPROBANDO...</span>
+                  </div>
+                ) : (
+                  <div className="relative z-10 flex items-center justify-center gap-2.5">
+                    <div className="h-6 w-6 rounded-lg bg-[#F0B900] text-slate-950 flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                      <CheckCircle2 className="h-4 w-4" />
+                    </div>
+                    <span className="font-black tracking-wider text-white">COMPROBAR APROBACIÓN</span>
+                  </div>
+                )}
+              </button>
+
+              {/* Regenerar código */}
+              <div className="mt-3 text-center">
+                <button
+                  type="button"
+                  onClick={generateNewPairingCode}
+                  disabled={generatingCode}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer py-1"
+                >
+                  <RefreshCw className={`h-3 w-3 ${generatingCode ? "animate-spin" : ""}`} />
+                  <span>¿No recibiste aprobación? Generar nuevo código</span>
+                </button>
+              </div>
+
+              {/* Botón Volver */}
+              <div className="mt-4 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setPairingData(null)}
+                  className="text-xs font-bold text-slate-500 hover:text-slate-800 cursor-pointer"
+                >
+                  ← Volver a inicio de sesión
+                </button>
+              </div>
+            </div>
+          ) : matchingAccounts.length > 0 ? (
             /* VISTA SELECTOR MULTI-SUCURSAL */
             <div className="space-y-4 animate-in fade-in zoom-in-98 duration-200">
               <div className="rounded-xl bg-[#1B4B73]/5 border border-[#1B4B73]/15 p-3.5 text-left space-y-1">

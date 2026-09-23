@@ -5440,21 +5440,52 @@ export async function revokeTerminal(
   }
 }
 
-export function isWithinWorkingHours(config?: TenantConfig): { permitida: boolean; mensaje?: string } {
+export function formatTime12h(timeStr?: string): string {
+  if (!timeStr) return "";
+  const [hStr, mStr] = timeStr.split(":");
+  let h = parseInt(hStr, 10);
+  const m = mStr ? mStr.slice(0, 2) : "00";
+  const ampm = h >= 12 ? "PM" : "AM";
+  h = h % 12 || 12;
+  const hFormatted = h < 10 ? `0${h}` : `${h}`;
+  return `${hFormatted}:${m} ${ampm}`;
+}
+
+export function formatDaysList(days?: number[]): string {
+  if (!days || days.length === 0) return "Ninguno";
+  if (days.length === 7) return "Lunes a Domingo (Todos los días)";
+  const map: Record<number, string> = {
+    1: "Lunes", 2: "Martes", 3: "Miércoles", 4: "Jueves", 5: "Viernes", 6: "Sábado", 0: "Domingo"
+  };
+  const sorted = [...days].sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b));
+  return sorted.map(d => map[d] || "").filter(Boolean).join(", ");
+}
+
+export function isWithinWorkingHours(config?: TenantConfig): { 
+  permitida: boolean; 
+  mensaje?: string; 
+  apertura?: string; 
+  cierre?: string; 
+  dias?: number[]; 
+} {
   if (!config || !config.control_horario_activo) return { permitida: true };
   const now = new Date();
   const currentDay = now.getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
   const dias = config.dias_laborables || [1, 2, 3, 4, 5, 6];
-  if (!dias.includes(currentDay)) {
-    const diasNombre = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
-    return {
-      permitida: false,
-      mensaje: `Hoy ${diasNombre[currentDay]} la sucursal permanece cerrada. El acceso a empleados está inhabilitado.`,
-    };
-  }
-
   const apertura = config.horario_apertura || "08:00";
   const cierre = config.horario_cierre || "19:30";
+
+  const diasNombre = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+
+  if (!dias.includes(currentDay)) {
+    return {
+      permitida: false,
+      apertura,
+      cierre,
+      dias,
+      mensaje: `Hoy ${diasNombre[currentDay]} la lavandería permanece cerrada. El acceso a empleados está inhabilitado.`,
+    };
+  }
 
   const [hA, mA] = apertura.split(":").map(Number);
   const [hC, mC] = cierre.split(":").map(Number);
@@ -5466,11 +5497,14 @@ export function isWithinWorkingHours(config?: TenantConfig): { permitida: boolea
   if (minutosActual < minutosApertura || minutosActual > minutosCierre) {
     return {
       permitida: false,
-      mensaje: `Acceso restringido: Fuera del horario operativo de la sucursal (${apertura} a ${cierre}).`,
+      apertura,
+      cierre,
+      dias,
+      mensaje: `Acceso restringido: Fuera del horario operativo de la lavandería (${formatTime12h(apertura)} a ${formatTime12h(cierre)}).`,
     };
   }
 
-  return { permitida: true };
+  return { permitida: true, apertura, cierre, dias };
 }
 
 export async function login(
@@ -5591,15 +5625,43 @@ export async function login(
 
     // 5. Políticas de Seguridad (Solo aplican para empleados no administradores)
     // El rol ADMIN y SuperAdmin siempre tienen acceso 24/7 sin restricción de hardware u horario
-    if (emp.rol !== "ADMIN") {
-      // A. Control de Horario Operativo
-      const checkHorario = isWithinWorkingHours(tenant.config);
+    const isAdmin = emp.rol?.toUpperCase() === "ADMIN";
+    if (!isAdmin) {
+      // A. Control de Horario Operativo (Sincronizado con BD en caliente)
+      let configHorario = tenant.config;
+      try {
+        const { data: dbHorario } = await supabase
+          .from("horarios_laborales_sucursal")
+          .select("*")
+          .eq("tenant_id", tenant.id)
+          .maybeSingle();
+        if (dbHorario && dbHorario.activo) {
+          configHorario = {
+            ...(tenant.config || {}),
+            control_horario_activo: true,
+            horario_apertura: dbHorario.horario_apertura?.slice(0, 5) || tenant.config?.horario_apertura || "08:00",
+            horario_cierre: dbHorario.horario_cierre?.slice(0, 5) || tenant.config?.horario_cierre || "19:30",
+            dias_laborables: dbHorario.dias_laborables || tenant.config?.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+          };
+        }
+      } catch (e) {}
+
+      const checkHorario = isWithinWorkingHours(configHorario);
       if (!checkHorario.permitida) {
         await supabase.auth.signOut();
         return {
           ok: false,
           error: checkHorario.mensaje || "Acceso fuera de horario laboral no permitido.",
-        };
+          fueraDeHorario: true,
+          horarioData: {
+            apertura: checkHorario.apertura || configHorario?.horario_apertura || "08:00",
+            cierre: checkHorario.cierre || configHorario?.horario_cierre || "19:30",
+            dias: checkHorario.dias || configHorario?.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+            mensaje: checkHorario.mensaje,
+            tenant,
+            empleado: emp,
+          },
+        } as any;
       }
 
       // B. Control de Terminal Autorizada (Hardware Pinning)

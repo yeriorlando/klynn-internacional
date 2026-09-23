@@ -247,10 +247,30 @@ export const getTenantsForUserServer = createServerFn({ method: "POST" })
         .select("*")
         .in("id", tenantIds);
 
+      // Sincronizar en caliente con horarios_laborales_sucursal
+      let horariosMap = new Map();
+      try {
+        const { data: horariosDb } = await adminClient
+          .from("horarios_laborales_sucursal")
+          .select("*")
+          .in("tenant_id", tenantIds);
+        if (horariosDb) {
+          horariosMap = new Map(horariosDb.map((h: any) => [h.tenant_id, h]));
+        }
+      } catch {}
+
       return (tenants || []).map((t) => {
         const emp = emps.find((e) => e.tenant_id === t.id);
+        const hDb = horariosMap.get(t.id);
+        const mergedConfig = { ...(t.config || {}) };
+        if (hDb && hDb.activo) {
+          mergedConfig.control_horario_activo = true;
+          mergedConfig.horario_apertura = hDb.horario_apertura?.slice(0, 5) || mergedConfig.horario_apertura || "08:00";
+          mergedConfig.horario_cierre = hDb.horario_cierre?.slice(0, 5) || mergedConfig.horario_cierre || "19:30";
+          mergedConfig.dias_laborables = hDb.dias_laborables || mergedConfig.dias_laborables || [1, 2, 3, 4, 5, 6, 0];
+        }
         return {
-          tenant: t,
+          tenant: { ...t, config: mergedConfig },
           empleado: emp,
         };
       });
@@ -278,7 +298,26 @@ export const getTenantBySlugServer = createServerFn({ method: "POST" })
         .eq("slug", data.slug.toLowerCase().trim())
         .maybeSingle();
 
-      return tenant || null;
+      if (!tenant) return null;
+
+      try {
+        const { data: hDb } = await adminClient
+          .from("horarios_laborales_sucursal")
+          .select("*")
+          .eq("tenant_id", tenant.id)
+          .maybeSingle();
+        if (hDb && hDb.activo) {
+          tenant.config = {
+            ...(tenant.config || {}),
+            control_horario_activo: true,
+            horario_apertura: hDb.horario_apertura?.slice(0, 5) || tenant.config?.horario_apertura || "08:00",
+            horario_cierre: hDb.horario_cierre?.slice(0, 5) || tenant.config?.horario_cierre || "19:30",
+            dias_laborables: hDb.dias_laborables || tenant.config?.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+          };
+        }
+      } catch {}
+
+      return tenant;
     } catch (err) {
       console.warn("Error en getTenantBySlugServer:", err);
       return null;
@@ -303,7 +342,26 @@ export const getTenantByIdServer = createServerFn({ method: "POST" })
         .eq("id", data.tenantId)
         .maybeSingle();
 
-      return tenant || null;
+      if (!tenant) return null;
+
+      try {
+        const { data: hDb } = await adminClient
+          .from("horarios_laborales_sucursal")
+          .select("*")
+          .eq("tenant_id", tenant.id)
+          .maybeSingle();
+        if (hDb && hDb.activo) {
+          tenant.config = {
+            ...(tenant.config || {}),
+            control_horario_activo: true,
+            horario_apertura: hDb.horario_apertura?.slice(0, 5) || tenant.config?.horario_apertura || "08:00",
+            horario_cierre: hDb.horario_cierre?.slice(0, 5) || tenant.config?.horario_cierre || "19:30",
+            dias_laborables: hDb.dias_laborables || tenant.config?.dias_laborables || [1, 2, 3, 4, 5, 6, 0],
+          };
+        }
+      } catch {}
+
+      return tenant;
     } catch (err) {
       console.warn("Error en getTenantByIdServer:", err);
       return null;
