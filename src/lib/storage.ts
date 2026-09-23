@@ -3869,7 +3869,7 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
       (o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId),
     );
     for (const o of local) {
-      const n = extractOrderSequenceNumber(o.numero, ym);
+      const n = extractOrderSequenceNumber(o.numero);
       if (n) localSeqs.push(n);
     }
   } catch {}
@@ -3879,7 +3879,7 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
       const outbox = await offlineDB.getPendingOutbox(realId);
       for (const item of outbox) {
         if (item.table_name === "ordenes" && item.payload?.numero) {
-          const n = extractOrderSequenceNumber(item.payload.numero, ym);
+          const n = extractOrderSequenceNumber(item.payload.numero);
           if (n) localSeqs.push(n);
         }
       }
@@ -3898,19 +3898,18 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
       .from("ordenes")
       .select("numero")
       .eq("tenant_id", realId)
-      .ilike("numero", `KL-${ym}-%`)
       .order("creado_en", { ascending: false })
       .limit(1000);
 
     const remoteSeqs: number[] = [];
     if (!error && data && data.length > 0) {
       for (const row of data) {
-        const n = extractOrderSequenceNumber(row.numero, ym);
+        const n = extractOrderSequenceNumber(row.numero);
         if (n) remoteSeqs.push(n);
       }
     }
 
-    const allSeqs = [...localSeqs, ...remoteSeqs];
+    const allSeqs = remoteSeqs.length > 0 ? [...remoteSeqs, ...localSeqs] : localSeqs;
     const next = computeNextOrderSequence(allSeqs);
     return `KL-${ym}-${String(next).padStart(4, "0")}`;
   } catch (e) {
@@ -4208,6 +4207,45 @@ export async function getMovimientos(
 export async function saveMovimiento(m: MovimientoCaja) {
   const realId = resolveTenantId(m.tenant_id);
   const movToSave = { ...m, tenant_id: realId };
+
+  // Protección anti-duplicidad: si es cobro o abono vinculado a orden, evitar duplicar el movimiento
+  if (movToSave.orden_id && (movToSave.tipo === "VENTA" || movToSave.tipo === "ABONO")) {
+    const localExisting = read<MovimientoCaja[]>(KEY.movimientos, []);
+    const now = Date.now();
+    const isRecentLocalDuplicate = localExisting.some((x) =>
+      x.orden_id === movToSave.orden_id &&
+      x.caja_id === movToSave.caja_id &&
+      Number(x.monto) === Number(movToSave.monto) &&
+      x.metodo === movToSave.metodo &&
+      now - new Date(x.creado_en).getTime() < 15000
+    );
+    if (isRecentLocalDuplicate) {
+      console.warn("[saveMovimiento] Descartado movimiento duplicado reciente (local):", movToSave);
+      return;
+    }
+
+    if (typeof window !== "undefined" && navigator.onLine) {
+      try {
+        const fifteenSecsAgo = new Date(Date.now() - 15000).toISOString();
+        const { data: existingServer } = await supabase
+          .from("movimientos_caja")
+          .select("id")
+          .eq("caja_id", movToSave.caja_id)
+          .eq("orden_id", movToSave.orden_id)
+          .eq("monto", movToSave.monto)
+          .gte("creado_en", fifteenSecsAgo)
+          .limit(1);
+
+        if (existingServer && existingServer.length > 0) {
+          console.warn("[saveMovimiento] Descartado movimiento duplicado reciente (servidor):", movToSave);
+          return;
+        }
+      } catch (errCheck) {
+        console.warn("[saveMovimiento] Error al verificar duplicados en servidor:", errCheck);
+      }
+    }
+  }
+
   try {
     await offlineDB.put("movimientos_caja", movToSave);
   } catch {}

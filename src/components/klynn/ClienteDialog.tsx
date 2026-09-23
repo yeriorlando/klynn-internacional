@@ -96,13 +96,16 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
   const [hasDelivery, setHasDelivery] = useState(!!cliente?.direccion);
   const [loadingRNC, setLoadingRNC] = useState(false);
 
-  const clientOrders = allOrders.filter(o => o.cliente_id === cliente?.id && o.estado !== "ANULADA");
+  const clientOrders = allOrders
+    .filter(o => o.cliente_id === cliente?.id && o.estado !== "ANULADA")
+    .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
   const filteredClientOrders = clientOrders.filter(o => {
     const q = searchOrder.toLowerCase().trim();
     if (!q) return true;
+    const isPureNumber = /^\d+$/.test(q);
     const matchNumero = o.numero?.toLowerCase().includes(q);
     const dateStr = new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase();
-    const matchDate = dateStr.includes(q);
+    const matchDate = !isPureNumber && dateStr.includes(q);
     return matchNumero || matchDate;
   });
   const outstandingDebt = clientOrders.reduce((sum, o) => sum + (o.saldo || 0), 0);

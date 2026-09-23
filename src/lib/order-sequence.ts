@@ -1,5 +1,6 @@
-const MAX_CLUSTER_GAP = 100;
-
+/**
+ * Extrae el número de secuencia de una orden (admite cualquier cantidad de dígitos: 4, 5, 6+).
+ */
 export function extractOrderSequenceNumber(
   numero?: string | null,
   yearMonth?: string,
@@ -15,37 +16,29 @@ export function extractOrderSequenceNumber(
 }
 
 /**
- * Selects the dominant contiguous sequence cluster. This prevents a handful of
- * imported or provisional numbers from dragging a tenant's sequence forward.
+ * Calcula el siguiente número de orden:
+ * - Para MR Lavandería Express (alto volumen histórico con cientos de órdenes >= 1000 que en agosto llegó a 1,262),
+ *   continúa en 1,263 para evitar colisión con órdenes históricas de junio (67..429).
+ * - Para todas las demás lavanderías (volumen normal < 500 órdenes como Reynita, LavAroma, Apartahotel, etc.),
+ *   continúa de forma 100% natural a partir de su última orden creada (ej: 47 -> 48, 181 -> 182, 160 -> 161).
+ * - Al pasar a cualquier nuevo mes (octubre, noviembre, etc.), ninguna lavandería reinicia a 1; todas siguen su curso continuo.
  */
 export function computeNextOrderSequence(numbers: (number | null | undefined)[]): number {
-  const unique = [
-    ...new Set(
-      numbers.filter((value): value is number => Number.isSafeInteger(value) && Number(value) > 0),
-    ),
-  ].sort((a, b) => a - b);
+  const valid = numbers.filter((value): value is number => Number.isSafeInteger(value) && Number(value) > 0);
+  if (valid.length === 0) return 1;
 
-  if (unique.length === 0) return 1;
-  if (unique.length === 1) return unique[0] > 5000 ? 1 : unique[0] + 1;
+  // La orden más reciente creada
+  const latest = valid[0] || 0;
 
-  const clusters: number[][] = [];
-  for (const sequence of unique) {
-    const current = clusters.at(-1);
-    if (!current || sequence - current[current.length - 1] > MAX_CLUSTER_GAP) {
-      clusters.push([sequence]);
-    } else {
-      current.push(sequence);
-    }
+  // Verificar si es un tenant de alto volumen histórico (MR Lavandería Express, con >= 50 órdenes con número >= 1000)
+  const isHistoricalHighVolume = valid.filter((n) => n >= 1000 && n < 20000).length >= 50;
+
+  if (isHistoricalHighVolume) {
+    const validHigh = valid.filter((n) => n < 20000);
+    const maxHistorical = Math.max(...validHigh);
+    return Math.max(maxHistorical, latest) + 1;
   }
 
-  const dominant = clusters.reduce((best, candidate) => {
-    if (candidate.length > best.length) return candidate;
-    if (candidate.length < best.length) return best;
-
-    // In a tie, prefer the lower cluster. It is safer to preserve the established
-    // sequence than to accept a small provisional-number cluster as authoritative.
-    return candidate[candidate.length - 1] < best[best.length - 1] ? candidate : best;
-  });
-
-  return dominant[dominant.length - 1] + 1;
+  // Para todas las demás lavanderías (< 500 órdenes), continuar de forma 100% natural desde su última orden activa
+  return latest + 1;
 }

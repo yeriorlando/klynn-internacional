@@ -534,18 +534,19 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       if (!q) return true;
       const c = clientes.find((x) => x.id === o.cliente_id);
       const nombreCompleto = c ? `${c.nombre} ${c.apellido || ""}` : "";
-      const searchLower = q.toLowerCase();
+      const searchLower = q.toLowerCase().trim();
+      const isPureNumberSearch = /^\d+$/.test(searchLower);
       const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
       const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
       const totalStr = String(o.total);
       const saldoStr = String(o.saldo);
+      const matchesDate = !isPureNumberSearch && (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
 
       return o.numero.toLowerCase().includes(searchLower) || 
              nombreCompleto.toLowerCase().includes(searchLower) ||
              (isConveyorEnabled && o.ubicacion_ropa && o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
              (o.pago_referencia && o.pago_referencia.toLowerCase().includes(searchLower)) ||
-             dateStr.includes(searchLower) ||
-             dateStrFull.includes(searchLower) ||
+             matchesDate ||
              totalStr.includes(searchLower) ||
              saldoStr.includes(searchLower);
     }).sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
@@ -565,6 +566,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
   const filteredPendientes = useMemo(() => {
     const searchLower = searchPendientes.trim().toLowerCase();
+    const isPureNumberSearch = /^\d+$/.test(searchLower);
 
     return pendientesCobroList.filter(o => {
       if (filtroPendientes !== "todos" && o.estado !== filtroPendientes) return false;
@@ -574,14 +576,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       const clienteNombre = clienteObj ? `${clienteObj.nombre} ${clienteObj.apellido || ""}`.toLowerCase() : "";
       const dateStr = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO").toLowerCase() : "";
       const dateStrFull = o.creado_en ? new Date(o.creado_en).toLocaleDateString("es-DO", { day: "2-digit", month: "long", year: "numeric" }).toLowerCase() : "";
+      const matchesDate = !isPureNumberSearch && (dateStr.includes(searchLower) || dateStrFull.includes(searchLower));
 
       return o.numero.toLowerCase().includes(searchLower) ||
         clienteNombre.includes(searchLower) ||
         (o.ubicacion_ropa && o.ubicacion_ropa.toLowerCase().includes(searchLower)) ||
         String(o.total).includes(searchLower) ||
         String(o.saldo).includes(searchLower) ||
-        dateStr.includes(searchLower) ||
-        dateStrFull.includes(searchLower);
+        matchesDate;
     });
   }, [pendientesCobroList, filtroPendientes, searchPendientes, clientes]);
 
@@ -4487,6 +4489,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   const [recibido, setRecibido] = useState<number>(orden.saldo);
   const [entregarAlCobrar, setEntregarAlCobrar] = useState<boolean>(false);
   const [loading, setLoading] = useState<boolean>(false);
+  const isSubmittingRef = useRef<boolean>(false);
   const [showCondonar, setShowCondonar] = useState<boolean>(false);
   const [referencia, setReferencia] = useState("");
   const [showRefInput, setShowRefInput] = useState(false);
@@ -4507,6 +4510,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
   };
 
   async function handleConfirmarCobro() {
+    if (isSubmittingRef.current || loading) return;
     if (!cajaAbierta) {
       toast.error("Debes abrir la caja antes de registrar un pago");
       return;
@@ -4520,19 +4524,51 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
       return;
     }
 
+    isSubmittingRef.current = true;
     setLoading(true);
     try {
-      const montoAPagar = metodo === "EFECTIVO" ? Math.min(recibido, totalCobrar) : recibido;
-      const nuevoPagado = orden.pagado + montoAPagar;
-      const nuevoSaldo = Math.max(0, totalCobrar - montoAPagar);
-      const nuevoEstado: EstadoOrden = orden.estado === "ENTREGADA" 
-        ? "ENTREGADA" 
-        : (nuevoSaldo === 0 && entregarAlCobrar ? "ENTREGADA" : orden.estado);
+      // Re-verificar contra la base de datos para evitar cobros dobles por datos desactualizados
+      let targetOrden: Orden = { ...orden };
+      if (typeof window !== "undefined" && navigator.onLine) {
+        try {
+          const { data: freshOrden } = await supabase
+            .from("ordenes")
+            .select("id, total, pagado, saldo, estado, metodo_pago")
+            .eq("id", orden.id)
+            .maybeSingle();
 
-      let finalNCF: string | undefined = orden.ncf;
-      let finalNcfVencimiento: string | undefined = orden.ncf_vencimiento;
-      let finalTipoECF: string | undefined = orden.tipo_ecf;
-      let finalEcfStatus: string | undefined = orden.ecf_status;
+          if (freshOrden) {
+            if (Number(freshOrden.saldo) <= 0) {
+              toast.warning(`La orden #${orden.numero} ya fue saldada previamente.`);
+              queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
+              queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
+              onClose();
+              return;
+            }
+            targetOrden = { ...targetOrden, ...freshOrden };
+          }
+        } catch (freshErr) {
+          console.warn("Aviso al verificar saldo fresco de orden:", freshErr);
+        }
+      }
+
+      const freshTotalCobrar = Number(targetOrden.saldo);
+      const montoAPagar = metodo === "EFECTIVO" ? Math.min(recibido, freshTotalCobrar) : recibido;
+      if (montoAPagar <= 0) {
+        toast.warning(`La orden #${orden.numero} no tiene saldo pendiente por cobrar.`);
+        onClose();
+        return;
+      }
+      const nuevoPagado = targetOrden.pagado + montoAPagar;
+      const nuevoSaldo = Math.max(0, freshTotalCobrar - montoAPagar);
+      const nuevoEstado: EstadoOrden = targetOrden.estado === "ENTREGADA" 
+        ? "ENTREGADA" 
+        : (nuevoSaldo === 0 && entregarAlCobrar ? "ENTREGADA" : targetOrden.estado);
+
+      let finalNCF: string | undefined = targetOrden.ncf;
+      let finalNcfVencimiento: string | undefined = targetOrden.ncf_vencimiento;
+      let finalTipoECF: string | undefined = targetOrden.tipo_ecf;
+      let finalEcfStatus: string | undefined = targetOrden.ecf_status;
       let finalEcfId: string | undefined = orden.ecf_id;
       let finalEcfQr: string | undefined = orden.ecf_qr;
       let finalEcfSecurityCode: string | undefined = orden.ecf_security_code;
@@ -4717,6 +4753,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
     } catch (err: any) {
       toast.error("Error al registrar el cobro: " + err.message);
     } finally {
+      isSubmittingRef.current = false;
       setLoading(false);
     }
   }
@@ -4743,7 +4780,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") {
         e.preventDefault();
-        if (!loading && cajaAbierta && recibido > 0 && !(metodo !== "EFECTIVO" && recibido > totalCobrar)) {
+        if (!loading && !isSubmittingRef.current && cajaAbierta && recibido > 0 && !(metodo !== "EFECTIVO" && recibido > totalCobrar)) {
           handleConfirmarCobro();
         }
       }
@@ -5122,6 +5159,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
               onClick={handleConfirmarCobro}
               disabled={
                 loading ||
+                isSubmittingRef.current ||
                 !cajaAbierta ||
                 recibido <= 0 ||
                 (metodo === "TRANSFERENCIA" && !referencia.trim()) ||

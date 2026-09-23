@@ -3381,17 +3381,19 @@ function UbicacionConveyorTool({ tenant, onClose }: { tenant: any; onClose?: () 
     });
   }, [tenant.id]);
 
-  const result = ordenes.filter((ord) => {
-    const q = busqueda.toLowerCase().trim();
-    if (!q) return true;
-    const num = (ord.numero || "").toLowerCase();
-    const ubi = (ord.ubicacion_ropa || "").toLowerCase();
-    const c = clientesList.find((x) => x.id === ord.cliente_id);
-    const cliName = c
-      ? `${c.nombre} ${c.apellido || ""}`.toLowerCase()
-      : (ord.cliente_nombre || "").toLowerCase();
-    return num.includes(q) || ubi.includes(q) || cliName.includes(q);
-  });
+  const result = ordenes
+    .filter((ord) => {
+      const q = busqueda.toLowerCase().trim();
+      if (!q) return true;
+      const num = (ord.numero || "").toLowerCase();
+      const ubi = (ord.ubicacion_ropa || "").toLowerCase();
+      const c = clientesList.find((x) => x.id === ord.cliente_id);
+      const cliName = c
+        ? `${c.nombre} ${c.apellido || ""}`.toLowerCase()
+        : (ord.cliente_nombre || "").toLowerCase();
+      return num.includes(q) || ubi.includes(q) || cliName.includes(q);
+    })
+    .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
 
   return (
     <div className="space-y-4">
