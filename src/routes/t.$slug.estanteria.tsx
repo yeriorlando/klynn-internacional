@@ -226,10 +226,10 @@ function EstanteriaPage() {
     setZonas(newZonas); // ACTUALIZACIÓN EN VIVO INMEDIATA (0ms)
     if (!tenant) return;
     try {
-      const updatedConfig = {
+      const updatedConfig: TenantConfig = {
         ...(tenant.config || {}),
         estanteria_zonas: newZonas,
-      };
+      } as TenantConfig;
       tenant.config = updatedConfig;
       await saveTenantConfig(tenant.id, updatedConfig);
       queryClient.invalidateQueries({ queryKey: ["tenant", tenantId] });

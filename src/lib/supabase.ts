@@ -44,8 +44,13 @@ export async function ensureFreshSupabaseSession(): Promise<boolean> {
     const now = Date.now();
     const fiveMinutes = 5 * 60 * 1000;
 
-    // Si no hay sesión en memoria, o expira en menos de 5 minutos, o ya expiró
-    if (!session || expiresAt - now < fiveMinutes) {
+    // Si no hay sesión activa, no intentar refrescar (evita error 'Auth session missing!')
+    if (!session) {
+      return false;
+    }
+
+    // Si la sesión expira en menos de 5 minutos, o ya expiró
+    if (expiresAt - now < fiveMinutes) {
       refreshingPromise = (async () => {
         try {
           const { data, error } = await supabase.auth.refreshSession();

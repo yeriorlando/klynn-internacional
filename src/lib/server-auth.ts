@@ -285,3 +285,105 @@ export const getTenantBySlugServer = createServerFn({ method: "POST" })
     }
   });
 
+export const getTenantByIdServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { tenantId: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      if (!serviceRoleKey || !data?.tenantId) return null;
+
+      const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      const { data: tenant } = await adminClient
+        .from("tenants")
+        .select("*")
+        .eq("id", data.tenantId)
+        .maybeSingle();
+
+      return tenant || null;
+    } catch (err) {
+      console.warn("Error en getTenantByIdServer:", err);
+      return null;
+    }
+  });
+
+export const saveTenantConfigServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { tenantId: string; config: any }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+      if (!serviceRoleKey || !data?.tenantId) {
+        return { ok: false, error: "Credenciales de servicio no disponibles" };
+      }
+
+      const adminClient = createClient(supabaseUrl, serviceRoleKey, {
+        auth: { persistSession: false, autoRefreshToken: false },
+      });
+
+      // 1. Obtener la configuración actual de Supabase
+      const { data: currentTenant, error: fetchErr } = await adminClient
+        .from("tenants")
+        .select("config")
+        .eq("id", data.tenantId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        console.warn("Aviso al consultar tenant config en server:", fetchErr);
+      }
+
+      const currentConfig =
+        currentTenant?.config && typeof currentTenant.config === "object"
+          ? currentTenant.config
+          : {};
+
+      const mergedConfig = {
+        ...currentConfig,
+        ...data.config,
+      };
+
+      // 2. Actualizar columna config en tenants con service_role (bypassing RLS)
+      const { error: updateErr } = await adminClient
+        .from("tenants")
+        .update({ config: mergedConfig })
+        .eq("id", data.tenantId);
+
+      if (updateErr) {
+        console.error("Error en update tenants config en server:", updateErr);
+        return { ok: false, error: updateErr.message };
+      }
+
+      // 3. Sincronizar tabla 'horarios_laborales_sucursal' si viene información de horario
+      if (
+        data.config.control_horario_activo !== undefined ||
+        data.config.horario_apertura !== undefined ||
+        data.config.horario_cierre !== undefined ||
+        data.config.dias_laborables !== undefined
+      ) {
+        try {
+          await adminClient.from("horarios_laborales_sucursal").upsert(
+            {
+              tenant_id: data.tenantId,
+              activo: mergedConfig.control_horario_activo || false,
+              horario_apertura: mergedConfig.horario_apertura || "08:00:00",
+              horario_cierre: mergedConfig.horario_cierre || "19:30:00",
+              dias_laborables: mergedConfig.dias_laborables || [1, 2, 3, 4, 5, 6],
+              actualizado_en: new Date().toISOString(),
+            },
+            { onConflict: "tenant_id" }
+          );
+        } catch (e) {
+          console.warn("Aviso en server sync horarios_laborales_sucursal:", e);
+        }
+      }
+
+      return { ok: true, config: mergedConfig };
+    } catch (err: any) {
+      console.error("Error en saveTenantConfigServer:", err);
+      return { ok: false, error: err?.message || "Error interno del servidor" };
+    }
+  });
+

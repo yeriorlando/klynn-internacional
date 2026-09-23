@@ -474,24 +474,63 @@ function AdminPage() {
         }
         setEcfConfigsMap(map);
       }
-      const ordsResults = await Promise.all(
-        t.map(async (tenant) => {
-          try {
-            const ords = await getOrdenes(tenant.id);
-            const ordsArr = Array.isArray(ords) ? ords : [];
-            const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
-            return { tenantId: tenant.id, count: ordsArr.length, total: ingr };
-          } catch {
-            return { tenantId: tenant.id, count: 0, total: 0 };
-          }
-        })
-      );
       const ordsMap: Record<string, { count: number; total: number }> = {};
       let grandTotal = 0;
-      for (const res of ordsResults) {
-        ordsMap[res.tenantId] = { count: res.count, total: res.total };
-        grandTotal += res.count;
+      for (const tenant of t) {
+        ordsMap[tenant.id] = { count: 0, total: 0 };
       }
+
+      try {
+        let allOrdsLite: { tenant_id: string; total: number }[] = [];
+        let from = 0;
+        const PAGE_SZ = 1000;
+        while (true) {
+          const { data, error } = await supabase
+            .from("ordenes")
+            .select("tenant_id, total")
+            .range(from, from + PAGE_SZ - 1);
+          if (error || !data || data.length === 0) break;
+          allOrdsLite.push(...data);
+          if (data.length < PAGE_SZ) break;
+          from += PAGE_SZ;
+        }
+
+        if (allOrdsLite.length > 0) {
+          grandTotal = allOrdsLite.length;
+          for (const ord of allOrdsLite) {
+            const tid = ord.tenant_id;
+            if (tid) {
+              const matchedTenant = t.find((ten) => isSameTenant(ten.id, tid));
+              const key = matchedTenant ? matchedTenant.id : tid;
+              if (!ordsMap[key]) ordsMap[key] = { count: 0, total: 0 };
+              ordsMap[key].count++;
+              ordsMap[key].total += Number(ord.total) || 0;
+            }
+          }
+        } else {
+          throw new Error("Sin datos de órdenes en consulta agregada");
+        }
+      } catch (aggErr) {
+        console.warn("[admin] Consulta ágil de órdenes falló, usando fallback:", aggErr);
+        const ordsResults = await Promise.all(
+          t.map(async (tenant) => {
+            try {
+              const ords = await getOrdenes(tenant.id);
+              const ordsArr = Array.isArray(ords) ? ords : [];
+              const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
+              return { tenantId: tenant.id, count: ordsArr.length, total: ingr };
+            } catch {
+              return { tenantId: tenant.id, count: 0, total: 0 };
+            }
+          })
+        );
+        grandTotal = 0;
+        for (const res of ordsResults) {
+          ordsMap[res.tenantId] = { count: res.count, total: res.total };
+          grandTotal += res.count;
+        }
+      }
+
       setOrdenesByTenant(ordsMap);
       setTotalOrdenes(grandTotal);
 

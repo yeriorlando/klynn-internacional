@@ -1,16 +1,20 @@
 /* Hallmark · redesign: tenant-login · genre: modern-minimal · theme: custom (#1B4B73 / #F0B900) */
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { 
   ArrowRight, ArrowLeft, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
-  MapPin, ShieldCheck 
+  MapPin, ShieldCheck, Laptop, RefreshCw, Copy, Check, Loader2, ShieldAlert, CheckCircle2
 } from "lucide-react";
+import { toast } from "sonner";
 import { Logo } from "@/components/klynn/Logo";
 import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { getTenantBySlug, login, setActiveTenant, type Tenant } from "@/lib/storage";
+import { 
+  getTenantBySlug, login, setActiveTenant, type Tenant,
+  isCurrentTerminalAuthorized, createTerminalPairingRequest, checkTerminalPairingStatus 
+} from "@/lib/storage";
 
 export const Route = createFileRoute("/t/$slug/login")({
   loader: async ({ params }) => {
@@ -38,6 +42,68 @@ function TenantLoginPage() {
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isEntering, setIsEntering] = useState(false);
+
+  const isTerminalControlActive = !!tenant?.config?.control_terminales_activo;
+  const [terminalAuthorized, setTerminalAuthorized] = useState(() => isCurrentTerminalAuthorized(tenant));
+  const [adminBypass, setAdminBypass] = useState(false);
+  const [pairingCode, setPairingCode] = useState<string | null>(null);
+  const [temporalToken, setTemporalToken] = useState<string | null>(null);
+  const [generatingCode, setGeneratingCode] = useState(false);
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [checkingManual, setCheckingManual] = useState(false);
+
+  const handleCheckManual = useCallback(async () => {
+    if (!pairingCode || !temporalToken) return;
+    setCheckingManual(true);
+    try {
+      const res = await checkTerminalPairingStatus(slug, pairingCode, temporalToken);
+      if (res.aprobada) {
+        setTerminalAuthorized(true);
+        toast.success("¡Dispositivo autorizado con éxito! Ya puedes ingresar.");
+      } else {
+        toast.info("Aún pendiente de aprobación por el administrador.");
+      }
+    } catch {
+      toast.error("Error al comprobar estado.");
+    } finally {
+      setCheckingManual(false);
+    }
+  }, [slug, pairingCode, temporalToken]);
+
+  const generateNewCode = useCallback(async () => {
+    setGeneratingCode(true);
+    try {
+      const res = await createTerminalPairingRequest(slug);
+      if (res.ok && res.codigo && res.temporalToken) {
+        setPairingCode(res.codigo);
+        setTemporalToken(res.temporalToken);
+      }
+    } finally {
+      setGeneratingCode(false);
+    }
+  }, [slug]);
+
+  useEffect(() => {
+    if (isTerminalControlActive && !terminalAuthorized && !pairingCode && !generatingCode) {
+      generateNewCode();
+    }
+  }, [isTerminalControlActive, terminalAuthorized, pairingCode, generatingCode, generateNewCode]);
+
+  useEffect(() => {
+    if (!isTerminalControlActive || terminalAuthorized || !pairingCode || !temporalToken) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await checkTerminalPairingStatus(slug, pairingCode, temporalToken);
+        if (res.aprobada) {
+          setTerminalAuthorized(true);
+          toast.success("¡Dispositivo autorizado con éxito! Ya puedes ingresar.");
+        }
+      } catch (err) {
+        // Ignorar errores transitorios de red
+      }
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [isTerminalControlActive, terminalAuthorized, pairingCode, temporalToken, slug]);
 
   // Asegurar que el login siempre se renderice en modo nítido y claro sin flash oscuro
   useEffect(() => {
@@ -153,172 +219,333 @@ function TenantLoginPage() {
       {/* Halo de resplandor ambiental suave centrado */}
       <div className="absolute w-[500px] h-[500px] rounded-full bg-[#1B4B73]/20 blur-[100px] pointer-events-none z-0" />
 
-      {/* Tarjeta de Inicio de Sesión Hallmark Glassmorphism Proporcional */}
-      <div 
-        className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/70 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300"
-      >
-        <div className="text-center">
-          {/* Contenedor de Logo de la Lavandería */}
-          <div className="mb-2.5 flex flex-col items-center justify-center">
-            <div className="h-13 flex items-center justify-center overflow-hidden">
-              {tenant.logo_url ? (
-                <img 
-                  src={tenant.logo_url} 
-                  className="object-contain max-h-13 max-w-[190px] w-auto drop-shadow-2xs transition-transform duration-200 hover:scale-105" 
-                  alt={tenant.nombre} 
-                />
-              ) : (
-                <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200/70 flex items-center justify-center shadow-2xs">
-                  <Building2 className="h-6 w-6 text-[#1B4B73]" />
+      {/* Si el control de terminales está activo, este equipo no está autorizado y no estamos en bypass admin: TARJETA COMPACTA OTP */}
+      {isTerminalControlActive && !terminalAuthorized && !adminBypass ? (
+        <div 
+          className="w-full max-w-[350px] sm:max-w-[360px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/80 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300 text-center"
+        >
+          {/* Círculo concéntrico OTP combinando Azul Añil (#1B4B73) y Amarillo Jabón (#F0B900) */}
+          <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-[#1B4B73]/10 border-4 border-[#1B4B73]/20 shadow-inner relative">
+            <div className="h-14 w-14 rounded-full border-2 border-[#F0B900] bg-[#F0B900]/15 flex items-center justify-center shadow-2xs">
+              <div className="h-9 w-9 rounded-full bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shadow-md shadow-[#1B4B73]/30">
+                <Laptop className="h-4.5 w-4.5 text-[#F0B900]" />
+              </div>
+            </div>
+          </div>
+
+          {/* Título & Subtítulo */}
+          <h1 className="text-xl font-black tracking-tight text-slate-900 leading-tight">
+            Vincular Terminal
+          </h1>
+          <p className="mt-1 text-xs text-slate-500 leading-relaxed max-w-[280px] mx-auto">
+            Ingresa o dicta este código de 6 dígitos en <span className="font-semibold text-slate-700">Configuración &gt; Seguridad</span>
+          </p>
+
+          {/* 6 Cajas OTP individuales con borde #1B4B73 y números en Azul Añil */}
+          <div className="my-5 flex items-center justify-center gap-1.5 sm:gap-2">
+            {generatingCode ? (
+              <div className="py-4 flex items-center justify-center gap-2 text-slate-400">
+                <Loader2 className="h-5 w-5 animate-spin text-[#1B4B73]" />
+                <span className="text-xs font-semibold">Generando código...</span>
+              </div>
+            ) : (
+              ((pairingCode || "------").split("").slice(0, 6)).map((digit, i) => (
+                <div
+                  key={i}
+                  className="w-10 h-13 sm:w-11 sm:h-14 rounded-xl border-2 border-[#1B4B73]/40 hover:border-[#F0B900] bg-white flex items-center justify-center text-xl sm:text-2xl font-black text-[#1B4B73] shadow-xs select-all transition-all duration-200"
+                >
+                  {digit !== "-" ? digit : ""}
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Acción rápida para copiar código */}
+          {pairingCode && (
+            <div className="-mt-2 mb-3">
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(pairingCode);
+                  setCopiedCode(true);
+                  setTimeout(() => setCopiedCode(false), 2000);
+                  toast.success("Código copiado al portapapeles");
+                }}
+                className="inline-flex items-center gap-1.5 text-[11px] font-bold text-[#1B4B73] hover:text-[#153b5c] cursor-pointer py-1 px-2.5 rounded-lg hover:bg-[#F0B900]/15 transition-colors"
+                title="Copiar código"
+              >
+                {copiedCode ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5 text-[#F0B900]" />}
+                <span>{copiedCode ? "¡Código copiado!" : "Copiar código"}</span>
+              </button>
+            </div>
+          )}
+
+          {/* Indicador esperando aprobación con Amarillo Jabón */}
+          <div className="inline-flex items-center justify-center gap-2 text-[11px] font-semibold text-slate-700 mb-4 bg-[#F0B900]/15 border border-[#F0B900]/40 py-1.5 px-3.5 rounded-full mx-auto shadow-2xs">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-[#F0B900] opacity-80"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-[#F0B900]"></span>
+            </span>
+            <span>Esperando aprobación del administrador...</span>
+          </div>
+
+          {/* Botón Principal combinando Azul Añil (#1B4B73) con detalles en Amarillo Jabón (#F0B900) */}
+          <button
+            type="button"
+            disabled={checkingManual || generatingCode}
+            onClick={handleCheckManual}
+            className="group relative w-full h-12 rounded-2xl bg-[#1B4B73] hover:bg-[#153b5c] text-white font-display font-black text-xs uppercase tracking-wider shadow-md shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5 transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] flex items-center justify-center gap-2.5 border-b-2 border-[#F0B900] disabled:opacity-60"
+          >
+            {/* Rayo de brillo shimmer */}
+            <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+
+            {checkingManual ? (
+              <div className="relative z-10 flex items-center justify-center gap-2">
+                <Loader2 className="h-4.5 w-4.5 animate-spin text-[#F0B900]" />
+                <span className="font-bold tracking-wider">COMPROBANDO...</span>
+              </div>
+            ) : (
+              <div className="relative z-10 flex items-center justify-center gap-2.5">
+                <div className="h-6 w-6 rounded-lg bg-[#F0B900] text-slate-950 flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform">
+                  <CheckCircle2 className="h-4 w-4" />
+                </div>
+                <span className="font-black tracking-wider text-white">COMPROBAR APROBACIÓN</span>
+              </div>
+            )}
+          </button>
+
+          {/* Reintentar / Generar nuevo código */}
+          <div className="mt-3 text-center">
+            <button
+              type="button"
+              onClick={generateNewCode}
+              disabled={generatingCode}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 hover:text-slate-800 transition-colors cursor-pointer py-1"
+            >
+              <RefreshCw className={`h-3 w-3 ${generatingCode ? "animate-spin" : ""}`} />
+              <span>¿No recibiste aprobación? Generar nuevo código</span>
+            </button>
+          </div>
+
+          {/* Acceso para Administrador & Cambiar Lavandería */}
+          <div className="mt-4 pt-3.5 border-t border-slate-100 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => setAdminBypass(true)}
+              className="w-full h-9.5 inline-flex items-center justify-center gap-1.5 px-3 rounded-xl border border-slate-200 bg-slate-50/80 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all hover:border-[#1B4B73]/40 cursor-pointer shadow-2xs"
+            >
+              <ShieldCheck className="h-3.5 w-3.5 text-[#1B4B73]" />
+              <span>¿Eres Administrador? Ingresar aquí</span>
+            </button>
+
+            <Link 
+              to="/login" 
+              className="text-[11px] font-semibold text-slate-400 hover:text-slate-600 transition-colors py-1"
+            >
+              Cambiar de lavandería
+            </Link>
+          </div>
+        </div>
+      ) : (
+        /* Tarjeta de Inicio de Sesión Habitual (SIN ALTERAR) */
+        <div 
+          className="w-full max-w-[380px] sm:max-w-[390px] bg-white/95 backdrop-blur-xl rounded-3xl border border-white/70 shadow-[0_20px_50px_-15px_rgba(0,0,0,0.25)] p-6 sm:p-7 relative z-10 animate-in fade-in zoom-in-95 duration-300"
+        >
+          <div className="text-center">
+            {/* Contenedor de Logo de la Lavandería */}
+            <div className="mb-2.5 flex flex-col items-center justify-center">
+              <div className="h-13 flex items-center justify-center overflow-hidden">
+                {tenant.logo_url ? (
+                  <img 
+                    src={tenant.logo_url} 
+                    className="object-contain max-h-13 max-w-[190px] w-auto drop-shadow-2xs transition-transform duration-200 hover:scale-105" 
+                    alt={tenant.nombre} 
+                  />
+                ) : (
+                  <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200/70 flex items-center justify-center shadow-2xs">
+                    <Building2 className="h-6 w-6 text-[#1B4B73]" />
+                  </div>
+                )}
+              </div>
+
+              {/* Badge con Ubicación / Sucursal */}
+              {(tenant.direccion || tenant.provincia) && (
+                <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100/90 border border-slate-200/80 text-[10.5px] font-semibold text-slate-600 shadow-2xs">
+                  <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
+                  <span className="truncate max-w-[250px]">
+                    {tenant.direccion ? `${tenant.direccion}${tenant.provincia ? ` · ${tenant.provincia}` : ""}` : tenant.provincia}
+                  </span>
                 </div>
               )}
             </div>
 
-            {/* Badge con Ubicación / Sucursal */}
-            {(tenant.direccion || tenant.provincia) && (
-              <div className="mt-2 inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full bg-slate-100/90 border border-slate-200/80 text-[10.5px] font-semibold text-slate-600 shadow-2xs">
-                <MapPin className="h-3 w-3 text-slate-400 shrink-0" />
-                <span className="truncate max-w-[250px]">
-                  {tenant.direccion ? `${tenant.direccion}${tenant.provincia ? ` · ${tenant.provincia}` : ""}` : tenant.provincia}
+            {/* Título & Subtítulo */}
+            <h1 className="text-[22px] font-black tracking-tight text-slate-900 leading-tight">
+              Iniciar sesión
+            </h1>
+            <p className="mt-0.5 text-xs text-slate-500 font-medium">
+              Acceso operativo para <span className="font-bold text-slate-700">{tenant.nombre}</span>
+            </p>
+
+            {/* Si este equipo ya está autorizado y el control está activo, mostrar badge verde */}
+            {isTerminalControlActive && terminalAuthorized && (
+              <div className="mt-2 flex items-center justify-center">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 border border-emerald-200/70 text-[10.5px] font-semibold text-emerald-700 shadow-2xs">
+                  <ShieldCheck className="h-3 w-3 text-emerald-600" />
+                  Terminal de caja autorizada
                 </span>
               </div>
             )}
-          </div>
 
-          {/* Título & Subtítulo */}
-          <h1 className="text-[22px] font-black tracking-tight text-slate-900 leading-tight">
-            Iniciar sesión
-          </h1>
-          <p className="mt-0.5 text-xs text-slate-500 font-medium">
-            Acceso operativo para <span className="font-bold text-slate-700">{tenant.nombre}</span>
-          </p>
-
-          {/* Formulario de Login */}
-          <form onSubmit={onSubmit} className="mt-4.5 space-y-3 text-left">
-            {/* Campo Email */}
-            <div className="space-y-1.5">
-              <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700">
-                Correo electrónico
-              </Label>
-              <div className="relative group">
-                <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] transition-colors" />
-                <Input
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  type="email"
-                  required
-                  placeholder="ejemplo@lavanderia.do"
-                  className="pl-10 h-10.5 bg-slate-50/70 border-slate-200/90 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400"
-                />
-              </div>
-            </div>
-
-            {/* Campo Contraseña */}
-            <div className="space-y-1.5">
-              <div className="flex items-center justify-between">
-                <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700">
-                  Contraseña
-                </Label>
-                <Link 
-                  to="/recuperar" 
-                  search={{ redirect: `/t/${tenant.slug}/login` } as any}
-                  className="text-[10.5px] font-bold text-[#1B4B73] hover:underline"
-                >
-                  ¿Olvidaste tu contraseña?
-                </Link>
-              </div>
-              <div className="relative group">
-                <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] transition-colors" />
-                <Input
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  type={showPassword ? "text" : "password"}
-                  required
-                  placeholder="••••••••"
-                  className="pl-10 pr-10 h-10.5 bg-slate-50/70 border-slate-200/90 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400"
-                />
+            {/* Si estamos en bypass admin en una máquina no autorizada */}
+            {adminBypass && !terminalAuthorized && (
+              <div className="mt-3 rounded-xl bg-amber-50/90 border border-amber-200/80 p-2.5 text-left text-xs text-amber-900 flex items-start justify-between gap-2 animate-in fade-in duration-200">
+                <div>
+                  <p className="font-bold text-[11px] flex items-center gap-1 text-amber-800">
+                    <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+                    Acceso para Administradores
+                  </p>
+                  <p className="text-[10.5px] text-amber-700 mt-0.5 leading-snug">
+                    Ingresa con tu cuenta de administrador. Luego podrás autorizar este equipo en Configuración &gt; Seguridad.
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1B4B73] transition-colors p-1"
-                  title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                  onClick={() => setAdminBypass(false)}
+                  className="text-[10px] font-bold text-amber-800 hover:underline shrink-0 cursor-pointer"
                 >
-                  {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                  Volver
                 </button>
-              </div>
-            </div>
-
-            {/* Mensaje de Error */}
-            {error && (
-              <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 animate-in fade-in duration-200">
-                <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-                <span>{error}</span>
               </div>
             )}
 
-            {/* Botón Principal INGRESAR AL SISTEMA con Animación Signature */}
-            <div className="pt-1">
-              <button
-                type="submit"
-                disabled={loading}
-                className={`group relative w-full h-11.5 rounded-2xl font-display font-black text-xs uppercase tracking-wider text-white shadow-md transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] ${
-                  loading 
-                    ? "bg-[#1B4B73] cursor-not-allowed opacity-95 shadow-[#1B4B73]/20" 
-                    : "bg-gradient-to-r from-[#1B4B73] via-[#245e8e] to-[#1B4B73] bg-[length:200%_auto] hover:bg-right shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5"
-                }`}
-              >
-                {/* Efecto de Brillo / Rayo Shimmer en Hover */}
-                <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
-
-                {loading ? (
-                  <div className="relative z-10 flex items-center justify-center gap-2.5">
-                    <div className="relative flex items-center justify-center">
-                      <div className="h-4.5 w-4.5 rounded-full border-2 border-white/20 border-t-[#F0B900] border-r-white animate-spin" />
-                      <div className="absolute h-1.5 w-1.5 rounded-full bg-[#F0B900] animate-ping opacity-75" />
-                    </div>
-                    <span className="text-xs font-bold text-white tracking-normal normal-case flex items-center gap-1">
-                      Iniciando sesión segura
-                      <span className="flex gap-0.5 items-center">
-                        <span className="h-1 w-1 rounded-full bg-[#F0B900] animate-bounce [animation-delay:-0.3s]" />
-                        <span className="h-1 w-1 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
-                        <span className="h-1 w-1 rounded-full bg-[#F0B900] animate-bounce" />
-                      </span>
-                    </span>
+              {/* Formulario de Login */}
+              <form onSubmit={onSubmit} className="mt-4.5 space-y-3 text-left">
+                {/* Campo Email */}
+                <div className="space-y-1.5">
+                  <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700">
+                    Correo electrónico
+                  </Label>
+                  <div className="relative group">
+                    <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] transition-colors" />
+                    <Input
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      type="email"
+                      required
+                      placeholder="ejemplo@lavanderia.do"
+                      className="pl-10 h-10.5 bg-slate-50/70 border-slate-200/90 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400"
+                    />
                   </div>
-                ) : (
-                  <div className="relative z-10 flex items-center justify-center gap-2">
-                    <span className="font-bold tracking-wider">INGRESAR AL SISTEMA</span>
-                    <div className="h-5.5 w-5.5 rounded-xl bg-white/15 group-hover:bg-[#F0B900] group-hover:text-slate-900 text-white flex items-center justify-center transition-all duration-300 shadow-2xs group-hover:translate-x-1">
-                      <ArrowRight className="h-3.5 w-3.5 transition-transform" />
-                    </div>
+                </div>
+
+                {/* Campo Contraseña */}
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-[10.5px] font-extrabold uppercase tracking-wider text-slate-700">
+                      Contraseña
+                    </Label>
+                    <Link 
+                      to="/recuperar" 
+                      search={{ redirect: `/t/${tenant.slug}/login` } as any}
+                      className="text-[10.5px] font-bold text-[#1B4B73] hover:underline"
+                    >
+                      ¿Olvidaste tu contraseña?
+                    </Link>
+                  </div>
+                  <div className="relative group">
+                    <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#1B4B73] transition-colors" />
+                    <Input
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      type={showPassword ? "text" : "password"}
+                      required
+                      placeholder="••••••••"
+                      className="pl-10 pr-10 h-10.5 bg-slate-50/70 border-slate-200/90 focus:border-[#1B4B73] focus:ring-2 focus:ring-[#1B4B73]/15 transition-all rounded-xl text-xs sm:text-sm font-medium text-slate-900 placeholder:text-slate-400"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-[#1B4B73] transition-colors p-1 cursor-pointer"
+                      title={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
+                    >
+                      {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Mensaje de Error */}
+                {error && (
+                  <div className="flex items-center gap-2 rounded-xl border border-rose-200 bg-rose-50/90 p-2.5 text-xs font-semibold text-rose-700 animate-in fade-in duration-200">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                    <span>{error}</span>
                   </div>
                 )}
-              </button>
+
+                {/* Botón Principal INGRESAR AL SISTEMA con Animación Signature */}
+                <div className="pt-1">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className={`group relative w-full h-11.5 rounded-2xl font-display font-black text-xs uppercase tracking-wider text-white shadow-md transition-all duration-300 overflow-hidden cursor-pointer active:scale-[0.98] ${
+                      loading 
+                        ? "bg-[#1B4B73] cursor-not-allowed opacity-95 shadow-[#1B4B73]/20" 
+                        : "bg-gradient-to-r from-[#1B4B73] via-[#245e8e] to-[#1B4B73] bg-[length:200%_auto] hover:bg-right shadow-[#1B4B73]/25 hover:shadow-lg hover:shadow-[#1B4B73]/35 hover:-translate-y-0.5"
+                    }`}
+                  >
+                    {/* Efecto de Brillo / Rayo Shimmer en Hover */}
+                    <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/15 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000 ease-in-out pointer-events-none" />
+
+                    {loading ? (
+                      <div className="relative z-10 flex items-center justify-center gap-2.5">
+                        <div className="relative flex items-center justify-center">
+                          <div className="h-4.5 w-4.5 rounded-full border-2 border-white/20 border-t-[#F0B900] border-r-white animate-spin" />
+                          <div className="absolute h-1.5 w-1.5 rounded-full bg-[#F0B900] animate-ping opacity-75" />
+                        </div>
+                        <span className="text-xs font-bold text-white tracking-normal normal-case flex items-center gap-1">
+                          Iniciando sesión segura
+                          <span className="flex gap-0.5 items-center">
+                            <span className="h-1 w-1 rounded-full bg-[#F0B900] animate-bounce [animation-delay:-0.3s]" />
+                            <span className="h-1 w-1 rounded-full bg-white animate-bounce [animation-delay:-0.15s]" />
+                            <span className="h-1 w-1 rounded-full bg-[#F0B900] animate-bounce" />
+                          </span>
+                        </span>
+                      </div>
+                    ) : (
+                      <div className="relative z-10 flex items-center justify-center gap-2">
+                        <span className="font-bold tracking-wider">INGRESAR AL SISTEMA</span>
+                        <div className="h-5.5 w-5.5 rounded-xl bg-white/15 group-hover:bg-[#F0B900] group-hover:text-slate-900 text-white flex items-center justify-center transition-all duration-300 shadow-2xs group-hover:translate-x-1">
+                          <ArrowRight className="h-3.5 w-3.5 transition-transform" />
+                        </div>
+                      </div>
+                    )}
+                  </button>
+                </div>
+              </form>
+
+              {/* Sección Inferior: Cambiar de Lavandería */}
+              <div className="mt-4.5 border-t border-slate-100 pt-3.5 text-center">
+                <p className="text-[11.5px] font-semibold text-slate-500 mb-2">
+                  ¿No trabajas en {tenant.nombre}?
+                </p>
+                <Link 
+                  to="/login" 
+                  className="w-full h-9.5 inline-flex items-center justify-center gap-2 px-3.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all shadow-2xs hover:border-[#1B4B73]/40 cursor-pointer"
+                >
+                  <Building2 className="h-3.5 w-3.5 text-[#1B4B73]" />
+                  <span>Cambiar de lavandería</span>
+                </Link>
+              </div>
+
+              {/* Sello de Seguridad Inferior */}
+              <div className="mt-3.5 flex items-center justify-center gap-1 text-[10px] font-medium text-slate-400">
+                <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
+                <span>Conexión segura con cifrado SSL 256-bit</span>
+              </div>
+
             </div>
-          </form>
-
-          {/* Sección Inferior: Cambiar de Lavandería */}
-          <div className="mt-4.5 border-t border-slate-100 pt-3.5 text-center">
-            <p className="text-[11.5px] font-semibold text-slate-500 mb-2">
-              ¿No trabajas en {tenant.nombre}?
-            </p>
-            <Link 
-              to="/login" 
-              className="w-full h-9.5 inline-flex items-center justify-center gap-2 px-3.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all shadow-2xs hover:border-[#1B4B73]/40 cursor-pointer"
-            >
-              <Building2 className="h-3.5 w-3.5 text-[#1B4B73]" />
-              <span>Cambiar de lavandería</span>
-            </Link>
           </div>
-
-          {/* Sello de Seguridad Inferior */}
-          <div className="mt-3.5 flex items-center justify-center gap-1 text-[10px] font-medium text-slate-400">
-            <ShieldCheck className="h-3.5 w-3.5 text-emerald-500" />
-            <span>Conexión segura con cifrado SSL 256-bit</span>
-          </div>
-
-        </div>
-      </div>
+        )}
     </div>
   );
 }

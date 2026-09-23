@@ -30,8 +30,9 @@ import {
   formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
   getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
   isModuleEnabled, sendWeeklySummaryTest, getNextRenewalDate,
+  authorizeCurrentTerminal, approveTerminalPairingRequest, revokeTerminal, isCurrentTerminalAuthorized,
   type Tenant, type TenantConfig, type WhatsAppConfig, type WeeklySummaryConfig, type PlanId, type Plan, type Gasto,
-  type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence
+  type GlobalConfig, type BankDetails, type ECFConfig, type ECFSequence, type TerminalAutorizada
 } from "@/lib/storage";
 import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA, consultarRNC, isECFReady, syncSequencesEF2 } from "@/lib/fiscal";
 import { notificarWhatsApp, getKlynnConnectInstanceName, sendTestWhatsAppMessage, checkAndTriggerSequenceWhatsAppAlert } from "@/lib/whatsapp";
@@ -74,6 +75,7 @@ import {
   getSerialPortLabel,
 } from "@/lib/impresora";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
 
 export const Route = createFileRoute("/t/$slug/configuracion")({ component: ConfigPage });
 
@@ -515,6 +517,713 @@ function WeeklySummaryTab({
   );
 }
 
+function SeguridadTab({
+  tenant,
+  onSaveConfig,
+}: {
+  tenant: Tenant;
+  onSaveConfig: (c: Partial<TenantConfig>, silent?: boolean) => Promise<void>;
+}) {
+  const cfg = tenant.config || {};
+  const [controlTerminales, setControlTerminales] = useState(cfg.control_terminales_activo || false);
+  const [terminales, setTerminales] = useState<TerminalAutorizada[]>(cfg.terminales_autorizadas || []);
+
+  // Modal Autorización Directa
+  const [openDirectModal, setOpenDirectModal] = useState(false);
+  const [directNombre, setDirectNombre] = useState("Caja Mostrador 1");
+  const [authorizingDirect, setAuthorizingDirect] = useState(false);
+  const currentTerminalToken = typeof window !== "undefined" ? localStorage.getItem("klynn_terminal_token") : null;
+  const isThisMachineAuthorized = Boolean(
+    currentTerminalToken && terminales.some((t) => t.token === currentTerminalToken)
+  );
+
+  // Modal Vinculación Remota
+  const [openRemoteModal, setOpenRemoteModal] = useState(false);
+  const [remoteCode, setRemoteCode] = useState("");
+  const [remoteNombre, setRemoteNombre] = useState("");
+  const [approvingRemote, setApprovingRemote] = useState(false);
+
+  // Horarios
+  const [controlHorario, setControlHorario] = useState(cfg.control_horario_activo || false);
+  const [horarioApertura, setHorarioApertura] = useState(cfg.horario_apertura || "08:00");
+  const [horarioCierre, setHorarioCierre] = useState(cfg.horario_cierre || "19:30");
+  const [diasLaborables, setDiasLaborables] = useState<number[]>(cfg.dias_laborables || [1, 2, 3, 4, 5, 6]);
+  const [savingHorarios, setSavingHorarios] = useState(false);
+
+  // Inactividad
+  const [bloqueoInactividad, setBloqueoInactividad] = useState<number>(cfg.bloqueo_inactividad_minutos || 0);
+  const [savingInactividad, setSavingInactividad] = useState(false);
+
+  // AlertDialog Desvincular
+  const [terminalToRevoke, setTerminalToRevoke] = useState<TerminalAutorizada | null>(null);
+
+  useEffect(() => {
+    if (tenant.config) {
+      setControlTerminales(tenant.config.control_terminales_activo || false);
+      setTerminales(tenant.config.terminales_autorizadas || []);
+      setControlHorario(tenant.config.control_horario_activo || false);
+      setHorarioApertura(tenant.config.horario_apertura || "08:00");
+      setHorarioCierre(tenant.config.horario_cierre || "19:30");
+      setDiasLaborables(tenant.config.dias_laborables || [1, 2, 3, 4, 5, 6]);
+      setBloqueoInactividad(tenant.config.bloqueo_inactividad_minutos || 0);
+    }
+  }, [tenant.config]);
+
+  // Sincronizar estado en vivo con las tablas dedicadas en Supabase
+  useEffect(() => {
+    if (!tenant?.id) return;
+    const realId = tenant.id;
+
+    supabase
+      .from("terminales_autorizadas")
+      .select("*")
+      .eq("tenant_id", realId)
+      .then(({ data, error }) => {
+        if (!error && data && data.length > 0) {
+          setTerminales((prev) => {
+            const seenTokens = new Set(prev.map((t) => t.token));
+            const newFromDb = data
+              .filter((d: any) => !seenTokens.has(d.token))
+              .map((d: any) => ({
+                id: d.id,
+                nombre: d.nombre,
+                token: d.token,
+                creado_en: d.creado_en,
+                ultimo_acceso: d.ultimo_acceso,
+                user_agent: d.user_agent,
+              }));
+            return [...prev, ...newFromDb];
+          });
+        }
+      });
+
+    supabase
+      .from("horarios_laborales_sucursal")
+      .select("*")
+      .eq("tenant_id", realId)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data) {
+          setControlHorario(!!data.activo);
+          if (data.horario_apertura) setHorarioApertura(data.horario_apertura.slice(0, 5));
+          if (data.horario_cierre) setHorarioCierre(data.horario_cierre.slice(0, 5));
+          if (Array.isArray(data.dias_laborables)) setDiasLaborables(data.dias_laborables);
+        }
+      });
+  }, [tenant?.id]);
+
+  const DIAS = [
+    { id: 1, label: "Lun", full: "Lunes" },
+    { id: 2, label: "Mar", full: "Martes" },
+    { id: 3, label: "Mié", full: "Miércoles" },
+    { id: 4, label: "Jue", full: "Jueves" },
+    { id: 5, label: "Vie", full: "Viernes" },
+    { id: 6, label: "Sáb", full: "Sábado" },
+    { id: 0, label: "Dom", full: "Domingo" },
+  ];
+
+  async function handleToggleControlTerminales(enabled: boolean) {
+    if (enabled && terminales.length === 0) {
+      toast.warning("Recomendación: Vincula este equipo antes de activar la restricción estricta.");
+    }
+    setControlTerminales(enabled);
+    try {
+      await onSaveConfig({ control_terminales_activo: enabled });
+      toast.success(enabled ? "Restricción de terminales ACTIVADA 🔒" : "Restricción de terminales desactivada");
+    } catch {
+      setControlTerminales(!enabled);
+      toast.error("Error al actualizar estado");
+    }
+  }
+
+  async function handleDirectAuth() {
+    if (!directNombre.trim()) {
+      toast.error("Ingresa un nombre descriptivo para este equipo.");
+      return;
+    }
+    setAuthorizingDirect(true);
+    try {
+      const res = await authorizeCurrentTerminal(tenant.id, directNombre);
+      if (res.ok && res.terminal) {
+        toast.success(`¡"${res.terminal.nombre}" autorizada como terminal de caja! ✅`);
+        setTerminales((prev) => [...prev, res.terminal!]);
+        setOpenDirectModal(false);
+      } else {
+        toast.error(res.error || "No se pudo autorizar el equipo.");
+      }
+    } catch (err: any) {
+      toast.error("Error al autorizar: " + (err?.message || String(err)));
+    } finally {
+      setAuthorizingDirect(false);
+    }
+  }
+
+  async function handleRemoteApprove() {
+    const cleanCode = remoteCode.replace(/\D/g, "");
+    if (cleanCode.length !== 6) {
+      toast.error("El código debe contener exactamente 6 dígitos numéricos.");
+      return;
+    }
+    setApprovingRemote(true);
+    try {
+      const res = await approveTerminalPairingRequest(tenant.id, cleanCode, remoteNombre);
+      if (res.ok) {
+        toast.success("¡Terminal vinculada y aprobada exitosamente! ✅");
+        const updated = await getTenantById(tenant.id);
+        if (updated?.config?.terminales_autorizadas) {
+          setTerminales(updated.config.terminales_autorizadas);
+        }
+        setOpenRemoteModal(false);
+        setRemoteCode("");
+        setRemoteNombre("");
+      } else {
+        toast.error(res.error || "Código inválido o expirado.");
+      }
+    } catch (err: any) {
+      toast.error("Error al vincular: " + (err?.message || String(err)));
+    } finally {
+      setApprovingRemote(false);
+    }
+  }
+
+  async function handleRevokeConfirm() {
+    if (!terminalToRevoke) return;
+    try {
+      const res = await revokeTerminal(tenant.id, terminalToRevoke.id);
+      if (res.ok) {
+        toast.success(`Terminal "${terminalToRevoke.nombre}" desvinculada.`);
+        setTerminales((prev) => prev.filter((t) => t.id !== terminalToRevoke.id));
+      } else {
+        toast.error(res.error || "Error al desvincular");
+      }
+    } catch (err: any) {
+      toast.error("Error al desvincular: " + (err?.message || String(err)));
+    } finally {
+      setTerminalToRevoke(null);
+    }
+  }
+
+  async function handleToggleControlHorario(enabled: boolean) {
+    setControlHorario(enabled);
+    try {
+      await onSaveConfig({
+        control_horario_activo: enabled,
+        horario_apertura: horarioApertura,
+        horario_cierre: horarioCierre,
+        dias_laborables: diasLaborables,
+      });
+      toast.success(enabled ? "Horario laboral ACTIVADO ⏰" : "Restricción de horario desactivada");
+    } catch {
+      setControlHorario(!enabled);
+      toast.error("Error al actualizar horario");
+    }
+  }
+
+  async function handleSaveHorarios() {
+    setSavingHorarios(true);
+    try {
+      await onSaveConfig({
+        control_horario_activo: controlHorario,
+        horario_apertura: horarioApertura,
+        horario_cierre: horarioCierre,
+        dias_laborables: diasLaborables,
+      });
+      toast.success("Horario operativo guardado correctamente ✅");
+    } catch (err: any) {
+      toast.error("Error al guardar horario: " + (err?.message || String(err)));
+    } finally {
+      setSavingHorarios(false);
+    }
+  }
+
+  async function handleSaveInactividad() {
+    setSavingInactividad(true);
+    try {
+      await onSaveConfig({
+        bloqueo_inactividad_minutos: Number(bloqueoInactividad),
+      });
+      toast.success("Tiempo de bloqueo guardado correctamente ✅");
+    } catch (err: any) {
+      toast.error("Error al guardar: " + (err?.message || String(err)));
+    } finally {
+      setSavingInactividad(false);
+    }
+  }
+
+  function toggleDia(diaId: number) {
+    setDiasLaborables((prev) =>
+      prev.includes(diaId) ? prev.filter((d) => d !== diaId) : [...prev, diaId]
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* 1. CONTROL DE TERMINALES (HARDWARE PINNING) */}
+      <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
+          <div className="flex items-center gap-3.5">
+            <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Laptop className="h-5.5 w-5.5 text-[#F0B900]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                  Terminales de Caja Autorizadas
+                </h3>
+                {controlTerminales ? (
+                  <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 text-[10.5px] font-bold gap-1">
+                    <ShieldCheck className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    Restricción Activa
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-slate-500 dark:text-slate-400 text-[10.5px] font-bold">
+                    Acceso Abierto
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Restringe el acceso de empleados exclusivamente a las computadoras físicas del local.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 self-end sm:self-center">
+            <span className="text-xs font-semibold text-muted-foreground">
+              {controlTerminales ? "Activado" : "Desactivado"}
+            </span>
+            <Switch
+              checked={controlTerminales}
+              onCheckedChange={handleToggleControlTerminales}
+              className="data-[state=checked]:bg-[#1B4B73]"
+            />
+          </div>
+        </div>
+
+        {/* Acciones de vinculación */}
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 bg-slate-50 dark:bg-slate-900/40 p-4 rounded-xl border border-slate-200/80 dark:border-slate-800">
+          <div className="text-xs text-slate-600 dark:text-slate-300 flex items-center gap-2">
+            {isThisMachineAuthorized ? (
+              <span className="inline-flex items-center gap-1.5 font-bold text-emerald-600 dark:text-emerald-400">
+                <CheckCircle2 className="h-4 w-4" />
+                Esta computadora ya está vinculada como terminal autorizada.
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 font-semibold text-slate-500 dark:text-slate-400">
+                <AlertTriangle className="h-4 w-4 text-amber-500" />
+                Esta computadora no está vinculada aún.
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-2 flex-wrap">
+            {!isThisMachineAuthorized && (
+              <Button
+                type="button"
+                onClick={() => setOpenDirectModal(true)}
+                className="rounded-xl h-9 px-4 font-bold text-xs bg-[#1B4B73] hover:bg-[#143a59] text-white shadow-xs cursor-pointer gap-2 border-b-2 border-[#F0B900] transition-all"
+              >
+                <Monitor className="h-3.5 w-3.5 text-[#F0B900]" />
+                <span>Autorizar este equipo</span>
+              </Button>
+            )}
+            <Button
+              type="button"
+              onClick={() => setOpenRemoteModal(true)}
+              className="rounded-xl h-9 px-4 font-black text-xs bg-[#F0B900] hover:bg-[#e0ad00] text-slate-950 shadow-xs cursor-pointer gap-2 border border-[#d9a700] transition-all active:scale-[0.98]"
+            >
+              <Smartphone className="h-3.5 w-3.5 text-slate-950" />
+              <span>Vincular por Código Remoto</span>
+            </Button>
+          </div>
+        </div>
+
+        {/* Lista de terminales */}
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400">
+              Terminales Registradas ({terminales.length})
+            </h4>
+          </div>
+
+          {terminales.length === 0 ? (
+            <div className="p-8 text-center border border-dashed border-slate-200 dark:border-slate-800 rounded-2xl bg-muted/20">
+              <Laptop className="h-10 w-10 text-muted-foreground/30 mx-auto mb-2" />
+              <p className="text-sm font-semibold text-foreground">No hay terminales vinculadas</p>
+              <p className="text-xs text-muted-foreground mt-1 max-w-md mx-auto leading-relaxed">
+                Haz clic en <strong className="font-bold text-slate-700 dark:text-slate-200">"Autorizar este equipo"</strong> si estás en la PC de la lavandería, o usa <strong className="font-bold text-slate-700 dark:text-slate-200">"Vincular por Código Remoto"</strong> si el empleado te proporcionó el código de 6 dígitos.
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-border/60 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden bg-background">
+              {terminales.map((term) => (
+                <div key={term.id} className="p-3.5 sm:p-4 flex items-center justify-between gap-3 hover:bg-slate-50/50 dark:hover:bg-slate-900/30 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="h-9 w-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <Monitor className="h-4.5 w-4.5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-sm text-foreground truncate">{term.nombre}</span>
+                        <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-[10px] font-bold px-1.5 py-0">
+                          Activa
+                        </Badge>
+                      </div>
+                      <div className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        Registrada: {new Date(term.creado_en).toLocaleDateString("es-DO")}
+                        {term.user_agent && ` · ${term.user_agent.includes("Windows") ? "Windows" : term.user_agent.includes("Mac") ? "Mac" : "Dispositivo"}`}
+                      </div>
+                    </div>
+                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setTerminalToRevoke(term)}
+                    className="h-8 px-2.5 rounded-lg text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 text-xs font-semibold cursor-pointer gap-1 shrink-0"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                    <span className="hidden sm:inline">Desvincular</span>
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* 2. HORARIO OPERATIVO DE SUCURSAL */}
+      <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-5 border-b border-border/70">
+          <div className="flex items-center gap-3.5">
+            <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Clock className="h-5.5 w-5.5 text-[#F0B900]" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+                  Horario Laboral de Sucursal
+                </h3>
+                {controlHorario ? (
+                  <Badge className="bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 border-emerald-300 text-[10.5px] font-bold gap-1">
+                    <CheckCircle2 className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+                    Horario Exigido
+                  </Badge>
+                ) : (
+                  <Badge variant="outline" className="text-slate-500 dark:text-slate-400 text-[10.5px] font-bold">
+                    Sin Restricción
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Bloquea el acceso a empleados fuera del horario de atención o en días no laborables.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3 self-end sm:self-center">
+            <span className="text-xs font-semibold text-muted-foreground">
+              {controlHorario ? "Activado" : "Desactivado"}
+            </span>
+            <Switch
+              checked={controlHorario}
+              onCheckedChange={handleToggleControlHorario}
+              className="data-[state=checked]:bg-[#1B4B73]"
+            />
+          </div>
+        </div>
+
+        <div className="grid gap-5 sm:grid-cols-2">
+          <Field label="Hora de Apertura" icon={Clock}>
+            <Input
+              type="time"
+              value={horarioApertura}
+              onChange={(e) => setHorarioApertura(e.target.value)}
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-bold`}
+            />
+          </Field>
+
+          <Field label="Hora de Cierre" icon={Clock}>
+            <Input
+              type="time"
+              value={horarioCierre}
+              onChange={(e) => setHorarioCierre(e.target.value)}
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-bold`}
+            />
+          </Field>
+        </div>
+
+        {/* Selector de días laborables */}
+        <div className="space-y-2">
+          <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200`}>
+            Días Laborables Permitidos
+          </Label>
+          <div className="flex items-center gap-2 flex-wrap">
+            {DIAS.map((d) => {
+              const active = diasLaborables.includes(d.id);
+              return (
+                <button
+                  key={d.id}
+                  type="button"
+                  onClick={() => toggleDia(d.id)}
+                  className={`h-9 px-3.5 rounded-xl text-xs font-bold transition-all cursor-pointer border ${
+                    active
+                      ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-2xs"
+                      : "bg-slate-50 dark:bg-slate-900 text-slate-500 border-slate-200 dark:border-slate-800 hover:border-slate-400"
+                  }`}
+                >
+                  {d.full}
+                </button>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-muted-foreground">
+            Los empleados solo podrán iniciar sesión los días seleccionados. El Administrador siempre tiene acceso 24/7.
+          </p>
+        </div>
+
+        <div className="pt-4 border-t border-border/70 flex justify-end">
+          <Button
+            type="button"
+            onClick={handleSaveHorarios}
+            disabled={savingHorarios}
+            className="rounded-xl bg-primary text-white font-bold h-10 px-5 gap-2 cursor-pointer"
+          >
+            {savingHorarios ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span>Guardar Horario Laboral</span>
+          </Button>
+        </div>
+      </Card>
+
+      {/* 3. BLOQUEO AUTOMÁTICO POR INACTIVIDAD (PIN) */}
+      <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+        <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+          <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Lock className="h-5.5 w-5.5 text-[#F0B900]" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+              Bloqueo Automático por Inactividad (PIN)
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Suspende la terminal automáticamente tras inactividad y exige el PIN del empleado para desbloquear.
+            </p>
+          </div>
+        </div>
+
+        <div>
+          {/* Bloquear después de X tiempo (PIN) */}
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700">
+            <div className="flex items-center gap-3.5">
+              <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                <Lock className="h-5.5 w-5.5 text-[#F0B900]" />
+              </div>
+              <div>
+                <div className="text-sm font-bold text-foreground flex items-center gap-2">
+                  <span>Bloquear después de X tiempo (PIN)</span>
+                  <Badge variant="outline" className="text-[10px] font-bold border-emerald-300 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50">
+                    Seguridad POS
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Suspende la terminal automáticamente tras inactividad y exige el PIN de 4 dígitos del empleado para continuar.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 self-start lg:self-auto shrink-0 bg-white dark:bg-slate-950 p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs flex-wrap sm:flex-nowrap">
+              {[
+                { val: 0, label: "Desactivado" },
+                { val: 1, label: "1 min" },
+                { val: 2, label: "2 min" },
+                { val: 3, label: "3 min" },
+                { val: 5, label: "5 min" },
+                { val: 10, label: "10 min" },
+              ].map(({ val, label }) => {
+                const isSelected = Number(bloqueoInactividad) === val;
+                return (
+                  <button
+                    key={val}
+                    type="button"
+                    onClick={() => {
+                      setBloqueoInactividad(val);
+                      onSaveConfig({ bloqueo_inactividad_minutos: val }, true);
+                    }}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                      isSelected
+                        ? "bg-[#1B4B73] text-white shadow-xs"
+                        : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+
+              <div className="hidden sm:block h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
+
+              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 focus-within:border-[#1B4B73] focus-within:ring-2 focus-within:ring-[#1B4B73]/15 transition-all">
+                <input
+                  type="number"
+                  min={0}
+                  max={120}
+                  value={bloqueoInactividad}
+                  onChange={(e) => {
+                    const v = Math.max(0, Number(e.target.value));
+                    setBloqueoInactividad(v);
+                  }}
+                  onBlur={() => {
+                    onSaveConfig({ bloqueo_inactividad_minutos: Number(bloqueoInactividad) }, true);
+                  }}
+                  className="w-8 text-center text-xs font-black bg-transparent border-none outline-none text-foreground p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">MIN</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="pt-4 border-t border-border/70 flex justify-end">
+          <Button
+            type="button"
+            onClick={handleSaveInactividad}
+            disabled={savingInactividad}
+            className="rounded-xl bg-primary text-white font-bold h-10 px-5 gap-2 cursor-pointer"
+          >
+            {savingInactividad ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span>Guardar Bloqueo por Inactividad</span>
+          </Button>
+        </div>
+      </Card>
+
+      {/* MODAL 1: AUTORIZAR ESTE EQUIPO DIRECTAMENTE */}
+      <Dialog open={openDirectModal} onOpenChange={setOpenDirectModal}>
+        <DialogContent className="max-w-md rounded-2xl bg-background p-6 shadow-xl border border-slate-200 dark:border-slate-800">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base font-bold text-foreground">
+              <Monitor className="h-5 w-5 text-[#1B4B73] dark:text-[#F0B900]" />
+              Autorizar esta Computadora
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1">
+              Este navegador quedará sellado con una credencial digital permanente para operar como terminal de cobro.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-3">
+            <Field label="Nombre identificador de la terminal" hint="Ej: Caja Principal Mostrador, Caja 2, etc.">
+              <Input
+                value={directNombre}
+                onChange={(e) => setDirectNombre(e.target.value)}
+                placeholder="Ej: Caja Mostrador 1"
+                className={`${FIELD} !bg-white dark:!bg-slate-900 rounded-xl font-medium border-slate-300 dark:border-slate-700 shadow-2xs`}
+              />
+            </Field>
+          </div>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setOpenDirectModal(false)} className="rounded-xl font-bold">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleDirectAuth}
+              disabled={authorizingDirect}
+              className="rounded-xl bg-[#1B4B73] text-white font-bold gap-2 cursor-pointer"
+            >
+              {authorizingDirect ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle2 className="h-4 w-4 text-[#F0B900]" />}
+              <span>Confirmar y Autorizar</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* MODAL 2: VINCULACIÓN REMOTA POR CÓDIGO CON 6 CAJAS OTP */}
+      <Dialog open={openRemoteModal} onOpenChange={setOpenRemoteModal}>
+        <DialogContent className="max-w-[420px] rounded-3xl bg-background p-6 shadow-2xl border border-slate-200 dark:border-slate-800">
+          <DialogHeader className="text-center sm:text-center">
+            <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-[#1B4B73] border-2 border-[#F0B900]/40 text-[#F0B900] shadow-xs">
+              <Smartphone className="h-6 w-6" />
+            </div>
+            <DialogTitle className="text-lg font-black text-foreground">
+              Aprobar Terminal Remota
+            </DialogTitle>
+            <DialogDescription className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto">
+              Ingresa el código de 6 dígitos que el empleado está viendo en la pantalla de la terminal en el local.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-3">
+            <div className="flex flex-col items-center justify-center">
+              <Label className="text-xs font-bold text-slate-700 dark:text-slate-200 mb-2.5 uppercase tracking-wider text-center">
+                Código de Enlace (6 dígitos)
+              </Label>
+              <InputOTP
+                maxLength={6}
+                value={remoteCode}
+                onChange={(val) => setRemoteCode(val.replace(/\D/g, ""))}
+                autoFocus
+              >
+                <InputOTPGroup className="gap-1.5 sm:gap-2">
+                  {[0, 1, 2, 3, 4, 5].map((i) => (
+                    <InputOTPSlot
+                      key={i}
+                      index={i}
+                      className="w-10 h-13 sm:w-11 sm:h-14 !rounded-xl !border-2 !border-[#1B4B73]/40 hover:!border-[#F0B900] focus:!border-[#1B4B73] !bg-white dark:!bg-slate-900 text-xl sm:text-2xl font-black text-[#1B4B73] dark:text-white shadow-2xs data-[active=true]:!border-[#1B4B73] data-[active=true]:ring-2 data-[active=true]:ring-[#F0B900]/40 transition-all"
+                    />
+                  ))}
+                </InputOTPGroup>
+              </InputOTP>
+              <p className="text-[11px] text-muted-foreground mt-2 text-center">
+                Escribe los 6 números que muestra la pantalla de la lavandería
+              </p>
+            </div>
+
+            <Field label="Nombre para esta terminal (Opcional)" hint="Ej: Caja 2, Tablet Mostrador">
+              <Input
+                value={remoteNombre}
+                onChange={(e) => setRemoteNombre(e.target.value)}
+                placeholder="Ej: Caja Sucursal"
+                className={`${FIELD} !bg-white dark:!bg-slate-900 rounded-xl font-medium border-slate-300 dark:border-slate-700 shadow-2xs`}
+              />
+            </Field>
+          </div>
+
+          <DialogFooter className="gap-2 sm:gap-0 pt-1">
+            <Button variant="outline" onClick={() => setOpenRemoteModal(false)} className="rounded-xl font-bold">
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleRemoteApprove}
+              disabled={approvingRemote || remoteCode.replace(/\D/g, "").length !== 6}
+              className="rounded-xl bg-[#1B4B73] hover:bg-[#153b5c] text-white font-bold gap-2 cursor-pointer disabled:opacity-50 h-10 px-5 shadow-sm border-b-2 border-[#F0B900]"
+            >
+              {approvingRemote ? <Loader2 className="h-4 w-4 animate-spin text-[#F0B900]" /> : <CheckCircle2 className="h-4 w-4 text-[#F0B900]" />}
+              <span>Aprobar y Desbloquear</span>
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* ALERT DIALOG: DESVINCULAR TERMINAL */}
+      <AlertDialog open={!!terminalToRevoke} onOpenChange={(open) => !open && setTerminalToRevoke(null)}>
+        <AlertDialogContent className="rounded-2xl max-w-md bg-background border border-slate-200 dark:border-slate-800">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-base font-bold text-foreground flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-rose-600" />
+              ¿Desvincular esta terminal?
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-xs text-muted-foreground mt-1">
+              El dispositivo <strong>"{terminalToRevoke?.nombre}"</strong> perderá inmediatamente el acceso como terminal de caja. Los empleados no podrán operar desde esa computadora a menos que sea autorizada nuevamente.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter className="gap-2 sm:gap-0">
+            <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleRevokeConfirm}
+              className="rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold"
+            >
+              Sí, desvincular equipo
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </div>
+  );
+}
+
 function SubtleExpandingTextarea({ value, onChange, placeholder, className = "", ...props }: any) {
   const [isFocused, setIsFocused] = useState(false);
 
@@ -883,10 +1592,15 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
   }, [tenant?.color_primario]);
 
   useEffect(() => {
-    if (auth?.tenant && auth.tenant.id !== '__loading__' && !tenant) {
-      setTenant(auth.tenant);
+    if (auth?.tenant && auth.tenant.id !== '__loading__') {
+      if (!tenant) setTenant(auth.tenant);
+      getTenantById(auth.tenant.id).then((fresh) => {
+        if (fresh) {
+          setTenant(fresh);
+        }
+      });
     }
-  }, [auth, tenant]);
+  }, [auth?.tenant?.id]);
 
   useEffect(() => {
     if (printingFakeTicket) {
@@ -953,10 +1667,11 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
   }
   async function saveCfg(c: Partial<TenantConfig>, silent = false) {
     try {
-      const nextConfig = { ...cfg, ...c };
+      const currentCfg = tenant?.config || cfg;
+      const nextConfig = { ...currentCfg, ...c };
+      const targetId = tenant?.id || tenantId;
+      await saveTenantConfig(targetId, nextConfig);
       const next: Tenant = { ...tenant!, config: nextConfig } as Tenant;
-      await saveTenant(next);
-      await saveTenantConfig(tenantId, nextConfig);
       setTenant(next);
       queryClient.invalidateQueries({ queryKey: ["tenant"] });
       queryClient.invalidateQueries({ queryKey: ["tenants"] });
@@ -998,12 +1713,13 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
         {/* Hallmark · component: settings tabs · genre: modern-minimal · theme: Klynn */}
         <div className="-mx-1 overflow-x-auto border-b border-slate-200/90 px-1 [scrollbar-width:none] dark:border-slate-800 [&::-webkit-scrollbar]:hidden">
-          <TabsList className="mx-auto flex h-auto w-max items-center justify-start gap-1 rounded-none border-none bg-transparent p-0 lg:w-full lg:min-w-0">
+          <TabsList className="flex h-auto w-full min-w-max items-center justify-between gap-1 sm:gap-2 rounded-none border-none bg-transparent p-0">
             {[
               { id: 'perfil', label: 'Perfil', icon: User },
               { id: 'apariencia', label: 'Apariencia', icon: Palette },
               { id: 'factura', label: 'Ticket', icon: FileText },
               { id: 'caja', label: 'Caja', icon: Banknote },
+              { id: 'seguridad', label: 'Seguridad', icon: Shield },
               { id: 'fiscal', label: 'Fiscal', icon: ShieldCheck, module: 'facturacion_fiscal' },
               { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
               { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
@@ -1018,10 +1734,10 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                   key={t.id}
                   value={t.id}
                   disabled={isTrialExpired && t.id !== 'plan'}
-                  className={`group relative flex shrink-0 cursor-pointer items-center gap-1.5 rounded-none border-none bg-transparent px-2.5 py-3 text-sm font-semibold shadow-none transition-colors duration-200 data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:cursor-not-allowed disabled:opacity-40 lg:min-w-0 lg:flex-1 lg:justify-center lg:px-1.5 xl:px-2.5 ${
+                  className={`group relative flex shrink-0 cursor-pointer items-center gap-1.5 sm:gap-2 rounded-t-xl border-none bg-transparent px-2.5 sm:px-3 lg:px-3.5 py-3 text-sm font-semibold shadow-none transition-colors duration-200 data-[state=active]:bg-transparent data-[state=active]:shadow-none disabled:cursor-not-allowed disabled:opacity-40 ${
                     isActive 
                       ? "text-[#1B4B73] dark:text-sky-400 font-bold" 
-                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-900/40 rounded-t-xl"
+                      : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-50 dark:hover:bg-slate-900/40"
                   }`}
                 >
                   <Icon className={`h-[18px] w-[18px] shrink-0 transition-colors ${
@@ -1029,7 +1745,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                       ? "text-[#1B4B73] dark:text-sky-400" 
                       : "text-slate-400 group-hover:text-slate-600 dark:text-slate-500 dark:group-hover:text-slate-300"
                   }`} />
-                  <span className="tracking-tight">{t.label}</span>
+                  <span className="tracking-tight whitespace-nowrap">{t.label}</span>
                   {isActive && (
                     <span 
                       className="absolute -bottom-px left-0 right-0 h-[3px] bg-[#1B4B73] dark:bg-sky-400 rounded-full"
@@ -1176,74 +1892,6 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                         className="w-7 text-center text-xs font-black bg-transparent border-none outline-none text-foreground p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                       />
                       <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">DÍAS</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Sección 4: Bloqueo por inactividad (PIN) */}
-              <div className="pt-5 border-t border-border/70">
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/60 dark:bg-slate-900/40 shadow-xs transition-all hover:border-slate-300 dark:hover:border-slate-700">
-                  <div className="flex items-center gap-3.5">
-                    <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
-                      <Lock className="h-5.5 w-5.5" />
-                    </div>
-                    <div>
-                      <div className="text-sm font-bold text-foreground flex items-center gap-2">
-                        <span>Bloquear después de X tiempo (PIN)</span>
-                        <Badge variant="outline" className="text-[10px] font-bold border-emerald-300 text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/50">
-                          Seguridad POS
-                        </Badge>
-                      </div>
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        Suspende la terminal automáticamente tras inactividad y exige el PIN de 4 dígitos del empleado para continuar.
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 self-start lg:self-auto shrink-0 bg-white dark:bg-slate-950 p-1.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 shadow-xs flex-wrap sm:flex-nowrap">
-                    {[
-                      { val: 0, label: "Desactivado" },
-                      { val: 1, label: "1 min" },
-                      { val: 2, label: "2 min" },
-                      { val: 3, label: "3 min" },
-                      { val: 5, label: "5 min" },
-                      { val: 10, label: "10 min" },
-                    ].map(({ val, label }) => {
-                      const currentVal = tenant.config?.bloqueo_inactividad_minutos ?? 0;
-                      const isSelected = currentVal === val;
-                      return (
-                        <button
-                          key={val}
-                          type="button"
-                          onClick={() => {
-                            updateCfg({ bloqueo_inactividad_minutos: val });
-                            saveCfg({ bloqueo_inactividad_minutos: val });
-                          }}
-                          className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                            isSelected
-                              ? "bg-[#1B4B73] text-white shadow-xs"
-                              : "text-slate-500 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60"
-                          }`}
-                        >
-                          {label}
-                        </button>
-                      );
-                    })}
-
-                    <div className="hidden sm:block h-4 w-px bg-slate-200 dark:bg-slate-800 mx-1" />
-
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 focus-within:border-[#1B4B73] focus-within:ring-2 focus-within:ring-[#1B4B73]/15 transition-all">
-                      <input
-                        type="number"
-                        min={0}
-                        max={120}
-                        value={tenant.config?.bloqueo_inactividad_minutos ?? 0}
-                        onChange={(e) => updateCfg({ bloqueo_inactividad_minutos: Math.max(0, Number(e.target.value)) })}
-                        onBlur={(e) => saveCfg({ bloqueo_inactividad_minutos: Math.max(0, Number(e.target.value)) })}
-                        className="w-8 text-center text-xs font-black bg-transparent border-none outline-none text-foreground p-0 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                      />
-                      <span className="text-[10px] font-extrabold text-slate-400 uppercase tracking-wider select-none">MIN</span>
                     </div>
                   </div>
                 </div>
@@ -2454,6 +3102,10 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
               </Button>
             </div>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="seguridad" className="space-y-6 animate-in fade-in duration-300">
+          <SeguridadTab tenant={tenant} onSaveConfig={saveCfg} />
         </TabsContent>
 
         <TabsContent value="fiscal">

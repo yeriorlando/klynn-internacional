@@ -49,47 +49,86 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
     if (!session) return null;
 
     // Caso Super Admin
-    if (session.empleado_id === "admin" && session.tenant_id === "admin") {
-      return {
-        empleado: {
-          id: "admin",
-          tenant_id: "admin",
-          nombre: "Super Admin",
-          email: "admin@klynn.com.do",
-          password: "***",
-          rol: "ADMIN",
-          activo: true,
-          permisos: [
-            "nueva-orden",
-            "ordenes",
-            "caja",
-            "clientes",
-            "catalogo",
-            "procesos",
-            "reportes",
-            "gastos",
-            "configuracion",
-            "conversations",
-            "logistica",
-            "personal",
-          ],
-          creado_en: new Date().toISOString(),
-        },
-        tenant: {
-          id: "admin",
-          nombre: "Administración Global",
-          slug: "admin",
-          plan_id: "enterprise",
-          estado: "ACTIVO",
-          trial_hasta: new Date().toISOString(),
-          creado_en: new Date().toISOString(),
-          color_primario: "#1B4B73",
-          color_secundario: "#F0B900",
-          telefono: "",
-          direccion: "",
-          email: "admin@klynn.com.do",
-        },
-      };
+    if (session.empleado_id === "admin") {
+      if (session.tenant_id === "admin") {
+        return {
+          empleado: {
+            id: "admin",
+            tenant_id: "admin",
+            nombre: "Super Admin",
+            email: "admin@klynn.com.do",
+            password: "***",
+            rol: "ADMIN",
+            activo: true,
+            permisos: [
+              "nueva-orden",
+              "ordenes",
+              "caja",
+              "clientes",
+              "catalogo",
+              "procesos",
+              "reportes",
+              "gastos",
+              "configuracion",
+              "conversations",
+              "logistica",
+              "personal",
+            ],
+            creado_en: new Date().toISOString(),
+          },
+          tenant: {
+            id: "admin",
+            nombre: "Administración Global",
+            slug: "admin",
+            plan_id: "enterprise",
+            estado: "ACTIVO",
+            trial_hasta: new Date().toISOString(),
+            creado_en: new Date().toISOString(),
+            color_primario: "#1B4B73",
+            color_secundario: "#F0B900",
+            telefono: "",
+            direccion: "",
+            email: "admin@klynn.com.do",
+          },
+        };
+      } else {
+        // Super Admin impersonando una sucursal específica
+        try {
+          const cachedTenantStr = localStorage.getItem(`klynn_tenant_id_${session.tenant_id}`);
+          if (cachedTenantStr) {
+            const cachedTen = JSON.parse(cachedTenantStr);
+            if (cachedTen && cachedTen.id === session.tenant_id) {
+              return {
+                empleado: {
+                  id: "admin",
+                  tenant_id: cachedTen.id,
+                  nombre: "Super Admin",
+                  email: "admin@klynn.com.do",
+                  password: "***",
+                  rol: "ADMIN",
+                  activo: true,
+                  permisos: [
+                    "nueva-orden",
+                    "ordenes",
+                    "caja",
+                    "clientes",
+                    "catalogo",
+                    "procesos",
+                    "reportes",
+                    "gastos",
+                    "configuracion",
+                    "conversations",
+                    "logistica",
+                    "personal",
+                  ],
+                  creado_en: new Date().toISOString(),
+                },
+                tenant: cachedTen,
+              };
+            }
+          }
+        } catch {}
+      }
     }
 
     // Usar la caché SOLO si coincide estrictamente con la sesión activa y la URL actual
@@ -133,6 +172,38 @@ export function useRequireAuth(): { empleado: Empleado; tenant: Tenant } | null 
         const session = getSession();
         if (session?.empleado_id && session?.tenant_id) {
           try {
+            if (session.empleado_id === "admin") {
+              const ten = await getTenantById(session.tenant_id);
+              if (ten) {
+                const empAdmin = {
+                  id: "admin",
+                  tenant_id: ten.id,
+                  nombre: "Super Admin",
+                  email: "admin@klynn.com.do",
+                  password: "***",
+                  rol: "ADMIN" as const,
+                  activo: true,
+                  permisos: [
+                    "nueva-orden",
+                    "ordenes",
+                    "caja",
+                    "clientes",
+                    "catalogo",
+                    "procesos",
+                    "reportes",
+                    "gastos",
+                    "configuracion",
+                    "conversations",
+                    "logistica",
+                    "personal",
+                  ],
+                  creado_en: new Date().toISOString(),
+                };
+                setUser({ empleado: empAdmin, tenant: ten });
+                setLoading(false);
+                return;
+              }
+            }
             const emp = await getEmpleadoById(session.empleado_id);
             const ten = await getTenantById(session.tenant_id);
             if (emp && ten && emp.activo) {

@@ -16,6 +16,8 @@ import {
   getEmpleadoByIdServer,
   getEmpleadoByEmailAndTenantServer,
   getTenantBySlugServer,
+  getTenantByIdServer,
+  saveTenantConfigServer,
 } from "./server-auth";
 
 export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
@@ -257,6 +259,40 @@ export interface TenantConfig {
   bloqueo_inactividad_minutos?: number;
   descuento_cliente_activo?: boolean;
   whatsapp_web_manual?: boolean;
+
+  // Políticas de Seguridad y Control de Terminales
+  control_terminales_activo?: boolean;
+  terminales_autorizadas?: TerminalAutorizada[];
+  solicitudes_vinculacion?: SolicitudVinculacion[];
+
+  // Control de Horario Laboral de Sucursal
+  control_horario_activo?: boolean;
+  horario_apertura?: string;
+  horario_cierre?: string;
+  dias_laborables?: number[];
+  margen_gracia_minutos?: number;
+
+  // Sesión Única para Empleados
+  impedir_sesiones_simultaneas?: boolean;
+  active_employee_sessions?: Record<string, string>;
+}
+
+export interface TerminalAutorizada {
+  id: string;
+  nombre: string;
+  token: string;
+  creado_en: string;
+  ultimo_acceso?: string;
+  user_agent?: string;
+}
+
+export interface SolicitudVinculacion {
+  codigo: string;
+  temporal_token: string;
+  nombre_dispositivo?: string;
+  creado_en: string;
+  expira_en: string;
+  aprobada?: boolean;
 }
 
 export interface WeeklySummaryConfig {
@@ -1129,6 +1165,15 @@ export const DEFAULT_CONFIG: TenantConfig = {
   bloqueo_inactividad_minutos: 0,
   descuento_cliente_activo: true,
   whatsapp_web_manual: true,
+  control_terminales_activo: false,
+  terminales_autorizadas: [],
+  solicitudes_vinculacion: [],
+  control_horario_activo: false,
+  horario_apertura: "08:00",
+  horario_cierre: "19:30",
+  dias_laborables: [1, 2, 3, 4, 5, 6],
+  margen_gracia_minutos: 30,
+  impedir_sesiones_simultaneas: false,
   whatsapp: {
     enabled: false,
     api_key: "",
@@ -1391,7 +1436,27 @@ export function read<T>(k: string, f: T): T {
   }
 }
 export function write<T>(k: string, v: T) {
-  if (isBrowser()) localStorage.setItem(k, JSON.stringify(v));
+  if (!isBrowser()) return;
+  try {
+    localStorage.setItem(k, JSON.stringify(v));
+  } catch (err: any) {
+    // Si la cuota de localStorage se llenó, purgar cachés pesadas prescindibles
+    if (err?.name === "QuotaExceededError" || err?.code === 22 || err?.number === -2147024882) {
+      try {
+        const prescindibleKeys = [
+          KEY.ordenes,
+          "klynn_last_parity_metrics",
+          "klynn_admin_ecf_map",
+        ];
+        for (const pk of prescindibleKeys) {
+          if (pk !== k) localStorage.removeItem(pk);
+        }
+        localStorage.setItem(k, JSON.stringify(v));
+      } catch {}
+    } else {
+      console.warn(`[storage] Aviso al guardar "${k}" en LocalStorage:`, err?.message || err);
+    }
+  }
 }
 
 // ============ Plans ============
@@ -1686,33 +1751,54 @@ export async function saveTenant(t: Tenant) {
   }
 }
 
-export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
+export async function saveTenantConfig(tenantId: string, config: Partial<TenantConfig>) {
   const realId = resolveTenantId(tenantId);
-  const cleanConfig: TenantConfig = {
-    ...config,
-  };
 
-  // 1. Actualizar caché local de inmediato para 0ms de respuesta y persistencia offline
+  // 1. Obtener la configuración previa acumulada de la caché y de Supabase para NUNCA pisar campos
+  let baseConfig: TenantConfig = DEFAULT_CONFIG;
+  const cacheKey = `klynn_tenant_id_${realId}`;
+  let cachedTenant: Tenant | null = null;
+
   if (typeof window !== "undefined") {
-    const cacheKey = `klynn_tenant_id_${realId}`;
-    let cachedTenant: Tenant | null = null;
     const raw = localStorage.getItem(cacheKey);
     if (raw) {
       try {
         cachedTenant = JSON.parse(raw);
+        if (cachedTenant?.config) baseConfig = { ...baseConfig, ...cachedTenant.config };
       } catch {}
     }
-    if (!cachedTenant) {
-      const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
-      if (lastAuthStr) {
-        try {
-          const parsed = JSON.parse(lastAuthStr);
-          if (parsed?.tenant) cachedTenant = parsed.tenant;
-        } catch {}
-      }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.tenant?.config) baseConfig = { ...baseConfig, ...parsed.tenant.config };
+      } catch {}
     }
+  }
+
+  // Si estamos online, consultar la configuración actual en Supabase para no pisar campos existentes
+  if (typeof window !== "undefined" && navigator.onLine) {
+    try {
+      const { data: remoteData } = await supabase
+        .from("tenants")
+        .select("config")
+        .eq("id", realId)
+        .maybeSingle();
+      if (remoteData?.config && typeof remoteData.config === "object") {
+        baseConfig = { ...baseConfig, ...remoteData.config };
+      }
+    } catch {}
+  }
+
+  const cleanConfig: TenantConfig = {
+    ...baseConfig,
+    ...config,
+  };
+
+  // 2. Actualizar caché local de inmediato para 0ms de respuesta y persistencia offline
+  if (typeof window !== "undefined") {
     if (cachedTenant) {
-      cachedTenant.config = { ...(cachedTenant.config || {}), ...cleanConfig };
+      cachedTenant.config = cleanConfig;
       localStorage.setItem(cacheKey, JSON.stringify(cachedTenant));
       if (cachedTenant.slug) {
         localStorage.setItem(
@@ -1720,45 +1806,74 @@ export async function saveTenantConfig(tenantId: string, config: TenantConfig) {
           JSON.stringify(cachedTenant),
         );
       }
-      const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
-      if (lastAuthStr) {
-        try {
-          const parsed = JSON.parse(lastAuthStr);
-          if (parsed?.tenant) {
-            parsed.tenant.config = { ...(parsed.tenant.config || {}), ...cleanConfig };
-            localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
-          }
-        } catch {}
+    }
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.tenant) {
+          parsed.tenant.config = cleanConfig;
+          localStorage.setItem("klynn_last_auth_user", JSON.stringify(parsed));
+        }
+      } catch {}
+    }
+  }
+
+  // 3. Persistir en Supabase de forma garantizada vía Server Function (service_role)
+  let savedViaServer = false;
+  try {
+    const res = await saveTenantConfigServer({ data: { tenantId: realId, config: cleanConfig } });
+    if (res?.ok) {
+      savedViaServer = true;
+    }
+  } catch (serverErr) {
+    console.warn("Aviso: server function saveTenantConfigServer no disponible:", serverErr);
+  }
+
+  // Si falló la Server Function o estamos en cliente directo, intentar cliente Supabase
+  if (!savedViaServer) {
+    try {
+      const { error } = await supabase.from("tenants").update({ config: cleanConfig }).eq("id", realId);
+      if (error) {
+        console.error("[saveTenantConfig] Error en update directo:", error);
+        throw error;
+      }
+    } catch (err) {
+      await offlineDB.addToOutbox({
+        id: realId,
+        tenant_id: realId,
+        table_name: "tenants",
+        action: "UPDATE",
+        payload: { config: cleanConfig },
+      });
+      if (typeof window !== "undefined") {
+        window.dispatchEvent(new CustomEvent("klynn-offline-save"));
       }
     }
   }
 
-  // 2. Si estamos sin conexión, agregar a Outbox
-  if (typeof window !== "undefined" && !navigator.onLine) {
-    await offlineDB.addToOutbox({
-      id: realId,
-      tenant_id: realId,
-      table_name: "tenants",
-      action: "UPDATE",
-      payload: { config: cleanConfig },
-    });
-    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
-    return;
-  }
-
-  // 3. Intentar guardar en Supabase
-  try {
-    const { error } = await supabase.from("tenants").update({ config: cleanConfig }).eq("id", realId);
-    if (error) throw error;
-  } catch (err) {
-    await offlineDB.addToOutbox({
-      id: realId,
-      tenant_id: realId,
-      table_name: "tenants",
-      action: "UPDATE",
-      payload: { config: cleanConfig },
-    });
-    window.dispatchEvent(new CustomEvent("klynn-offline-save"));
+  // 4. Sincronizar también con la tabla dedicada 'horarios_laborales_sucursal'
+  if (
+    config.control_horario_activo !== undefined ||
+    config.horario_apertura !== undefined ||
+    config.horario_cierre !== undefined ||
+    config.dias_laborables !== undefined
+  ) {
+    try {
+      await supabase.from("horarios_laborales_sucursal").upsert(
+        {
+          tenant_id: realId,
+          activo: cleanConfig.control_horario_activo || false,
+          horario_apertura: cleanConfig.horario_apertura || "08:00:00",
+          horario_cierre: cleanConfig.horario_cierre || "19:30:00",
+          dias_laborables: cleanConfig.dias_laborables || [1, 2, 3, 4, 5, 6],
+          actualizado_en: new Date().toISOString(),
+        },
+        { onConflict: "tenant_id" }
+      );
+    } catch (e) {
+      console.warn("Aviso: no se pudo sincronizar horarios_laborales_sucursal:", e);
+    }
   }
 
   if (typeof window !== "undefined") {
@@ -2200,6 +2315,19 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
           localStorage.setItem(`klynn_tenant_cache_${data.slug}`, JSON.stringify(data));
       }
       return data;
+    }
+  } catch (e) {}
+
+  // Fallback a Server Function nativa (service_role garantizado sin RLS)
+  try {
+    const serverTenant = await getTenantByIdServer({ data: { tenantId: id } });
+    if (serverTenant) {
+      if (typeof window !== "undefined") {
+        localStorage.setItem(cacheKey, JSON.stringify(serverTenant));
+        if (serverTenant.slug)
+          localStorage.setItem(`klynn_tenant_cache_${serverTenant.slug}`, JSON.stringify(serverTenant));
+      }
+      return serverTenant as Tenant;
     }
   } catch (e) {}
 
@@ -3281,6 +3409,15 @@ export async function getClientes(tenant_id: string): Promise<Cliente[]> {
     console.warn("Aviso al consultar clientes en Supabase:", e);
   }
 
+  try {
+    const idbClientes = await offlineDB.getAll<Cliente>("clientes", realId);
+    if (idbClientes && idbClientes.length > 0) {
+      return idbClientes.filter(
+        (c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId),
+      );
+    }
+  } catch {}
+
   return read<Cliente[]>(KEY.clientes, []).filter(
     (c) => isSameTenant(c.tenant_id, tenant_id) || isSameTenant(c.tenant_id, realId),
   );
@@ -3467,8 +3604,10 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
       } catch {}
 
       const combined = [...allData, ...pendingLocal];
-      const sorted = combined.sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
-      write(KEY.ordenes, [...otherTenants, ...sorted]);
+      // Guardar en localStorage solo las órdenes recientes por sucursal para inicio instantáneo
+      // El historial completo (1,500+ órdenes) se persiste en IndexedDB sin riesgo de agotar la cuota de 5MB
+      const recentForLocalStorage = sorted.slice(0, 50);
+      write(KEY.ordenes, [...otherTenants, ...recentForLocalStorage]);
       try {
         const existingIdb = await offlineDB.getAll<Orden>("ordenes", realId);
         const activeIds = new Set(sorted.map((o) => o.id));
@@ -3485,6 +3624,16 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
   } catch (e) {
     // Fallback silencioso a almacenamiento local e IndexedDB
   }
+
+  // Priorizar IndexedDB en fallback, ya que contiene el historial completo sin límite de cuota
+  try {
+    const idb = await offlineDB.getAll<Orden>("ordenes", realId);
+    if (idb && idb.length > 0) {
+      return idb
+        .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
+        .sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
+    }
+  } catch {}
 
   const localFallback = read<Orden[]>(KEY.ordenes, [])
     .filter((o) => isSameTenant(o.tenant_id, tenant_id) || isSameTenant(o.tenant_id, realId))
@@ -4890,6 +5039,7 @@ export interface Session {
   empleado_id: string;
   tenant_id: string;
   iniciado_en: string;
+  session_token?: string;
   auth_verified_at?: string;
   offline_expires_at?: string;
 }
@@ -4977,6 +5127,350 @@ async function authenticateCachedEmployee(
   await offlineDB.put("auth_cache", matched);
   const { _offline_auth: _auth, ...employee } = matched;
   return { ok: true, empleado: employee };
+}
+
+// ============ Control de Terminales y Seguridad ============
+
+export function getTerminalToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem("klynn_terminal_token") || null;
+}
+
+export function setTerminalToken(token: string) {
+  if (typeof window !== "undefined") {
+    localStorage.setItem("klynn_terminal_token", token);
+  }
+}
+
+export function removeTerminalToken() {
+  if (typeof window !== "undefined") {
+    localStorage.removeItem("klynn_terminal_token");
+  }
+}
+
+export function isCurrentTerminalAuthorized(tenant?: Tenant | null): boolean {
+  if (!tenant) return true;
+  if (!tenant.config?.control_terminales_activo) return true;
+  const token = getTerminalToken();
+  if (!token) return false;
+  const termList = tenant.config?.terminales_autorizadas || [];
+  return termList.some((t) => t.token === token);
+}
+
+export async function authorizeCurrentTerminal(
+  tenantId: string,
+  nombre: string
+): Promise<{ ok: boolean; terminal?: TerminalAutorizada; error?: string }> {
+  try {
+    const realId = resolveTenantId(tenantId);
+    const tenant = await getTenantById(realId);
+    if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
+    const token = `term_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const userAgent = typeof navigator !== "undefined" ? navigator.userAgent : "Navegador";
+    const terminalName = nombre.trim() || "Terminal de Caja";
+    const nowIso = new Date().toISOString();
+
+    const newTerminal: TerminalAutorizada = {
+      id: `term-${Date.now()}`,
+      nombre: terminalName,
+      token,
+      creado_en: nowIso,
+      ultimo_acceso: nowIso,
+      user_agent: userAgent,
+    };
+    const currentList = tenant.config?.terminales_autorizadas || [];
+    const updatedList = [...currentList, newTerminal];
+    await saveTenantConfig(realId, {
+      terminales_autorizadas: updatedList,
+    });
+
+    // Sincronizar en tabla dedicada public.terminales_autorizadas
+    try {
+      await supabase.from("terminales_autorizadas").insert({
+        tenant_id: realId,
+        nombre: terminalName,
+        token,
+        user_agent: userAgent,
+        creado_en: nowIso,
+        ultimo_acceso: nowIso,
+      });
+    } catch (dbErr) {
+      console.warn("Aviso al registrar en terminales_autorizadas:", dbErr);
+    }
+
+    setTerminalToken(token);
+    return { ok: true, terminal: newTerminal };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al autorizar terminal" };
+  }
+}
+
+export async function createTerminalPairingRequest(
+  slug: string,
+  nombreDispositivo?: string
+): Promise<{ ok: boolean; codigo?: string; temporalToken?: string; error?: string }> {
+  try {
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
+    const codigo = Math.floor(100000 + Math.random() * 900000).toString();
+    const temporalToken = `temp_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+    const now = Date.now();
+    const expiraEn = new Date(now + 15 * 60 * 1000).toISOString();
+    const deviceName =
+      nombreDispositivo ||
+      (typeof navigator !== "undefined"
+        ? navigator.userAgent.includes("Windows")
+          ? "PC Windows"
+          : navigator.userAgent.includes("Mac")
+          ? "Mac"
+          : "Terminal"
+        : "Terminal");
+
+    const newReq: SolicitudVinculacion = {
+      codigo,
+      temporal_token: temporalToken,
+      nombre_dispositivo: deviceName,
+      creado_en: new Date().toISOString(),
+      expira_en: expiraEn,
+      aprobada: false,
+    };
+    const validReqs = (tenant.config?.solicitudes_vinculacion || []).filter(
+      (r) => Date.parse(r.expira_en) > now
+    );
+    await saveTenantConfig(tenant.id, {
+      solicitudes_vinculacion: [...validReqs, newReq],
+    });
+
+    // Guardar también en tabla dedicada public.solicitudes_vinculacion_terminal
+    try {
+      await supabase.from("solicitudes_vinculacion_terminal").insert({
+        tenant_id: tenant.id,
+        codigo,
+        temporal_token: temporalToken,
+        nombre_dispositivo: deviceName,
+        aprobada: false,
+        expira_en: expiraEn,
+      });
+    } catch (dbErr) {
+      console.warn("Aviso al registrar en solicitudes_vinculacion_terminal:", dbErr);
+    }
+
+    return { ok: true, codigo, temporalToken };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al crear solicitud de enlace" };
+  }
+}
+
+export async function approveTerminalPairingRequest(
+  tenantId: string,
+  codigo: string,
+  nombre?: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const realId = resolveTenantId(tenantId);
+    const cleanCode = codigo.replace(/\D/g, "");
+    const tenant = await getTenantById(realId);
+    if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
+
+    let target = (tenant.config?.solicitudes_vinculacion || []).find(
+      (r) => r.codigo === cleanCode && Date.parse(r.expira_en) > Date.now()
+    );
+
+    // Si no está en config local, buscar en la tabla de Supabase
+    if (!target) {
+      try {
+        const { data: dbReq } = await supabase
+          .from("solicitudes_vinculacion_terminal")
+          .select("*")
+          .eq("tenant_id", realId)
+          .eq("codigo", cleanCode)
+          .gt("expira_en", new Date().toISOString())
+          .order("creado_en", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (dbReq) {
+          target = {
+            codigo: dbReq.codigo,
+            temporal_token: dbReq.temporal_token,
+            nombre_dispositivo: dbReq.nombre_dispositivo,
+            creado_en: dbReq.creado_en,
+            expira_en: dbReq.expira_en,
+            aprobada: dbReq.aprobada,
+          };
+        }
+      } catch {}
+    }
+
+    if (!target) {
+      return { ok: false, error: "Código inválido o expirado. Genera uno nuevo en la pantalla de la terminal." };
+    }
+
+    const termName = (nombre && nombre.trim()) ? nombre.trim() : (target.nombre_dispositivo || "Terminal Vinculada");
+    const nowIso = new Date().toISOString();
+
+    const newTerminal: TerminalAutorizada = {
+      id: `term-${Date.now()}`,
+      nombre: termName,
+      token: target.temporal_token,
+      creado_en: nowIso,
+      ultimo_acceso: nowIso,
+    };
+    const currentList = tenant.config?.terminales_autorizadas || [];
+    const updatedList = [...currentList, newTerminal];
+    const updatedReqs = (tenant.config?.solicitudes_vinculacion || []).map((r) =>
+      r.codigo === cleanCode ? { ...r, aprobada: true } : r
+    );
+    await saveTenantConfig(realId, {
+      terminales_autorizadas: updatedList,
+      solicitudes_vinculacion: updatedReqs,
+    });
+
+    // Guardar en tabla terminales_autorizadas y actualizar solicitudes_vinculacion_terminal
+    try {
+      await supabase.from("terminales_autorizadas").insert({
+        tenant_id: realId,
+        nombre: termName,
+        token: target.temporal_token,
+        creado_en: nowIso,
+        ultimo_acceso: nowIso,
+      });
+
+      await supabase
+        .from("solicitudes_vinculacion_terminal")
+        .update({ aprobada: true })
+        .eq("tenant_id", realId)
+        .eq("codigo", cleanCode);
+    } catch (dbErr) {
+      console.warn("Aviso al sincronizar tablas de vinculación:", dbErr);
+    }
+
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al aprobar vinculación" };
+  }
+}
+
+export async function checkTerminalPairingStatus(
+  slug: string,
+  codigo: string,
+  temporalToken: string
+): Promise<{ aprobada: boolean }> {
+  try {
+    const cleanCode = codigo.replace(/\D/g, "");
+
+    // 1. Revisar si ya fue registrada en la tabla de Supabase
+    try {
+      const { data: dbTerm } = await supabase
+        .from("terminales_autorizadas")
+        .select("token")
+        .eq("token", temporalToken)
+        .maybeSingle();
+
+      if (dbTerm) {
+        setTerminalToken(temporalToken);
+        return { aprobada: true };
+      }
+
+      const { data: dbReq } = await supabase
+        .from("solicitudes_vinculacion_terminal")
+        .select("aprobada")
+        .eq("codigo", cleanCode)
+        .eq("temporal_token", temporalToken)
+        .maybeSingle();
+
+      if (dbReq?.aprobada) {
+        setTerminalToken(temporalToken);
+        return { aprobada: true };
+      }
+    } catch {}
+
+    // 2. Revisar configuración de tenant
+    const tenant = await getTenantBySlug(slug);
+    if (!tenant) return { aprobada: false };
+    const isAuthorized = (tenant.config?.terminales_autorizadas || []).some(
+      (t) => t.token === temporalToken
+    );
+    if (isAuthorized) {
+      setTerminalToken(temporalToken);
+      return { aprobada: true };
+    }
+    const req = (tenant.config?.solicitudes_vinculacion || []).find(
+      (r) => r.codigo === cleanCode && r.temporal_token === temporalToken
+    );
+    if (req?.aprobada) {
+      setTerminalToken(temporalToken);
+      return { aprobada: true };
+    }
+    return { aprobada: false };
+  } catch {
+    return { aprobada: false };
+  }
+}
+
+export async function revokeTerminal(
+  tenantId: string,
+  terminalId: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const realId = resolveTenantId(tenantId);
+    const tenant = await getTenantById(realId);
+    if (!tenant) return { ok: false, error: "Lavandería no encontrada" };
+    const currentList = tenant.config?.terminales_autorizadas || [];
+    const targetTerm = currentList.find((t) => t.id === terminalId);
+    const updatedList = currentList.filter((t) => t.id !== terminalId);
+    await saveTenantConfig(realId, {
+      terminales_autorizadas: updatedList,
+    });
+
+    if (targetTerm?.token) {
+      try {
+        await supabase
+          .from("terminales_autorizadas")
+          .delete()
+          .eq("tenant_id", realId)
+          .eq("token", targetTerm.token);
+      } catch (dbErr) {
+        console.warn("Aviso al eliminar de terminales_autorizadas:", dbErr);
+      }
+    }
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, error: err?.message || "Error al desvincular terminal" };
+  }
+}
+
+export function isWithinWorkingHours(config?: TenantConfig): { permitida: boolean; mensaje?: string } {
+  if (!config || !config.control_horario_activo) return { permitida: true };
+  const now = new Date();
+  const currentDay = now.getDay(); // 0=Dom, 1=Lun, ..., 6=Sáb
+  const dias = config.dias_laborables || [1, 2, 3, 4, 5, 6];
+  if (!dias.includes(currentDay)) {
+    const diasNombre = ["Domingo", "Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado"];
+    return {
+      permitida: false,
+      mensaje: `Hoy ${diasNombre[currentDay]} la sucursal permanece cerrada. El acceso a empleados está inhabilitado.`,
+    };
+  }
+
+  const apertura = config.horario_apertura || "08:00";
+  const cierre = config.horario_cierre || "19:30";
+
+  const [hA, mA] = apertura.split(":").map(Number);
+  const [hC, mC] = cierre.split(":").map(Number);
+
+  const minutosActual = now.getHours() * 60 + now.getMinutes();
+  const minutosApertura = hA * 60 + mA;
+  const minutosCierre = hC * 60 + mC;
+
+  if (minutosActual < minutosApertura || minutosActual > minutosCierre) {
+    return {
+      permitida: false,
+      mensaje: `Acceso restringido: Fuera del horario operativo de la sucursal (${apertura} a ${cierre}).`,
+    };
+  }
+
+  return { permitida: true };
 }
 
 export async function login(
@@ -5095,15 +5589,67 @@ export async function login(
       return { ok: false, error: "Acceso denegado para esta sucursal" };
     }
 
+    // 5. Políticas de Seguridad (Solo aplican para empleados no administradores)
+    // El rol ADMIN y SuperAdmin siempre tienen acceso 24/7 sin restricción de hardware u horario
+    if (emp.rol !== "ADMIN") {
+      // A. Control de Horario Operativo
+      const checkHorario = isWithinWorkingHours(tenant.config);
+      if (!checkHorario.permitida) {
+        await supabase.auth.signOut();
+        return {
+          ok: false,
+          error: checkHorario.mensaje || "Acceso fuera de horario laboral no permitido.",
+        };
+      }
+
+      // B. Control de Terminal Autorizada (Hardware Pinning)
+      if (tenant.config?.control_terminales_activo) {
+        let isAuth = isCurrentTerminalAuthorized(tenant);
+        if (!isAuth) {
+          const token = getTerminalToken();
+          if (token) {
+            try {
+              const { data: dbTerm } = await supabase
+                .from("terminales_autorizadas")
+                .select("id")
+                .eq("tenant_id", tenant.id)
+                .eq("token", token)
+                .maybeSingle();
+              if (dbTerm) isAuth = true;
+            } catch {}
+          }
+        }
+        if (!isAuth) {
+          await supabase.auth.signOut();
+          return {
+            ok: false,
+            error: "Dispositivo no autorizado. Solo puedes ingresar desde las terminales de caja vinculadas de la lavandería.",
+          };
+        }
+      }
+    }
+
     // Guardar en caché offline para permitir acceso futuro si se va la luz/red
     try {
       await cacheEmployeeForOffline(emp, password);
     } catch {}
 
+    // C. Control de Sesión Única para Empleados
+    let sessionToken: string | undefined;
+    if (emp.rol !== "ADMIN" && tenant.config?.impedir_sesiones_simultaneas) {
+      sessionToken = `sess_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const activeSessions = {
+        ...(tenant.config?.active_employee_sessions || {}),
+        [emp.id]: sessionToken,
+      };
+      saveTenantConfig(tenant.id, { active_employee_sessions: activeSessions }).catch(() => {});
+    }
+
     setSession({
       empleado_id: emp.id,
       tenant_id: tenant.id,
       iniciado_en: new Date().toISOString(),
+      session_token: sessionToken,
     });
     setActiveTenant(slug);
     return { ok: true, empleado: emp, tenant };
@@ -5197,6 +5743,41 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
   // 1. Si estamos sin conexión, recuperar la sesión estrictamente desde sesión activa verificada
   if (typeof window !== "undefined" && !navigator.onLine) {
     if (session?.empleado_id && session?.tenant_id) {
+      if (session.empleado_id === "admin") {
+        if (session.tenant_id === "admin") {
+          const empAdmin = {
+            id: "admin",
+            tenant_id: "admin",
+            nombre: "Super Admin",
+            email: "admin@klynn.com.do",
+            rol: "ADMIN",
+            activo: true,
+            permisos: PERMISOS_SISTEMA.map((p) => p.id),
+            creado_en: new Date().toISOString(),
+          } as any;
+          const tenAdmin = { id: "admin", nombre: "Administración Global", slug: "admin" } as any;
+          cacheUserResult(empAdmin, tenAdmin);
+          return { empleado: empAdmin, tenant: tenAdmin };
+        } else {
+          const ten = await getTenantById(session.tenant_id);
+          if (ten) {
+            const emp: Empleado = {
+              id: "admin",
+              tenant_id: ten.id,
+              nombre: "Super Admin",
+              email: "admin@klynn.com.do",
+              password: "***",
+              rol: "ADMIN",
+              activo: true,
+              permisos: PERMISOS_SISTEMA.map((p) => p.id),
+              creado_en: new Date().toISOString(),
+            };
+            cacheUserResult(emp, ten);
+            return { empleado: emp, tenant: ten };
+          }
+        }
+      }
+
       const emp = await getEmpleadoById(session.empleado_id);
       const ten = await getTenantById(session.tenant_id);
       if (emp && ten && emp.activo && isSameTenant(emp.tenant_id, ten.id)) {
@@ -5220,24 +5801,44 @@ export async function getCurrentUser(): Promise<{ empleado: Empleado; tenant: Te
     console.warn("Aviso al verificar usuario en Supabase Auth:", e);
   }
 
-  // 3. Si no hay usuario autenticado devuelto directamente por Supabase Auth (ej. token en renovación)
+  // 3. Si no hay usuario autenticado devuelto directamente por Supabase Auth (ej. token en renovación o modo impersonate)
   if (!user) {
     // Si tenemos una sesión local previa activa, recuperar el empleado y tenant sin cerrar la sesión
     if (session?.empleado_id && session?.tenant_id) {
-      if (session.empleado_id === "admin" && session.tenant_id === "admin") {
-        const empAdmin = {
-          id: "admin",
-          tenant_id: "admin",
-          nombre: "Super Admin",
-          email: "admin@klynn.com.do",
-          rol: "ADMIN",
-          activo: true,
-          permisos: PERMISOS_SISTEMA.map((p) => p.id),
-          creado_en: new Date().toISOString(),
-        } as any;
-        const tenAdmin = { id: "admin", nombre: "Administración Global", slug: "admin" } as any;
-        cacheUserResult(empAdmin, tenAdmin);
-        return { empleado: empAdmin, tenant: tenAdmin };
+      if (session.empleado_id === "admin") {
+        if (session.tenant_id === "admin") {
+          const empAdmin = {
+            id: "admin",
+            tenant_id: "admin",
+            nombre: "Super Admin",
+            email: "admin@klynn.com.do",
+            rol: "ADMIN",
+            activo: true,
+            permisos: PERMISOS_SISTEMA.map((p) => p.id),
+            creado_en: new Date().toISOString(),
+          } as any;
+          const tenAdmin = { id: "admin", nombre: "Administración Global", slug: "admin" } as any;
+          cacheUserResult(empAdmin, tenAdmin);
+          return { empleado: empAdmin, tenant: tenAdmin };
+        } else {
+          // Super Admin impersonando una sucursal específica
+          const ten = await getTenantById(session.tenant_id);
+          if (ten) {
+            const emp: Empleado = {
+              id: "admin",
+              tenant_id: ten.id,
+              nombre: "Super Admin",
+              email: "admin@klynn.com.do",
+              password: "***",
+              rol: "ADMIN",
+              activo: true,
+              permisos: PERMISOS_SISTEMA.map((p) => p.id),
+              creado_en: new Date().toISOString(),
+            };
+            cacheUserResult(emp, ten);
+            return { empleado: emp, tenant: ten };
+          }
+        }
       }
 
       const emp = await getEmpleadoById(session.empleado_id);
