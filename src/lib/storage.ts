@@ -3604,6 +3604,7 @@ export async function getOrdenes(tenant_id: string): Promise<Orden[]> {
       } catch {}
 
       const combined = [...allData, ...pendingLocal];
+      const sorted = [...combined].sort((a, b) => +new Date(b.creado_en) - +new Date(a.creado_en));
       // Guardar en localStorage solo las órdenes recientes por sucursal para inicio instantáneo
       // El historial completo (1,500+ órdenes) se persiste en IndexedDB sin riesgo de agotar la cuota de 5MB
       const recentForLocalStorage = sorted.slice(0, 50);

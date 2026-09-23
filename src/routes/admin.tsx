@@ -31,6 +31,7 @@ import {
   deleteTenant,
   getPlans,
   getOrdenes,
+  isSameTenant,
   formatRD,
   setActiveTenant,
   setSession,
