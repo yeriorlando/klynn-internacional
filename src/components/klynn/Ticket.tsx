@@ -1,5 +1,6 @@
 import type { Orden, Tenant, Empleado, Cliente, Servicio } from "@/lib/storage";
 import { formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled } from "@/lib/storage";
+import { formatEcfStatus } from "@/lib/fiscal";
 import { QRCodeSVG } from "qrcode.react";
 import {
   ClipboardList,
@@ -1013,7 +1014,7 @@ export function Ticket({
             {fiscalSignatureDate && fiscalSignatureDate !== "null" && (
               <div>Fecha Firma: <span className="font-semibold">{formatDateTimeRD(fiscalSignatureDate)}</span></div>
             )}
-            {ecfStatus && <div>Estado DGII: <span className="font-black">{ecfStatus}</span></div>}
+            {ecfStatus && <div>Estado DGII: <span className="font-black">{formatEcfStatus(ecfStatus)}</span></div>}
           </div>
           <div className="text-[9px] text-center leading-tight font-bold text-black mt-1">
             Consulte su factura en:<br/>

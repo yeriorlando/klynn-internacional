@@ -133,6 +133,7 @@ const PERMISOS_CONFIG: Record<string, { icon: any; color: string; bg: string; bo
   "nota-credito": { icon: FileMinus, color: "text-cyan-600 dark:text-cyan-400", bg: "bg-cyan-50 dark:bg-cyan-950/60", border: "border-cyan-200 dark:border-cyan-800" },
   "nota-debito": { icon: FilePlus, color: "text-violet-600 dark:text-violet-400", bg: "bg-violet-50 dark:bg-violet-950/60", border: "border-violet-200 dark:border-violet-800" },
   "autorizar-credito": { icon: CreditCard, color: "text-amber-600 dark:text-amber-400", bg: "bg-amber-50 dark:bg-amber-950/60", border: "border-amber-200 dark:border-amber-800" },
+  "editar-orden": { icon: Pencil, color: "text-[#1B4B73] dark:text-sky-400", bg: "bg-blue-50 dark:bg-blue-950/60", border: "border-[#1B4B73]/30 dark:border-blue-800" },
 };
 
 function getRoleBadgeClass(rol: RolEmpleado) {

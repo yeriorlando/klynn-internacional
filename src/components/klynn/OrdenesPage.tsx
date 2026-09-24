@@ -35,7 +35,8 @@ import {
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveECFDocument, IS_LOCAL_MODE,
   updateOrdenEstado, can
 } from "@/lib/storage";
-import { emitirECF, getECFConfig, isECFReady } from "@/lib/fiscal";
+import { emitirECF, getECFConfig, isECFReady, formatEcfStatus } from "@/lib/fiscal";
+import { showDGIIToast } from "@/components/klynn/DGIIToast";
 import { toast } from "sonner";
 import { AlertTriangle, Rocket, Building2, Zap, Calendar, CalendarDays, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
 import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
@@ -52,6 +53,13 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useSearch, useNavigate } from "@tanstack/react-router";
 import { encodeEscPos, encodeMarquillasEscPos, printBrowserElementsIndividually, printDirectRaw } from "@/lib/impresora";
 import { UbicacionSelectorDialog } from "@/components/klynn/UbicacionSelectorDialog";
+import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
+import { Pencil } from "lucide-react";
+
+function orderEditLabel(orden: Orden): string {
+  return ["RECIBIDA", "EN_PROCESO", "LISTA"].includes(orden.estado) && !orden.ncf && !orden.ecf_id && !orden.ecf_status
+    ? "Editar orden" : "Historial de edición";
+}
 
 export type PeriodoCreacion = 
   | "todas"
@@ -270,12 +278,13 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
   const [tempDesde, setTempDesde] = useState<string>("");
   const [tempHasta, setTempHasta] = useState<string>("");
   const [filtroEntrega, setFiltroEntrega] = useState<"todas" | "hoy" | "atrasadas" | "sin_retirar">("todas");
-  const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar">("todas");
+  const [filtroUrgencia, setFiltroUrgencia] = useState<"todas" | "urgente" | "estandar" | "pagadas" | "pendientes_pago">("todas");
   const [filtroPago, setFiltroPago] = useState<"todas" | MetodoPago>("todas");
   const [filtroUbicacion, setFiltroUbicacion] = useState<string>("todas");
   const [editingUbicacionOrden, setEditingUbicacionOrden] = useState<Orden | null>(null);
   const [editingUbicacionValue, setEditingUbicacionValue] = useState<string>("");
   const [view, setView] = useState<Orden | null>(null);
+  const [editOrder, setEditOrder] = useState<Orden | null>(null);
   const [anular, setAnular] = useState<Orden | null>(null);
   const [motivoAnular, setMotivoAnular] = useState("");
   const [codigoAnular, setCodigoAnular] = useState("01");
@@ -504,9 +513,17 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
         if (o.estado !== "LISTA" || diasAlmacen < minDias) return false;
       }
 
-      // Filtro de urgencia
+      // Filtro de urgencia / estado de pago
       if (filtroUrgencia === "urgente" && !o.es_urgente) return false;
       if (filtroUrgencia === "estandar" && o.es_urgente) return false;
+      if (filtroUrgencia === "pagadas") {
+        if (Number(o.saldo || 0) > 0) return false;
+        if (filtroEstado !== "ANULADA" && o.estado === "ANULADA") return false;
+      }
+      if (filtroUrgencia === "pendientes_pago") {
+        if (Number(o.saldo || 0) <= 0) return false;
+        if (o.estado === "ANULADA") return false;
+      }
 
       // Filtro de pago
       if (filtroPago !== "todas" && o.metodo_pago !== filtroPago) return false;
@@ -1436,7 +1453,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                     if (periodoCreacion !== "todas") partes.push(`Período: ${getPeriodoLabel(periodoCreacion, customFechaDesde, customFechaHasta)}`);
                     if (filtroEstado !== "todos") partes.push(`Estado: ${filtroEstado}`);
                     if (filtroEntrega !== "todas") partes.push(`Entrega: ${filtroEntrega}`);
-                    if (filtroUrgencia !== "todas") partes.push(`Prioridad: ${filtroUrgencia}`);
+                    if (filtroUrgencia !== "todas") {
+                      const urgLabel =
+                        filtroUrgencia === "urgente" ? "Urgentes" :
+                        filtroUrgencia === "estandar" ? "Estándar" :
+                        filtroUrgencia === "pagadas" ? "Ya pagadas" :
+                        filtroUrgencia === "pendientes_pago" ? "Pendientes de pago" : filtroUrgencia;
+                      partes.push(`Prioridad: ${urgLabel}`);
+                    }
                     if (filtroPago !== "todas") partes.push(`Pago: ${filtroPago}`);
                     if (q.trim()) partes.push(`Búsqueda: "${q}"`);
                     if (partes.length > 0) filtroActivoDesc = partes.join(" | ");
@@ -1667,14 +1691,22 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
           </SelectContent>
         </Select>
         <Select value={filtroUrgencia} onValueChange={(v: any) => setFiltroUrgencia(v)}>
-          <SelectTrigger className="w-[140px] font-semibold text-xs shrink-0">
-            <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+          <SelectTrigger className="w-[170px] font-semibold text-xs shrink-0">
+            {filtroUrgencia === "pagadas" ? (
+              <CheckCircle2 className="h-4 w-4 text-emerald-500 shrink-0 mr-1.5" />
+            ) : filtroUrgencia === "pendientes_pago" ? (
+              <Clock className="h-4 w-4 text-rose-500 shrink-0 mr-1.5" />
+            ) : (
+              <Zap className="h-4 w-4 text-amber-500 shrink-0 mr-1.5" />
+            )}
             <SelectValue />
           </SelectTrigger>
-          <SelectContent>
+          <SelectContent className="min-w-[195px]">
             <SelectItem value="todas">Prioridades</SelectItem>
             <SelectItem value="urgente">Urgentes</SelectItem>
             <SelectItem value="estandar">Estándar</SelectItem>
+            <SelectItem value="pagadas">Ya pagadas</SelectItem>
+            <SelectItem value="pendientes_pago">Pendientes de pago</SelectItem>
           </SelectContent>
         </Select>
         <Select value={filtroPago} onValueChange={(v: any) => setFiltroPago(v)}>
@@ -2042,6 +2074,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                 <Eye className="h-4 w-4 text-muted-foreground shrink-0" />
                                 <span>Ver Detalles</span>
                               </DropdownMenuItem>
+                              {emp && can(emp, "editar-orden") && (
+                                <DropdownMenuItem onClick={() => setEditOrder(o)} className="gap-2.5 rounded-xl px-3 py-2 text-xs font-semibold cursor-pointer">
+                                  <Pencil className="h-4 w-4" />
+                                  {orderEditLabel(o)}
+                                </DropdownMenuItem>
+                              )}
 
                               {o.estado === "LISTA" && (
                                 <DropdownMenuItem
@@ -2189,7 +2227,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                                         await queryClient.invalidateQueries({ queryKey: ["ordenes", tenantId] });
                                         await queryClient.refetchQueries({ queryKey: ["ordenes", tenantId] });
                                         if (accepted) {
-                                          toast.success(`Comprobante ${res.encf} emitido y aceptado por DGII ✓`);
+                                          showDGIIToast(res.encf);
                                         } else {
                                           const rawDgii = res.document?.dgii_response as any;
                                           const dgiiMensaje =
@@ -2319,8 +2357,38 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
       </Card>
 
       {/* Vista detalle */}
+      {editOrder && <EditOrderDialog key={editOrder.id} orden={editOrder} clientes={clientes} servicios={servicios} empleados={empleados} ubicacionEnabled={isConveyorEnabled} tenant={tenant}
+        onClose={() => setEditOrder(null)}
+        onSaved={async (updated) => {
+          setEditOrder(null);
+          setView(updated);
+          // 1. Actualizar React Query en memoria inmediatamente para ver los cambios sin recargar
+          queryClient.setQueryData<Orden[]>(['ordenes', tenantId], (current) =>
+            current ? current.map((o) => (o.id === updated.id ? updated : o)) : [updated]
+          );
+          queryClient.setQueriesData({ queryKey: ['ordenes'] }, (old: Orden[] | undefined) =>
+            old ? old.map((o) => (o.id === updated.id ? updated : o)) : old
+          );
+          // 2. Persistir de inmediato en IndexedDB y LocalStorage
+          try {
+            await offlineDB.put("ordenes", updated);
+            const local = read<Orden[]>(KEY.ordenes, []);
+            const idx = local.findIndex((x) => x.id === updated.id);
+            if (idx >= 0) local[idx] = updated;
+            else local.push(updated);
+            write(KEY.ordenes, local);
+          } catch (e) {
+            console.warn("Storage sync warning on order edit:", e);
+          }
+          // 3. Forzar refetch de todas las listas
+          void queryClient.invalidateQueries({ queryKey: ['ordenes'] });
+          void queryClient.refetchQueries({ queryKey: ['ordenes'] });
+          toast.success("Orden actualizada. El cambio quedó registrado en el historial.", {
+            action: { label: "Imprimir ticket", onClick: () => setShowPrint(updated) },
+          });
+        }} />}
       <Dialog open={!!view} onOpenChange={(o) => !o && setView(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden rounded-3xl p-5">
+        <DialogContent className="max-w-3xl max-h-[84vh] overflow-hidden rounded-3xl p-4 sm:p-5">
           {view && (
             <OrderDetail 
               view={view} 
@@ -2330,6 +2398,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               cambiarEstado={cambiarEstado} 
               setView={setView} 
               onPrint={() => setShowPrint(view)}
+              onEdit={emp && can(emp, "editar-orden") ? () => { setEditOrder(view); setView(null); } : undefined}
               onPrintProduccion={isTallerEnabled ? () => setShowPrintProduccion(view) : undefined}
               onPrintMarquillas={isMarquillasEnabled ? () => setShowPrintMarquillas(view) : undefined}
               setCobrarOrden={setCobrarOrden}
@@ -2850,7 +2919,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       {/* Modal de Rango de Fechas Personalizado */}
       <Dialog open={showCustomDateModal} onOpenChange={setShowCustomDateModal}>
-        <DialogContent className="max-w-md rounded-2xl p-6 shadow-2xl">
+        <DialogContent className="max-w-md rounded-3xl p-6 shadow-2xl bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
           <DialogHeader>
             <div className="flex items-center gap-2.5 mb-1">
               <div className="p-2 rounded-xl bg-primary/10 text-primary">
@@ -2871,12 +2940,12 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               <span className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground block mb-2">
                 Accesos rápidos
               </span>
-              <div className="grid grid-cols-3 gap-1.5">
+              <div className="grid grid-cols-3 gap-2">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
                   onClick={() => {
                     const todayStr = formatLocalDateToInput(new Date());
                     setTempDesde(todayStr);
@@ -2889,7 +2958,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
                   onClick={() => {
                     const ayer = new Date();
                     ayer.setDate(ayer.getDate() - 1);
@@ -2904,7 +2973,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
                   onClick={() => {
                     const hoy = new Date();
                     const d = new Date();
@@ -2919,7 +2988,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
                   onClick={() => {
                     const hoy = new Date();
                     const d = new Date();
@@ -2934,7 +3003,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
                   onClick={() => {
                     const hoy = new Date();
                     const d = new Date();
@@ -2949,7 +3018,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="text-xs h-8 font-semibold rounded-lg hover:bg-primary/10 hover:text-primary hover:border-primary/40"
+                  className="text-xs h-9 font-semibold rounded-xl bg-white dark:bg-slate-800 border border-slate-200/90 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750 hover:border-primary/50 hover:text-primary transition-all active:scale-[0.98] cursor-pointer"
                   onClick={() => {
                     const hoy = new Date();
                     const primerDia = new Date(hoy.getFullYear(), hoy.getMonth(), 1);
@@ -2972,7 +3041,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="date"
                   value={tempDesde}
                   onChange={(e) => setTempDesde(e.target.value)}
-                  className="h-9 text-xs rounded-xl font-medium"
+                  className="h-9 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
                 />
               </div>
               <div className="space-y-1.5">
@@ -2983,7 +3052,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
                   type="date"
                   value={tempHasta}
                   onChange={(e) => setTempHasta(e.target.value)}
-                  className="h-9 text-xs rounded-xl font-medium"
+                  className="h-9 text-xs rounded-xl font-medium bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 shadow-xs"
                 />
               </div>
             </div>
@@ -3009,7 +3078,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               variant="outline"
               size="sm"
               onClick={() => setShowCustomDateModal(false)}
-              className="text-xs font-semibold rounded-xl"
+              className="text-xs font-semibold rounded-xl bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 shadow-xs hover:bg-slate-50 dark:hover:bg-slate-750"
             >
               Cancelar
             </Button>
@@ -3362,6 +3431,7 @@ export function OrderDetail({
   cambiarEstado, 
   setView, 
   onPrint, 
+  onEdit,
   onPrintProduccion,
   onPrintMarquillas,
   setCobrarOrden,
@@ -3375,6 +3445,7 @@ export function OrderDetail({
   cambiarEstado: any; 
   setView: any; 
   onPrint: () => void; 
+  onEdit?: () => void;
   onPrintProduccion?: () => void;
   onPrintMarquillas?: () => void;
   setCobrarOrden: any;
@@ -3417,7 +3488,7 @@ export function OrderDetail({
               className="group relative inline-flex items-center gap-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-100/90 dark:bg-slate-800/90 hover:bg-slate-200 dark:hover:bg-slate-700/90 text-slate-800 dark:text-slate-100 shadow-xs transition-all duration-150 cursor-pointer active:scale-95 select-none"
             >
               <Receipt className="h-4 w-4 text-primary shrink-0" />
-              <span className="font-mono text-xs sm:text-sm font-bold tracking-tight text-slate-900 dark:text-slate-100">
+              <span className="font-sans text-xs sm:text-sm font-extrabold tracking-tight text-slate-900 dark:text-slate-100">
                 Orden {view.numero}
               </span>
               {copied ? (
@@ -3471,37 +3542,37 @@ export function OrderDetail({
         </div>
       </DialogHeader>
       
-      <div className="grid gap-6 md:grid-cols-2 items-start">
-        <div className="flex flex-col gap-4">
-          {/* List items layout con fuentes más grandes */}
+      <div className="grid gap-4 sm:gap-5 md:grid-cols-2 items-start">
+        <div className="flex flex-col gap-2 max-h-[calc(94vh-90px)] overflow-y-auto pr-1 custom-scrollbar">
+          {/* List items layout compactado */}
           <div className="flex flex-col">
-            <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-              <div className="flex items-center gap-3 text-slate-600">
-                <User className="h-5 w-5 text-primary" />
-                <span className="font-semibold text-sm">Cliente</span>
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <User className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm">Cliente</span>
               </div>
-              <div className="font-extrabold text-slate-900 text-[15px]">{c.nombre} {c.apellido || ""}</div>
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm truncate max-w-[200px]">{c.nombre} {c.apellido || ""}</div>
             </div>
 
             {c.telefono && c.telefono !== "---" && (
-              <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-                <div className="flex items-center gap-3 text-slate-600">
-                  <Phone className="h-5 w-5 text-primary" />
-                  <span className="font-semibold text-sm">Teléfono</span>
+              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                  <Phone className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold text-xs sm:text-sm">Teléfono</span>
                 </div>
-                <div className="font-extrabold text-slate-900 text-[15px]">{formatPhoneRD(c.telefono)}</div>
+                <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{formatPhoneRD(c.telefono)}</div>
               </div>
             )}
 
             {isConveyorEnabled && (
-              <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-                <div className="flex items-center gap-3 text-slate-600">
-                  <MapPin className="h-5 w-5 text-primary" />
-                  <span className="font-semibold text-sm">Ubicación / Conveyor</span>
+              <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+                <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                  <MapPin className="h-4 w-4 text-primary shrink-0" />
+                  <span className="font-semibold text-xs sm:text-sm">Ubicación / Conveyor</span>
                 </div>
                 <div className="flex items-center gap-2">
                   {view.ubicacion_ropa ? (
-                    <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 text-xs font-black px-2.5 py-0.5 shadow-2xs">
+                    <Badge className="bg-amber-500/15 text-amber-800 dark:text-amber-300 border-amber-300 dark:border-amber-700/60 text-xs font-black px-2 py-0.5 shadow-2xs">
                       📍 {view.ubicacion_ropa}
                     </Badge>
                   ) : (
@@ -3512,7 +3583,7 @@ export function OrderDetail({
                       type="button"
                       size="sm"
                       variant="outline"
-                      className="h-7 text-xs font-bold px-2.5 rounded-lg border-slate-200 hover:bg-slate-100 dark:border-slate-700 active:scale-95"
+                      className="h-6.5 text-[11px] font-bold px-2 rounded-lg border-slate-200 hover:bg-slate-100 dark:border-slate-700 active:scale-95"
                       onClick={() => {
                         setView(null);
                         onEditUbicacion(view);
@@ -3526,75 +3597,84 @@ export function OrderDetail({
             )}
 
             {(getNotaCreditoMonto(view) > 0 || getNotaDebitoMonto(view) > 0) && (
-              <div className="my-2 rounded-xl border border-amber-200 bg-amber-50/80 p-3 dark:border-amber-800 dark:bg-amber-950/30">
+              <div className="my-1.5 rounded-xl border border-amber-200 bg-amber-50/80 p-2.5 dark:border-amber-800 dark:bg-amber-950/30">
                 <div className="flex items-center justify-between text-xs text-slate-600 dark:text-slate-300">
                   <span>Total original</span>
                   <span className="font-semibold line-through">{formatRD(view.total)}</span>
                 </div>
                 {getNotaCreditoMonto(view) > 0 && (
-                  <div className="mt-1.5 flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
+                  <div className="mt-1 flex items-center justify-between text-xs font-bold text-amber-700 dark:text-amber-300">
                     <span className="inline-flex items-center gap-1"><ArrowDownCircle className="h-3.5 w-3.5" /> Nota de Crédito E34</span>
                     <span>−{formatRD(getNotaCreditoMonto(view))}</span>
                   </div>
                 )}
                 {getNotaDebitoMonto(view) > 0 && (
-                  <div className="mt-1.5 flex items-center justify-between text-xs font-bold text-blue-700 dark:text-blue-300">
+                  <div className="mt-1 flex items-center justify-between text-xs font-bold text-blue-700 dark:text-blue-300">
                     <span className="inline-flex items-center gap-1"><ArrowUpCircle className="h-3.5 w-3.5" /> Nota de Débito E33</span>
                     <span>+{formatRD(getNotaDebitoMonto(view))}</span>
                   </div>
                 )}
-                <div className="mt-2 flex items-center justify-between border-t border-amber-200 pt-2 font-extrabold text-slate-950 dark:border-amber-800 dark:text-white">
+                <div className="mt-1.5 flex items-center justify-between border-t border-amber-200 pt-1.5 font-extrabold text-slate-950 dark:border-amber-800 dark:text-white">
                   <span>Total neto</span>
                   <span>{formatRD(getTotalNetoOrden(view))}</span>
                 </div>
                 {view.nota_credito_ncf && (
-                  <div className="mt-1 text-right font-mono text-[10px] text-muted-foreground">{view.nota_credito_ncf}</div>
+                  <div className="mt-0.5 text-right font-mono text-[10px] text-muted-foreground">{view.nota_credito_ncf}</div>
                 )}
               </div>
             )}
 
-            <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-              <div className="flex items-center gap-3 text-slate-600">
-                <Wallet className="h-5 w-5 text-primary" />
-                <span className="font-semibold text-sm">{getNotaCreditoMonto(view) > 0 ? "Pagado originalmente" : "Pagado"}</span>
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <Wallet className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm">{getNotaCreditoMonto(view) > 0 ? "Pagado originalmente" : "Pagado"}</span>
               </div>
-              <div className="font-extrabold text-slate-900 text-[15px]">{formatRD(view.pagado)}</div>
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{formatRD(view.pagado)}</div>
             </div>
 
-            <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-              <div className="flex items-center gap-3 text-slate-600">
-                <Scale className="h-5 w-5 text-primary" />
-                <span className="font-semibold text-sm">Saldo</span>
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <Scale className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm">Saldo</span>
               </div>
-              <div className="font-extrabold text-amber-600 text-[15px]">{formatRD(view.saldo)}</div>
+              <div className="font-black text-amber-600 dark:text-amber-400 text-xs sm:text-sm">{formatRD(view.saldo)}</div>
             </div>
 
-            <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-              <div className="flex items-center gap-3 text-slate-600">
-                <UserCog className="h-5 w-5 text-primary" />
-                <span className="font-semibold text-sm">Atendido por</span>
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <UserCog className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm">Atendido por</span>
               </div>
-              <div className="font-extrabold text-slate-900 text-[15px]">{emp.nombre}</div>
+              <div className="font-bold text-slate-900 dark:text-slate-100 text-xs sm:text-sm">{emp.nombre}</div>
             </div>
 
-            <div className="flex items-center justify-between border-b-2 border-slate-200/70 dark:border-slate-800 py-2.5">
-              <div className="flex items-center gap-3 text-slate-600">
-                <Shirt className="h-5 w-5 text-primary" />
-                <span className="font-semibold text-sm">Total de prendas</span>
+            <div className="flex items-center justify-between border-b border-slate-200/80 dark:border-slate-800 py-1.5">
+              <div className="flex items-center gap-2 text-slate-600 dark:text-slate-300">
+                <Shirt className="h-4 w-4 text-primary shrink-0" />
+                <span className="font-semibold text-xs sm:text-sm">Total de prendas</span>
               </div>
-              <div className="font-extrabold text-slate-900 dark:text-slate-100 text-lg">
+              <div className="font-black text-slate-900 dark:text-slate-100 text-xs sm:text-sm">
                 {(view.items || []).filter(it => !it.descripcion.toLowerCase().startsWith("servicio:")).reduce((acc, it) => acc + it.cantidad, 0)}
               </div>
             </div>
           </div>
             
-          {view.motivo_anulacion && <div className="rounded-xl bg-destructive/10 p-3 text-destructive border border-destructive/20 text-sm mt-2"><strong>Motivo anulación:</strong> {view.motivo_anulacion}</div>}
+          {view.motivo_anulacion && <div className="rounded-xl bg-destructive/10 p-2.5 text-destructive border border-destructive/20 text-xs mt-1"><strong>Motivo anulación:</strong> {view.motivo_anulacion}</div>}
 
-
-
-          <div className="pt-2">
-            <div className="mb-3 text-center text-sm font-extrabold text-slate-900 uppercase tracking-wide">Cambiar estado</div>
-            <div className="grid grid-cols-4 gap-2">
+          <div className="pt-1">
+            {onEdit && (
+              <Button 
+                type="button" 
+                className="mb-2 w-full h-9 rounded-xl !bg-[#1B4B73] hover:!bg-[#133857] !text-white font-bold text-xs shadow-md transition-all active:scale-[0.99] cursor-pointer flex items-center justify-center gap-2 border-0"
+                style={{ backgroundColor: "#1B4B73", color: "#ffffff" }}
+                onClick={onEdit}
+              >
+                <Pencil className="h-3.5 w-3.5 text-white shrink-0" />
+                <span className="text-white font-bold tracking-wide">{orderEditLabel(view)}</span>
+              </Button>
+            )}
+            <div className="mb-1 text-center text-[10px] font-black text-slate-600 dark:text-slate-400 uppercase tracking-wider">Cambiar estado</div>
+            <div className="grid grid-cols-4 gap-1.5">
               {(["RECIBIDA", "EN_PROCESO", "LISTA", "ENTREGADA"] as EstadoOrden[]).map((s) => {
                 const isActive = view.estado === s;
                 let Icon = Inbox;
@@ -3607,7 +3687,7 @@ export function OrderDetail({
                     key={s} 
                     variant="outline" 
                     disabled={isActive || !esTransicionEstadoPermitida(view.estado, s, view.saldo, view.metodo_pago)}
-                    className={`h-11 flex-col gap-1 px-1 py-1.5 transition-all text-[9px] font-bold border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed ${
+                    className={`h-9 flex-col gap-0.5 px-1 py-1 transition-all text-[9px] font-bold border-slate-200 disabled:opacity-40 disabled:cursor-not-allowed rounded-xl ${
                       isActive 
                         ? 'bg-[#2E4A79] text-white border-transparent hover:bg-[#253d63]' 
                         : 'bg-white text-slate-600 hover:bg-slate-50'
@@ -3622,7 +3702,7 @@ export function OrderDetail({
                       }
                     }}
                   >
-                    <Icon className={`h-4 w-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
+                    <Icon className={`h-3.5 w-3.5 ${isActive ? 'text-white' : 'text-slate-400'}`} />
                     {s.replace("_", " ")}
                   </Button>
                 );
@@ -3630,29 +3710,29 @@ export function OrderDetail({
             </div>
           </div>
 
-          <div className="pt-2">
+          <div className="pt-1">
             {view.estado !== "ANULADA" && (
               view.saldo > 0 ? (
                 <Button 
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold h-12 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99]"
+                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white shadow-md font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all active:scale-[0.99] cursor-pointer"
                   onClick={() => {
                     setView(null);
                     setCobrarOrden(view);
                   }}
                 >
-                  <DollarSign className="h-5 w-5" />
+                  <DollarSign className="h-4 w-4" />
                   Cobrar Orden ({formatRD(view.saldo)})
                 </Button>
               ) : (
                 <Button 
                   variant="outline"
-                  className="w-full bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200 font-bold h-12 rounded-2xl text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
+                  className="w-full bg-emerald-50/80 hover:bg-emerald-100/80 text-emerald-700 border-emerald-200 font-bold h-10 rounded-xl text-xs sm:text-sm flex items-center justify-center gap-2 transition-all cursor-pointer"
                   onClick={() => {
                     setView(null);
                     setCobrarOrden(view);
                   }}
                 >
-                  <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                  <CheckCircle2 className="h-4 w-4 text-emerald-600" />
                   Orden Pagada · Ver Cobros
                 </Button>
               )
@@ -4231,7 +4311,7 @@ export function FacturaA4PrintPortal({ orden, tenant, clientes = [], empleados =
                   {fiscalSignatureDate && fiscalSignatureDate !== "null" && (
                     <div>Fecha Firma: {formatDateTimeRD(fiscalSignatureDate)}</div>
                   )}
-                  {ecfStatus && <div>Estado DGII: <span className="font-bold">{ecfStatus}</span></div>}
+                  {ecfStatus && <div>Estado DGII: <span className="font-bold">{formatEcfStatus(ecfStatus)}</span></div>}
                 </div>
                 <div className="text-[10px] text-center font-bold text-slate-500">
                   Consulte su factura en:<br/>dgii.gov.do
@@ -4642,19 +4722,19 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
             );
 
             const legalStatusUpper = String(result.legal_status || result.document?.legal_status || result.document?.status || '').toUpperCase();
-            const accepted = /ACEPT|PROCESAD|APROB/.test(legalStatusUpper) && !/RECHAZ/.test(legalStatusUpper);
-            const rejected = /RECHAZ|ERROR/.test(legalStatusUpper);
+            const isRejected = /RECHAZ|ERROR|INVALID/.test(legalStatusUpper);
+            const isAccepted = !isRejected && (Boolean(result.encf) || /ACEPT|PROCESAD|APROB|REGISTERED|EMITID|COMPLETAD|VALID|SUCCESS/.test(legalStatusUpper));
             finalNCF = result.encf;
             finalTipoECF = tipoECFDefault;
-            finalEcfStatus = rejected ? "REJECTED" : accepted ? "ACCEPTED" : "REGISTERED";
-            finalEcfId = result.document.id;
+            finalEcfStatus = isAccepted ? "ACCEPTED" : isRejected ? "REJECTED" : "REGISTERED";
+            finalEcfId = result.document?.id;
             finalEcfQr = result.stamp_url || (result.document as any)?.document_stamp_url || '';
             finalEcfSecurityCode = result.security_code || '';
             finalEcfSignatureDate = (result.document as any)?.signature_date || new Date().toISOString();
 
-            if (accepted) {
-              toast.success(`✅ Comprobante DGII ${result.encf} aceptado`);
-            } else if (rejected) {
+            if (isAccepted) {
+              showDGIIToast(result.encf);
+            } else if (isRejected) {
               toast.error(`El e-CF ${result.encf} fue rechazado por DGII.`);
             } else {
               toast.info(`e-CF ${result.encf} emitido. Validación DGII pendiente.`);

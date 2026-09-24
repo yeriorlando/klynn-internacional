@@ -1049,3 +1049,33 @@ export async function submitCommercialApprovalPronesoft(
   );
   return client.submitCommercialApproval(documentId, status, details);
 }
+
+/**
+ * Traduce y formatea los estados técnicos de e-CF (DGII/EF2) al español legible.
+ */
+export function formatEcfStatus(status?: string | null): string {
+  if (!status) return "";
+  const s = String(status).toUpperCase().trim();
+  switch (s) {
+    case "ACCEPTED":
+      return "ACEPTADO";
+    case "ACCEPTED_WITH_OBSERVATIONS":
+      return "ACEPTADO CON OBSERVACIONES";
+    case "REGISTERED":
+      return "REGISTRADO";
+    case "SIGNED":
+      return "FIRMADO";
+    case "DELIVERED":
+      return "ENTREGADO";
+    case "PENDING":
+    case "PENDING_OFFLINE_TRANSMISSION":
+      return "PENDIENTE DE ENVÍO";
+    case "REJECTED":
+      return "RECHAZADO";
+    case "ERROR":
+      return "ERROR";
+    default:
+      return s;
+  }
+}
+

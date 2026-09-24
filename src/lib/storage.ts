@@ -1347,6 +1347,7 @@ export const PERMISOS_SISTEMA = [
   { id: "dashboard", nombre: "Dashboard", descripcion: "Vista general y métricas rápidas" },
   { id: "nueva-orden", nombre: "Nueva Orden", descripcion: "Crear y recibir pedidos" },
   { id: "ordenes", nombre: "Órdenes", descripcion: "Ver historial y estados de órdenes" },
+  { id: "editar-orden", nombre: "Editar órdenes", descripcion: "Corregir órdenes abiertas con motivo e historial de cambios" },
   {
     id: "control-marbetes",
     nombre: "Control de Marbetes",

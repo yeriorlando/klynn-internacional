@@ -96,6 +96,7 @@ import {
   createSequenceEF2,
   emitirECF,
   getEF2Client,
+  formatEcfStatus,
 } from "@/lib/fiscal";
 
 export const Route = createFileRoute("/t/$slug/fiscal")({
@@ -1306,7 +1307,7 @@ function CentroFiscalPage() {
                                 : "bg-amber-50 text-amber-700 border-amber-200"
                           }`}
                         >
-                          {doc.status}
+                          {formatEcfStatus(doc.status)}
                         </Badge>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -1475,7 +1476,7 @@ function CentroFiscalPage() {
                                 : "bg-amber-50 text-amber-700 border-amber-200"
                           }`}
                         >
-                          {doc.status}
+                          {formatEcfStatus(doc.status)}
                         </Badge>
                       </td>
                       <td className="px-4 py-3.5 text-center whitespace-nowrap">
@@ -1756,7 +1757,7 @@ function CentroFiscalPage() {
                         </td>
                         <td className="px-4 py-3 text-center">
                           <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold">
-                            {nc.status}
+                            {formatEcfStatus(nc.status)}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-center">
@@ -2393,7 +2394,7 @@ function CentroFiscalPage() {
                           : "bg-amber-50 text-amber-700 border-amber-200"
                     }`}
                   >
-                    {selectedAuditDetail?.status === "ACCEPTED" ? "Aceptado por DGII" : selectedAuditDetail?.status}
+                    {formatEcfStatus(selectedAuditDetail?.status)}
                   </Badge>
                 </div>
 

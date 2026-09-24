@@ -142,6 +142,8 @@ import {
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
 import { notificarWhatsApp, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
 import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
+import { showDGIIToast } from "@/components/klynn/DGIIToast";
+import { showOrderCreatedToast } from "@/components/klynn/OrderCreatedToast";
 import { getProneSoftClient } from "@/lib/fiscal/pronesoft-client";
 import { PlanLimitModal } from "@/components/klynn/PlanLimitModal";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
@@ -2864,7 +2866,7 @@ function getMarbeteColorStyle(colorName?: string) {
             ordenActualizada = { ...orden, ...fiscalFields };
             await saveOrden(ordenActualizada);
             if (isAccepted) {
-              toast.success(`Comprobante ${result.encf} emitido y aceptado por DGII ✓`);
+              showDGIIToast(result.encf);
             } else if (isRejected) {
               toast.error(`Comprobante ${result.encf} rechazado por DGII`);
             } else {
@@ -3030,7 +3032,13 @@ function getMarbeteColorStyle(colorName?: string) {
       setIsCobroModalOpen(false);
       resetPosOrder();
       releaseOrderCreation();
-      toast.success(`Orden ${ordenActualizada.numero} creada ✅`);
+      const targetNombre = targetCliente
+        ? [targetCliente.nombre, targetCliente.apellido].filter((x) => x && x !== "null").join(" ") || targetCliente.nombre
+        : undefined;
+      showOrderCreatedToast({
+        numero: ordenActualizada.numero,
+        clienteNombre: targetNombre,
+      });
 
       // Notificación de WhatsApp al cliente (Recibo / Ticket digital)
       // CONDICIÓN: Solo para clientes registrados con teléfono válido. JAMÁS para Consumidor Final genérico.
