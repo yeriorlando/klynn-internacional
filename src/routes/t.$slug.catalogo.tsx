@@ -25,6 +25,7 @@ import {
   Layers,
   SlidersHorizontal,
   ChevronDown,
+  RotateCcw,
 } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -53,6 +54,9 @@ import {
   getServicios,
   saveServicio,
   deleteServicio,
+  restaurarMuestras,
+  limpiarTodasLasMuestras,
+  getTenantExclusions,
   formatRD,
   formatAmountInput,
   uid,
@@ -207,6 +211,18 @@ function CatalogoPage() {
 
   const categorias = Array.from(new Set(filteredItems.map((i) => i.categoria))).sort();
 
+  const exclusions = useMemo(() => getTenantExclusions(tenantId), [tenantId, items, servicios]);
+  const samplePrendasCount = useMemo(
+    () => items.filter((i) => i.es_muestra || i.tenant_id === "admin").length,
+    [items],
+  );
+  const sampleServiciosCount = useMemo(
+    () => servicios.filter((s) => s.es_muestra || s.tenant_id === "admin").length,
+    [servicios],
+  );
+  const excludedPrendasCount = exclusions.prendas.size;
+  const excludedServiciosCount = exclusions.servicios.size;
+
   return (
     <div className="w-full mx-auto max-w-6xl">
       <PageHeader
@@ -215,76 +231,209 @@ function CatalogoPage() {
       />
 
       <Tabs value={tab} onValueChange={handleTabChange} className="mt-2">
-        <TabsList className="flex items-center gap-2 sm:gap-2.5 bg-transparent p-0 border-none h-auto justify-start mb-6">
-          <TabsTrigger
-            value="prendas"
-            className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
-          >
-            <Shirt className={`h-4 w-4 shrink-0 transition-colors ${tab === "prendas" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
-            <span>Prendas</span>
-            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "prendas" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
-              {items.length}
-            </span>
-          </TabsTrigger>
-          <TabsTrigger
-            value="servicios"
-            className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
-          >
-            <Layers className={`h-4 w-4 shrink-0 transition-colors ${tab === "servicios" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
-            <span>Servicios</span>
-            <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "servicios" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
-              {servicios.length}
-            </span>
-          </TabsTrigger>
-        </TabsList>
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-6">
+          <TabsList className="flex items-center gap-2 sm:gap-2.5 bg-transparent p-0 border-none h-auto justify-start">
+            <TabsTrigger
+              value="prendas"
+              className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
+            >
+              <Shirt className={`h-4 w-4 shrink-0 transition-colors ${tab === "prendas" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
+              <span>Prendas</span>
+              <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "prendas" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
+                {items.length}
+              </span>
+            </TabsTrigger>
+            <TabsTrigger
+              value="servicios"
+              className="flex items-center gap-2 px-4 py-2 sm:py-2.5 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-xs data-[state=active]:bg-[#1B4B73] data-[state=active]:text-white data-[state=active]:border-[#1B4B73] data-[state=active]:shadow-md transition-all hover:bg-muted/60 cursor-pointer shrink-0"
+            >
+              <Layers className={`h-4 w-4 shrink-0 transition-colors ${tab === "servicios" ? "text-[#F0B900]" : "text-[#1B4B73] dark:text-sky-400"}`} />
+              <span>Servicios</span>
+              <span className={`ml-0.5 rounded-full px-2 py-0.5 text-[10px] font-black leading-none ${tab === "servicios" ? "bg-white/20 text-white" : "bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"}`}>
+                {servicios.length}
+              </span>
+            </TabsTrigger>
+          </TabsList>
+
+          <div className="flex items-center gap-2 flex-wrap md:justify-end">
+            {tab === "prendas" ? (
+              <>
+                {samplePrendasCount > 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex items-center gap-1.5 rounded-xl h-10 px-3 font-bold border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-xs sm:text-sm shrink-0 cursor-pointer shadow-2xs"
+                        title="Ocultar todas las prendas de muestra precargadas"
+                      >
+                        <Trash2 className="h-4 w-4 shrink-0 text-rose-500" />
+                        <span className="hidden sm:inline">Limpiar muestras</span>
+                        <Badge className="bg-rose-200/80 text-rose-800 dark:bg-rose-900/80 dark:text-rose-200 text-[10px] h-4 px-1.5 font-black border-none">
+                          {samplePrendasCount}
+                        </Badge>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-2xl border-none shadow-card">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Ocultar todas las prendas de muestra?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta acción removerá las {samplePrendasCount} prendas de muestra precargadas de tu catálogo para que puedas empezar tu listado desde cero. Podrás restaurarlas en cualquier momento con un clic.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            await limpiarTodasLasMuestras(tenantId, "prendas", items, servicios);
+                            queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
+                            toast.success("Prendas de muestra eliminadas del catálogo");
+                          }}
+                          className="bg-destructive hover:bg-destructive/90 text-white rounded-xl font-bold"
+                        >
+                          Limpiar Muestras
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => exportPrendasToExcel(items, user.tenant.nombre)}
+                  className="flex items-center gap-2 rounded-xl h-10 px-3.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                  title="Descargar catálogo de prendas en Excel"
+                >
+                  <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                  <span>Exportar Excel</span>
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setOpenExcelImport(true)}
+                  className="flex items-center gap-2 rounded-xl h-10 px-3.5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                  title="Importar o actualizar catálogo desde archivo Excel"
+                >
+                  <Upload className="h-4 w-4 text-white shrink-0" />
+                  <span>Importar Excel</span>
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditItem(null);
+                    setOpenItem(true);
+                  }}
+                  className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                >
+                  <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
+                  <span>Nueva prenda</span>
+                </Button>
+              </>
+            ) : (
+              <>
+                {sampleServiciosCount > 0 && (
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="flex items-center gap-1.5 rounded-xl h-10 px-3 font-bold border-rose-200 dark:border-rose-900/50 bg-rose-50/70 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 hover:bg-rose-100 dark:hover:bg-rose-950/40 text-xs sm:text-sm shrink-0 cursor-pointer shadow-2xs"
+                        title="Ocultar todos los servicios de muestra precargados"
+                      >
+                        <Trash2 className="h-4 w-4 shrink-0 text-rose-500" />
+                        <span className="hidden sm:inline">Limpiar servicios</span>
+                        <Badge className="bg-rose-200/80 text-rose-800 dark:bg-rose-900/80 dark:text-rose-200 text-[10px] h-4 px-1.5 font-black border-none">
+                          {sampleServiciosCount}
+                        </Badge>
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="rounded-2xl border-none shadow-card">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Ocultar todos los servicios de muestra?</AlertDialogTitle>
+                        <AlertDialogDescription>
+                          Esta acción removerá los {sampleServiciosCount} servicios de muestra precargados de tu catálogo para que puedas configurar tus propios procesos. Podrás restaurarlos en cualquier momento con un clic.
+                        </AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          onClick={async () => {
+                            await limpiarTodasLasMuestras(tenantId, "servicios", items, servicios);
+                            queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
+                            toast.success("Servicios de muestra eliminados del catálogo");
+                          }}
+                          className="bg-destructive hover:bg-destructive/90 text-white rounded-xl font-bold"
+                        >
+                          Limpiar Servicios
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                )}
+                <Button
+                  type="button"
+                  onClick={() => exportServiciosToExcel(servicios, user.tenant.nombre)}
+                  className="flex items-center gap-2 rounded-xl h-10 px-3.5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                  title="Descargar servicios en Excel"
+                >
+                  <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                  <span>Exportar Excel</span>
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => setOpenExcelImport(true)}
+                  className="flex items-center gap-2 rounded-xl h-10 px-3.5 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                  title="Importar o actualizar catálogo desde archivo Excel"
+                >
+                  <Upload className="h-4 w-4 text-white shrink-0" />
+                  <span>Importar Excel</span>
+                </Button>
+                <Button
+                  type="button"
+                  onClick={() => {
+                    setEditServ(null);
+                    setOpenServ(true);
+                  }}
+                  className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                >
+                  <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
+                  <span>Nuevo servicio</span>
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
 
         {/* PRENDAS */}
         <TabsContent value="prendas">
-          <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs sm:text-sm font-medium text-muted-foreground">
-              {items.length} prendas · {categorias.length} categorías
-            </p>
-            <div className="flex flex-1 items-center gap-2 max-w-md">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar prendas o categorías..."
-                  className="pl-9 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium focus-visible:ring-primary shadow-2xs"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+          <div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground">
+                {items.length} prendas · {categorias.length} categorías
+              </p>
+              {excludedPrendasCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    await restaurarMuestras(tenantId, "prendas");
+                    queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
+                    toast.success("Prendas de muestra restauradas ✨");
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl h-8 px-2.5 font-bold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs shrink-0 cursor-pointer shadow-2xs"
+                  title="Restaurar prendas de muestra eliminadas"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                  <span>Restaurar {excludedPrendasCount} muestra{excludedPrendasCount > 1 ? "s" : ""}</span>
+                </Button>
+              )}
             </div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <Button
-                type="button"
-                onClick={() => exportPrendasToExcel(items, user.tenant.nombre)}
-                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                title="Descargar catálogo de prendas en Excel"
-              >
-                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Exportar Excel</span>
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setOpenExcelImport(true)}
-                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                title="Importar o actualizar catálogo desde archivo Excel"
-              >
-                <Upload className="h-4 w-4 text-white shrink-0" />
-                <span>Importar Excel</span>
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setEditItem(null);
-                  setOpenItem(true);
-                }}
-                className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-              >
-                <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Nueva prenda</span>
-              </Button>
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar prendas o categorías..."
+                className="pl-9 h-10 w-full rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium focus-visible:ring-primary shadow-2xs"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
 
@@ -549,7 +698,7 @@ function CatalogoPage() {
                                 <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
                                 <AlertDialogAction
                                   onClick={async () => {
-                                    await deleteCatalogoItem(it.id);
+                                    await deleteCatalogoItem(it.id, tenantId);
                                     queryClient.invalidateQueries({ queryKey: ["catalogo", tenantId] });
                                     toast.success("Prenda eliminada");
                                   }}
@@ -571,51 +720,36 @@ function CatalogoPage() {
 
         {/* SERVICIOS */}
         <TabsContent value="servicios">
-          <div className="mb-5 flex items-center justify-between gap-3 flex-wrap">
-            <p className="text-xs sm:text-sm font-medium text-muted-foreground">
-              {filteredServicios.length} servicios disponibles
-            </p>
-            <div className="flex flex-1 items-center gap-2 max-w-md">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar servicios..."
-                  className="pl-9 h-10 rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium focus-visible:ring-primary shadow-2xs"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
+          <div className="mb-5 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex items-center gap-3 flex-wrap">
+              <p className="text-xs sm:text-sm font-medium text-muted-foreground">
+                {filteredServicios.length} servicios disponibles
+              </p>
+              {excludedServiciosCount > 0 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={async () => {
+                    await restaurarMuestras(tenantId, "servicios");
+                    queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
+                    toast.success("Servicios de muestra restaurados ✨");
+                  }}
+                  className="flex items-center gap-1.5 rounded-xl h-8 px-2.5 font-bold border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 text-xs shrink-0 cursor-pointer shadow-2xs"
+                  title="Restaurar servicios de muestra eliminados"
+                >
+                  <RotateCcw className="h-3.5 w-3.5 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                  <span>Restaurar {excludedServiciosCount} servicio{excludedServiciosCount > 1 ? "s" : ""}</span>
+                </Button>
+              )}
             </div>
-            <div className="flex items-center gap-2.5 flex-wrap">
-              <Button
-                type="button"
-                onClick={() => exportServiciosToExcel(servicios, user.tenant.nombre)}
-                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                title="Descargar servicios en Excel"
-              >
-                <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Exportar Excel</span>
-              </Button>
-              <Button
-                type="button"
-                onClick={() => setOpenExcelImport(true)}
-                className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-600 shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-                title="Importar o actualizar catálogo desde archivo Excel"
-              >
-                <Upload className="h-4 w-4 text-white shrink-0" />
-                <span>Importar Excel</span>
-              </Button>
-              <Button
-                type="button"
-                onClick={() => {
-                  setEditServ(null);
-                  setOpenServ(true);
-                }}
-                className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
-              >
-                <Plus className="h-4 w-4 text-[#F0B900] shrink-0" />
-                <span>Nuevo servicio</span>
-              </Button>
+            <div className="relative w-full sm:max-w-md">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                placeholder="Buscar servicios..."
+                className="pl-9 h-10 w-full rounded-xl bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 text-xs sm:text-sm font-medium focus-visible:ring-primary shadow-2xs"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+              />
             </div>
           </div>
 
@@ -745,11 +879,7 @@ function CatalogoPage() {
                         <AlertDialogCancel className="rounded-xl font-bold">Cancelar</AlertDialogCancel>
                         <AlertDialogAction
                           onClick={async () => {
-                            if (s.tenant_id === "admin") {
-                              toast.error("No puedes eliminar servicios de muestra. Desactívalo si no lo usas.");
-                              return;
-                            }
-                            await deleteServicio(s.id);
+                            await deleteServicio(s.id, tenantId);
                             queryClient.invalidateQueries({ queryKey: ["servicios", tenantId] });
                             toast.success("Servicio eliminado");
                           }}

@@ -260,6 +260,10 @@ export interface TenantConfig {
   descuento_cliente_activo?: boolean;
   whatsapp_web_manual?: boolean;
 
+  // Exclusión de Muestras del Catálogo (Prendas y Servicios por defecto)
+  prendas_excluidas_muestra?: string[];
+  servicios_excluidos_muestra?: string[];
+
   // Políticas de Seguridad y Control de Terminales
   control_terminales_activo?: boolean;
   terminales_autorizadas?: TerminalAutorizada[];
@@ -1165,6 +1169,8 @@ export const DEFAULT_CONFIG: TenantConfig = {
   bloqueo_inactividad_minutos: 0,
   descuento_cliente_activo: true,
   whatsapp_web_manual: true,
+  prendas_excluidas_muestra: [],
+  servicios_excluidos_muestra: [],
   control_terminales_activo: false,
   terminales_autorizadas: [],
   solicitudes_vinculacion: [],
@@ -4643,6 +4649,186 @@ export async function archiveGastoPlantilla(id: string, tenantId: string): Promi
   await saveGastoPlantilla({ ...current, tenant_id: tenantId, activo: false });
 }
 
+// ============ Exclusiones de Muestra de Catálogo y Servicios ============
+export function getTenantExclusions(tenantId: string): { prendas: Set<string>; servicios: Set<string> } {
+  const realId = resolveTenantId(tenantId);
+  const prendas = new Set<string>();
+  const servicios = new Set<string>();
+
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  if (typeof window !== "undefined") {
+    // 1. Probar caché por ID
+    const raw = localStorage.getItem(`klynn_tenant_id_${realId}`);
+    if (raw) {
+      try {
+        const t = JSON.parse(raw);
+        (t?.config?.prendas_excluidas_muestra || []).forEach((x: string) => {
+          if (x) {
+            prendas.add(x.toLowerCase());
+            prendas.add(normalize(x));
+          }
+        });
+        (t?.config?.servicios_excluidos_muestra || []).forEach((x: string) => {
+          if (x) {
+            servicios.add(x.toLowerCase());
+            servicios.add(normalize(x));
+          }
+        });
+      } catch {}
+    }
+    // 2. Probar last_auth_user
+    const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+    if (lastAuthStr) {
+      try {
+        const parsed = JSON.parse(lastAuthStr);
+        if (parsed?.tenant?.config) {
+          (parsed.tenant.config.prendas_excluidas_muestra || []).forEach((x: string) => {
+            if (x) {
+              prendas.add(x.toLowerCase());
+              prendas.add(normalize(x));
+            }
+          });
+          (parsed.tenant.config.servicios_excluidos_muestra || []).forEach((x: string) => {
+            if (x) {
+              servicios.add(x.toLowerCase());
+              servicios.add(normalize(x));
+            }
+          });
+        }
+      } catch {}
+    }
+  }
+
+  return { prendas, servicios };
+}
+
+export async function eliminarPrendaMuestra(
+  tenantId: string,
+  item: { id: string; nombre: string },
+): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  const idKey = item.id.toLowerCase();
+  const nameKey = normalize(item.nombre);
+
+  const tenant = await getTenantById(realId);
+  const currentList = tenant?.config?.prendas_excluidas_muestra || [];
+  const nextSet = new Set(currentList.map((x) => x.toLowerCase()));
+  nextSet.add(idKey);
+  nextSet.add(nameKey);
+  const updatedList = Array.from(nextSet);
+
+  await saveTenantConfig(realId, { prendas_excluidas_muestra: updatedList });
+
+  const local = read<CatalogoItem[]>(KEY.catalogo, []);
+  write(
+    KEY.catalogo,
+    local.filter((i) => i.id.toLowerCase() !== idKey && normalize(i.nombre) !== nameKey),
+  );
+  try {
+    await offlineDB.delete("catalogo_prendas", item.id);
+  } catch {}
+}
+
+export async function eliminarServicioMuestra(
+  tenantId: string,
+  servicio: { id: string; nombre: string },
+): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  const idKey = servicio.id.toLowerCase();
+  const nameKey = normalize(servicio.nombre);
+
+  const tenant = await getTenantById(realId);
+  const currentList = tenant?.config?.servicios_excluidos_muestra || [];
+  const nextSet = new Set(currentList.map((x) => x.toLowerCase()));
+  nextSet.add(idKey);
+  nextSet.add(nameKey);
+  const updatedList = Array.from(nextSet);
+
+  await saveTenantConfig(realId, { servicios_excluidos_muestra: updatedList });
+
+  const local = read<Servicio[]>(KEY.servicios, []);
+  write(
+    KEY.servicios,
+    local.filter((s) => s.id.toLowerCase() !== idKey && normalize(s.nombre) !== nameKey),
+  );
+  try {
+    await offlineDB.delete("catalogo_servicios", servicio.id);
+  } catch {}
+}
+
+export async function restaurarMuestras(
+  tenantId: string,
+  tipo: "prendas" | "servicios" | "todas" = "todas",
+): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const updates: Partial<TenantConfig> = {};
+  if (tipo === "prendas" || tipo === "todas") {
+    updates.prendas_excluidas_muestra = [];
+  }
+  if (tipo === "servicios" || tipo === "todas") {
+    updates.servicios_excluidos_muestra = [];
+  }
+  await saveTenantConfig(realId, updates);
+}
+
+export async function limpiarTodasLasMuestras(
+  tenantId: string,
+  tipo: "prendas" | "servicios" | "todas" = "todas",
+  prendasActuales: CatalogoItem[] = [],
+  serviciosActuales: Servicio[] = [],
+): Promise<void> {
+  const realId = resolveTenantId(tenantId);
+  const normalize = (s: string) =>
+    s
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[\u0300-\u036f]/g, "");
+
+  const tenant = await getTenantById(realId);
+  const updates: Partial<TenantConfig> = {};
+
+  if (tipo === "prendas" || tipo === "todas") {
+    const prendasMuestra = prendasActuales.filter((p) => p.es_muestra || p.tenant_id === "admin");
+    const current = tenant?.config?.prendas_excluidas_muestra || [];
+    const setP = new Set(current.map((x) => x.toLowerCase()));
+    prendasMuestra.forEach((p) => {
+      setP.add(p.id.toLowerCase());
+      setP.add(normalize(p.nombre));
+    });
+    updates.prendas_excluidas_muestra = Array.from(setP);
+  }
+
+  if (tipo === "servicios" || tipo === "todas") {
+    const serviciosMuestra = serviciosActuales.filter((s) => s.es_muestra || s.tenant_id === "admin");
+    const current = tenant?.config?.servicios_excluidos_muestra || [];
+    const setS = new Set(current.map((x) => x.toLowerCase()));
+    serviciosMuestra.forEach((s) => {
+      setS.add(s.id.toLowerCase());
+      setS.add(normalize(s.nombre));
+    });
+    updates.servicios_excluidos_muestra = Array.from(setS);
+  }
+
+  await saveTenantConfig(realId, updates);
+}
+
 // ============ Catálogo (Supabase) ============
 export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
   const normalize = (s: string) =>
@@ -4652,15 +4838,18 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
       .replace(/[\u0300-\u036f]/g, "");
 
   const realId = resolveTenantId(tenant_id);
+  const { prendas: excludedPrendas } = getTenantExclusions(realId);
+  const isExcluded = (id: string, nombre: string) =>
+    excludedPrendas.has(id.toLowerCase()) || excludedPrendas.has(normalize(nombre));
 
   // 1. Si estamos sin conexión, devolver inmediatamente del almacenamiento local
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<CatalogoItem[]>(KEY.catalogo, []);
     const relevant = local.filter(
-      (i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin",
+      (i) => (isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin") && !isExcluded(i.id, i.nombre),
     );
     if (relevant.length > 0) return relevant;
-    return CATALOGO_PRENDAS_PREDEFINIDAS as any;
+    return ((CATALOGO_PRENDAS_PREDEFINIDAS as any) || []).filter((i: any) => !isExcluded(i.id || "", i.nombre));
   }
 
   // 2. Intentar buscar en Supabase con timeout de 3000ms
@@ -4692,23 +4881,25 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
       data
         .filter((i: any) => i.tenant_id !== "admin")
         .forEach((i: any) => {
-          const loc = localMap.get(i.id);
-          const merged: CatalogoItem = {
-            ...i,
-            descripcion: i.descripcion || loc?.descripcion || undefined,
-            precios_servicios:
-              i.precios_servicios && Object.keys(i.precios_servicios).length > 0
-                ? i.precios_servicios
-                : (loc?.precios_servicios || {}),
-          };
-          finalItems.push(merged);
-          namesSet.add(normalize(i.nombre));
+          if (!isExcluded(i.id, i.nombre)) {
+            const loc = localMap.get(i.id);
+            const merged: CatalogoItem = {
+              ...i,
+              descripcion: i.descripcion || loc?.descripcion || undefined,
+              precios_servicios:
+                i.precios_servicios && Object.keys(i.precios_servicios).length > 0
+                  ? i.precios_servicios
+                  : (loc?.precios_servicios || {}),
+            };
+            finalItems.push(merged);
+            namesSet.add(normalize(i.nombre));
+          }
         });
 
       data
         .filter((i: any) => i.tenant_id === "admin")
         .forEach((i: any) => {
-          if (!namesSet.has(normalize(i.nombre))) {
+          if (!namesSet.has(normalize(i.nombre)) && !isExcluded(i.id, i.nombre)) {
             const loc = localMap.get(i.id);
             const merged: CatalogoItem = {
               ...i,
@@ -4734,10 +4925,10 @@ export async function getCatalogo(tenant_id: string): Promise<CatalogoItem[]> {
 
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
   const relevant = local.filter(
-    (i) => isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin",
+    (i) => (isSameTenant(i.tenant_id, tenant_id) || i.tenant_id === "admin") && !isExcluded(i.id, i.nombre),
   );
   if (relevant.length > 0) return relevant;
-  return CATALOGO_PRENDAS_PREDEFINIDAS as any;
+  return ((CATALOGO_PRENDAS_PREDEFINIDAS as any) || []).filter((i: any) => !isExcluded(i.id || "", i.nombre));
 }
 
 export async function saveCatalogoItem(item: CatalogoItem) {
@@ -4795,9 +4986,20 @@ export async function saveCatalogoItem(item: CatalogoItem) {
   }
 }
 
-export async function deleteCatalogoItem(id: string) {
+export async function deleteCatalogoItem(id: string, tenantId?: string) {
   const local = read<CatalogoItem[]>(KEY.catalogo, []);
   const target = local.find((item) => item.id === id);
+  const realTenantId = resolveTenantId(tenantId || target?.tenant_id || "");
+
+  // Si el ítem es de muestra o pertenece a admin:
+  if (target?.tenant_id === "admin" || target?.es_muestra || !target?.tenant_id) {
+    if (realTenantId) {
+      await eliminarPrendaMuestra(realTenantId, { id, nombre: target?.nombre || "" });
+      return;
+    }
+  }
+
+  // Si es un ítem creado por el tenant:
   if (typeof window !== "undefined")
     write(
       KEY.catalogo,
@@ -4806,9 +5008,26 @@ export async function deleteCatalogoItem(id: string) {
   try {
     await offlineDB.delete("catalogo_prendas", id);
   } catch {}
+
+  // Zombie prevention: si existe un ítem admin homónimo, también agregarlo a exclusiones
+  if (realTenantId && target?.nombre) {
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const nameKey = normalize(target.nombre);
+    const tenant = await getTenantById(realTenantId);
+    const currentList = tenant?.config?.prendas_excluidas_muestra || [];
+    if (!currentList.includes(nameKey)) {
+      await saveTenantConfig(realTenantId, {
+        prendas_excluidas_muestra: [...currentList, nameKey, id.toLowerCase()],
+      });
+    }
+  }
+
   if (typeof window !== "undefined" && !navigator.onLine) {
-    if (!target?.tenant_id)
-      throw new Error("No se pudo determinar la lavandería del artículo eliminado.");
+    if (!target?.tenant_id) return;
     await offlineDB.addToOutbox({
       id,
       tenant_id: resolveTenantId(target.tenant_id),
@@ -4820,16 +5039,15 @@ export async function deleteCatalogoItem(id: string) {
   }
   try {
     const { error } = await supabase.from("catalogo_items").delete().eq("id", id);
-    if (error) throw error;
+    if (error) {
+      if (realTenantId && target?.nombre) {
+        await eliminarPrendaMuestra(realTenantId, { id, nombre: target.nombre });
+      }
+    }
   } catch (error) {
-    if (!target?.tenant_id) throw error;
-    await offlineDB.addToOutbox({
-      id,
-      tenant_id: resolveTenantId(target.tenant_id),
-      table_name: "catalogo_items",
-      action: "DELETE",
-      payload: { id },
-    });
+    if (realTenantId && target?.nombre) {
+      await eliminarPrendaMuestra(realTenantId, { id, nombre: target.nombre });
+    }
   }
 }
 
@@ -4841,9 +5059,15 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "");
 
+  const realId = resolveTenantId(tenant_id);
+  const { servicios: excludedServicios } = getTenantExclusions(realId);
+  const isExcluded = (id: string, nombre: string) =>
+    excludedServicios.has(id.toLowerCase()) || excludedServicios.has(normalize(nombre));
+
   const deduplicate = (services: Servicio[]): Servicio[] => {
     const byName = new Map<string, Servicio>();
     for (const service of services) {
+      if (isExcluded(service.id, service.nombre)) continue;
       const key = normalize(String(service.nombre || "").trim());
       if (!key) continue;
       const current = byName.get(key);
@@ -4867,15 +5091,13 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
     return Array.from(byName.values());
   };
 
-  const realId = resolveTenantId(tenant_id);
-
   if (typeof window !== "undefined" && !navigator.onLine) {
     const local = read<Servicio[]>(KEY.servicios, []);
     const relevant = local.filter(
-      (s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin",
+      (s) => (isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin") && !isExcluded(s.id, s.nombre),
     );
     if (relevant.length > 0) return deduplicate(relevant);
-    return deduplicate(SERVICIOS_PREDEFINIDOS as any);
+    return deduplicate(((SERVICIOS_PREDEFINIDOS as any) || []).filter((s: any) => !isExcluded(s.id || "", s.nombre)));
   }
 
   try {
@@ -4911,10 +5133,10 @@ export async function getServicios(tenant_id: string): Promise<Servicio[]> {
 
   const local = read<Servicio[]>(KEY.servicios, []);
   const relevant = local.filter(
-    (s) => isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin",
+    (s) => (isSameTenant(s.tenant_id, tenant_id) || s.tenant_id === "admin") && !isExcluded(s.id, s.nombre),
   );
   if (relevant.length > 0) return deduplicate(relevant);
-  return deduplicate(SERVICIOS_PREDEFINIDOS as any);
+  return deduplicate(((SERVICIOS_PREDEFINIDOS as any) || []).filter((s: any) => !isExcluded(s.id || "", s.nombre)));
 }
 
 export async function saveServicio(s: Servicio) {
@@ -4956,9 +5178,19 @@ export async function saveServicio(s: Servicio) {
   }
 }
 
-export async function deleteServicio(id: string) {
+export async function deleteServicio(id: string, tenantId?: string) {
   const local = read<Servicio[]>(KEY.servicios, []);
   const target = local.find((item) => item.id === id);
+  const realTenantId = resolveTenantId(tenantId || target?.tenant_id || "");
+
+  // Si el servicio es de muestra o pertenece a admin:
+  if (target?.tenant_id === "admin" || target?.es_muestra || !target?.tenant_id) {
+    if (realTenantId) {
+      await eliminarServicioMuestra(realTenantId, { id, nombre: target?.nombre || "" });
+      return;
+    }
+  }
+
   if (isBrowser())
     write(
       KEY.servicios,
@@ -4967,9 +5199,26 @@ export async function deleteServicio(id: string) {
   try {
     await offlineDB.delete("catalogo_servicios", id);
   } catch {}
+
+  // Zombie prevention:
+  if (realTenantId && target?.nombre) {
+    const normalize = (s: string) =>
+      s
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+    const nameKey = normalize(target.nombre);
+    const tenant = await getTenantById(realTenantId);
+    const currentList = tenant?.config?.servicios_excluidos_muestra || [];
+    if (!currentList.includes(nameKey)) {
+      await saveTenantConfig(realTenantId, {
+        servicios_excluidos_muestra: [...currentList, nameKey, id.toLowerCase()],
+      });
+    }
+  }
+
   if (typeof window !== "undefined" && !navigator.onLine) {
-    if (!target?.tenant_id)
-      throw new Error("No se pudo determinar la lavandería del servicio eliminado.");
+    if (!target?.tenant_id) return;
     await offlineDB.addToOutbox({
       id,
       tenant_id: resolveTenantId(target.tenant_id),
@@ -4981,16 +5230,15 @@ export async function deleteServicio(id: string) {
   }
   try {
     const { error } = await supabase.from("servicios").delete().eq("id", id);
-    if (error) throw error;
+    if (error) {
+      if (realTenantId && target?.nombre) {
+        await eliminarServicioMuestra(realTenantId, { id, nombre: target.nombre });
+      }
+    }
   } catch (error) {
-    if (!target?.tenant_id) throw error;
-    await offlineDB.addToOutbox({
-      id,
-      tenant_id: resolveTenantId(target.tenant_id),
-      table_name: "servicios",
-      action: "DELETE",
-      payload: { id },
-    });
+    if (realTenantId && target?.nombre) {
+      await eliminarServicioMuestra(realTenantId, { id, nombre: target.nombre });
+    }
   }
 }
 
@@ -8412,5 +8660,63 @@ export async function saveDetallesNomina(detalles: DetalleNomina[]): Promise<voi
     }
   } catch (e) {
     console.warn("saveDetallesNomina supabase error:", e);
+  }
+}
+
+/**
+ * Purga automática de fotos de comprobante de entrega (POD) con más de 7 días.
+ * Elimina los archivos físicos del bucket de Storage para evitar saturación de espacio,
+ * y limpia el campo pod_foto en la tabla ordenes manteniendo la auditoría (quién y fecha).
+ */
+export async function purgeOldPodImages(tenantId?: string): Promise<{ deleted: number }> {
+  try {
+    const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+
+    let query = supabase
+      .from("ordenes")
+      .select("id, pod_foto, pod_fecha")
+      .not("pod_foto", "is", null)
+      .lt("pod_fecha", sevenDaysAgo)
+      .limit(50);
+
+    if (tenantId) {
+      query = query.eq("tenant_id", tenantId);
+    }
+
+    const { data: oldOrders, error } = await query;
+    if (error || !oldOrders || oldOrders.length === 0) {
+      return { deleted: 0 };
+    }
+
+    const pathsToRemove: string[] = [];
+    const orderIdsToUpdate: string[] = [];
+
+    for (const order of oldOrders) {
+      if (order.pod_foto) {
+        orderIdsToUpdate.push(order.id);
+        const match = order.pod_foto.match(/catalogo\/(pod\/.+)$/);
+        if (match && match[1]) {
+          pathsToRemove.push(match[1]);
+        }
+      }
+    }
+
+    if (pathsToRemove.length > 0) {
+      await supabase.storage.from("catalogo").remove(pathsToRemove);
+      console.log(`[POD Auto-Purge] ${pathsToRemove.length} fotos con más de 7 días eliminadas de Storage.`);
+    }
+
+    if (orderIdsToUpdate.length > 0) {
+      await supabase
+        .from("ordenes")
+        .update({ pod_foto: null })
+        .in("id", orderIdsToUpdate);
+      console.log(`[POD Auto-Purge] ${orderIdsToUpdate.length} órdenes actualizadas con pod_foto: null.`);
+    }
+
+    return { deleted: pathsToRemove.length };
+  } catch (err) {
+    console.warn("[POD Auto-Purge] Error purgando fotos antiguas:", err);
+    return { deleted: 0 };
   }
 }
