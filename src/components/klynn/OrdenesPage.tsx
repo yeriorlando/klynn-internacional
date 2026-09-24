@@ -3741,7 +3741,7 @@ export function OrderDetail({
         </div>
 
         {/* Tarjeta con Fondo Temático de Lavandería (Alineada arriba a nivel de Cliente) */}
-        <div className="relative w-full max-h-[500px] overflow-y-auto custom-scrollbar rounded-2xl bg-slate-100/90 dark:bg-slate-900/60 p-3 shadow-inner border border-slate-200/60 dark:border-slate-800 flex flex-col items-center">
+        <div className="relative w-full max-h-[calc(84vh-90px)] sm:max-h-[580px] overflow-y-auto custom-scrollbar rounded-2xl bg-slate-100/90 dark:bg-slate-900/60 p-3 shadow-inner border border-slate-200/60 dark:border-slate-800 flex flex-col items-center">
           {/* Fondo de Iconos de Lavandería Sutiles (Marca de Agua) */}
           <div className="absolute inset-0 pointer-events-none overflow-hidden select-none opacity-[0.06] text-primary flex flex-wrap justify-between p-6 gap-8">
             <Shirt className="h-12 w-12 -rotate-12" />
@@ -3754,10 +3754,10 @@ export function OrderDetail({
             <Wind className="h-12 w-12" />
           </div>
 
-          {/* Recibo Térmico Centrado */}
-          <div className="relative z-10 w-full flex justify-center py-1">
+          {/* Recibo Térmico Centrado con espacio inferior generoso para permitir desplazamiento completo */}
+          <div className="relative z-10 w-full flex justify-center pt-1 pb-28">
             <div 
-              className="mx-auto flex justify-center [&_.thermal-ticket]:mx-auto [&_.thermal-ticket]:px-4 [&_.thermal-ticket]:shadow-lg [&_.thermal-ticket]:rounded-sm" 
+              className="mx-auto flex justify-center [&_.thermal-ticket]:mx-auto [&_.thermal-ticket]:px-4 [&_.thermal-ticket]:shadow-lg [&_.thermal-ticket]:rounded-sm [&_.thermal-ticket]:mb-6" 
               style={{ zoom: 0.8 }}
             >
               <Ticket 

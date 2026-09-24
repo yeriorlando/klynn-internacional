@@ -22,6 +22,9 @@ import {
   Calendar as CalendarIcon,
   Receipt,
   Scale,
+  Zap,
+  CircleDollarSign,
+  CheckCircle2,
 } from "lucide-react";
 import { format } from "date-fns";
 import { es } from "date-fns/locale";
@@ -205,7 +208,12 @@ function Changes({
       const antesSub = row.antesCant * row.precio_unitario;
       const despuesSub = row.despuesCant * row.precio_unitario;
       const isChanged = row.antesCant !== row.despuesCant;
-      const unit = row.es_libra ? "lb" : " uds";
+      const unitAntes = row.es_libra
+        ? (row.antesCant === 1 ? " lb" : " lbs")
+        : (row.antesCant === 1 ? " pza" : " pzas");
+      const unitDespues = row.es_libra
+        ? (row.despuesCant === 1 ? " lb" : " lbs")
+        : (row.despuesCant === 1 ? " pza" : " pzas");
 
       return {
         ...row,
@@ -213,7 +221,8 @@ function Changes({
         antesSub,
         despuesSub,
         isChanged,
-        unit,
+        unitAntes,
+        unitDespues,
       };
     });
   }, [changes.items]);
@@ -265,10 +274,21 @@ function Changes({
     });
   }, [changes.servicios, changes.servicios_precios]);
 
-  // 3. Otros campos (financieros y operativos)
+  // 3. Otros campos operativos (NO financieros; los financieros se muestran en la tarjeta contable de liquidación)
   const otherKeys = useMemo(() => {
     return Object.keys(changes).filter(
-      (k) => !["items", "servicios", "servicios_precios"].includes(k),
+      (k) =>
+        ![
+          "items",
+          "servicios",
+          "servicios_precios",
+          "subtotal",
+          "itbis",
+          "descuento",
+          "costo_envio",
+          "total",
+          "saldo",
+        ].includes(k),
     );
   }, [changes]);
 
@@ -276,11 +296,7 @@ function Changes({
     itemRows.length > 0 || serviceRows.length > 0 || otherKeys.length > 0;
 
   if (!hasAnyChanges) {
-    return (
-      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 p-4 text-center text-xs text-muted-foreground bg-white dark:bg-slate-900">
-        No se registraron cambios en esta versión.
-      </div>
-    );
+    return null;
   }
 
   return (
@@ -359,7 +375,7 @@ function Changes({
 
                 {/* Columna de PRECIO unitario dedicada */}
                 <div className="text-right pr-2 shrink-0">
-                  <span className="inline-block px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs font-black text-slate-800 dark:text-slate-200 shadow-2xs">
+                  <span className="inline-block px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 tabular-nums text-xs font-black text-slate-800 dark:text-slate-200 shadow-2xs">
                     {formatRD(it.precio_unitario)}
                   </span>
                 </div>
@@ -376,9 +392,9 @@ function Changes({
                     >
                       <span className="font-bold">
                         {it.antesCant}
-                        {it.unit}
+                        {it.unitAntes}
                       </span>
-                      <span className="text-[10px] opacity-75 font-mono">
+                      <span className="text-[10px] opacity-75 tabular-nums">
                         ({formatRD(it.antesSub)})
                       </span>
                     </span>
@@ -399,9 +415,9 @@ function Changes({
                     >
                       <span className="font-black text-emerald-600 dark:text-emerald-400">
                         {it.despuesCant}
-                        {it.unit}
+                        {it.unitDespues}
                       </span>
-                      <span className="text-[10px] text-emerald-700/90 dark:text-emerald-300 font-mono font-bold">
+                      <span className="text-[10px] text-emerald-700/90 dark:text-emerald-300 tabular-nums font-bold">
                         ({formatRD(it.despuesSub)})
                       </span>
                     </span>
@@ -448,7 +464,7 @@ function Changes({
 
                 {/* Columna de PRECIO del servicio */}
                 <div className="text-right pr-2 shrink-0">
-                  <span className="inline-block px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 font-mono text-xs font-black text-slate-800 dark:text-slate-200 shadow-2xs">
+                  <span className="inline-block px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 tabular-nums text-xs font-black text-slate-800 dark:text-slate-200 shadow-2xs">
                     {formatRD(srv.precio)}
                   </span>
                 </div>
@@ -487,13 +503,13 @@ function Changes({
           </>
         )}
 
-        {/* BLOQUE 3: Totales y Condiciones de la orden */}
+        {/* BLOQUE 3: Condiciones y fechas operativas de la orden */}
         {otherKeys.length > 0 && (
           <>
             {(itemRows.length > 0 || serviceRows.length > 0) && (
               <div className="px-3.5 py-1 bg-slate-100/70 dark:bg-slate-800/50 text-[10px] font-black uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                <Receipt className="h-3 w-3 text-primary" />
-                <span>Totales y Condiciones de la Orden</span>
+                <Pencil className="h-3 w-3 text-primary" />
+                <span>Condiciones y Fechas de la Orden</span>
               </div>
             )}
             {otherKeys.map((key) => {
@@ -525,7 +541,7 @@ function Changes({
                   <div className="text-right pr-2 shrink-0">
                     {diff != null && Math.abs(diff) >= 0.01 ? (
                       <span
-                        className={`inline-block px-1.5 py-0.5 rounded-md font-mono text-[11px] font-black shadow-2xs ${
+                        className={`inline-block px-1.5 py-0.5 rounded-md tabular-nums text-[11px] font-black shadow-2xs ${
                           diff > 0
                             ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200/80"
                             : "bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-200/80"
@@ -535,18 +551,18 @@ function Changes({
                         {formatRD(diff)}
                       </span>
                     ) : (
-                      <span className="text-muted-foreground font-mono text-xs">—</span>
+                      <span className="text-muted-foreground tabular-nums text-xs">—</span>
                     )}
                   </div>
 
                   {/* DE LA ORDEN (Antes) */}
                   <div className="min-w-0">
                     {financial ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/50 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 font-mono text-xs font-bold line-through decoration-rose-400">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/50 dark:border-rose-900/40 text-rose-700 dark:text-rose-300 tabular-nums text-xs font-bold line-through decoration-rose-400">
                         {formatRD(Number(change.antes))}
                       </span>
                     ) : key === "fecha_entrega" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/50 text-rose-700 text-xs font-mono line-through">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-rose-50/70 dark:bg-rose-950/30 border border-rose-200/50 text-rose-700 text-xs tabular-nums line-through">
                         <CalendarIcon className="h-3 w-3" />
                         <span>{formatDateClean(change.antes)}</span>
                       </span>
@@ -564,11 +580,11 @@ function Changes({
                   {/* NUEVOS CAMBIOS (Después) */}
                   <div className="min-w-0">
                     {financial ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-mono text-xs font-black shadow-2xs">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 tabular-nums text-xs font-black shadow-2xs">
                         {formatRD(Number(change.despues))}
                       </span>
                     ) : key === "fecha_entrega" ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 text-emerald-700 text-xs font-mono font-bold shadow-2xs">
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 text-emerald-700 text-xs tabular-nums font-bold shadow-2xs">
                         <CalendarIcon className="h-3 w-3" />
                         <span>{formatDateClean(change.despues)}</span>
                       </span>
@@ -587,6 +603,392 @@ function Changes({
             })}
           </>
         )}
+      </div>
+    </div>
+  );
+}
+
+function OrderFinancialSummary({
+  ordenAnterior,
+  ordenNueva,
+  financialChanges,
+}: {
+  ordenAnterior?: Orden;
+  ordenNueva?: Orden;
+  financialChanges?: OrderChanges;
+}) {
+  const isHistory = Boolean(financialChanges && !ordenNueva);
+
+  if (isHistory) {
+    const hasAnyFin =
+      financialChanges &&
+      Object.keys(financialChanges).some((k) =>
+        ["subtotal", "descuento", "costo_envio", "itbis", "total", "saldo"].includes(k),
+      );
+    if (!hasAnyFin || !financialChanges) return null;
+
+    const subAntes = financialChanges.subtotal?.antes != null ? Number(financialChanges.subtotal.antes) : null;
+    const subDesp = financialChanges.subtotal?.despues != null ? Number(financialChanges.subtotal.despues) : null;
+
+    const descAntes = financialChanges.descuento?.antes != null ? Number(financialChanges.descuento.antes) : null;
+    const descDesp = financialChanges.descuento?.despues != null ? Number(financialChanges.descuento.despues) : null;
+
+    const envAntes = financialChanges.costo_envio?.antes != null ? Number(financialChanges.costo_envio.antes) : null;
+    const envDesp = financialChanges.costo_envio?.despues != null ? Number(financialChanges.costo_envio.despues) : null;
+
+    const itbisAntes = financialChanges.itbis?.antes != null ? Number(financialChanges.itbis.antes) : null;
+    const itbisDesp = financialChanges.itbis?.despues != null ? Number(financialChanges.itbis.despues) : null;
+
+    const totAntes = financialChanges.total?.antes != null ? Number(financialChanges.total.antes) : null;
+    const totDesp = financialChanges.total?.despues != null ? Number(financialChanges.total.despues) : null;
+
+    const salAntes = financialChanges.saldo?.antes != null ? Number(financialChanges.saldo.antes) : null;
+    const salDesp = financialChanges.saldo?.despues != null ? Number(financialChanges.saldo.despues) : null;
+
+    const diffTot = totDesp != null && totAntes != null ? totDesp - totAntes : null;
+
+    return (
+      <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
+        <div className="px-3.5 py-2 bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200/90 dark:border-slate-800 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-1.5 font-black uppercase tracking-wider text-[10px] text-muted-foreground">
+            <Receipt className="h-3.5 w-3.5 text-primary" />
+            <span>Liquidación Financiera Registrada</span>
+          </div>
+          {diffTot != null && Math.abs(diffTot) >= 0.01 && (
+            <span
+              className={`text-[10px] font-black tabular-nums px-2 py-0.5 rounded-full border ${
+                diffTot > 0
+                  ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200/80"
+                  : "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200/80"
+              }`}
+            >
+              {diffTot > 0 ? `+${formatRD(diffTot)}` : formatRD(diffTot)}
+            </span>
+          )}
+        </div>
+
+        <div className="p-3.5 space-y-2 text-xs">
+          {subDesp != null && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Subtotal</span>
+              <div className="flex items-center gap-2">
+                {subAntes != null && Math.abs(subDesp - subAntes) >= 0.01 && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground line-through decoration-rose-400">
+                    {formatRD(subAntes)}
+                  </span>
+                )}
+                <span className="tabular-nums font-bold text-foreground">
+                  {formatRD(subDesp)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {descDesp != null && (
+            <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+              <span className="font-medium">Descuento</span>
+              <div className="flex items-center gap-2">
+                {descAntes != null && Math.abs(descDesp - descAntes) >= 0.01 && (
+                  <span className="text-[11px] tabular-nums line-through opacity-70">
+                    -{formatRD(descAntes)}
+                  </span>
+                )}
+                <span className="tabular-nums font-bold">
+                  -{formatRD(descDesp)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {envDesp != null && (
+            <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+              <span className="font-medium">Envío / Delivery</span>
+              <div className="flex items-center gap-2">
+                {envAntes != null && Math.abs(envDesp - envAntes) >= 0.01 && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground line-through decoration-rose-400">
+                    {formatRD(envAntes)}
+                  </span>
+                )}
+                <span className="tabular-nums font-bold text-foreground">
+                  {formatRD(envDesp)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {itbisDesp != null && (
+            <div className="flex items-center justify-between">
+              <span className="text-slate-600 dark:text-slate-400 font-medium">ITBIS (18%)</span>
+              <div className="flex items-center gap-2">
+                {itbisAntes != null && Math.abs(itbisDesp - itbisAntes) >= 0.01 && (
+                  <span className="text-[11px] tabular-nums text-muted-foreground line-through decoration-rose-400">
+                    {formatRD(itbisAntes)}
+                  </span>
+                )}
+                <span className="tabular-nums font-bold text-foreground">
+                  {formatRD(itbisDesp)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {totDesp != null && (
+            <>
+              <div className="border-t border-dashed border-slate-200 dark:border-slate-800 my-1.5" />
+              <div className="p-3 sm:p-3.5 rounded-xl bg-[#1B4B73]/10 dark:bg-[#1B4B73]/25 border border-[#1B4B73]/20 dark:border-[#1B4B73]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-[#1B4B73] text-white shadow-2xs shrink-0">
+                    <CircleDollarSign className="h-5 w-5" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-black tracking-wider uppercase text-[#1B4B73] dark:text-sky-300 block">
+                      TOTAL DE LA ORDEN
+                    </span>
+                    {diffTot != null && Math.abs(diffTot) >= 0.01 && totAntes != null && (
+                      <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                        <span>Anterior:</span>
+                        <span className="tabular-nums line-through decoration-rose-400">
+                          {formatRD(totAntes)}
+                        </span>
+                        <span
+                          className={`tabular-nums font-bold text-[11px] ${
+                            diffTot > 0
+                              ? "text-emerald-600 dark:text-emerald-400"
+                              : "text-rose-600 dark:text-rose-400"
+                          }`}
+                        >
+                          ({diffTot > 0 ? `+${formatRD(diffTot)}` : formatRD(diffTot)})
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="sm:text-right">
+                  <div className="text-xl sm:text-2xl font-black tabular-nums tracking-tight text-[#1B4B73] dark:text-white">
+                    {formatRD(totDesp)}
+                  </div>
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+                    Total Guardado
+                  </span>
+                </div>
+              </div>
+            </>
+          )}
+
+          {salDesp != null && (
+            <div className="pt-2 px-1 flex flex-wrap items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800/80">
+              <span className="text-[11px] font-medium text-muted-foreground">Saldo resultante:</span>
+              <div className="flex items-center gap-2">
+                {salDesp <= 0 ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-bold text-xs">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
+                    <span>{salDesp < 0 ? `Saldo a favor: ${formatRD(Math.abs(salDesp))}` : "TOTALMENTE PAGADA"}</span>
+                  </span>
+                ) : (
+                  <span className="tabular-nums font-black text-sm text-rose-600 dark:text-rose-400">
+                    {formatRD(salDesp)}
+                  </span>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // MODO PREVIEW (ordenAnterior y ordenNueva completos)
+  if (!ordenNueva) return null;
+
+  const subAntes = Number(ordenAnterior?.subtotal ?? 0);
+  const subDesp = Number(ordenNueva.subtotal ?? 0);
+
+  const descAntes = Number(ordenAnterior?.descuento ?? 0);
+  const descDesp = Number(ordenNueva.descuento ?? 0);
+
+  const envAntes = Number(ordenAnterior?.costo_envio ?? 0);
+  const envDesp = Number(ordenNueva.costo_envio ?? 0);
+
+  const itbisAntes = Number(ordenAnterior?.itbis ?? 0);
+  const itbisDesp = Number(ordenNueva.itbis ?? 0);
+
+  const totAntes = Number(ordenAnterior?.total ?? 0);
+  const totDesp = Number(ordenNueva.total ?? 0);
+
+  const salAntes = Number(ordenAnterior?.saldo ?? 0);
+  const salDesp = Number(ordenNueva.saldo ?? 0);
+
+  const pagado = Number(ordenNueva.pagado ?? ordenAnterior?.pagado ?? Math.max(0, totDesp - salDesp));
+  const diffTot = totDesp - totAntes;
+
+  const hasDescuento = descAntes > 0 || descDesp > 0;
+  const hasEnvio = envAntes > 0 || envDesp > 0;
+
+  return (
+    <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-2xs overflow-hidden">
+      {/* Encabezado del Ticket de Liquidación */}
+      <div className="px-3.5 py-2 bg-slate-50/90 dark:bg-slate-800/80 border-b border-slate-200/90 dark:border-slate-800 flex items-center justify-between text-xs">
+        <div className="flex items-center gap-1.5 font-black uppercase tracking-wider text-[10px] text-muted-foreground">
+          <Receipt className="h-3.5 w-3.5 text-primary" />
+          <span>Liquidación Contable de la Orden</span>
+        </div>
+        {Math.abs(diffTot) >= 0.01 && (
+          <span
+            className={`text-[10px] font-black tabular-nums px-2 py-0.5 rounded-full border ${
+              diffTot > 0
+                ? "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border-emerald-200/80"
+                : "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-300 border-rose-200/80"
+            }`}
+          >
+            {diffTot > 0 ? `+${formatRD(diffTot)}` : formatRD(diffTot)}
+          </span>
+        )}
+      </div>
+
+      {/* Desglose Contable Ordenado */}
+      <div className="p-3.5 space-y-2 text-xs">
+        {/* 1. Subtotal */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-600 dark:text-slate-400 font-medium">Subtotal</span>
+          <div className="flex items-center gap-2">
+            {Math.abs(subDesp - subAntes) >= 0.01 && subAntes > 0 && (
+              <span className="text-[11px] tabular-nums text-muted-foreground line-through decoration-rose-400">
+                {formatRD(subAntes)}
+              </span>
+            )}
+            <span className="tabular-nums font-bold text-foreground">
+              {formatRD(subDesp)}
+            </span>
+          </div>
+        </div>
+
+        {/* 2. Descuento (si aplica) */}
+        {hasDescuento && (
+          <div className="flex items-center justify-between text-emerald-600 dark:text-emerald-400">
+            <span className="font-medium">Descuento</span>
+            <div className="flex items-center gap-2">
+              {Math.abs(descDesp - descAntes) >= 0.01 && descAntes > 0 && (
+                <span className="text-[11px] tabular-nums line-through opacity-70">
+                  -{formatRD(descAntes)}
+                </span>
+              )}
+              <span className="tabular-nums font-bold">
+                -{formatRD(descDesp)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 3. Costo de envío (si aplica) */}
+        {hasEnvio && (
+          <div className="flex items-center justify-between text-slate-600 dark:text-slate-400">
+            <span className="font-medium">Envío / Delivery</span>
+            <div className="flex items-center gap-2">
+              {Math.abs(envDesp - envAntes) >= 0.01 && envAntes > 0 && (
+                <span className="text-[11px] tabular-nums text-muted-foreground line-through decoration-rose-400">
+                  {formatRD(envAntes)}
+                </span>
+              )}
+              <span className="tabular-nums font-bold text-foreground">
+                {formatRD(envDesp)}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* 4. ITBIS (18%) */}
+        <div className="flex items-center justify-between">
+          <span className="text-slate-600 dark:text-slate-400 font-medium">ITBIS (18%)</span>
+          <div className="flex items-center gap-2">
+            {Math.abs(itbisDesp - itbisAntes) >= 0.01 && itbisAntes > 0 && (
+              <span className="text-[11px] tabular-nums text-muted-foreground line-through decoration-rose-400">
+                {formatRD(itbisAntes)}
+              </span>
+            )}
+            <span className="tabular-nums font-bold text-foreground">
+              {formatRD(itbisDesp)}
+            </span>
+          </div>
+        </div>
+
+        {/* Separador tipo ticket */}
+        <div className="border-t border-dashed border-slate-200 dark:border-slate-800 my-1.5" />
+
+        {/* 🌟 5. TOTAL DE LA ORDEN - Protagonista con fondo destacado y tamaño apreciable */}
+        <div className="p-3 sm:p-3.5 rounded-xl bg-[#1B4B73]/10 dark:bg-[#1B4B73]/25 border border-[#1B4B73]/20 dark:border-[#1B4B73]/40 flex flex-col sm:flex-row sm:items-center justify-between gap-2 shadow-2xs">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-lg bg-[#1B4B73] text-white shadow-2xs shrink-0">
+              <CircleDollarSign className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-xs font-black tracking-wider uppercase text-[#1B4B73] dark:text-sky-300 block">
+                TOTAL DE LA ORDEN
+              </span>
+              {Math.abs(diffTot) >= 0.01 && totAntes > 0 && (
+                <div className="text-[11px] text-muted-foreground flex items-center gap-1 mt-0.5">
+                  <span>Anterior:</span>
+                  <span className="tabular-nums line-through decoration-rose-400">
+                    {formatRD(totAntes)}
+                  </span>
+                  <span
+                    className={`tabular-nums font-bold text-[11px] ${
+                      diffTot > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : "text-rose-600 dark:text-rose-400"
+                    }`}
+                  >
+                    ({diffTot > 0 ? `+${formatRD(diffTot)}` : formatRD(diffTot)})
+                  </span>
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div className="sm:text-right">
+            <div className="text-xl sm:text-2xl font-black tabular-nums tracking-tight text-[#1B4B73] dark:text-white">
+              {formatRD(totDesp)}
+            </div>
+            <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
+              Monto Total Calculado
+            </span>
+          </div>
+        </div>
+
+        {/* 6. Liquidación de Pagos y Saldo Resultante */}
+        <div className="pt-2 px-1 flex flex-wrap items-center justify-between gap-2 text-xs border-t border-slate-100 dark:border-slate-800/80">
+          <div className="flex items-center gap-1.5">
+            <span className="text-[11px] font-medium text-muted-foreground">Ya cobrado:</span>
+            <span className="tabular-nums font-bold text-foreground text-xs">
+              {formatRD(pagado)}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            {salDesp <= 0 ? (
+              <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300 font-black text-xs shadow-2xs">
+                <CheckCircle2 className="h-3.5 w-3.5" />
+                <span>
+                  {salDesp < 0
+                    ? `Saldo a favor: ${formatRD(Math.abs(salDesp))}`
+                    : "TOTALMENTE PAGADA"}
+                </span>
+              </span>
+            ) : (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-amber-50 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-[10px] font-black uppercase tracking-wider">
+                  Pendiente de cobro
+                </span>
+                <div className="flex items-center gap-1">
+                  <span className="text-[11px] font-bold text-muted-foreground">Saldo:</span>
+                  <span className="tabular-nums font-black text-sm text-rose-600 dark:text-rose-400">
+                    {formatRD(salDesp)}
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -650,7 +1052,7 @@ function DeliveryDatePicker({
           >
             <div className="flex items-center gap-2 min-w-0">
               <CalendarIcon className="h-4 w-4 text-[#1B4B73] shrink-0" />
-              <span className="font-mono font-bold text-sm text-foreground">
+              <span className="font-bold text-sm text-foreground tabular-nums">
                 {formattedDate}
               </span>
               <span className="text-xs text-muted-foreground">
@@ -857,7 +1259,7 @@ function ClientSearchbox({
                 : "Seleccionar cliente..."}
             </span>
             {selectedClient?.telefono && (
-              <span className="text-[11px] text-muted-foreground font-mono">
+              <span className="text-[11px] text-muted-foreground tabular-nums">
                 ({selectedClient.telefono})
               </span>
             )}
@@ -1093,7 +1495,7 @@ export function EditOrderDialog({
 
   function close() {
     if (saving.current) return;
-    if (dirty) setDiscard(true);
+    if (dirty && !discard) setDiscard(true);
     else onClose();
   }
 
@@ -1157,28 +1559,69 @@ export function EditOrderDialog({
     }
   }
 
-  // Cálculo en vivo para la tarjeta financiera
+  // Cálculo en vivo para la tarjeta financiera con cálculo exacto de ITBIS
   const liveFinancials = useMemo(() => {
-    if (!draft) return { subtotal: 0, baseSub: 0, surcharge: 0, itbis: 0, total: 0, saldo: 0 };
-    const itemsTotal = draft.items.reduce(
+    if (!draft) return { subtotal: 0, baseSub: 0, surcharge: 0, itbis: 0, total: 0, saldo: 0, hasItbis: false };
+    
+    // Separar prendas gravables y exentas exactamente igual que la RPC order_edit_totals
+    const taxableItems = draft.items.filter((it) => !it.is_exento);
+    const exemptItems = draft.items.filter((it) => it.is_exento);
+
+    const taxable = taxableItems.reduce(
       (acc, it) => acc + (it.cantidad || 0) * (it.precio_unitario || 0),
       0,
     );
-    const feesTotal = Object.values(draft.servicios_precios || {}).reduce(
+    const exempt = exemptItems.reduce(
+      (acc, it) => acc + (it.cantidad || 0) * (it.precio_unitario || 0),
+      0,
+    );
+    const fees = Object.values(draft.servicios_precios || {}).reduce(
       (acc, fee) => acc + (fee || 0),
       0,
     );
-    const baseSub = itemsTotal + feesTotal;
     const surcharge = draft.es_urgente
-      ? Number(((baseSub * recargoUrgencia) / 100).toFixed(2))
+      ? Number((((taxable + exempt + fees) * recargoUrgencia) / 100).toFixed(2))
       : 0;
-    const sub = baseSub + surcharge;
+    const base = taxable + fees + surcharge;
+
+    const itbisPorcentaje = tenant?.config?.itbis_porcentaje ?? 18;
+    const itbisIncluido = Boolean(tenant?.config?.itbis_incluido);
+    // Si la orden original tenía ITBIS cobrado (orden.itbis > 0), se recalcula con su porcentaje
+    const hasItbis = Boolean(orden.itbis && orden.itbis > 0);
+    const rate = hasItbis ? itbisPorcentaje / 100 : 0;
+
+    let tax = 0;
+    let sub = 0;
+
+    if (rate > 0) {
+      if (itbisIncluido) {
+        tax = Number((base - base / (1 + rate)).toFixed(2));
+        sub = Number((base / (1 + rate) + exempt).toFixed(2));
+      } else {
+        tax = Number((base * rate).toFixed(2));
+        sub = Number((base + exempt).toFixed(2));
+      }
+    } else {
+      tax = 0;
+      sub = Number((base + exempt).toFixed(2));
+    }
+
     const discount = draft.descuento || 0;
     const shipping = draft.costo_envio || 0;
-    const tot = Math.max(0, sub - discount) + shipping;
-    const sal = tot - (draft.pagado || 0);
-    return { subtotal: sub, baseSub, surcharge, itbis: 0, total: tot, saldo: sal };
-  }, [draft, recargoUrgencia]);
+    const tot = Number((Math.max(0, sub + tax - discount) + shipping).toFixed(2));
+    const sal = Number((tot - (draft.pagado || 0)).toFixed(2));
+
+    return {
+      subtotal: sub,
+      baseSub: taxable + exempt + fees,
+      surcharge,
+      itbis: tax,
+      total: tot,
+      saldo: sal,
+      hasItbis,
+      itbisPorcentaje,
+    };
+  }, [draft, recargoUrgencia, orden.itbis, tenant?.config?.itbis_porcentaje, tenant?.config?.itbis_incluido]);
 
   return (
     <Dialog
@@ -1188,18 +1631,17 @@ export function EditOrderDialog({
       }}
     >
       <DialogContent
-        className="max-w-3xl max-h-[82vh] flex flex-col p-0 gap-0 rounded-3xl overflow-hidden shadow-2xl border border-border/70 bg-background"
-        onInteractOutside={(event) => event.preventDefault()}
+        className="max-w-[620px] max-h-[85vh] flex flex-col p-0 gap-0 rounded-3xl overflow-hidden shadow-2xl border border-border/70 bg-background"
       >
         {/* Header Fijo */}
-        <div className="px-5 py-3.5 pr-14 sm:pr-16 border-b border-border/60 bg-surface/50 backdrop-blur-xs flex items-center justify-between gap-4 shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-2xl bg-primary/10 text-primary shrink-0">
-              <Pencil className="h-5 w-5" />
+        <div className="px-5 py-3 pr-14 sm:pr-16 border-b border-border/60 bg-surface/50 backdrop-blur-xs flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="p-2 rounded-2xl bg-primary/10 text-primary shrink-0">
+              <Pencil className="h-4.5 w-4.5" />
             </div>
-            <div>
-              <DialogTitle className="text-lg sm:text-xl font-display font-black text-foreground tracking-tight flex items-center gap-2">
-                <span>
+            <div className="min-w-0">
+              <DialogTitle className="text-base sm:text-lg font-display font-black text-foreground tracking-tight flex items-center gap-2">
+                <span className="truncate">
                   {history
                     ? "Historial de Cambios"
                     : preview
@@ -1304,58 +1746,35 @@ export function EditOrderDialog({
                               clientes={clientes}
                               empleados={empleados}
                             />
+                            <OrderFinancialSummary
+                              financialChanges={entry.cambios}
+                            />
                           </div>
                         ))
                       )}
                     </div>
                   ) : preview ? (
                     /* Vista de Revisión (Preview) */
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-3 gap-2.5 p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200/80 dark:border-slate-800 text-xs">
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                            Total Anterior
-                          </span>
-                          <strong className="text-sm sm:text-base font-black text-slate-600 dark:text-slate-300 block mt-0.5">
-                            {formatRD(context.orden.total)}
-                          </strong>
+                    <div className="space-y-3.5">
+                      {Object.keys(preview.cambios).some((k) =>
+                        !["subtotal", "itbis", "descuento", "costo_envio", "total", "saldo"].includes(k),
+                      ) && (
+                        <div className="space-y-1.5">
+                          <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+                            Detalle de Prendas y Modificaciones
+                          </Label>
+                          <Changes
+                            changes={preview.cambios}
+                            clientes={clientes}
+                            empleados={empleados}
+                          />
                         </div>
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-primary block">
-                            Nuevo Total
-                          </span>
-                          <strong className="text-sm sm:text-base font-black text-primary block mt-0.5">
-                            {formatRD(preview.orden.total)}
-                          </strong>
-                        </div>
-                        <div>
-                          <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground block">
-                            Saldo Resultante
-                          </span>
-                          <strong
-                            className={`text-sm sm:text-base font-black block mt-0.5 ${
-                              preview.orden.saldo > 0
-                                ? "text-rose-600"
-                                : preview.orden.saldo < 0
-                                ? "text-emerald-600"
-                                : "text-foreground"
-                            }`}
-                          >
-                            {formatRD(preview.orden.saldo)}
-                          </strong>
-                        </div>
-                      </div>
+                      )}
 
-                      <div className="space-y-1.5">
-                        <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
-                          Detalle de Cambios a Aplicar
-                        </Label>
-                        <Changes
-                          changes={preview.cambios}
-                          clientes={clientes}
-                          empleados={empleados}
-                        />
-                      </div>
+                      <OrderFinancialSummary
+                        ordenAnterior={context.orden}
+                        ordenNueva={preview.orden}
+                      />
 
                       <div className="space-y-1.5 p-3.5 rounded-2xl bg-blue-50/60 dark:bg-blue-950/30 border border-blue-200/60 dark:border-blue-900/40 text-xs">
                         <Label htmlFor="preview-reason" className="font-bold text-blue-950 dark:text-blue-200">
@@ -1730,17 +2149,17 @@ export function EditOrderDialog({
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5 items-start">
                               {/* Columna Izquierda: Tipo de Orden (Prioridad) */}
                               <div className="space-y-1.5 flex flex-col justify-between h-full">
-                                <div className="h-5 flex items-center justify-between">
-                                  <Label className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5">
-                                    <Clock className="h-3.5 w-3.5 text-primary" />
-                                    <span>Tipo de orden (Prioridad)</span>
+                                <div className="h-5 flex items-center justify-between gap-1">
+                                  <Label className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 shrink-0">
+                                    <Clock className="h-3 w-3 text-primary shrink-0" />
+                                    <span>Tipo de orden</span>
                                   </Label>
                                   {draft.es_urgente ? (
-                                    <span className="text-[10px] font-black uppercase text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-full border border-rose-200 dark:border-rose-900">
-                                      Recargo +{recargoUrgencia}%
+                                    <span className="text-[9px] font-bold uppercase text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/40 px-1.5 py-0.5 rounded-full border border-rose-200 dark:border-rose-900 whitespace-nowrap shrink-0">
+                                      +{recargoUrgencia}% recargo
                                     </span>
                                   ) : (
-                                    <span className="text-[10px] font-bold text-muted-foreground">
+                                    <span className="text-[9.5px] font-semibold text-muted-foreground whitespace-nowrap shrink-0">
                                       Sin recargo
                                     </span>
                                   )}
@@ -1750,27 +2169,27 @@ export function EditOrderDialog({
                                   <button
                                     type="button"
                                     onClick={() => update({ es_urgente: false })}
-                                    className={`h-8 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                    className={`h-8 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 px-1 transition-all cursor-pointer ${
                                       !draft.es_urgente
                                         ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-2xs font-black border border-slate-200/80 dark:border-slate-700"
                                         : "text-slate-600 dark:text-slate-400 hover:text-foreground"
                                     }`}
                                   >
-                                    <Clock className={`h-3.5 w-3.5 ${!draft.es_urgente ? "text-primary" : "text-slate-400"}`} />
+                                    <Clock className={`h-3 w-3 shrink-0 ${!draft.es_urgente ? "text-primary" : "text-slate-400"}`} />
                                     <span>Estándar</span>
                                   </button>
 
                                   <button
                                     type="button"
                                     onClick={() => update({ es_urgente: true })}
-                                    className={`h-8 rounded-lg text-xs font-bold flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                                    className={`h-8 rounded-lg text-[11px] font-bold flex items-center justify-center gap-1 px-1 transition-all cursor-pointer ${
                                       draft.es_urgente
                                         ? "bg-rose-500 text-white shadow-2xs font-black"
                                         : "text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/30"
                                     }`}
                                   >
-                                    <Sparkles className="h-3.5 w-3.5" />
-                                    <span>⚡ Urgente (+{recargoUrgencia}%)</span>
+                                    <Zap className="h-3 w-3 shrink-0 fill-current" />
+                                    <span>Urgente (+{recargoUrgencia}%)</span>
                                   </button>
                                 </div>
 
@@ -1785,12 +2204,12 @@ export function EditOrderDialog({
 
                               {/* Columna Derecha: Descuento */}
                               <div className="space-y-1.5 flex flex-col justify-between h-full">
-                                <div className="h-5 flex items-center justify-between">
+                                <div className="h-5 flex items-center justify-between gap-1">
                                   <Label
                                     htmlFor="edit-discount"
-                                    className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1.5"
+                                    className="text-[10.5px] font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-1 shrink-0"
                                   >
-                                    <DollarSign className="h-3.5 w-3.5 text-primary" />
+                                    <DollarSign className="h-3 w-3 text-primary shrink-0" />
                                     <span>Descuento</span>
                                   </Label>
                                   {Number(selectedClient?.descuento_fijo || 0) > 0 ? (
@@ -1802,9 +2221,9 @@ export function EditOrderDialog({
                                         update({ descuento: amount });
                                         toast.info(`Descuento fijo (${pct}%) aplicado: ${formatRD(amount)}`);
                                       }}
-                                      className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer"
+                                      className="text-[9.5px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline cursor-pointer whitespace-nowrap shrink-0"
                                     >
-                                      Aplicar desc. cliente ({selectedClient?.descuento_fijo}%)
+                                      Desc. cliente ({selectedClient?.descuento_fijo}%)
                                     </button>
                                   ) : null}
                                 </div>
@@ -1900,7 +2319,7 @@ export function EditOrderDialog({
                             <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
                               Total Anterior
                             </span>
-                            <span className="text-sm font-black text-slate-600 dark:text-slate-400 block mt-0.5">
+                            <span className="text-sm font-black tabular-nums text-slate-600 dark:text-slate-400 block mt-0.5">
                               {formatRD(context.orden.total)}
                             </span>
                           </div>
@@ -1908,9 +2327,14 @@ export function EditOrderDialog({
                             <span className="text-[10px] font-black uppercase tracking-wider text-[#1B4B73] dark:text-sky-300 block">
                               Nuevo Total
                             </span>
-                            <span className="text-sm font-black text-[#1B4B73] dark:text-sky-300 block mt-0.5">
+                            <span className="text-sm font-black tabular-nums text-[#1B4B73] dark:text-sky-300 block mt-0.5">
                               {formatRD(liveFinancials.total)}
                             </span>
+                            {liveFinancials.itbis > 0 && (
+                              <span className="text-[9px] font-semibold text-muted-foreground block">
+                                + ({formatRD(liveFinancials.itbis)} ITBIS)
+                              </span>
+                            )}
                             {draft.es_urgente && liveFinancials.surcharge > 0 && (
                               <span className="text-[9px] font-bold text-rose-500 block">
                                 +{formatRD(liveFinancials.surcharge)} urgencia
@@ -1921,7 +2345,7 @@ export function EditOrderDialog({
                             <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block">
                               Pagado
                             </span>
-                            <span className="text-sm font-bold text-foreground block mt-0.5">
+                            <span className="text-sm font-bold tabular-nums text-foreground block mt-0.5">
                               {formatRD(context.orden.pagado)}
                             </span>
                           </div>
@@ -1930,7 +2354,7 @@ export function EditOrderDialog({
                               Saldo Resultante
                             </span>
                             <span
-                              className={`text-sm font-black block mt-0.5 ${
+                              className={`text-sm font-black tabular-nums block mt-0.5 ${
                                 liveFinancials.saldo > 0
                                   ? "text-rose-600 dark:text-rose-400"
                                   : liveFinancials.saldo < 0
@@ -2009,12 +2433,17 @@ export function EditOrderDialog({
                 Revisa los cambios antes de confirmar.
               </span>
             ) : draft ? (
-              <>
-                <span className="text-muted-foreground font-medium">Total resultante:</span>
-                <span className="font-black text-sm text-[#1B4B73] dark:text-sky-300">
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <span className="text-muted-foreground font-medium">Total:</span>
+                <span className="font-black text-sm tabular-nums text-[#1B4B73] dark:text-sky-300">
                   {formatRD(liveFinancials.total)}
                 </span>
-              </>
+                {liveFinancials.itbis > 0 && (
+                  <span className="text-[11px] text-muted-foreground font-medium">
+                    + ({formatRD(liveFinancials.itbis)} ITBIS)
+                  </span>
+                )}
+              </div>
             ) : null}
           </div>
 
