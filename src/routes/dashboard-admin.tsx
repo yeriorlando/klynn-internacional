@@ -32,7 +32,20 @@ import {
   Filter,
   BarChart3,
   CreditCard,
-  Truck
+  Truck,
+  Pencil,
+  Eye,
+  X,
+  Phone,
+  Store,
+  UserCheck,
+  ChevronRight,
+  Hash,
+  Inbox,
+  RotateCw,
+  Ban,
+  Shirt,
+  Trash2
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
@@ -44,9 +57,12 @@ import {
   getTenantsForUser, 
   getTenantBranchName,
   getOrdenes, 
+  getClientes,
+  getServicios,
   getPlans,
   PLANS,
   formatRD, 
+  formatDateRD,
   setActiveTenant,
   setSession,
   logout,
@@ -55,9 +71,17 @@ import {
   getEmpleados,
   getNextRenewalDate,
   getCajas,
+  saveOrden,
   type Tenant,
-  type Plan 
+  type Plan,
+  type Orden,
+  type Cliente,
+  type Servicio,
+  type Empleado,
+  type EstadoOrden
 } from "@/lib/storage";
+import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
+import { OrderDetail, TicketPrintPortal } from "@/components/klynn/OrdenesPage";
 import { toast } from "sonner";
 import {
   Dialog,
@@ -66,6 +90,13 @@ import {
   DialogTitle,
   DialogDescription,
 } from "@/components/ui/dialog";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { usePlans } from "@/hooks/use-queries";
@@ -110,6 +141,110 @@ function PlanBadge({ id }: { id: string }) {
   );
 }
 
+function getEstadoBadge(estado: string) {
+  const norm = (estado || "").replace("_", " ").toUpperCase().trim();
+
+  const config: Record<string, { icon: any; label: string; style: string }> = {
+    RECIBIDA: {
+      icon: Inbox,
+      label: "Recibida",
+      style: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    RECIBIDO: {
+      icon: Inbox,
+      label: "Recibida",
+      style: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    "EN PROCESO": {
+      icon: RotateCw,
+      label: "En Proceso",
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    EN_PROCESO: {
+      icon: RotateCw,
+      label: "En Proceso",
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    PROCESO: {
+      icon: RotateCw,
+      label: "En Proceso",
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    LISTA: {
+      icon: CheckCircle2,
+      label: "Lista",
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    LISTO: {
+      icon: CheckCircle2,
+      label: "Lista",
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    "EN CAMINO": {
+      icon: Truck,
+      label: "En Camino",
+      style: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+    },
+    EN_CAMINO: {
+      icon: Truck,
+      label: "En Camino",
+      style: "border-sky-200 bg-sky-50 text-sky-700 dark:border-sky-900/50 dark:bg-sky-950/40 dark:text-sky-300",
+    },
+    ENTREGADA: {
+      icon: CheckCircle2,
+      label: "Entregada",
+      style: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
+    },
+    ENTREGADO: {
+      icon: CheckCircle2,
+      label: "Entregada",
+      style: "border-purple-200 bg-purple-50 text-purple-700 dark:border-purple-900/50 dark:bg-purple-950/40 dark:text-purple-300",
+    },
+    PAGADA: {
+      icon: CheckCircle2,
+      label: "Pagada",
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    PAGADO: {
+      icon: CheckCircle2,
+      label: "Pagada",
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    CANCELADA: {
+      icon: Ban,
+      label: "Cancelada",
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
+    CANCELADO: {
+      icon: Ban,
+      label: "Cancelada",
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
+    ANULADA: {
+      icon: Ban,
+      label: "Anulada",
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
+  };
+
+  const item = config[norm] || config[estado] || {
+    icon: CheckCircle2,
+    label: estado,
+    style: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300",
+  };
+  const Icon = item.icon;
+
+  return (
+    <Badge
+      variant="outline"
+      className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[10px] font-bold tracking-wide shadow-2xs border ${item.style}`}
+    >
+      <Icon className="h-3 w-3 shrink-0" />
+      <span>{item.label}</span>
+    </Badge>
+  );
+}
+
 function DashboardAdminPage() {
   const auth = useRequireAuth();
   const navigate = useNavigate();
@@ -127,29 +262,61 @@ function DashboardAdminPage() {
       const ordsResults = await Promise.all(
         tenants.map(async (t) => {
           try {
-            const ords = await getOrdenes(t.id);
-            const ordsArr = Array.isArray(ords) ? ords : [];
+            const [ords, clis] = await Promise.all([
+              getOrdenes(t.id),
+              getClientes(t.id)
+            ]);
+            const ordsArr = Array.isArray(ords) ? (ords as Orden[]) : [];
+            const clisArr = Array.isArray(clis) ? (clis as Cliente[]) : [];
             const ingr = ordsArr.reduce((s: number, o: any) => s + (o.total || 0), 0);
-            return { tenantId: t.id, count: ordsArr.length, total: ingr, estado: t.estado };
+            return { 
+              tenantId: t.id, 
+              count: ordsArr.length, 
+              total: ingr, 
+              estado: t.estado,
+              ords: ordsArr,
+              clis: clisArr,
+              tenant: t
+            };
           } catch {
-            return { tenantId: t.id, count: 0, total: 0, estado: t.estado };
+            return { 
+              tenantId: t.id, 
+              count: 0, 
+              total: 0, 
+              estado: t.estado,
+              ords: [],
+              clis: [],
+              tenant: t
+            };
           }
         })
       );
 
       let totalIngresos = 0, totalOrdenesCount = 0, activasCount = 0;
       const tStats: Record<string, { count: number; total: number }> = {};
+      const allOrdersWithTenant: Array<{ orden: Orden; tenant: Tenant; cliente?: Cliente }> = [];
+
       for (const res of ordsResults) {
         tStats[res.tenantId] = { count: res.count, total: res.total };
         totalIngresos += res.total;
         totalOrdenesCount += res.count;
         if (res.estado !== "CANCELADO") activasCount++;
+
+        const clientMap = new Map((res.clis || []).map((c) => [c.id, c]));
+        (res.ords || []).forEach((o: Orden) => {
+          allOrdersWithTenant.push({
+            orden: o,
+            tenant: res.tenant,
+            cliente: clientMap.get(o.cliente_id)
+          });
+        });
       }
 
       return {
         tenants,
         tenantStats: tStats,
-        stats: { totalIngresos, totalOrdenesCount, activasCount }
+        stats: { totalIngresos, totalOrdenesCount, activasCount },
+        allOrdersWithTenant
       };
     },
     enabled: !!userEmail && auth?.empleado.id !== '__loading__',
@@ -159,11 +326,45 @@ function DashboardAdminPage() {
   const myTenants = dashboardData?.tenants || [];
   const tenantStats = dashboardData?.tenantStats || {};
   const stats = dashboardData?.stats || { totalIngresos: 0, totalOrdenesCount: 0, activasCount: 0 };
+  const allOrdersWithTenant = dashboardData?.allOrdersWithTenant || [];
   const loading = loadingDashboard && myTenants.length === 0;
 
+  // Filtros de Sucursales
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  // Buscador Global Multicursal (Omnisearch)
+  const [globalSearch, setGlobalSearch] = useState("");
+  const [globalSearchBranch, setGlobalSearchBranch] = useState<string>("ALL");
+  const [isOpeningOrder, setIsOpeningOrder] = useState(false);
+
+  const selectedBranchTenant = useMemo(() => {
+    return myTenants.find((t) => t.id === globalSearchBranch) || null;
+  }, [myTenants, globalSearchBranch]);
+
+  const globalSearchResults = useMemo(() => {
+    const q = globalSearch.toLowerCase().trim();
+    if (!q || q.length < 2) return [];
+    const cleanQ = q.startsWith("#") ? q.slice(1) : q;
+
+    return allOrdersWithTenant.filter(({ orden, tenant, cliente }) => {
+      // Filtro por sucursal seleccionada
+      if (globalSearchBranch !== "ALL" && tenant.id !== globalSearchBranch) {
+        return false;
+      }
+
+      const numMatch = (orden.numero || "").toLowerCase().includes(cleanQ);
+      const cliNameMatch = cliente 
+        ? `${cliente.nombre} ${cliente.apellido || ""}`.toLowerCase().includes(q) 
+        : false;
+      const cliPhoneMatch = cliente?.telefono ? cliente.telefono.includes(cleanQ) : false;
+      const tenantNameMatch = tenant.nombre.toLowerCase().includes(q);
+      const notesMatch = (orden.notas || "").toLowerCase().includes(q);
+
+      return numMatch || cliNameMatch || cliPhoneMatch || tenantNameMatch || notesMatch;
+    }).slice(0, 20);
+  }, [allOrdersWithTenant, globalSearch, globalSearchBranch]);
 
   const filteredTenants = useMemo(() => {
     return myTenants.filter((t) => {
@@ -185,245 +386,92 @@ function DashboardAdminPage() {
 
   const [showBranchModal, setShowBranchModal] = useState(false);
   const [showSuccessModal, setShowSuccessModal] = useState(false);
-  const [selectedInspectTenant, setSelectedInspectTenant] = useState<Tenant | null>(null);
-  const [inspectLoading, setInspectLoading] = useState(false);
-  const [inspectData, setInspectData] = useState<{
-    ordenes: any[];
-    gastos: any[];
-    empleados: any[];
-    movimientos: any[];
-    cajas: any[];
+  
+  // Estados para ver / editar órdenes desde la búsqueda global
+  const [editingOrder, setEditingOrder] = useState<Orden | null>(null);
+  const [editingOrderContext, setEditingOrderContext] = useState<{
+    tenant: Tenant;
+    clientes: Cliente[];
+    servicios: Servicio[];
+    empleados: Empleado[];
   } | null>(null);
 
-  useEffect(() => {
-    async function loadInspect() {
-      if (!selectedInspectTenant) {
-        setInspectData(null);
-        return;
+  const [viewingOrder, setViewingOrder] = useState<Orden | null>(null);
+  const [viewingOrderContext, setViewingOrderContext] = useState<{
+    tenant: Tenant;
+    clientes: Cliente[];
+    servicios: Servicio[];
+    empleados: Empleado[];
+  } | null>(null);
+
+  const [showPrint, setShowPrint] = useState<Orden | null>(null);
+
+
+
+  // Handlers para abrir órdenes desde el buscador global
+  const handleOpenGlobalOrder = async (orden: Orden, tenant: Tenant, action: "view" | "edit") => {
+    setIsOpeningOrder(true);
+    try {
+      const [clis, servs, emps] = await Promise.all([
+        getClientes(tenant.id),
+        getServicios(tenant.id),
+        getEmpleados(tenant.id)
+      ]);
+      const ctx = {
+        tenant,
+        clientes: clis || [],
+        servicios: servs || [],
+        empleados: emps || []
+      };
+      if (action === "view") {
+        setViewingOrderContext(ctx);
+        setViewingOrder(orden);
+      } else {
+        setEditingOrderContext(ctx);
+        setEditingOrder(orden);
       }
-      setInspectLoading(true);
-      try {
-        const [oList, gList, eList, mList, cList] = await Promise.all([
-          getOrdenes(selectedInspectTenant.id),
-          getGastos(selectedInspectTenant.id),
-          getEmpleados(selectedInspectTenant.id),
-          getMovimientos(selectedInspectTenant.id),
-          getCajas(selectedInspectTenant.id)
-        ]);
-        setInspectData({
-          ordenes: oList || [],
-          gastos: gList || [],
-          empleados: eList || [],
-          movimientos: mList || [],
-          cajas: cList || []
-        });
-      } catch (err) {
-        console.error("Error loading inspect data:", err);
-        toast.error("Error al cargar estadísticas de la sucursal");
-      } finally {
-        setInspectLoading(false);
-      }
+    } catch (e) {
+      console.error("Error al preparar orden:", e);
+      toast.error("Error al cargar datos para la orden");
+    } finally {
+      setIsOpeningOrder(false);
     }
-    loadInspect();
-  }, [selectedInspectTenant]);
+  };
 
-  const inspectStats = useMemo(() => {
-    if (!inspectData) return null;
-    const { ordenes, gastos, movimientos, cajas } = inspectData;
 
-    const totalVentas = ordenes.reduce((s, o) => s + (o.total || 0), 0);
-    const totalITBIS = ordenes.reduce((s, o) => s + (o.itbis || 0), 0);
-    
-    // Gastos manuales + caja chica
-    const gastosManuales = gastos.filter(g => !g.is_caja_chica).reduce((s, g) => s + g.monto, 0);
-    const gastosCajaChica = gastos.filter(g => g.is_caja_chica).reduce((s, g) => s + g.monto, 0);
-    const totalGastos = gastos.reduce((s, g) => s + (g.monto || 0), 0);
+  // Guardar orden editada con actualización reactiva
+  const handleOrderSaved = (updated: Orden) => {
+    setEditingOrder(null);
+    setEditingOrderContext(null);
+    toast.success(`Orden #${updated.numero} actualizada con éxito`);
 
-    const rentabilidad = totalVentas - totalGastos;
-    const ticketPromedio = ordenes.length > 0 ? totalVentas / ordenes.length : 0;
-
-    // Métodos de Pago
-    const porMetodo = ordenes.reduce((m, o) => { 
-      m[o.metodo_pago] = (m[o.metodo_pago] || 0) + (o.total || 0); 
-      return m; 
-    }, {} as Record<string, number>);
-
-    // Gastos por Categoría
-    const porCategoria = gastos.reduce((m, g) => {
-      const cat = g.categoria || "Otros";
-      m[cat] = (m[cat] || 0) + g.monto;
-      return m;
-    }, {} as Record<string, number>);
-
-    // Estados de Órdenes
-    const porEstado = ordenes.reduce((m, o) => {
-      m[o.estado] = (m[o.estado] || 0) + 1;
-      return m;
-    }, {} as Record<string, number>);
-
-    // Cierres de caja (últimos 5)
-    const cierresCaja = [...cajas]
-      .filter((c: any) => c.estado === "CERRADA")
-      .sort((a, b) => new Date(b.cerrada_en || 0).getTime() - new Date(a.cerrada_en || 0).getTime())
-      .slice(0, 5);
-
-    // Actividad Reciente en las últimas 48 horas (unificada)
-    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
-    const feedItems: any[] = [];
-
-    // 1. Órdenes
-    ordenes.forEach(o => {
-      feedItems.push({
-        id: `ord-${o.id}`,
-        titulo: `Orden Recibida`,
-        desc: `Orden ${o.numero} creada`,
-        monto: o.total,
-        fecha: o.creado_en,
-        badgeText: "PEDIDO",
-        color: "bg-blue-50 text-blue-700 border-blue-100"
-      });
-    });
-
-    // 2. Movimientos de caja (aperturas, cierres, abonos, ventas)
-    movimientos.forEach(m => {
-      const conceptoLower = (m.concepto || "").toLowerCase();
-      let titulo = "Movimiento de Caja";
-      let color = "bg-slate-50 text-slate-700 border-slate-100";
-      let badgeText = "CAJA";
-
-      if (conceptoLower.includes("apertura")) {
-        titulo = "Apertura de Caja";
-        color = "bg-emerald-50 text-emerald-700 border-emerald-100";
-        badgeText = "APERTURA";
-      } else if (conceptoLower.includes("cierre")) {
-        titulo = "Cierre de Caja";
-        color = "bg-amber-50 text-amber-700 border-amber-100";
-        badgeText = "CIERRE";
-      } else if (m.tipo === "GASTO_CAJA_CHICA") {
-        titulo = "Gasto Caja Chica";
-        color = "bg-rose-50 text-rose-700 border-rose-100";
-        badgeText = "EGRESO CAJA CHICA";
-      } else if (m.tipo === "VENTA" || m.tipo === "ABONO") {
-        titulo = m.tipo === "VENTA" ? "Cobro Recibido" : "Abono Registrado";
-        color = "bg-green-50 text-green-700 border-green-100";
-        badgeText = "COBRO";
-      } else if (m.tipo === "EGRESO" || m.tipo === "RETIRO") {
-        titulo = m.tipo === "RETIRO" ? "Retiro de Efectivo" : "Egreso de Caja";
-        color = "bg-rose-50 text-rose-700 border-rose-100";
-        badgeText = "RETIRO";
-      }
-
-      feedItems.push({
-        id: `mov-${m.id}`,
-        titulo,
-        desc: m.concepto,
-        monto: m.monto,
-        fecha: m.creado_en,
-        badgeText,
-        color
-      });
-    });
-
-    // 3. Gastos manuales
-    gastos.filter(g => !g.is_caja_chica).forEach(g => {
-      feedItems.push({
-        id: `gas-${g.id}`,
-        titulo: `Gasto: ${g.categoria}`,
-        desc: g.descripcion || "Egreso bancario",
-        monto: g.monto,
-        fecha: g.fecha,
-        badgeText: "GASTO BANCARIO",
-        color: "bg-rose-100 text-rose-800 border-rose-200"
-      });
-    });
-
-    // Filtrar a las últimas 48 horas
-    let recientes = feedItems.filter(item => new Date(item.fecha).getTime() >= cutoff);
-
-    // Fallback: si no hay actividades en las últimas 48 horas, mostrar las últimas 5 generales
-    if (recientes.length === 0) {
-      recientes = [...feedItems];
+    if (viewingOrder?.id === updated.id) {
+      setViewingOrder(updated);
     }
 
-    recientes = recientes
-      .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
-      .slice(0, 10); // Límite de 10
+    queryClient.invalidateQueries({ queryKey: ["dashboard-admin-data"] });
+  };
 
-    // --- 1. Top de Servicios Más Vendidos ---
-    const serviceCounts: Record<string, { count: number; total: number }> = {};
-    ordenes.forEach(o => {
-      if (Array.isArray(o.items)) {
-        o.items.forEach((item: any) => {
-          const desc = item.descripcion || "Otros";
-          const qty = item.cantidad || 1;
-          const sub = (item.precio_unitario || 0) * qty;
-          if (!serviceCounts[desc]) {
-            serviceCounts[desc] = { count: 0, total: 0 };
-          }
-          serviceCounts[desc].count += qty;
-          serviceCounts[desc].total += sub;
-        });
+  // Cambiar estado de orden
+  const handleCambiarEstado = async (ordenId: string, nuevoEstado: EstadoOrden) => {
+    try {
+      const orden = viewingOrder;
+      if (!orden) return;
+      const updated = { ...orden, estado: nuevoEstado };
+      await saveOrden(updated);
+      toast.success(`Estado de orden #${orden.numero} cambiado a ${nuevoEstado}`);
+
+      if (viewingOrder?.id === ordenId) {
+        setViewingOrder(updated);
       }
-    });
 
-    const topServicios = Object.entries(serviceCounts)
-      .map(([name, data]) => ({ name, ...data }))
-      .sort((a, b) => b.count - a.count)
-      .slice(0, 3);
+      queryClient.invalidateQueries({ queryKey: ["dashboard-admin-data"] });
+    } catch (err) {
+      console.error("Error al cambiar estado:", err);
+      toast.error("Error al actualizar estado");
+    }
+  };
 
-    // --- 2. Canal de Entrega ---
-    const totalOrds = ordenes.length || 1;
-    const ordsDomicilio = ordenes.filter(o => o.entrega_domicilio).length;
-    const ordsLocal = totalOrds - ordsDomicilio;
-    const pctDomicilio = Math.round((ordsDomicilio / totalOrds) * 100);
-    const pctLocal = 100 - pctDomicilio;
-
-    // --- 3. Tasa de Urgencia ---
-    const ordsUrgentes = ordenes.filter(o => o.es_urgente).length;
-    const pctUrgencia = Math.round((ordsUrgentes / totalOrds) * 100);
-
-    // --- 4. Desglose Avanzado de Delivery ---
-    const deliveryEntregados = ordenes.filter(o => o.entrega_domicilio && o.estado === "ENTREGADA").length;
-    const deliveryCancelados = ordenes.filter(o => o.entrega_domicilio && o.estado === "ANULADA").length;
-    const deliveryPendientes = ordenes.filter(o => o.entrega_domicilio && o.estado !== "ENTREGADA" && o.estado !== "ANULADA").length;
-
-    // --- 5. Créditos y Deudas de Clientes ---
-    const activeOrds = ordenes.filter(o => o.estado !== "ANULADA");
-    const totalDeuda = activeOrds.reduce((s, o) => s + (o.saldo || 0), 0);
-    const cantidadDeudas = activeOrds.filter(o => (o.saldo || 0) > 0).length;
-    const totalAbonado = activeOrds.filter(o => (o.saldo || 0) > 0).reduce((s, o) => s + (o.pagado || 0), 0);
-
-    // Buscar abonos reales en los movimientos de caja
-    const realAbonosMovs = movimientos.filter(m => m.concepto?.toLowerCase().includes("abono"));
-    const totalAbonosCaja = realAbonosMovs.reduce((s, m) => s + m.monto, 0);
-
-    return {
-      totalVentas,
-      totalITBIS,
-      totalGastos,
-      rentabilidad,
-      ticketPromedio,
-      porMetodo,
-      porCategoria,
-      porEstado,
-      cierresCaja,
-      recientes,
-      topServicios,
-      ordsDomicilio,
-      ordsLocal,
-      pctDomicilio,
-      pctLocal,
-      ordsUrgentes,
-      pctUrgencia,
-      deliveryEntregados,
-      deliveryCancelados,
-      deliveryPendientes,
-      totalDeuda,
-      cantidadDeudas,
-      totalAbonado,
-      totalAbonosCaja
-    };
-  }, [inspectData]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -532,7 +580,7 @@ function DashboardAdminPage() {
             onClick={() => setShowBranchModal(true)}
             className="bg-primary text-white hover:bg-primary/90 h-10 px-5 rounded-xl shadow-md transition-all active:scale-95 font-bold"
           >
-            <Building2 className="mr-2 h-4 w-4" /> Registrar nueva sucursal
+            <Store className="mr-2 h-4 w-4" /> Registrar nueva sucursal
           </Button>
         </div>
 
@@ -568,13 +616,301 @@ function DashboardAdminPage() {
           />
         </div>
 
-        {/* Barra de Búsqueda y Filtros de Estado */}
-        <div className="mt-6 sm:mt-8 space-y-4">
+        {/* Barra de Búsqueda Global Multicursal (Omnisearch) y Filtros */}
+        <div className="mt-6 sm:mt-8 space-y-3">
+          {/* Buscador Global Omnisearch con Selector de Sucursal Integrado */}
+          <div className="relative">
+            <div className="bg-white dark:bg-slate-900 rounded-2xl border-2 border-slate-300/80 dark:border-slate-700 shadow-sm p-2 transition-all">
+              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                {/* Selector de Sucursal con Logo Circular y Detalles */}
+                <div className="shrink-0 w-full sm:w-auto">
+                  <Select value={globalSearchBranch} onValueChange={setGlobalSearchBranch}>
+                    <SelectTrigger className="h-11 border border-slate-200 dark:border-slate-700 bg-slate-50 hover:bg-slate-100 dark:bg-slate-800 dark:hover:bg-slate-700/80 rounded-xl text-xs font-bold text-slate-800 dark:text-slate-200 gap-2.5 px-3 shadow-2xs focus:ring-0 cursor-pointer transition-all w-full sm:w-auto sm:min-w-[270px]">
+                      <SelectValue asChild>
+                        <div className="flex items-center gap-2.5 min-w-0 flex-1 text-left">
+                          {globalSearchBranch === "ALL" ? (
+                            <>
+                              <div className="h-7 w-7 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 shadow-2xs">
+                                <Store className="h-3.5 w-3.5 stroke-[2.5]" />
+                              </div>
+                              <div className="truncate flex items-center gap-1.5 min-w-0">
+                                <span className="font-extrabold text-xs text-foreground truncate">Todas las sucursales</span>
+                                <span className="text-[10px] font-bold text-muted-foreground shrink-0">({myTenants.length})</span>
+                              </div>
+                            </>
+                          ) : selectedBranchTenant ? (
+                            <>
+                              {selectedBranchTenant.logo_url ? (
+                                <img
+                                  src={selectedBranchTenant.logo_url}
+                                  alt=""
+                                  className="h-7 w-7 rounded-full object-contain border border-border/80 bg-white p-0.5 shrink-0 shadow-2xs"
+                                />
+                              ) : (
+                                <div
+                                  className="h-7 w-7 rounded-full flex items-center justify-center font-black text-white text-xs shrink-0 shadow-2xs"
+                                  style={{ backgroundColor: selectedBranchTenant.color_primario || "#0891b2" }}
+                                >
+                                  {selectedBranchTenant.nombre.charAt(0).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="truncate flex items-center gap-1.5 min-w-0">
+                                <span className="font-bold text-xs text-foreground truncate">{selectedBranchTenant.nombre}</span>
+                                <span className="hidden sm:inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-md border border-emerald-200/50 shrink-0">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                  {getTenantBranchName(selectedBranchTenant)}
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <span className="text-muted-foreground">Seleccionar sucursal</span>
+                          )}
+                        </div>
+                      </SelectValue>
+                    </SelectTrigger>
+                    <SelectContent className="rounded-2xl border border-slate-200 dark:border-slate-800 shadow-2xl p-1.5 max-h-84 w-auto min-w-[320px] sm:min-w-[380px] max-w-[480px]">
+                      {/* Opción Todas las Sucursales */}
+                      <SelectItem 
+                        value="ALL" 
+                        className="py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors my-0.5"
+                      >
+                        <div className="flex items-center gap-3 w-full pr-1">
+                          <div className="h-9 w-9 rounded-full bg-primary/10 text-primary flex items-center justify-center shrink-0 border border-primary/20 shadow-2xs">
+                            <Store className="h-4.5 w-4.5 stroke-[2.5]" />
+                          </div>
+                          <div className="min-w-0 flex-1 text-left whitespace-normal">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-extrabold text-xs text-foreground">Todas las sucursales</span>
+                              <span className="bg-primary/10 text-primary font-bold text-[9.5px] px-1.5 py-0.2 rounded-md">
+                                {myTenants.length} activas
+                              </span>
+                            </div>
+                            <div className="text-[10.5px] text-muted-foreground mt-0.5 leading-tight font-medium">
+                              Búsqueda global unificada en toda la red
+                            </div>
+                          </div>
+                        </div>
+                      </SelectItem>
+
+                      <div className="h-px bg-slate-200/70 dark:bg-slate-800 my-1 mx-2" />
+
+                      {/* Lista de Sucursales con Logo Circular y Detalles */}
+                      {myTenants.map((t) => (
+                        <SelectItem 
+                          key={t.id} 
+                          value={t.id} 
+                          className="py-2.5 px-3 rounded-xl cursor-pointer hover:bg-slate-100 dark:hover:bg-slate-800/80 transition-colors my-0.5"
+                        >
+                          <div className="flex items-center gap-3 w-full pr-1">
+                            {/* Logotipo Circular */}
+                            {t.logo_url ? (
+                              <img
+                                src={t.logo_url}
+                                alt={t.nombre}
+                                className="h-9 w-9 rounded-full object-contain border border-slate-200 dark:border-slate-700 bg-white p-0.5 shrink-0 shadow-2xs ring-1 ring-black/5"
+                              />
+                            ) : (
+                              <div
+                                className="h-9 w-9 rounded-full flex items-center justify-center font-black text-white text-xs shrink-0 shadow-2xs ring-1 ring-black/5"
+                                style={{ backgroundColor: t.color_primario || "#0891b2" }}
+                              >
+                                {t.nombre.charAt(0).toUpperCase()}
+                              </div>
+                            )}
+
+                            {/* Nombre, Badge de Sucursal y Datos Compactos */}
+                            <div className="min-w-0 flex-1 text-left whitespace-normal">
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="font-bold text-xs text-foreground truncate">{t.nombre}</span>
+                                <span className="inline-flex items-center gap-1 text-[9px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shrink-0">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                                  {getTenantBranchName(t)}
+                                </span>
+                              </div>
+
+                              <div className="text-[10.5px] text-muted-foreground mt-0.5 flex items-center gap-1.5 flex-wrap">
+                                {t.telefono && (
+                                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                                    {t.telefono}
+                                  </span>
+                                )}
+                                {t.telefono && t.rnc && <span className="text-slate-300 dark:text-slate-600 font-bold">•</span>}
+                                {t.rnc && (
+                                  <span 
+                                    className="font-mono font-bold px-2 py-0.5 rounded-md text-[10px] tracking-wide border border-white/20 shadow-2xs text-white"
+                                    style={{ backgroundColor: '#1B4B73', color: '#FFFFFF' }}
+                                  >
+                                    RNC: {t.rnc}
+                                  </span>
+                                )}
+                                {!t.telefono && !t.rnc && t.email && (
+                                  <span className="truncate">{t.email}</span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Separador vertical para pantallas medianas/grandes */}
+                <div className="hidden sm:block h-7 w-px bg-slate-200 dark:bg-slate-750 mx-0.5" />
+
+                {/* Campo de búsqueda con borde definido, icono y botón de limpiar */}
+                <div className="relative flex-1 flex items-center min-w-0 bg-slate-50/90 dark:bg-slate-800/90 border border-slate-300/90 dark:border-slate-600/90 rounded-xl px-3 h-11 transition-all focus-within:border-primary focus-within:bg-white dark:focus-within:bg-slate-900 focus-within:ring-2 focus-within:ring-primary/20 shadow-2xs gap-2">
+                  <Search className="h-4 w-4 text-slate-400 dark:text-slate-500 shrink-0" />
+                  <Input
+                    placeholder={
+                      globalSearchBranch === "ALL"
+                        ? "Buscar orden # (ej. 0052), cliente o teléfono en todas las sucursales..."
+                        : `Buscar en ${selectedBranchTenant?.nombre || "esta sucursal"}...`
+                    }
+                    value={globalSearch}
+                    onChange={(e) => setGlobalSearch(e.target.value)}
+                    className="border-0 shadow-none focus-visible:ring-0 text-xs sm:text-sm h-full bg-transparent flex-1 pl-1 placeholder:text-muted-foreground/70 font-medium"
+                  />
+                  {globalSearch && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      onClick={() => setGlobalSearch("")}
+                      className="h-8 px-3 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs flex items-center gap-1.5 shadow-sm transition-all cursor-pointer shrink-0 border-0"
+                    >
+                      <Trash2 className="h-3.5 w-3.5 text-white stroke-[2.5]" />
+                      <span>Limpiar Campo</span>
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* Resultados Flotantes de la Búsqueda Global */}
+            {globalSearch.trim().length >= 2 && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-2xl rounded-2xl p-3 z-50 max-h-[460px] overflow-y-auto space-y-2">
+                <div className="flex items-center justify-between px-2 py-1 text-xs font-bold text-muted-foreground uppercase tracking-wider border-b border-border/60 pb-2">
+                  <span>
+                    Resultados {globalSearchBranch !== "ALL" ? `en ${myTenants.find((t) => t.id === globalSearchBranch)?.nombre || "sucursal"}` : "en todas las sucursales"} ({globalSearchResults.length})
+                  </span>
+                  <span className="text-[10px] lowercase font-normal text-muted-foreground">haz clic en Ver o Editar</span>
+                </div>
+
+                {globalSearchResults.length === 0 ? (
+                  <div className="py-8 text-center text-muted-foreground text-sm">
+                    <Search className="h-8 w-8 mx-auto mb-2 opacity-30 text-primary" />
+                    No se encontraron órdenes o clientes coincidentes con <strong className="text-foreground">"{globalSearch}"</strong>.
+                  </div>
+                ) : (
+                  globalSearchResults.map(({ orden, tenant, cliente }) => {
+                    const totalPrendas = (orden.items || []).reduce((acc: number, it: any) => acc + (it.cantidad || 0), 0);
+
+                    return (
+                      <div
+                        key={`${tenant.id}-${orden.id}`}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-primary/50 hover:shadow-md transition-all gap-3.5 group"
+                      >
+                        <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+                          {/* Badge de Orden Horizontal Elegante (ancho automático sin cortes) */}
+                          <div className="shrink-0">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs tabular-nums tracking-wide shadow-2xs whitespace-nowrap">
+                              <Hash className="h-3 w-3 opacity-60 shrink-0" />
+                              {orden.numero}
+                            </span>
+                          </div>
+
+                          {/* Datos del Cliente, Sucursal y Fechas */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                                {cliente ? `${cliente.nombre} ${cliente.apellido || ""}` : `Cliente registrado`}
+                              </span>
+                              {cliente?.telefono && (
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  • {cliente.telefono}
+                                </span>
+                              )}
+                              {globalSearchBranch === "ALL" && (
+                                <Badge variant="outline" className="text-[10px] font-bold bg-sky-50 text-sky-800 border-sky-200/80 dark:bg-sky-950/60 dark:text-sky-300 inline-flex items-center gap-1.5 shrink-0 px-2 py-0.5 rounded-full shadow-2xs">
+                                  <Store className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0" />
+                                  <span>{tenant.nombre}</span>
+                                </Badge>
+                              )}
+                              {getEstadoBadge(orden.estado)}
+                              {orden.es_urgente && (
+                                <Badge className="text-[9px] bg-rose-500 text-white font-bold h-4 px-1.5 inline-flex items-center gap-1">
+                                  <Zap className="h-2.5 w-2.5" /> Urgente
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                                <Calendar className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 shrink-0 stroke-[2.5]" />
+                                <span className="font-extrabold text-slate-900 dark:text-white">Recibida:</span>
+                                <span className="font-bold">{formatDateRD(orden.creado_en)}</span>
+                              </span>
+                              {orden.fecha_entrega && (
+                                <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                                  <Truck className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 shrink-0 stroke-[2.5]" />
+                                  <span className="font-extrabold text-slate-900 dark:text-white">Entrega:</span>
+                                  <span className="font-bold">{formatDateRD(orden.fecha_entrega)}</span>
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-slate-700 text-xs">
+                                <Shirt className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 shrink-0 stroke-[2]" />
+                                <span>{totalPrendas} {totalPrendas === 1 ? "prenda" : "prendas"}</span>
+                              </span>
+                              <span className="font-bold text-foreground tabular-nums">
+                                Total: {formatRD(orden.total)}
+                              </span>
+                              {orden.saldo > 0 ? (
+                                <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-900 text-[11px] tabular-nums">
+                                  Debe: {formatRD(orden.saldo)}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900 text-[11px]">
+                                  Saldada
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botones de Acción */}
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 w-full sm:w-auto justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={isOpeningOrder}
+                            className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5 cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-slate-800"
+                            onClick={() => handleOpenGlobalOrder(orden, tenant, "view")}
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" /> Ver
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={isOpeningOrder}
+                            className="h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5 bg-primary hover:bg-primary/90 text-white cursor-pointer shadow-2xs"
+                            onClick={() => handleOpenGlobalOrder(orden, tenant, "edit")}
+                          >
+                            <Pencil className="h-3.5 w-3.5" /> Editar
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Barra de Filtros de Sucursal */}
           <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/50 shadow-xs">
             <div className="relative flex-1 max-w-md">
               <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
-                placeholder="Buscar por nombre, correo, RNC o subdominio..."
+                placeholder="Filtrar sucursales por nombre, correo, RNC o subdominio..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="pl-10 h-10 rounded-xl bg-background border-border/80 text-sm focus-visible:ring-primary/20"
@@ -680,24 +1016,28 @@ function DashboardAdminPage() {
                           className="hover:bg-muted/30 transition-colors border-b border-border/40"
                         >
                           <td className="px-3.5 py-2.5">
-                            <div className="flex items-center gap-2.5">
+                            <div
+                              onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                              className="flex items-center gap-2.5 cursor-pointer group"
+                              title="Haz clic para ver reportes y operativa de esta sucursal"
+                            >
                               {t.logo_url ? (
                                 <img
                                   src={t.logo_url}
                                   alt={t.nombre}
-                                  className="h-10 w-10 rounded-full object-contain border-2 border-border/70 bg-white p-0.5 shrink-0 shadow-xs ring-2 ring-primary/10"
+                                  className="h-10 w-10 rounded-full object-contain border-2 border-border/70 bg-white p-0.5 shrink-0 shadow-xs ring-2 ring-primary/10 group-hover:ring-primary/50 transition-all"
                                 />
                               ) : (
                                 <div
-                                  className="h-10 w-10 rounded-full flex items-center justify-center font-black text-white text-sm shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10"
+                                  className="h-10 w-10 rounded-full flex items-center justify-center font-black text-white text-sm shrink-0 shadow-xs ring-2 ring-black/10 dark:ring-white/10 group-hover:scale-105 transition-all"
                                   style={{ backgroundColor: t.color_primario || "#0891b2" }}
                                 >
                                   {t.nombre.charAt(0).toUpperCase()}
                                 </div>
                               )}
                               <div className="min-w-0">
-                                <div className="font-bold text-foreground text-[13px] tracking-tight hover:text-primary transition-colors flex items-center gap-1.5 flex-wrap">
-                                  <span className="truncate">{t.nombre}</span>
+                                <div className="font-bold text-foreground text-[13px] tracking-tight group-hover:text-primary transition-colors flex items-center gap-1.5 flex-wrap">
+                                  <span className="truncate underline-offset-2 group-hover:underline">{t.nombre}</span>
                                   <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
                                     <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                     {getTenantBranchName(t)}
@@ -844,22 +1184,22 @@ function DashboardAdminPage() {
                             <div className="flex items-center justify-center gap-1.5">
                               <Button
                                 size="sm"
-                                onClick={() => handleManage(t.id, t.slug)}
-                                className="h-8 px-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-500/80 shadow-2xs gap-1 cursor-pointer transition-all"
+                                onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                                className="h-8 px-3 rounded-full font-bold text-xs bg-[#1B4B73] hover:bg-[#153a5b] text-white border-0 shadow-2xs gap-1.5 cursor-pointer transition-all"
+                                title="Inspeccionar reportes y operativa de la sucursal"
                               >
-                                <ExternalLink className="h-3.5 w-3.5" />
-                                <span>Entrar</span>
+                                <Eye className="h-3.5 w-3.5 text-white" />
+                                <span>Inspeccionar</span>
                               </Button>
 
                               <Button
                                 size="sm"
-                                variant="outline"
-                                onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
-                                className="h-8 px-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:bg-slate-50 font-bold text-xs gap-1 shadow-2xs cursor-pointer transition-all"
-                                title="Ver reportes de ventas"
+                                onClick={() => handleManage(t.id, t.slug)}
+                                className="h-8 px-2.5 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white border border-emerald-500/80 shadow-2xs gap-1 cursor-pointer transition-all"
+                                title="Entrar al panel interno de esta sucursal"
                               >
-                                <BarChart3 className="h-3.5 w-3.5 text-slate-600 dark:text-slate-300" />
-                                <span>Reportes</span>
+                                <ExternalLink className="h-3.5 w-3.5" />
+                                <span>Entrar</span>
                               </Button>
                             </div>
                           </td>
@@ -900,16 +1240,20 @@ function DashboardAdminPage() {
                     key={t.id} 
                     className="p-4 rounded-2xl border border-border/70 shadow-xs bg-surface"
                   >
-                    <div className="flex items-start gap-3">
+                    <div 
+                      onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                      className="flex items-start gap-3 cursor-pointer group"
+                      title="Toca para ver reportes y operativa de esta sucursal"
+                    >
                       {t.logo_url ? (
                         <img
                           src={t.logo_url}
                           alt={t.nombre}
-                          className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs"
+                          className="h-12 w-12 rounded-full object-contain border-2 border-border/70 bg-white p-1 shrink-0 shadow-xs group-hover:ring-2 group-hover:ring-primary/40 transition-all"
                         />
                       ) : (
                         <div
-                          className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs"
+                          className="h-12 w-12 rounded-full flex items-center justify-center font-black text-white text-base shrink-0 shadow-xs group-hover:scale-105 transition-all"
                           style={{ backgroundColor: t.color_primario || "#0891b2" }}
                         >
                           {t.nombre.charAt(0).toUpperCase()}
@@ -917,7 +1261,7 @@ function DashboardAdminPage() {
                       )}
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-1">
-                          <h3 className="font-bold text-foreground text-sm truncate">{t.nombre}</h3>
+                          <h3 className="font-bold text-foreground text-sm truncate group-hover:text-primary transition-colors underline-offset-2 group-hover:underline">{t.nombre}</h3>
                           {t.estado === "ACTIVO" ? (
                             <div className="flex items-center gap-1.5 shrink-0">
                               <Badge className="bg-emerald-50 text-emerald-700 border-emerald-200 text-[10px] font-bold px-2 py-0.5 rounded-full shrink-0">
@@ -1001,21 +1345,21 @@ function DashboardAdminPage() {
                     <div className="mt-3 pt-2.5 flex items-center justify-between gap-2">
                       <Button
                         size="sm"
+                        onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
+                        className="flex-1 h-8 rounded-full font-bold text-xs bg-[#1B4B73] hover:bg-[#153a5b] text-white border-0 shadow-2xs gap-1.5 cursor-pointer transition-all"
+                        title="Inspeccionar reportes y operativa"
+                      >
+                        <Eye className="h-3.5 w-3.5 text-white" />
+                        <span>Inspeccionar</span>
+                      </Button>
+
+                      <Button
+                        size="sm"
                         onClick={() => handleManage(t.id, t.slug)}
                         className="flex-1 h-8 rounded-xl font-bold text-xs bg-emerald-600 hover:bg-emerald-700 text-white gap-1.5 shadow-2xs cursor-pointer"
                       >
                         <ExternalLink className="h-3.5 w-3.5" />
                         <span>Entrar</span>
-                      </Button>
-
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        onClick={() => navigate({ to: "/reportes", search: { tenantId: t.id } })}
-                        className="h-8 px-3 rounded-xl border border-slate-200 bg-white hover:bg-slate-50 font-bold text-xs gap-1 cursor-pointer shadow-2xs"
-                      >
-                        <BarChart3 className="h-3.5 w-3.5" />
-                        <span>Reportes</span>
                       </Button>
                     </div>
                   </Card>
@@ -1028,122 +1372,246 @@ function DashboardAdminPage() {
 
       {/* Modal centralizado de Sucursales */}
       <Dialog open={showBranchModal} onOpenChange={setShowBranchModal}>
-        <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-card p-6 bg-white overflow-hidden">
-          <DialogHeader className="text-center pb-2">
-            <DialogTitle className="flex flex-col items-center gap-3 text-2xl font-bold tracking-tight">
+        <DialogContent className="sm:max-w-[430px] rounded-3xl border border-slate-200/90 dark:border-slate-800 shadow-2xl p-5 sm:p-6 bg-white dark:bg-slate-900 overflow-hidden text-foreground">
+          <div className="relative">
+            {/* Luz ambiental superior decorativa */}
+            <div className="absolute -top-16 left-1/2 -translate-x-1/2 w-48 h-24 bg-gradient-to-b from-[#1B4B73]/15 via-amber-500/10 to-transparent blur-2xl pointer-events-none" />
+
+            <div className="space-y-3.5 pt-1">
               {tieneCuposLibres ? (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-50 text-emerald-600 shadow-sm">
-                  <CheckCircle2 className="h-6 w-6" />
+                <div className="space-y-3.5">
+                  {/* Hero Header */}
+                  <DialogHeader className="flex flex-col items-center text-center">
+                    <div className="relative mb-2">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-emerald-500 to-teal-600 text-white flex items-center justify-center shadow-md shadow-emerald-500/25 border border-emerald-400/40">
+                        <CheckCircle2 className="h-6 w-6 text-white stroke-[2.3]" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-emerald-400 text-slate-900 flex items-center justify-center shadow-2xs">
+                        <Sparkles className="h-3 w-3 fill-current text-white" />
+                      </div>
+                    </div>
+
+                    <Badge className="mb-1.5 bg-emerald-50 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 font-bold text-[11px] px-2.5 py-0.5 rounded-full">
+                      Cupo de sucursal listo
+                    </Badge>
+
+                    <DialogTitle className="font-display font-black text-xl text-foreground tracking-tight">
+                      ¡Espacio disponible!
+                    </DialogTitle>
+
+                    <DialogDescription className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed text-center">
+                      Tienes cupo en tu cuenta para registrar y activar tu nueva sede de inmediato sin costos adicionales.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {/* Quota Progress Card */}
+                  <div className="rounded-2xl border border-emerald-200/80 dark:border-emerald-900/50 bg-emerald-50/40 dark:bg-emerald-950/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold gap-2">
+                      <span className="text-emerald-900 dark:text-emerald-300 flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                        <Store className="h-3.5 w-3.5 text-emerald-600" />
+                        Sucursales creadas
+                      </span>
+                      <span className="font-mono text-emerald-700 dark:text-emerald-400 font-bold text-xs whitespace-nowrap shrink-0">
+                        {sucursalesCreadas} de {maxSucursalesContratadas} contratadas
+                      </span>
+                    </div>
+
+                    <div className="h-2 w-full bg-emerald-200/50 dark:bg-emerald-900/40 rounded-full overflow-hidden p-0.5">
+                      <div 
+                        className="h-full bg-gradient-to-r from-emerald-500 to-teal-500 rounded-full transition-all duration-500" 
+                        style={{ width: `${Math.min(100, Math.round((sucursalesCreadas / maxSucursalesContratadas) * 100))}%` }}
+                      />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10.5px] text-emerald-800/80 dark:text-emerald-300/80">
+                      <span className="whitespace-nowrap">Espacios disponibles:</span>
+                      <span className="font-bold text-emerald-700 dark:text-emerald-300 whitespace-nowrap">
+                        {Math.max(0, maxSucursalesContratadas - sucursalesCreadas)} sucursal(es) libres
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-1 flex flex-col gap-2">
+                    <Link to="/nueva-sucursal" className="w-full">
+                      <Button 
+                        onClick={() => setShowBranchModal(false)} 
+                        className="w-full bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold h-11 rounded-xl shadow-md shadow-[#1B4B73]/20 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer transition-all active:scale-[0.98]"
+                      >
+                        <Store className="h-4 w-4 mr-1 text-[#F0B900]" />
+                        <span>Continuar a registro de sucursal</span>
+                        <ArrowRight className="h-4 w-4 ml-1" />
+                      </Button>
+                    </Link>
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowBranchModal(false)} 
+                      className="h-9 rounded-xl text-slate-600 dark:text-slate-400 font-semibold border-border hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs"
+                    >
+                      Cerrar
+                    </Button>
+                  </div>
                 </div>
               ) : puedeComprarMas ? (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-amber-50 text-amber-600 shadow-sm animate-pulse">
-                  <Sparkles className="h-6 w-6" />
+                <div className="space-y-3.5">
+                  {/* Hero Header */}
+                  <DialogHeader className="flex flex-col items-center text-center">
+                    <div className="relative mb-2">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-amber-500 to-orange-600 text-white flex items-center justify-center shadow-md shadow-amber-500/25 border border-amber-400/40">
+                        <Sparkles className="h-6 w-6 text-white stroke-[2.3]" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-300 text-slate-900 flex items-center justify-center shadow-2xs">
+                        <Store className="h-3 w-3" />
+                      </div>
+                    </div>
+
+                    <Badge className="mb-1.5 bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border border-amber-200 dark:border-amber-800 font-bold text-[11px] px-2.5 py-0.5 rounded-full">
+                      Plan {plan?.nombre} • Expansión disponible
+                    </Badge>
+
+                    <DialogTitle className="font-display font-black text-xl text-foreground tracking-tight">
+                      Desbloquear nueva sucursal
+                    </DialogTitle>
+
+                    <DialogDescription className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed text-center">
+                      Tu plan actual <strong className="text-foreground font-bold">{plan?.nombre}</strong> te permite añadir hasta <strong className="text-foreground font-bold">{limiteAdicionalesPlan} sucursales extra</strong>.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {/* Price and Quota Card */}
+                  <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/80 dark:bg-slate-850/60 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs pb-1.5 border-b border-slate-200/80 dark:border-slate-800 gap-2">
+                      <span className="font-medium text-muted-foreground whitespace-nowrap shrink-0">Plan contratado:</span>
+                      <Badge variant="outline" className="font-bold text-[10px] bg-white dark:bg-slate-800 uppercase text-[#1B4B73] dark:text-sky-300 border-[#1B4B73]/20 whitespace-nowrap">
+                        {plan?.nombre}
+                      </Badge>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs pb-1.5 border-b border-slate-200/80 dark:border-slate-800 gap-2">
+                      <span className="font-medium text-muted-foreground whitespace-nowrap shrink-0">Cupos activos:</span>
+                      <span className="font-bold text-foreground font-mono whitespace-nowrap">{maxSucursalesContratadas} sucursal(es)</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-xs gap-2">
+                      <span className="font-bold text-foreground whitespace-nowrap shrink-0">Inversión sucursal extra:</span>
+                      <span className="font-display font-black text-sm text-primary whitespace-nowrap">
+                        {formatRD(precioAdicional).replace("DOP", "RD$")}<span className="text-[10px] font-semibold text-muted-foreground">/mes</span>
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-1 flex flex-col gap-2">
+                    {polarSucursalUrl ? (
+                      <a href={polarSucursalUrl} target="_blank" rel="noreferrer" className="w-full">
+                        <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-600 hover:to-orange-700 text-white font-bold h-11 rounded-xl shadow-md shadow-orange-500/25 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer transition-all active:scale-[0.98]">
+                          <Sparkles className="h-4 w-4 text-white" />
+                          <span>Desbloquear sucursal extra</span>
+                          <ExternalLink className="h-3.5 w-3.5 text-white/70 ml-1" />
+                        </Button>
+                      </a>
+                    ) : (
+                      <Button disabled className="w-full bg-slate-200 text-slate-500 font-bold h-11 rounded-xl text-xs">
+                        Enlace de pago no disponible
+                      </Button>
+                    )}
+
+                    <div className="flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground font-medium py-0.5">
+                      <span>¿Pago asistido?</span>
+                      <a 
+                        href={`https://wa.me/18299416546?text=Hola%20Klynn,%20me%20gustaria%20activar%20una%20sucursal%20adicional%20para%20mi%20lavanderia%20${encodeURIComponent(mainTenant?.nombre || "")}`} 
+                        target="_blank" 
+                        rel="noreferrer" 
+                        className="font-bold text-[#1B4B73] dark:text-sky-400 hover:underline inline-flex items-center gap-1"
+                      >
+                        <MessageCircle className="h-3 w-3" /> Soporte WhatsApp
+                      </a>
+                    </div>
+
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowBranchModal(false)} 
+                      className="h-9 rounded-xl text-slate-600 dark:text-slate-400 font-semibold border-border hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs"
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
                 </div>
               ) : (
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-rose-50 text-rose-600 shadow-sm">
-                  <Crown className="h-6 w-6" />
-                </div>
-              )}
-              {tieneCuposLibres ? "¡Cupo disponible!" : puedeComprarMas ? "Desbloquear nueva sucursal" : "Límite máximo alcanzado"}
-            </DialogTitle>
-          </DialogHeader>
+                <div className="space-y-3.5">
+                  {/* Hero Header */}
+                  <DialogHeader className="flex flex-col items-center text-center">
+                    <div className="relative mb-2">
+                      <div className="h-12 w-12 rounded-2xl bg-gradient-to-br from-[#1B4B73] to-[#0f2d47] text-white flex items-center justify-center shadow-md shadow-[#1B4B73]/25 border border-[#1B4B73]/30">
+                        <Crown className="h-6 w-6 text-[#F0B900]" />
+                      </div>
+                      <div className="absolute -top-1 -right-1 h-5 w-5 rounded-full bg-amber-400 text-slate-900 flex items-center justify-center shadow-2xs">
+                        <Sparkles className="h-3 w-3 fill-current" />
+                      </div>
+                    </div>
 
-          <div className="space-y-4 py-2 text-center text-slate-800">
-            {tieneCuposLibres ? (
-              <>
-                <p className="text-sm text-muted-foreground text-balance">
-                  Tienes espacio disponible en tu cuenta para registrar tu nueva sucursal de inmediato sin costos adicionales.
-                </p>
-                <div className="rounded-xl border border-emerald-100 bg-emerald-50/30 p-3.5 text-xs text-emerald-800 font-semibold flex items-center justify-between">
-                  <span>Sucursales creadas:</span>
-                  <span className="text-sm font-bold">{sucursalesCreadas} de {maxSucursalesContratadas} permitidas</span>
-                </div>
-                <div className="pt-2 flex flex-col gap-2">
-                  <Link to="/nueva-sucursal">
-                    <Button onClick={() => setShowBranchModal(false)} className="w-full bg-primary text-white font-bold h-11 rounded-xl shadow-glow">
-                      Continuar a registro <ArrowRight className="ml-2 h-4 w-4" />
-                    </Button>
-                  </Link>
-                  <Button variant="ghost" onClick={() => setShowBranchModal(false)} className="h-10 rounded-xl text-slate-500 font-bold">
-                    Cerrar
-                  </Button>
-                </div>
-              </>
-            ) : puedeComprarMas ? (
-              <>
-                <p className="text-sm text-muted-foreground text-balance">
-                  Tu plan actual <strong className="font-bold text-slate-900">{plan?.nombre}</strong> te permite agregar hasta <strong className="font-bold text-slate-900">{limiteAdicionalesPlan}</strong> sucursales adicionales para expandir tu negocio.
-                </p>
-                
-                <div className="rounded-2xl border border-border p-4 bg-slate-50 space-y-3.5 text-left text-xs text-slate-700">
-                  <div className="flex justify-between items-center pb-2 border-b border-slate-100">
-                    <span className="font-semibold text-slate-500">Plan actual:</span>
-                    <Badge variant="outline" className="font-bold text-[10px] bg-white uppercase text-primary border-primary/20">{plan?.nombre}</Badge>
-                  </div>
-                  <div className="flex justify-between items-center">
-                    <span className="font-semibold text-slate-500">Cupos activos:</span>
-                    <span className="font-bold text-slate-900">{maxSucursalesContratadas} sucursal(es)</span>
-                  </div>
-                  <div className="flex justify-between items-center text-primary">
-                    <span className="font-bold">Sucursal adicional:</span>
-                    <span className="font-extrabold text-sm">{formatRD(precioAdicional).replace("DOP", "RD$")}/mes</span>
-                  </div>
-                </div>
+                    <Badge className="mb-1.5 bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 border border-[#1B4B73]/25 font-bold text-[11px] px-2.5 py-0.5 rounded-full">
+                      Plan {plan?.nombre || "Básico"} • Capacidad al 100%
+                    </Badge>
 
-                <div className="pt-3 flex flex-col gap-2">
-                  {polarSucursalUrl ? (
-                    <a href={polarSucursalUrl} target="_blank" rel="noreferrer">
-                      <Button className="w-full bg-gradient-to-r from-amber-500 to-orange-600 text-white font-bold h-11 rounded-xl shadow-md hover:opacity-95 flex items-center justify-center gap-2">
-                        <Sparkles className="h-4 w-4" /> Desbloquear sucursal extra
+                    <DialogTitle className="font-display font-black text-xl text-foreground tracking-tight">
+                      Límite máximo alcanzado
+                    </DialogTitle>
+
+                    <DialogDescription className="text-xs text-muted-foreground mt-1 max-w-xs leading-relaxed text-center">
+                      Has completado el límite máximo de <strong className="text-foreground font-bold">{totalMaxSucursalesPlan} sucursales</strong> permitido para tu cuenta en el <strong className="text-foreground font-bold">Plan {plan?.nombre}</strong>.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  {/* Quota Progress Card */}
+                  <div className="rounded-2xl border border-rose-200/80 dark:border-rose-900/50 bg-rose-50/40 dark:bg-rose-950/20 p-3 space-y-2">
+                    <div className="flex items-center justify-between text-xs font-bold gap-2">
+                      <span className="text-rose-900 dark:text-rose-300 flex items-center gap-1.5 whitespace-nowrap shrink-0">
+                        <Store className="h-3.5 w-3.5 text-rose-600 dark:text-rose-400" />
+                        Capacidad ocupada
+                      </span>
+                      <span className="font-mono text-rose-700 dark:text-rose-400 font-bold text-xs whitespace-nowrap shrink-0">
+                        {sucursalesCreadas} de {totalMaxSucursalesPlan} contratadas (100%)
+                      </span>
+                    </div>
+
+                    <div className="h-2 w-full bg-rose-200/50 dark:bg-rose-900/40 rounded-full overflow-hidden p-0.5">
+                      <div className="h-full bg-gradient-to-r from-amber-500 to-rose-500 rounded-full w-full" />
+                    </div>
+
+                    <div className="flex items-center justify-between text-[10.5px] text-rose-800/80 dark:text-rose-300/80">
+                      <span className="whitespace-nowrap">Estado:</span>
+                      <span className="font-bold text-rose-700 dark:text-rose-400 whitespace-nowrap">
+                        Tope de sucursales alcanzado
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="pt-1 flex flex-col gap-2">
+                    <a 
+                      href={`https://wa.me/18299416546?text=Hola%20Klynn,%20he%20alcanzado%20el%20limite%20de%20sucursales%20en%20el%20plan%20${plan?.nombre}%20y%20me%20gustaria%20actualizar%20a%20un%20plan%20corporativo%20personalizado.`} 
+                      target="_blank" 
+                      rel="noreferrer"
+                      className="w-full"
+                    >
+                      <Button className="w-full bg-[#1B4B73] hover:bg-[#143a59] text-white font-bold h-11 rounded-xl shadow-md shadow-[#1B4B73]/20 flex items-center justify-center gap-2 text-xs sm:text-sm cursor-pointer transition-all active:scale-[0.98]">
+                        <Crown className="h-4 w-4 text-[#F0B900]" />
+                        <span>Solicitar plan corporativo</span>
+                        <ExternalLink className="h-3.5 w-3.5 text-white/70 ml-1" />
                       </Button>
                     </a>
-                  ) : (
-                    <Button disabled className="w-full bg-slate-200 text-slate-500 font-bold h-11 rounded-xl">
-                      Enlace de pago no disponible
-                    </Button>
-                  )}
-                  
-                  <div className="mt-2.5 flex items-center justify-center gap-2 text-sm text-slate-600 font-medium">
-                    <span>¿Prefieres pago manual?</span>
-                    <a 
-                      href={`https://wa.me/18299416546?text=Hola%20Klynn,%20me%20gustaria%20activar%20una%20sucursal%20adicional%20para%20mi%20lavanderia%20${encodeURIComponent(mainTenant?.nombre || "")}`} 
-                      target="_blank" 
-                      rel="noreferrer" 
-                      className="font-bold text-primary hover:underline flex items-center gap-1.5"
+                    <Button 
+                      variant="outline" 
+                      onClick={() => setShowBranchModal(false)} 
+                      className="h-9 rounded-xl text-slate-600 dark:text-slate-400 font-semibold border-border hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer text-xs"
                     >
-                      <MessageCircle className="h-4 w-4 fill-primary/10" /> Habla con soporte
-                    </a>
-                  </div>
-                  
-                  <Button variant="ghost" onClick={() => setShowBranchModal(false)} className="h-10 rounded-xl text-slate-500 font-bold mt-1">
-                    Cancelar
-                  </Button>
-                </div>
-              </>
-            ) : (
-              <>
-                <p className="text-sm text-muted-foreground text-balance">
-                  Has alcanzado el límite máximo de sucursales permitido para el <strong className="font-bold text-slate-900">Plan {plan?.nombre}</strong> (<strong className="font-bold text-slate-900">{totalMaxSucursalesPlan}</strong> sucursales).
-                </p>
-                <div className="rounded-xl border border-rose-100 bg-rose-50/30 p-3.5 text-xs text-rose-800 font-semibold text-center">
-                  Límite alcanzado: {sucursalesCreadas} de {totalMaxSucursalesPlan} contratadas.
-                </div>
-                <div className="pt-3 flex flex-col gap-2">
-                  <a 
-                    href={`https://wa.me/18299416546?text=Hola%20Klynn,%20he%20alcanzado%20el%20limite%20de%20sucursales%20en%20el%20plan%20${plan?.nombre}%20y%20me%20gustaria%20actualizar%20a%20un%20plan%20corporativo%20personalizado.`} 
-                    target="_blank" 
-                    rel="noreferrer"
-                  >
-                    <Button className="w-full bg-primary text-white font-bold h-11 rounded-xl shadow-glow flex items-center justify-center gap-2">
-                      <Crown className="h-4 w-4" /> Solicitar plan corporativo
+                      Cerrar
                     </Button>
-                  </a>
-                  <Button variant="ghost" onClick={() => setShowBranchModal(false)} className="h-10 rounded-xl text-slate-500 font-bold">
-                    Cerrar
-                  </Button>
+                  </div>
                 </div>
-              </>
-            )}
+              )}
+            </div>
           </div>
         </DialogContent>
       </Dialog>
@@ -1174,594 +1642,58 @@ function DashboardAdminPage() {
           </div>
         </DialogContent>
       </Dialog>
-      {/* MODAL DETALLADO DE ESTADÍSTICAS Y RENDIMIENTO DE SUCURSAL */}
-      <Dialog open={!!selectedInspectTenant} onOpenChange={(open) => { if (!open) setSelectedInspectTenant(null); }}>
-        <DialogContent className="max-w-5xl rounded-[1.5rem] border-none shadow-elegant p-0 overflow-y-auto max-h-[90vh] bg-slate-50">
-          {selectedInspectTenant && (
-            <div>
-              {/* Encabezado Principal y Botón de Acción Centrado */}
-              <div 
-                className="p-6 text-white relative overflow-hidden flex flex-col items-center justify-center text-center gap-2 transition-all duration-300"
-                style={{ 
-                  background: `linear-gradient(135deg, ${selectedInspectTenant.color_primario || '#1B4B73'}, ${selectedInspectTenant.color_secundario || '#F0B900'})`
-                }}
-              >
-                <div className="absolute inset-0 bg-cover bg-center opacity-10 pointer-events-none" />
-                <div className="relative z-10 flex flex-col items-center">
-                  {selectedInspectTenant.logo_url ? (
-                    <img 
-                      src={selectedInspectTenant.logo_url} 
-                      alt="Logo" 
-                      className="h-16 w-16 rounded-full object-cover border-2 border-white/40 shadow-md mb-2.5 bg-white p-1" 
-                    />
-                  ) : (
-                    <span className="text-[9px] font-bold uppercase tracking-widest bg-white/20 px-2.5 py-0.5 rounded-full backdrop-blur-sm">
-                      Rendimiento de Sucursal
-                    </span>
-                  )}
-                  <h2 className="text-3xl font-display mt-2 leading-none">{selectedInspectTenant.nombre}</h2>
-                  <p className="text-[10px] text-white/80 mt-1 font-mono">klynn.com.do/t/{selectedInspectTenant.slug}</p>
-                  
-                  <Button 
-                    onClick={() => handleManage(selectedInspectTenant.id, selectedInspectTenant.slug)}
-                    size="sm"
-                    className="mt-3 bg-white hover:bg-white/95 text-slate-900 font-bold h-8 text-[11px] rounded-lg shadow-sm border-none transition-colors px-4 flex items-center gap-1.5"
-                  >
-                    Gestionar Sucursal <ArrowRight className="h-3.5 w-3.5" style={{ color: selectedInspectTenant.color_primario }} />
-                  </Button>
-                </div>
-              </div>
-
-              {inspectLoading ? (
-                <div className="py-24 flex flex-col items-center justify-center gap-3">
-                  <RefreshCw className="h-8 w-8 animate-spin text-primary" style={{ color: selectedInspectTenant.color_primario }} />
-                  <p className="text-sm font-semibold text-muted-foreground animate-pulse">Procesando datos en tiempo real...</p>
-                </div>
-              ) : inspectStats ? (
-                <div className="p-6 space-y-6">
-                  {/* Fila 1: KPIs Financieros */}
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <TrendingUp className="h-3.5 w-3.5 text-primary" style={{ color: selectedInspectTenant.color_primario }} /> Ingresos Totales
-                      </div>
-                      <div className="text-xl font-display font-bold mt-1 text-slate-800">
-                        {formatRD(inspectStats.totalVentas)}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground mt-1">Suma total facturada</div>
-                    </Card>
-
-                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <DollarSign className="h-3.5 w-3.5 text-rose-500" /> Gastos Totales
-                      </div>
-                      <div className="text-xl font-display font-bold mt-1 text-rose-600">
-                        {formatRD(inspectStats.totalGastos)}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground mt-1">Manuales + caja chica</div>
-                    </Card>
-
-                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow border-l-4 border-l-emerald-500">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Wallet className="h-3.5 w-3.5 text-emerald-500" /> Rentabilidad Neta
-                      </div>
-                      <div className={`text-xl font-display font-bold mt-1 ${inspectStats.rentabilidad >= 0 ? 'text-emerald-600' : 'text-rose-600'}`}>
-                        {formatRD(inspectStats.rentabilidad)}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground mt-1">Beneficio neto real</div>
-                    </Card>
-
-                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Shield className="h-3.5 w-3.5 text-blue-500" /> ITBIS Recaudado
-                      </div>
-                      <div className="text-xl font-display font-bold mt-1 text-blue-600">
-                        {formatRD(inspectStats.totalITBIS)}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground mt-1">Declaración DGII</div>
-                    </Card>
-
-                    <Card className="p-4 bg-white border-none shadow-sm flex flex-col justify-between h-28 hover:shadow transition-shadow">
-                      <div className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider flex items-center gap-1.5">
-                        <Sparkles className="h-3.5 w-3.5 text-amber-500" /> Ticket Promedio
-                      </div>
-                      <div className="text-xl font-display font-bold mt-1 text-slate-800">
-                        {formatRD(inspectStats.ticketPromedio)}
-                      </div>
-                      <div className="text-[9px] text-muted-foreground mt-1">Gasto medio por orden</div>
-                    </Card>
-                  </div>
-
-                  {/* Doble Columna Principal */}
-                  <div className="grid gap-6 lg:grid-cols-2">
-                    {/* Columna Izquierda: Gráficos y Desgloses */}
-                    <div className="space-y-6">
-                      {/* Estado de las Órdenes */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          📋 Estado de las Órdenes
-                        </h3>
-                        <div className="space-y-4">
-                          {[
-                            { state: "RECIBIDA", label: "Recibidas", color: "bg-blue-500" },
-                            { state: "EN_PROCESO", label: "En Proceso", color: "bg-indigo-500" },
-                            { state: "LISTA", label: "Listas para Entrega", color: "bg-emerald-500" },
-                            { state: "ENTREGADA", label: "Entregadas/Completadas", color: "bg-slate-500" },
-                          ].map((item) => {
-                            const count = inspectStats.porEstado[item.state] || 0;
-                            const total = inspectData?.ordenes.length || 1;
-                            const pct = Math.round((count / total) * 100);
-                            return (
-                              <div key={item.state} className="space-y-1">
-                                <div className="flex justify-between text-xs font-semibold text-slate-700">
-                                  <span>{item.label}</span>
-                                  <span>{count} órdenes ({pct}%)</span>
-                                </div>
-                                <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                  <div className={`h-full ${item.color}`} style={{ width: `${pct}%` }} />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </Card>
-
-                      {/* Métodos de Pago Preferidos */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          💳 Métodos de Pago
-                        </h3>
-                        <div className="space-y-3">
-                          {["EFECTIVO", "TARJETA", "TRANSFERENCIA", "MIXTO"].map((m) => {
-                            const v = inspectStats.porMetodo[m] || 0;
-                            const pct = inspectStats.totalVentas > 0 ? (v / inspectStats.totalVentas) * 100 : 0;
-                            const icons: Record<string, string> = {
-                              EFECTIVO: "💵",
-                              TARJETA: "💳",
-                              TRANSFERENCIA: "🏦",
-                              MIXTO: "💰"
-                            };
-                            return (
-                              <div key={m}>
-                                <div className="mb-1 flex justify-between text-xs font-semibold text-slate-700">
-                                  <span className="flex items-center gap-1.5">
-                                    <span>{icons[m] || "💰"}</span> {m}
-                                  </span>
-                                  <span>{formatRD(v)} ({Math.round(pct)}%)</span>
-                                </div>
-                                <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                  <div 
-                                    className="h-full bg-primary" 
-                                    style={{ 
-                                      width: `${pct}%`,
-                                      backgroundColor: selectedInspectTenant.color_primario 
-                                    }} 
-                                  />
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </Card>
-
-                      {/* Gastos por Categoría */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          🏷️ Gastos por Categoría
-                        </h3>
-                        <div className="space-y-3">
-                          {Object.entries(inspectStats.porCategoria).length > 0 ? (
-                            Object.entries(inspectStats.porCategoria).map(([cat, val]: [string, any]) => {
-                              const pct = inspectStats.totalGastos > 0 ? (val / inspectStats.totalGastos) * 100 : 0;
-                              return (
-                                <div key={cat}>
-                                  <div className="mb-1 flex justify-between text-xs font-semibold text-slate-700">
-                                    <span className="capitalize">{cat.toLowerCase()}</span>
-                                    <span>{formatRD(val)} ({Math.round(pct)}%)</span>
-                                  </div>
-                                  <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                    <div className="h-full bg-rose-500" style={{ width: `${pct}%` }} />
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="text-center text-xs text-muted-foreground py-6">
-                              Sin gastos registrados en este período.
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-
-                      {/* Servicios Más Populares */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          🧺 Servicios Más Populares
-                        </h3>
-                        <div className="space-y-3">
-                          {inspectStats.topServicios.length > 0 ? (
-                            (() => {
-                              const maxQty = Math.max(...inspectStats.topServicios.map(s => s.count), 1);
-                              return inspectStats.topServicios.map((srv: any) => {
-                                const pct = (srv.count / maxQty) * 100;
-                                return (
-                                  <div key={srv.name} className="space-y-1">
-                                    <div className="flex justify-between text-xs font-semibold text-slate-700">
-                                      <span className="truncate max-w-[180px]">{srv.name}</span>
-                                      <span className="text-[10px] text-muted-foreground shrink-0">
-                                        {srv.count} cant. ({formatRD(srv.total)})
-                                      </span>
-                                    </div>
-                                    <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                      <div 
-                                        className="h-full bg-indigo-500" 
-                                        style={{ 
-                                          width: `${pct}%`,
-                                          backgroundColor: selectedInspectTenant.color_primario 
-                                        }} 
-                                      />
-                                    </div>
-                                  </div>
-                                );
-                              });
-                            })()
-                          ) : (
-                            <div className="text-center text-xs text-muted-foreground py-6">
-                              Sin servicios registrados en las órdenes de este período.
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-
-                      {/* Cierres de Caja Recientes */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          📦 Cierres de Caja Recientes
-                        </h3>
-                        <div className="space-y-3">
-                          {inspectStats.cierresCaja.length > 0 ? (
-                            inspectStats.cierresCaja.map((c: any) => {
-                              const dif = c.diferencia || 0;
-                              const statusColor = dif === 0 
-                                ? "text-emerald-600 bg-emerald-50 border-emerald-100" 
-                                : dif > 0 
-                                  ? "text-blue-600 bg-blue-50 border-blue-100" 
-                                  : "text-rose-600 bg-rose-50 border-rose-100";
-                              const statusText = dif === 0 
-                                ? "Cuadrada" 
-                                : dif > 0 
-                                  ? `Sobrante: ${formatRD(dif)}` 
-                                  : `Faltante: ${formatRD(dif)}`;
-
-                              return (
-                                <div key={c.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-2 text-xs">
-                                  <div className="flex justify-between items-center">
-                                    <span className="font-bold text-slate-800">
-                                      Cierre de Caja
-                                    </span>
-                                    <span className="text-[10px] text-muted-foreground flex items-center gap-1">
-                                      <Calendar className="h-3 w-3" />
-                                      {c.cerrada_en ? new Date(c.cerrada_en).toLocaleDateString("es-DO") : ""}
-                                    </span>
-                                  </div>
-                                  <div className="grid grid-cols-3 gap-2 text-[9px] pt-1.5 border-t border-slate-100 text-slate-600">
-                                    <div>
-                                      <span className="block text-muted-foreground">Monto Inicial</span>
-                                      <strong className="font-bold text-slate-800">{formatRD(c.monto_inicial)}</strong>
-                                    </div>
-                                    <div>
-                                      <span className="block text-muted-foreground">Efectivo Real</span>
-                                      <strong className="font-bold text-slate-800">{formatRD(c.monto_contado_efectivo || 0)}</strong>
-                                    </div>
-                                    <div className="text-right">
-                                      <span className="block text-muted-foreground text-center">Cuadre</span>
-                                      <span className={`inline-block px-1.5 py-0.5 rounded text-[8px] font-extrabold uppercase ${statusColor}`}>
-                                        {statusText}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  {c.notas_cierre && (
-                                    <p className="text-[9px] text-slate-500 italic mt-0.5 border-t border-dashed border-slate-100 pt-1">
-                                      "{c.notas_cierre}"
-                                    </p>
-                                  )}
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="text-center text-xs text-muted-foreground py-8">
-                              No se han registrado cierres de caja aún.
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-                    </div>
-
-                    {/* Columna Derecha: Feed en Vivo y Personal */}
-                    <div className="space-y-6">
-                      {/* Actividad Reciente */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <div className="flex justify-between items-center mb-4">
-                          <h3 className="font-display text-lg text-slate-800 flex items-center gap-2">
-                            🔔 Actividad Reciente (48h)
-                          </h3>
-                          <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-2 py-0.5 rounded-full">
-                            Autolimpieza activa
-                          </span>
-                        </div>
-                        <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
-                          {inspectStats.recientes.length > 0 ? (
-                            inspectStats.recientes.map((act: any) => {
-                              return (
-                                <div key={act.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100/50 hover:bg-slate-100/50 transition-colors">
-                                  <div className="min-w-0 flex-1 pr-2">
-                                    <div className="font-semibold text-xs text-slate-800 truncate">{act.titulo}</div>
-                                    <div className="text-[10px] text-muted-foreground truncate">{act.desc}</div>
-                                    <div className="text-[8px] text-slate-400 flex items-center gap-1 mt-1">
-                                      <Calendar className="h-2.5 w-2.5" />
-                                      {new Date(act.fecha).toLocaleString("es-DO", { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'numeric' })}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2.5 shrink-0">
-                                    {act.monto !== undefined && act.monto > 0 && (
-                                      <div className="font-bold text-xs text-slate-800">{formatRD(act.monto)}</div>
-                                    )}
-                                    <span className={`px-2 py-0.5 rounded text-[8px] font-extrabold uppercase border ${act.color}`}>
-                                      {act.badgeText}
-                                    </span>
-                                  </div>
-                                </div>
-                              );
-                            })
-                          ) : (
-                            <div className="text-center text-xs text-muted-foreground py-8">
-                              Sin actividades registradas en las últimas 48 horas.
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-
-                      {/* Equipo Registrado */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          👥 Equipo de Trabajo
-                        </h3>
-                        <div className="space-y-3">
-                          {inspectData?.empleados && inspectData.empleados.length > 0 ? (
-                            inspectData.empleados.map((emp) => (
-                              <div key={emp.id} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-100/50">
-                                <div className="flex items-center gap-2.5">
-                                  <div 
-                                    className="h-8 w-8 rounded-full flex items-center justify-center text-white font-bold text-xs"
-                                    style={{ backgroundColor: selectedInspectTenant.color_primario }}
-                                  >
-                                    {emp.nombre.charAt(0)}
-                                  </div>
-                                  <div>
-                                    <div className="font-semibold text-xs text-slate-800">{emp.nombre} {emp.apellido || ""}</div>
-                                    <div className="text-[9px] text-muted-foreground">{emp.email}</div>
-                                  </div>
-                                </div>
-                                <span className="px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-600 border border-slate-200">
-                                  {emp.rol}
-                                </span>
-                              </div>
-                            ))
-                          ) : (
-                            <div className="text-center text-xs text-muted-foreground py-8">
-                              No hay empleados configurados en esta sucursal.
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-
-                      {/* Ventas por Empleado */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          📊 Ventas por Empleado
-                        </h3>
-                        <div className="space-y-3">
-                          {inspectData?.empleados && inspectData.empleados.length > 0 ? (
-                            (() => {
-                              const empData = inspectData.empleados.map(emp => {
-                                const empOrds = (inspectData.ordenes || []).filter(o => o.empleado_id === emp.id);
-                                const total = empOrds.reduce((s, o) => s + (o.total || 0), 0);
-                                const count = empOrds.length;
-                                return { emp, total, count };
-                              });
-
-                              const maxVentas = Math.max(...empData.map(d => d.total), 1);
-
-                              return empData.map(({ emp, total, count }) => {
-                                const pct = (total / maxVentas) * 100;
-                                return (
-                                  <div key={emp.id} className="p-3 rounded-xl bg-slate-50 border border-slate-100 flex flex-col gap-2">
-                                    <div className="flex items-center justify-between">
-                                      <div className="flex items-center gap-2">
-                                        <div 
-                                          className="h-6 w-6 rounded-full flex items-center justify-center text-white font-bold text-[10px]"
-                                          style={{ backgroundColor: selectedInspectTenant.color_primario }}
-                                        >
-                                          {emp.nombre.charAt(0)}
-                                        </div>
-                                        <span className="font-semibold text-xs text-slate-800">{emp.nombre} {emp.apellido || ""}</span>
-                                      </div>
-                                      <span className="text-[10px] text-muted-foreground font-semibold">
-                                        {count} {count === 1 ? "orden" : "órdenes"}
-                                      </span>
-                                    </div>
-                                    <div>
-                                      <div className="flex justify-between text-[11px] font-bold text-slate-700 mb-1">
-                                        <span>Total Ventas</span>
-                                        <span>{formatRD(total)}</span>
-                                      </div>
-                                      <div className="h-1.5 overflow-hidden rounded-full bg-slate-100">
-                                        <div 
-                                          className="h-full rounded-full transition-all duration-500" 
-                                          style={{ 
-                                            width: `${pct}%`,
-                                            backgroundColor: selectedInspectTenant.color_primario 
-                                          }} 
-                                        />
-                                      </div>
-                                    </div>
-                                  </div>
-                                );
-                              });
-                            })()
-                          ) : (
-                            <div className="text-center text-xs text-muted-foreground py-8">
-                              No hay empleados registrados.
-                            </div>
-                          )}
-                        </div>
-                      </Card>
-
-                      {/* Logística y Eficiencia Operativa */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          ⚡ Logística y Eficiencia
-                        </h3>
-                        <div className="space-y-4">
-                          {/* Canal de Entrega */}
-                          <div className="space-y-1.5">
-                            <div className="flex justify-between text-xs font-semibold text-slate-700">
-                              <span>Canal de Entrega</span>
-                              <span className="text-[10px] text-muted-foreground">
-                                {inspectStats.ordsDomicilio} delivery vs {inspectStats.ordsLocal} local
-                              </span>
-                            </div>
-                            <div className="h-3 overflow-hidden rounded-full bg-slate-100 flex">
-                              <div 
-                                className="h-full text-[8px] font-bold text-white flex items-center justify-center transition-all" 
-                                style={{ 
-                                  width: `${inspectStats.pctDomicilio}%`,
-                                  backgroundColor: selectedInspectTenant.color_primario || '#1B4B73'
-                                }} 
-                                title={`Delivery: ${inspectStats.pctDomicilio}%`}
-                              >
-                                {inspectStats.pctDomicilio >= 15 && `${inspectStats.pctDomicilio}% 🚚`}
-                              </div>
-                              <div 
-                                className="h-full text-[8px] font-bold text-white flex items-center justify-center bg-slate-400 transition-all" 
-                                style={{ 
-                                  width: `${inspectStats.pctLocal}%`
-                                }} 
-                                title={`En Local: ${inspectStats.pctLocal}%`}
-                              >
-                                {inspectStats.pctLocal >= 15 && `${inspectStats.pctLocal}% 🧺`}
-                              </div>
-                            </div>
-                            <div className="flex justify-between text-[8px] text-muted-foreground px-1">
-                              <span>🚚 Delivery ({inspectStats.pctDomicilio}%)</span>
-                              <span>🧺 En Local ({inspectStats.pctLocal}%)</span>
-                            </div>
-                          </div>
-
-                          {/* Desglose de Delivery a Domicilio */}
-                          <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-dashed border-slate-100 text-[10px] text-slate-600">
-                            <div className="bg-emerald-50/70 p-2 rounded-xl border border-emerald-100 flex flex-col justify-between">
-                              <span className="text-[9px] text-emerald-800 font-medium">Entregados 🚚</span>
-                              <strong className="text-emerald-700 font-bold text-xs mt-1">{inspectStats.deliveryEntregados}</strong>
-                            </div>
-                            <div className="bg-amber-50/70 p-2 rounded-xl border border-amber-100 flex flex-col justify-between">
-                              <span className="text-[9px] text-amber-800 font-medium">En Ruta 📍</span>
-                              <strong className="text-amber-700 font-bold text-xs mt-1">{inspectStats.deliveryPendientes}</strong>
-                            </div>
-                            <div className="bg-rose-50/70 p-2 rounded-xl border border-rose-100 flex flex-col justify-between">
-                              <span className="text-[9px] text-rose-800 font-medium">Cancelados ❌</span>
-                              <strong className="text-rose-700 font-bold text-xs mt-1">{inspectStats.deliveryCancelados}</strong>
-                            </div>
-                          </div>
-
-                          {/* Tasa de Urgencia */}
-                          <div className="pt-3 border-t border-slate-100 space-y-1.5">
-                            <div className="flex justify-between text-xs font-semibold text-slate-700">
-                              <span>Tasa de Órdenes Express / Urgentes</span>
-                              <span className={`text-[10px] font-bold ${inspectStats.pctUrgencia > 20 ? 'text-amber-600' : 'text-slate-500'}`}>
-                                {inspectStats.ordsUrgentes} urgentes
-                              </span>
-                            </div>
-                            <div className="h-2 overflow-hidden rounded-full bg-slate-100">
-                              <div 
-                                className="h-full rounded-full transition-all duration-500" 
-                                style={{ 
-                                  width: `${inspectStats.pctUrgencia}%`,
-                                  backgroundColor: inspectStats.pctUrgencia > 20 ? '#D97706' : (selectedInspectTenant.color_primario || '#1B4B73')
-                                }} 
-                              />
-                            </div>
-                            <div className="flex justify-between items-center text-[9px] text-muted-foreground pt-0.5">
-                              <span>⚡ Prioridad Express: {inspectStats.pctUrgencia}%</span>
-                              <span>
-                                {inspectStats.pctUrgencia > 20 ? (
-                                  <span className="text-amber-600 font-medium">⚠️ Alta demanda express</span>
-                                ) : (
-                                  <span className="text-emerald-600 font-medium">🟢 Carga de trabajo stable</span>
-                                )}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      </Card>
-
-                      {/* Créditos, Deudas y Abonos de Clientes */}
-                      <Card className="p-6 bg-white border-none shadow-sm rounded-2xl">
-                        <h3 className="font-display text-lg text-slate-800 mb-4 flex items-center gap-2">
-                          🏦 Créditos y Cuentas por Cobrar
-                        </h3>
-                        <div className="space-y-3">
-                          {/* Deuda Pendiente */}
-                          <div className="p-3.5 rounded-2xl bg-rose-50/60 border border-rose-100/50 flex items-center justify-between">
-                            <div>
-                              <span className="text-[10px] text-rose-800 font-bold uppercase tracking-wider block">Deuda Pendiente (Por Cobrar)</span>
-                              <div className="text-2xl font-display font-bold text-rose-600 mt-1">
-                                {formatRD(inspectStats.totalDeuda)}
-                              </div>
-                            </div>
-                            <span className="px-2.5 py-1 bg-rose-100 text-rose-800 text-[10px] font-extrabold rounded-lg">
-                              {inspectStats.cantidadDeudas} {inspectStats.cantidadDeudas === 1 ? "factura" : "facturas"}
-                            </span>
-                          </div>
-
-                          {/* Abonos y Parciales */}
-                          <div className="p-3.5 rounded-2xl bg-emerald-50/60 border border-emerald-100/50 flex items-center justify-between">
-                            <div>
-                              <span className="text-[10px] text-emerald-800 font-bold uppercase tracking-wider block">Abonos y Pagos Recibidos</span>
-                              <div className="text-2xl font-display font-bold text-emerald-600 mt-1">
-                                {formatRD(inspectStats.totalAbonado + inspectStats.totalAbonosCaja)}
-                              </div>
-                            </div>
-                            <span className="px-2.5 py-1 bg-emerald-100 text-emerald-800 text-[10px] font-extrabold rounded-lg">
-                              Abonos Activos
-                            </span>
-                          </div>
-
-                          {/* Nota aclaratoria con estilo */}
-                          <div className="text-[9px] text-slate-500 bg-slate-50 border border-slate-100/80 p-2.5 rounded-xl text-center leading-normal">
-                            ℹ️ <strong>Cuentas por cobrar:</strong> Representa los saldos pendientes de pago de tus clientes. Los abonos reflejan pagos parciales aplicados a órdenes vigentes.
-                          </div>
-                        </div>
-                      </Card>
-                    </div>
-                  </div>
-                </div>
-              ) : null}
-
-              {/* Botón de Cierre */}
-              <div className="p-4 bg-slate-100 border-t flex justify-end">
-                <Button 
-                  onClick={() => setSelectedInspectTenant(null)}
-                  className="rounded-xl font-bold h-10 px-6"
-                  variant="outline"
-                >
-                  Cerrar panel
-                </Button>
-              </div>
-            </div>
+      {/* MODAL DE DETALLE DE ORDEN (TICKET, PRENDAS, DESGLOSE) */}
+      <Dialog open={!!viewingOrder} onOpenChange={(o) => !o && setViewingOrder(null)}>
+        <DialogContent className="max-w-3xl max-h-[86vh] overflow-hidden rounded-3xl p-4 sm:p-5">
+          {viewingOrder && (
+            <OrderDetail 
+              view={viewingOrder} 
+              tenant={viewingOrderContext?.tenant} 
+              clientes={viewingOrderContext?.clientes || []} 
+              empleados={viewingOrderContext?.empleados || []}
+              cambiarEstado={handleCambiarEstado} 
+              setView={setViewingOrder} 
+              onPrint={() => setShowPrint(viewingOrder)}
+              onEdit={() => { 
+                setEditingOrder(viewingOrder); 
+                setEditingOrderContext(viewingOrderContext);
+                setViewingOrder(null); 
+              }}
+              setCobrarOrden={() => {
+                toast.info("Para gestionar movimientos de caja y cobros directos, accede a la sucursal.");
+              }}
+            />
           )}
         </DialogContent>
       </Dialog>
+
+      {/* MODAL DE EDICIÓN DE ORDEN INTEGRAL */}
+      {editingOrder && (
+        <EditOrderDialog 
+          key={editingOrder.id} 
+          orden={editingOrder} 
+          clientes={editingOrderContext?.clientes || []} 
+          servicios={editingOrderContext?.servicios || []} 
+          empleados={editingOrderContext?.empleados || []} 
+          tenant={editingOrderContext?.tenant || undefined}
+          onClose={() => {
+            setEditingOrder(null);
+            setEditingOrderContext(null);
+          }}
+          onSaved={handleOrderSaved}
+        />
+      )}
+
+      {/* MODAL DE IMPRESIÓN DE TICKET */}
+      {showPrint && (
+        <TicketPrintPortal 
+          orden={showPrint} 
+          tenant={viewingOrderContext?.tenant || undefined} 
+          clientes={viewingOrderContext?.clientes || []}
+          empleados={viewingOrderContext?.empleados || []}
+          onClose={() => setShowPrint(null)} 
+        />
+      )}
     </div>
   );
 }

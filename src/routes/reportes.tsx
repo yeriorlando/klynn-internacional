@@ -74,7 +74,18 @@ import {
   SlidersHorizontal,
   ChevronDown,
   List,
-  BarChart2
+  BarChart2,
+  Hash,
+  Eye,
+  Pencil,
+  Inbox,
+  Ban,
+  Store,
+  Crown,
+  Rocket,
+  User,
+  MessageSquare,
+  UserPlus
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { Card } from "@/components/ui/card";
@@ -145,16 +156,26 @@ import {
   getServicios,
   getTenantBranchName,
   formatRD, 
+  formatDateRD,
   formatPhoneRD,
   setActiveTenant,
   setSession,
   logout,
+  saveOrden,
   type Tenant,
   type Cliente,
   type Plan,
   type CatalogoItem,
-  type Servicio
+  type Servicio,
+  type Orden,
+  type EstadoOrden
 } from "@/lib/storage";
+import { EditOrderDialog } from "@/components/klynn/EditOrderDialog";
+import { OrderDetail, TicketPrintPortal } from "@/components/klynn/OrdenesPage";
+import { ClienteDialog } from "@/components/klynn/ClienteDialog";
+import { ClienteDetalleModal } from "@/components/klynn/ClienteDetalleModal";
+import { getSectorOptions, normalizeText } from "@/lib/cliente-analytics";
+import { exportClientsToExcel } from "@/lib/excel-clients";
 
 // Catálogo Oficial de Comprobantes Fiscales y Electrónicos DGII (República Dominicana)
 const DGII_CATALOGO_MAP: Record<string, {
@@ -187,6 +208,43 @@ const DGII_CATALOGO_MAP: Record<string, {
   B15: { codigo: "B15", nombreOficial: "B15 - GUBERNAMENTAL", subtitulo: "Comprobante Gubernamental Tradicional", esElectronico: false, colorClass: "text-blue-700 dark:text-blue-300", badgeBg: "bg-blue-600" },
   B16: { codigo: "B16", nombreOficial: "B16 - EXPORTACIONES", subtitulo: "Comprobante para Exportaciones Tradicional", esElectronico: false, colorClass: "text-teal-700 dark:text-teal-300", badgeBg: "bg-teal-600" },
 };
+
+function PlanBadge({ id }: { id?: string }) {
+  const configs: Record<string, { label: string; icon: any; className: string; iconColor: string }> = {
+    basico: { 
+      label: "Básico", 
+      icon: Zap, 
+      className: "bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300 dark:border-sky-800",
+      iconColor: "text-sky-500 dark:text-sky-400"
+    },
+    pro: { 
+      label: "Pro", 
+      icon: Crown, 
+      className: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/50 dark:text-purple-300 dark:border-purple-800",
+      iconColor: "text-purple-600 dark:text-purple-400"
+    },
+    enterprise: { 
+      label: "Enterprise", 
+      icon: Rocket, 
+      className: "bg-amber-50 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300 dark:border-amber-700",
+      iconColor: "text-amber-600 dark:text-amber-400"
+    },
+  };
+  const key = (id || "basico").toLowerCase().trim();
+  const config = configs[key] || { label: id || "Básico", icon: Zap, className: "bg-muted/60 text-foreground border-border", iconColor: "text-muted-foreground" };
+  const Icon = config.icon;
+
+  return (
+    <Badge 
+      variant="outline" 
+      className={`text-xs font-semibold px-2.5 py-0.5 rounded-full flex items-center gap-1.5 w-fit ${config.className}`}
+    >
+      <Icon className={`h-3 w-3 ${config.iconColor}`} />
+      <span>{config.label}</span>
+    </Badge>
+  );
+}
+
 /**
  * Componente para renderizar cifras de métricas con tipografía adaptativa inteligente:
  * - Reduce gradualmente el tamaño del texto según la longitud de caracteres (millones, decenas de millones)
@@ -339,6 +397,90 @@ function getReporteCategoriaInfo(cat: string) {
   };
 }
 
+function getEstadoBadge(estado: string) {
+  const norm = (estado || "").replace("_", " ").toUpperCase().trim();
+
+  const config: Record<string, { icon: any; label: string; style: string }> = {
+    RECIBIDA: {
+      icon: Inbox,
+      label: "Recibida",
+      style: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    RECIBIDO: {
+      icon: Inbox,
+      label: "Recibida",
+      style: "border-blue-200 bg-blue-50 text-blue-700 dark:border-blue-900/50 dark:bg-blue-950/40 dark:text-blue-300",
+    },
+    "EN PROCESO": {
+      icon: RotateCw,
+      label: "En Proceso",
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    EN_PROCESO: {
+      icon: RotateCw,
+      label: "En Proceso",
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    PROCESO: {
+      icon: RotateCw,
+      label: "En Proceso",
+      style: "border-amber-200 bg-amber-50 text-amber-700 dark:border-amber-900/50 dark:bg-amber-950/40 dark:text-amber-300",
+    },
+    LISTA: {
+      icon: CheckCircle2,
+      label: "Lista",
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    LISTO: {
+      icon: CheckCircle2,
+      label: "Lista",
+      style: "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/50 dark:bg-emerald-950/40 dark:text-emerald-300",
+    },
+    ENTREGADA: {
+      icon: Truck,
+      label: "Entregada",
+      style: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    },
+    ENTREGADO: {
+      icon: Truck,
+      label: "Entregada",
+      style: "border-slate-300 bg-slate-100 text-slate-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-300",
+    },
+    CANCELADA: {
+      icon: Ban,
+      label: "Cancelada",
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
+    CANCELADO: {
+      icon: Ban,
+      label: "Cancelada",
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
+    ANULADA: {
+      icon: Ban,
+      label: "Anulada",
+      style: "border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/50 dark:bg-rose-950/40 dark:text-rose-300",
+    },
+  };
+
+  const item = config[norm] || {
+    icon: Inbox,
+    label: norm,
+    style: "border-slate-200 bg-slate-50 text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-300",
+  };
+  const Icon = item.icon;
+
+  return (
+    <Badge
+      variant="outline"
+      className={`text-[10px] font-bold px-2 py-0.5 rounded-full inline-flex items-center gap-1.5 shrink-0 shadow-2xs ${item.style}`}
+    >
+      <Icon className="h-3 w-3 shrink-0" />
+      <span>{item.label}</span>
+    </Badge>
+  );
+}
+
 export const Route = createFileRoute("/reportes")({
   component: ReportesPage,
 });
@@ -350,7 +492,18 @@ function ReportesPage() {
   const [inspectLoading, setInspectLoading] = useState(true);
   const [isPrinting, setIsPrinting] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
-  const [activeTab, setActiveTab] = useState<string>("finanzas");
+  
+  const searchTab = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("tab") : null;
+  const [activeTab, setActiveTab] = useState<string>(searchTab || "finanzas");
+
+  // Sincronizar activeTab si cambia el parámetro de URL tab
+  useEffect(() => {
+    const tabParam = new URLSearchParams(window.location.search).get("tab");
+    if (tabParam && tabParam !== activeTab) {
+      setActiveTab(tabParam);
+    }
+  }, []);
+
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
@@ -360,6 +513,14 @@ function ReportesPage() {
   const [debtSearch, setDebtSearch] = useState<string>("");
   const [debtPage, setDebtPage] = useState<number>(1);
   const DEBT_PAGE_SIZE = 5;
+
+  // Estados para Órdenes y Clientes dentro de Reportes
+  const [ordersSearch, setOrdersSearch] = useState<string>("");
+  const [ordersStatusFilter, setOrdersStatusFilter] = useState<string>("TODAS");
+  const [clientsSearch, setClientsSearch] = useState<string>("");
+  const [viewingOrder, setViewingOrder] = useState<Orden | null>(null);
+  const [editingOrder, setEditingOrder] = useState<Orden | null>(null);
+  const [showOrderPrint, setShowOrderPrint] = useState<Orden | null>(null);
 
   // Estados para Filtros y Paginación de Prendas & Servicios
   const [prendaSearch, setPrendaSearch] = useState<string>("");
@@ -1528,8 +1689,168 @@ function ReportesPage() {
     return filteredDeudores.slice(startIndex, startIndex + DEBT_PAGE_SIZE);
   }, [filteredDeudores, debtPage]);
 
+  // Órdenes filtradas dentro de la sucursal en Reportes (respetando filtros de búsqueda y estado)
+  const filteredInspectOrders = useMemo(() => {
+    const baseList = (filteredData?.ordenes || inspectData?.ordenes || []) as Orden[];
+    const q = ordersSearch.toLowerCase().trim();
+    const cleanQ = q.startsWith("#") ? q.slice(1) : q;
+    const clientMap = new Map((inspectData?.clientes || []).map((c) => [c.id, c]));
+
+    return baseList.filter((o) => {
+      // Filtro de estado
+      if (ordersStatusFilter !== "TODAS") {
+        const est = (o.estado || "").toUpperCase();
+        if (ordersStatusFilter === "RECIBIDO" && !est.includes("RECIBI")) return false;
+        if (ordersStatusFilter === "PROCESO" && !est.includes("PROCES")) return false;
+        if (ordersStatusFilter === "LISTO" && !est.includes("LIST")) return false;
+        if (ordersStatusFilter === "ENTREGADO" && !est.includes("ENTREGA")) return false;
+        if (ordersStatusFilter === "CANCELADO" && !est.includes("CANCEL")) return false;
+      }
+
+      if (!q) return true;
+      const cli = clientMap.get(o.cliente_id);
+      const cliName = cli ? `${cli.nombre} ${cli.apellido || ""}`.toLowerCase() : "";
+      const cliPhone = cli?.telefono ? cli.telefono.toLowerCase() : "";
+      const matchesNum = (o.numero || "").toLowerCase().includes(cleanQ);
+      const matchesCli = cliName.includes(q) || cliPhone.includes(cleanQ);
+      const matchesNotas = (o.notas || "").toLowerCase().includes(q);
+
+      return matchesNum || matchesCli || matchesNotas;
+    });
+  }, [filteredData?.ordenes, inspectData?.ordenes, inspectData?.clientes, ordersSearch, ordersStatusFilter]);
+
+  // Paginación para órdenes dentro de la sucursal en Reportes (igual que en /ordenes)
+  const ORDERS_PAGE_SIZE = 10;
+  const [ordersCurrentPage, setOrdersCurrentPage] = useState(1);
+  const totalOrdersPages = Math.max(1, Math.ceil(filteredInspectOrders.length / ORDERS_PAGE_SIZE));
+
+  const paginatedInspectOrders = useMemo(() => {
+    const start = (ordersCurrentPage - 1) * ORDERS_PAGE_SIZE;
+    return filteredInspectOrders.slice(start, start + ORDERS_PAGE_SIZE);
+  }, [filteredInspectOrders, ordersCurrentPage]);
+
+  useEffect(() => {
+    setOrdersCurrentPage(1);
+  }, [filteredInspectOrders.length, ordersStatusFilter, ordersSearch]);
+
+  // Estados para Clientes dentro de Reportes
+  const [clientFilterType, setClientFilterType] = useState<"all" | "empresa" | "persona" | "deuda" | "credito">("all");
+  const [clientSectorFilter, setClientSectorFilter] = useState<string>("all");
+  const [selectedInspectClienteId, setSelectedInspectClienteId] = useState<string | null>(null);
+  const [editingInspectCliente, setEditingInspectCliente] = useState<Cliente | null>(null);
+  const [showNewInspectCliente, setShowNewInspectCliente] = useState<boolean>(false);
+
+  const deudaInspectCliente = (id: string) => {
+    return (inspectData?.ordenes || []).filter((o) => o.cliente_id === id && o.estado !== "ANULADA").reduce((s, o) => s + (o.saldo || 0), 0);
+  };
+
+  const totalGastadoInspectCliente = (id: string) => {
+    return (inspectData?.ordenes || []).filter((o) => o.cliente_id === id && o.estado !== "ANULADA").reduce((s, o) => s + (o.total || 0), 0);
+  };
+
+  const inspectClientesList = inspectData?.clientes || [];
+  const totalClientesCount = inspectClientesList.length;
+  const empresasCount = useMemo(() => inspectClientesList.filter((c) => c.tipo === "Empresa").length, [inspectClientesList]);
+  const personasCount = useMemo(() => inspectClientesList.filter((c) => c.tipo !== "Empresa").length, [inspectClientesList]);
+  const clientesConDeudaCount = useMemo(() => inspectClientesList.filter((c) => deudaInspectCliente(c.id) > 0).length, [inspectClientesList, inspectData?.ordenes]);
+  const clientesConCreditoCount = useMemo(() => inspectClientesList.filter((c) => (c.limite_credito || 0) > 0).length, [inspectClientesList]);
+  const totalDeudaGlobalClientes = useMemo(() => inspectClientesList.reduce((sum, c) => sum + deudaInspectCliente(c.id), 0), [inspectClientesList, inspectData?.ordenes]);
+
+  const selectedInspectCliente = useMemo(() => {
+    return inspectClientesList.find((c) => c.id === selectedInspectClienteId) || null;
+  }, [inspectClientesList, selectedInspectClienteId]);
+
+  const inspectSectorOptions = useMemo(() => {
+    return getSectorOptions(inspectClientesList);
+  }, [inspectClientesList]);
+
+  // Clientes filtrados dentro de la sucursal en Reportes (Texto + Sector + Tipo de Filtro)
+  const filteredInspectClients = useMemo(() => {
+    return inspectClientesList.filter((c) => {
+      const search = clientsSearch.toLowerCase().trim();
+      const matchSearch = !search || 
+        c.nombre.toLowerCase().includes(search) || 
+        (c.apellido && c.apellido.toLowerCase().includes(search)) || 
+        (c.telefono || "").includes(search) ||
+        (c.cedula && c.cedula.includes(search)) ||
+        (c.email && c.email.toLowerCase().includes(search)) ||
+        (c.direccion && c.direccion.toLowerCase().includes(search)) ||
+        (c.sector && c.sector.toLowerCase().includes(search));
+
+      if (!matchSearch) return false;
+
+      // Filtro por Sector
+      if (clientSectorFilter !== "all") {
+        const clientSector = normalizeText(c.sector);
+        if (clientSector !== clientSectorFilter) return false;
+      }
+
+      if (clientFilterType === "empresa") return c.tipo === "Empresa";
+      if (clientFilterType === "persona") return c.tipo !== "Empresa";
+      if (clientFilterType === "deuda") return deudaInspectCliente(c.id) > 0;
+      if (clientFilterType === "credito") return (c.limite_credito || 0) > 0;
+
+      return true;
+    });
+  }, [inspectClientesList, clientsSearch, clientFilterType, clientSectorFilter, inspectData?.ordenes]);
+
+  // Handlers para abrir órdenes desde la sucursal
+  const handleOpenOrder = (orden: Orden, action: "view" | "edit") => {
+    if (action === "view") {
+      setViewingOrder(orden);
+    } else {
+      setEditingOrder(orden);
+    }
+  };
+
+  // Guardar orden editada con actualización reactiva
+  const handleOrderSaved = (updated: Orden) => {
+    setEditingOrder(null);
+    toast.success(`Orden #${updated.numero} actualizada con éxito`);
+
+    setInspectData((prev) => {
+      if (!prev) return null;
+      return {
+        ...prev,
+        ordenes: prev.ordenes.map((o: any) => (o.id === updated.id ? updated : o))
+      };
+    });
+
+    if (viewingOrder?.id === updated.id) {
+      setViewingOrder(updated);
+    }
+  };
+
+  // Recargar clientes tras agregar o editar en el modal
+  const refreshInspectClientes = async () => {
+    if (!selectedInspectTenant) return;
+    try {
+      const updatedClientes = await getClientes(selectedInspectTenant.id);
+      setInspectData((prev) => prev ? { ...prev, clientes: updatedClientes || [] } : prev);
+    } catch (err) {
+      console.error("Error refreshing clientes:", err);
+    }
+  };
+
+  // Cambiar estado de orden
+  const handleCambiarEstado = async (ordenId: string, nuevoEstado: EstadoOrden) => {
+    try {
+      const orden = inspectData?.ordenes.find((o: any) => o.id === ordenId) || viewingOrder;
+      if (!orden) return;
+      const updated = { ...orden, estado: nuevoEstado };
+      await saveOrden(updated);
+      toast.success(`Estado actualizado a ${nuevoEstado}`);
+      handleOrderSaved(updated);
+    } catch (e) {
+      console.error("Error al actualizar estado:", e);
+      toast.error("Error al actualizar el estado de la orden");
+    }
+  };
+
   // Mapa de Nombres Legibles de Pestañas para Exportación y UI
   const TAB_LABELS_MAP: Record<string, string> = {
+    ordenes: "Órdenes de la Sucursal",
+    clientes: "Directorio de Clientes",
     finanzas: "Finanzas & Caja",
     deudas: "CXC (Cuentas por Cobrar)",
     prendas: "Prendas & Servicios",
@@ -1712,12 +2033,11 @@ function ReportesPage() {
                 <h1 className="text-2xl sm:text-3xl font-display font-black text-foreground tracking-tight">
                   {selectedInspectTenant.nombre}
                 </h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold bg-primary/10 text-primary border border-primary/20">
-                  {branchName}
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
-                  {selectedInspectTenant.plan_id.toUpperCase()}
-                </span>
+                <Badge className="bg-[#1B4B73] hover:bg-[#1B4B73] text-white border-0 font-bold text-xs shadow-2xs px-3 py-1 rounded-xl inline-flex items-center gap-1.5">
+                  <Store className="h-3.5 w-3.5 text-[#F0B900] shrink-0" />
+                  <span>{branchName}</span>
+                </Badge>
+                <PlanBadge id={selectedInspectTenant.plan_id} />
               </div>
               <div className="flex items-center gap-3 text-xs sm:text-sm text-muted-foreground flex-wrap justify-center sm:justify-start pt-0.5">
                 <span className="inline-flex items-center gap-1.5 font-medium">
@@ -1742,16 +2062,14 @@ function ReportesPage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2.5 w-full sm:w-auto justify-center">
-            <Button 
-              onClick={() => handleManage(selectedInspectTenant.id, selectedInspectTenant.slug)}
-              className="gap-2 bg-[#1B4B73] hover:bg-[#143755] text-white h-10 px-5 rounded-xl font-bold shadow-md cursor-pointer active:scale-95 transition-all text-xs sm:text-sm border border-[#1B4B73]/20"
-            >
-              <Building2 className="h-4 w-4 text-[#F0B900]" />
-              <span>Gestionar Sucursal</span>
-              <ArrowRight className="h-3.5 w-3.5 opacity-80" />
-            </Button>
-          </div>
+          <Button 
+            onClick={() => handleManage(selectedInspectTenant.id, selectedInspectTenant.slug)}
+            className="gap-2 bg-[#1B4B73] hover:bg-[#143755] text-white h-11 px-5 rounded-xl font-bold shadow-md cursor-pointer active:scale-95 transition-all text-xs sm:text-sm border border-[#1B4B73]/20 shrink-0 self-center"
+          >
+            <Building2 className="h-4 w-4 text-[#F0B900]" />
+            <span>Gestionar Sucursal</span>
+            <ArrowRight className="h-3.5 w-3.5 opacity-80" />
+          </Button>
         </div>
 
         {/* BARRA DE HERRAMIENTAS AVANZADA: FILTROS TEMPORALES, MESES, RANGO + EXPORTACIÓN */}
@@ -2093,6 +2411,42 @@ function ReportesPage() {
           /* PESTAÑAS INDEPENDIENTES CON ESTILO /ADMIN Y BOTÓN ICONO PASTEL */
           <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
             <TabsList className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2.5 sm:gap-3 bg-transparent p-0 border-none h-auto w-full">
+              {/* Tab: Gestión de Órdenes */}
+              <TabsTrigger 
+                value="ordenes"
+                className="flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl font-bold bg-surface border border-border/80 text-foreground shadow-2xs data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 hover:border-border cursor-pointer text-left justify-start h-full w-full group select-none relative overflow-hidden"
+              >
+                <span className="p-2.5 rounded-xl bg-blue-50 dark:bg-blue-950/70 text-blue-600 dark:text-blue-400 shrink-0 transition-transform group-hover:scale-105 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
+                  <Package className="h-5 w-5 shrink-0" />
+                </span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-[13px] leading-tight truncate text-foreground group-data-[state=active]:text-white">
+                    Órdenes
+                  </span>
+                  <span className="text-[10px] text-muted-foreground group-data-[state=active]:text-white/80 leading-tight truncate font-normal mt-1">
+                    {filteredData.ordenes.length} pedidos
+                  </span>
+                </div>
+              </TabsTrigger>
+
+              {/* Tab: Directorio de Clientes */}
+              <TabsTrigger 
+                value="clientes"
+                className="flex items-center gap-3 p-3.5 sm:p-4 rounded-2xl font-bold bg-surface border border-border/80 text-foreground shadow-2xs data-[state=active]:bg-primary data-[state=active]:text-white data-[state=active]:border-primary data-[state=active]:shadow-md transition-all hover:bg-muted/60 hover:border-border cursor-pointer text-left justify-start h-full w-full group select-none relative overflow-hidden"
+              >
+                <span className="p-2.5 rounded-xl bg-emerald-50 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 shrink-0 transition-transform group-hover:scale-105 group-data-[state=active]:bg-white/20 group-data-[state=active]:text-white">
+                  <Users className="h-5 w-5 shrink-0" />
+                </span>
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-bold text-xs sm:text-[13px] leading-tight truncate text-foreground group-data-[state=active]:text-white">
+                    Clientes
+                  </span>
+                  <span className="text-[10px] text-muted-foreground group-data-[state=active]:text-white/80 leading-tight truncate font-normal mt-1">
+                    {inspectData.clientes.length} registrados
+                  </span>
+                </div>
+              </TabsTrigger>
+
               {/* Tab 1: Finanzas */}
               <TabsTrigger 
                 value="finanzas"
@@ -2283,6 +2637,825 @@ function ReportesPage() {
                 </div>
               </TabsTrigger>
             </TabsList>
+
+            {/* ============================================================ */}
+            {/* PESTAÑA: GESTIÓN DE ÓRDENES DE LA SUCURSAL                    */}
+            {/* ============================================================ */}
+            <TabsContent value="ordenes" className="space-y-6">
+              {/* Mini KPIs de Órdenes con Estilo Dashboard */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {/* 1. Total Órdenes - Primary (Azul Añil Institucional) */}
+                <Card className="p-4 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between bg-[#1B4B73] dark:bg-[#143755] text-white shadow-md border-0">
+                  <div className="flex items-start justify-between">
+                    <span className="text-xs uppercase tracking-wider text-white/80 font-bold">Total Órdenes</span>
+                    <Package className="h-4 w-4 text-white/80 shrink-0" />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-2xl sm:text-3xl font-black font-display tracking-tight text-white">
+                      {(filteredData?.ordenes || inspectData?.ordenes || []).length}
+                    </div>
+                    <p className="text-xs mt-1 truncate text-white/70">En período activo</p>
+                  </div>
+                </Card>
+
+                {/* 2. En Proceso - Amber */}
+                <Card className="p-4 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between bg-amber-500/10 border border-amber-500/20 shadow-2xs">
+                  <div className="flex items-start justify-between">
+                    <span className="text-xs uppercase tracking-wider text-amber-800 dark:text-amber-300 font-bold">En Proceso</span>
+                    <RotateCw className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0" />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-2xl sm:text-3xl font-black font-display tracking-tight text-foreground">
+                      {(filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.estado || "").toUpperCase().includes("PROCES")).length}
+                    </div>
+                    <p className="text-xs mt-1 truncate text-amber-700/70 dark:text-amber-400/70">En lavado o planchado</p>
+                  </div>
+                </Card>
+
+                {/* 3. Listas para Entrega - Emerald */}
+                <Card className="p-4 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between bg-emerald-500/10 border border-emerald-500/20 shadow-2xs">
+                  <div className="flex items-start justify-between">
+                    <span className="text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-bold">Listas para Entrega</span>
+                    <Truck className="h-4 w-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-2xl sm:text-3xl font-black font-display tracking-tight text-foreground">
+                      {(filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.estado || "").toUpperCase().includes("LIST")).length}
+                    </div>
+                    <p className="text-xs mt-1 truncate text-emerald-700/70 dark:text-emerald-400/70">Listas en sucursal</p>
+                  </div>
+                </Card>
+
+                {/* 4. Con Saldo Pendiente - Rose */}
+                <Card className="p-4 sm:p-5 rounded-2xl relative overflow-hidden flex flex-col justify-between bg-rose-500/10 border border-rose-500/20 shadow-2xs">
+                  <div className="flex items-start justify-between">
+                    <span className="text-xs uppercase tracking-wider text-rose-800 dark:text-rose-300 font-bold">Con Saldo Pendiente</span>
+                    <AlertCircle className="h-4 w-4 text-rose-600 dark:text-rose-400 shrink-0" />
+                  </div>
+                  <div className="mt-2">
+                    <div className="text-2xl sm:text-3xl font-black font-display tracking-tight text-foreground">
+                      {(filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.saldo || 0) > 0).length}
+                    </div>
+                    <p className="text-xs mt-1 truncate text-rose-700/70 dark:text-rose-400/70">Cuentas por cobrar</p>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Barra de Filtros y Buscador de Órdenes */}
+              <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 rounded-2xl border border-border/80 shadow-2xs">
+                <div className="relative flex-1 max-w-md bg-slate-50/90 dark:bg-slate-800/90 border border-slate-300/90 dark:border-slate-600/90 rounded-xl px-3 h-10 flex items-center shadow-2xs focus-within:ring-2 focus-within:ring-primary/20">
+                  <Search className="h-4 w-4 text-slate-400 shrink-0" />
+                  <Input
+                    placeholder="Buscar por orden #, cliente o notas..."
+                    value={ordersSearch}
+                    onChange={(e) => setOrdersSearch(e.target.value)}
+                    className="border-0 shadow-none focus-visible:ring-0 text-xs sm:text-sm h-full bg-transparent flex-1 pl-2 placeholder:text-muted-foreground/70 font-medium"
+                  />
+                  {ordersSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setOrdersSearch("")}
+                      className="text-muted-foreground hover:text-foreground text-xs p-1 cursor-pointer"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+
+                {/* Filtros de Estados estilo /ordenes: Colores pastel con conteo y activos sólidos */}
+                <div className="flex items-center gap-1.5 overflow-x-auto p-1 rounded-2xl shrink-0 scrollbar-none flex-wrap">
+                  {[
+                    { 
+                      key: "TODAS", 
+                      label: "Todas", 
+                      icon: LayoutGrid, 
+                      count: (filteredData?.ordenes || inspectData?.ordenes || []).length,
+                      bg: "bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300 dark:border-slate-700", 
+                      activeBg: "bg-[#1B4B73] text-white border-[#1B4B73] shadow-md" 
+                    },
+                    { 
+                      key: "RECIBIDO", 
+                      label: "Recibidas", 
+                      icon: Inbox, 
+                      count: (filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.estado || "").toUpperCase().includes("RECIBI")).length,
+                      bg: "bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/50", 
+                      activeBg: "bg-blue-600 text-white border-blue-600 shadow-md" 
+                    },
+                    { 
+                      key: "PROCESO", 
+                      label: "En Proceso", 
+                      icon: RotateCw, 
+                      count: (filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.estado || "").toUpperCase().includes("PROCES")).length,
+                      bg: "bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-900/50", 
+                      activeBg: "bg-amber-500 text-white border-amber-500 shadow-md" 
+                    },
+                    { 
+                      key: "LISTO", 
+                      label: "Listas", 
+                      icon: CheckCircle2, 
+                      count: (filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.estado || "").toUpperCase().includes("LIST")).length,
+                      bg: "bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/50", 
+                      activeBg: "bg-emerald-600 text-white border-emerald-600 shadow-md" 
+                    },
+                    { 
+                      key: "ENTREGADO", 
+                      label: "Entregadas", 
+                      icon: Truck, 
+                      count: (filteredData?.ordenes || inspectData?.ordenes || []).filter((o: any) => (o.estado || "").toUpperCase().includes("ENTREGA")).length,
+                      bg: "bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900/50", 
+                      activeBg: "bg-purple-600 text-white border-purple-600 shadow-md" 
+                    },
+                  ].map((tab) => {
+                    const isActive = ordersStatusFilter === tab.key;
+                    const Icon = tab.icon;
+                    return (
+                      <button
+                        key={tab.key}
+                        type="button"
+                        onClick={() => setOrdersStatusFilter(tab.key)}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shadow-2xs ${
+                          isActive ? tab.activeBg : `${tab.bg} hover:shadow-xs`
+                        }`}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
+                        <span>{tab.label}</span>
+                        <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none ${
+                          isActive ? "bg-white/25 text-white" : "bg-black/5 dark:bg-white/10"
+                        }`}>
+                          {tab.count}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Listado de Órdenes */}
+              {filteredInspectOrders.length === 0 ? (
+                <div className="py-16 text-center bg-white dark:bg-slate-900 rounded-3xl border border-dashed border-border/80 text-muted-foreground">
+                  <Package className="h-10 w-10 mx-auto mb-2 opacity-30 text-primary" />
+                  <p className="text-sm font-semibold">No se encontraron órdenes con los filtros actuales.</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Prueba cambiando el término de búsqueda o el filtro de estado.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {paginatedInspectOrders.map((ord: any) => {
+                    const cli = inspectData?.clientes.find((c) => c.id === ord.cliente_id);
+                    const totalPrendas = (ord.items || []).reduce((acc: number, it: any) => acc + (it.cantidad || 0), 0);
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className="flex flex-col sm:flex-row sm:items-center justify-between p-3.5 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-primary/50 hover:shadow-md transition-all gap-3.5 group"
+                      >
+                        <div className="flex items-start sm:items-center gap-3.5 min-w-0 flex-1">
+                          {/* Badge de Orden Horizontal Elegante (ancho automático sin cortes) */}
+                          <div className="shrink-0">
+                            <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 font-bold text-xs tabular-nums tracking-wide shadow-2xs whitespace-nowrap">
+                              <Hash className="h-3 w-3 opacity-60 shrink-0" />
+                              {ord.numero}
+                            </span>
+                          </div>
+
+                          {/* Datos del Cliente, Fechas y Estado */}
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-sm text-foreground truncate group-hover:text-primary transition-colors">
+                                {cli ? `${cli.nombre} ${cli.apellido || ""}` : `Cliente registrado`}
+                              </span>
+                              {cli?.telefono && (
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  • {cli.telefono}
+                                </span>
+                              )}
+                              {getEstadoBadge(ord.estado)}
+                              {ord.es_urgente && (
+                                <Badge className="text-[9px] bg-rose-500 text-white font-bold h-4 px-1.5 inline-flex items-center gap-1">
+                                  <Zap className="h-2.5 w-2.5" /> Urgente
+                                </Badge>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-muted-foreground mt-1 flex items-center gap-3 flex-wrap">
+                              <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                                <Calendar className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 shrink-0 stroke-[2.5]" />
+                                <span className="font-extrabold text-slate-900 dark:text-white">Recibida:</span>
+                                <span className="font-bold">{formatDateRD(ord.creado_en)}</span>
+                              </span>
+                              {ord.fecha_entrega && (
+                                <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                                  <Truck className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 shrink-0 stroke-[2.5]" />
+                                  <span className="font-extrabold text-slate-900 dark:text-white">Entrega:</span>
+                                  <span className="font-bold">{formatDateRD(ord.fecha_entrega)}</span>
+                                </span>
+                              )}
+                              <span className="inline-flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200/80 dark:border-slate-700 text-xs">
+                                <Shirt className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400 shrink-0 stroke-[2]" />
+                                <span>{totalPrendas} {totalPrendas === 1 ? "prenda" : "prendas"}</span>
+                              </span>
+                              <span className="font-bold text-foreground tabular-nums">
+                                Total: {formatRD(ord.total)}
+                              </span>
+                              {ord.saldo > 0 ? (
+                                <span className="text-rose-600 font-bold bg-rose-50 dark:bg-rose-950/40 px-2 py-0.5 rounded-md border border-rose-200 dark:border-rose-900 text-[11px] tabular-nums">
+                                  Debe: {formatRD(ord.saldo)}
+                                </span>
+                              ) : (
+                                <span className="text-emerald-600 font-bold bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900 text-[11px]">
+                                  Saldada
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Botones de Acción */}
+                        <div className="flex items-center gap-2 shrink-0 self-end sm:self-center pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100 dark:border-slate-800 w-full sm:w-auto justify-end">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-3 text-xs font-bold rounded-xl gap-1.5 cursor-pointer shadow-2xs hover:bg-slate-50 dark:hover:bg-slate-800"
+                            onClick={() => handleOpenOrder(ord, "view")}
+                          >
+                            <Eye className="h-3.5 w-3.5 text-slate-600 dark:text-slate-400" /> Ver
+                          </Button>
+                          <Button
+                            size="sm"
+                            className="h-8 px-3.5 text-xs font-bold rounded-xl gap-1.5 bg-primary hover:bg-primary/90 text-white cursor-pointer shadow-2xs"
+                            onClick={() => handleOpenOrder(ord, "edit")}
+                          >
+                            <Pencil className="h-3.5 w-3.5" /> Editar
+                          </Button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Paginación de Órdenes (Exacto diseño /ordenes) */}
+              {totalOrdersPages > 1 && (
+                <div className="p-4 sm:p-5 rounded-2xl border border-border/80 bg-white dark:bg-slate-900 shadow-2xs flex flex-col sm:flex-row items-center justify-between gap-3 mt-4">
+                  <div className="text-xs text-muted-foreground font-medium">
+                    Mostrando <span className="font-bold text-foreground">{(ordersCurrentPage - 1) * ORDERS_PAGE_SIZE + 1}</span>–<span className="font-bold text-foreground">{Math.min(ordersCurrentPage * ORDERS_PAGE_SIZE, filteredInspectOrders.length)}</span> de <span className="font-bold text-foreground">{filteredInspectOrders.length}</span> órdenes
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98] cursor-pointer"
+                      disabled={ordersCurrentPage === 1}
+                      onClick={() => setOrdersCurrentPage(prev => Math.max(1, prev - 1))}
+                    >
+                      <ChevronLeft className="mr-1 h-3.5 w-3.5" /> Anterior
+                    </Button>
+
+                    <div className="flex items-center gap-1 px-1">
+                      {Array.from({ length: totalOrdersPages }, (_, i) => i + 1)
+                        .filter(p => p === 1 || p === totalOrdersPages || Math.abs(p - ordersCurrentPage) <= 1)
+                        .map((page, idx, arr) => {
+                          const prevPage = arr[idx - 1];
+                          const showEllipsis = prevPage && page - prevPage > 1;
+                          return (
+                            <div key={page} className="flex items-center gap-1">
+                              {showEllipsis && <span className="px-1 text-xs text-muted-foreground">...</span>}
+                              <button
+                                type="button"
+                                onClick={() => setOrdersCurrentPage(page)}
+                                className={`h-8 min-w-8 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                                  ordersCurrentPage === page
+                                    ? "bg-primary text-primary-foreground shadow-xs"
+                                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                                }`}
+                              >
+                                {page}
+                              </button>
+                            </div>
+                          );
+                        })}
+                    </div>
+
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="h-8 px-3 rounded-lg text-xs font-semibold border-border hover:bg-accent transition-all active:scale-[0.98] cursor-pointer"
+                      disabled={ordersCurrentPage === totalOrdersPages}
+                      onClick={() => setOrdersCurrentPage(prev => Math.min(totalOrdersPages, prev + 1))}
+                    >
+                      Siguiente <ChevronRight className="ml-1 h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            {/* ============================================================ */}
+            {/* PESTAÑA: DIRECTORIO DE CLIENTES DE LA SUCURSAL               */}
+            {/* ============================================================ */}
+            <TabsContent value="clientes" className="space-y-5">
+              {/* Header de la Pestaña */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-display text-2xl font-black text-foreground tracking-tight">Directorio de clientes</h2>
+                  <p className="text-xs sm:text-sm text-muted-foreground mt-0.5 font-medium">
+                    Gestión centralizada de perfiles, cuentas por cobrar, líneas de crédito y contacto comercial de la sucursal.
+                  </p>
+                </div>
+
+                <div className="flex items-center gap-2.5 flex-wrap shrink-0">
+                  <Button
+                    type="button"
+                    onClick={() => exportClientsToExcel(inspectClientesList, selectedInspectTenant?.nombre || "Sucursal")}
+                    className="flex items-center gap-2 rounded-xl h-10 px-4 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                    title="Descargar clientes actuales en Excel"
+                  >
+                    <Download className="h-4 w-4 text-[#F0B900] shrink-0" />
+                    <span>Exportar Excel</span>
+                  </Button>
+
+                  <Button 
+                    type="button"
+                    onClick={() => setShowNewInspectCliente(true)} 
+                    className="flex items-center gap-2 rounded-xl h-10 px-5 font-bold bg-[#1B4B73] hover:bg-[#143a59] text-white border border-[#1B4B73] shadow-xs cursor-pointer transition-all active:scale-95 text-xs sm:text-sm shrink-0"
+                  >
+                    <UserPlus className="h-4 w-4 text-[#F0B900] shrink-0" />
+                    <span>Nuevo cliente</span>
+                  </Button>
+                </div>
+              </div>
+
+              {/* 4 EXECUTIVE KPI CARDS (EXACTO ESTILO /CLIENTES Y /ADMIN) */}
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+                {/* 1. Total Clientes (Variant: Primary Gradient) */}
+                <Card className="p-3.5 sm:p-5 h-full rounded-2xl bg-gradient-primary text-white shadow-md border-0 flex flex-col justify-between">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider text-white/80 font-semibold">Total Clientes</div>
+                    <Users className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 text-white/80" />
+                  </div>
+                  <div className="mt-1.5 sm:mt-2 font-display font-black tracking-tight text-white text-xl sm:text-2xl lg:text-3xl">
+                    {totalClientesCount}
+                  </div>
+                  <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate text-white/90">
+                    {totalClientesCount === 1 ? "1 cliente registrado" : `${totalClientesCount} registrados en catálogo`}
+                  </div>
+                </Card>
+
+                {/* 2. Empresas (Variant: Indigo) */}
+                <Card className="p-3.5 sm:p-5 h-full rounded-2xl bg-indigo-500/10 border border-indigo-500/20 shadow-2xs flex flex-col justify-between">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider text-indigo-800 dark:text-indigo-300 font-semibold">Empresas</div>
+                    <Building2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 text-indigo-600 dark:text-indigo-400" />
+                  </div>
+                  <div className="mt-1.5 sm:mt-2 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl lg:text-3xl">
+                    {empresasCount}
+                  </div>
+                  <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate text-indigo-900 dark:text-indigo-200">
+                    Cuentas corporativas y RNC
+                  </div>
+                </Card>
+
+                {/* 3. Personas (Variant: Emerald) */}
+                <Card className="p-3.5 sm:p-5 h-full rounded-2xl bg-emerald-500/10 border border-emerald-500/20 shadow-2xs flex flex-col justify-between">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider text-emerald-800 dark:text-emerald-300 font-semibold">Personas</div>
+                    <User className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 text-emerald-600 dark:text-emerald-400" />
+                  </div>
+                  <div className="mt-1.5 sm:mt-2 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl lg:text-3xl">
+                    {personasCount}
+                  </div>
+                  <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate text-emerald-900 dark:text-emerald-300">
+                    Consumidores particulares
+                  </div>
+                </Card>
+
+                {/* 4. Con Deuda (Variant: Rose) */}
+                <Card className="p-3.5 sm:p-5 h-full rounded-2xl bg-rose-500/10 border border-rose-500/20 shadow-2xs flex flex-col justify-between">
+                  <div className="flex items-start justify-between gap-1.5">
+                    <div className="text-[10px] sm:text-xs uppercase tracking-wider text-rose-800 dark:text-rose-300 font-semibold">Con Deuda</div>
+                    <AlertCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 shrink-0 mt-0.5 text-rose-600 dark:text-rose-400" />
+                  </div>
+                  <div className="mt-1.5 sm:mt-2 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl lg:text-3xl">
+                    {clientesConDeudaCount}
+                  </div>
+                  <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate text-rose-900 dark:text-rose-300">
+                    Saldo: <strong className="font-bold text-rose-600 dark:text-rose-400">{formatRD(totalDeudaGlobalClientes)}</strong>
+                  </div>
+                </Card>
+              </div>
+
+              {/* BARRA DE BÚSQUEDA Y FILTROS INTEGRADOS (2 NIVELES ESPACIOSOS) */}
+              <div className="bg-surface p-3 sm:p-3.5 rounded-2xl border border-border/80 shadow-2xs space-y-2.5">
+                {/* NIVEL 1: BUSCADOR AMPLIO + SELECTOR DE SECTORES AMIGABLE */}
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+                  {/* Input de Búsqueda */}
+                  <div className="relative flex-1 min-w-[240px]">
+                    <Search className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input 
+                      value={clientsSearch} 
+                      onChange={(e) => setClientsSearch(e.target.value)} 
+                      placeholder="Buscar por nombre, teléfono, RNC, cédula, email o dirección..." 
+                      className="pl-9.5 pr-8 h-10 rounded-xl bg-background border-border/70 text-xs sm:text-sm font-medium focus:ring-1 focus:ring-primary/20 w-full" 
+                    />
+                    {clientsSearch && (
+                      <button
+                        type="button"
+                        onClick={() => setClientsSearch("")}
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground text-xs p-0.5 cursor-pointer"
+                        title="Limpiar búsqueda"
+                      >
+                        <XIcon className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Selector de Sectores (Radix UI amigable) */}
+                  <div className="w-full sm:w-64 md:w-72 shrink-0">
+                    <Select value={clientSectorFilter} onValueChange={setClientSectorFilter}>
+                      <SelectTrigger className="h-10 rounded-xl border border-border/80 bg-background hover:bg-muted/40 text-xs sm:text-sm font-semibold px-3 shadow-2xs cursor-pointer transition-colors">
+                        <div className="flex items-center gap-2 truncate">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300">
+                            <MapPin className="h-3.5 w-3.5" />
+                          </span>
+                          <span className="truncate text-foreground">
+                            {clientSectorFilter === "all"
+                              ? "Todos los sectores"
+                              : (inspectSectorOptions.find((s) => s.key === clientSectorFilter)?.label || "Sector")}
+                          </span>
+                          {clientSectorFilter !== "all" && (
+                            <span className="ml-auto rounded-full bg-[#1B4B73]/15 text-[#1B4B73] dark:bg-[#1B4B73]/30 dark:text-sky-300 px-1.5 py-0.2 text-[10px] font-black shrink-0">
+                              {inspectSectorOptions.find((s) => s.key === clientSectorFilter)?.count || 0}
+                            </span>
+                          )}
+                        </div>
+                      </SelectTrigger>
+                      <SelectContent className="rounded-xl border border-border/80 bg-popover text-popover-foreground shadow-xl max-h-72">
+                        <SelectItem value="all" className="cursor-pointer text-xs font-semibold py-2">
+                          <div className="flex items-center justify-between w-full gap-3">
+                            <span className="font-bold">Todos los sectores</span>
+                            <span className="text-[10px] font-bold text-muted-foreground bg-muted px-2 py-0.5 rounded-full">
+                              {totalClientesCount}
+                            </span>
+                          </div>
+                        </SelectItem>
+                        {inspectSectorOptions.length > 0 && (
+                          <div className="px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground border-t border-border/50 mt-1">
+                            Sectores ({inspectSectorOptions.length})
+                          </div>
+                        )}
+                        {inspectSectorOptions.map((sec) => (
+                          <SelectItem key={sec.key} value={sec.key} className="cursor-pointer text-xs py-2">
+                            <div className="flex items-center justify-between w-full gap-3">
+                              <span className="truncate font-medium">{sec.label}</span>
+                              <span className="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full shrink-0">
+                                {sec.count} {sec.count === 1 ? "cliente" : "clientes"}
+                              </span>
+                            </div>
+                          </SelectItem>
+                        ))}
+                        {inspectSectorOptions.length === 0 && (
+                          <div className="p-3 text-center text-xs text-muted-foreground italic">
+                            Sin sectores registrados
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                {/* NIVEL 2: PÍLDORAS DE FILTRO RÁPIDO + BADGE DE SECTOR ACTIVO */}
+                <div className="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-border/50">
+                  <div className="flex items-center gap-1.5 overflow-x-auto pb-1 md:pb-0 custom-scrollbar">
+                    {/* Todos */}
+                    <button
+                      type="button"
+                      onClick={() => setClientFilterType("all")}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                        clientFilterType === "all"
+                          ? "bg-[#183659] text-white border-[#183659] shadow-md"
+                          : "bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200 dark:hover:bg-slate-700"
+                      }`}
+                    >
+                      <Users className="h-3.5 w-3.5 shrink-0" />
+                      <span>Todos</span>
+                      <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                        clientFilterType === "all" ? "bg-white/25 text-white" : "bg-black/10 dark:bg-white/10 text-slate-800 dark:text-slate-200"
+                      }`}>
+                        {totalClientesCount}
+                      </span>
+                    </button>
+
+                    {/* Empresas */}
+                    <button
+                      type="button"
+                      onClick={() => setClientFilterType("empresa")}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                        clientFilterType === "empresa"
+                          ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-md"
+                          : "bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-300 border-[#1B4B73]/20 hover:bg-[#1B4B73]/20 dark:bg-[#1B4B73]/25"
+                      }`}
+                    >
+                      <Building2 className="h-3.5 w-3.5 shrink-0" />
+                      <span>Empresas</span>
+                      <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                        clientFilterType === "empresa" ? "bg-white/25 text-white" : "bg-[#1B4B73]/20 text-[#1B4B73] dark:bg-sky-950 dark:text-sky-300"
+                      }`}>
+                        {empresasCount}
+                      </span>
+                    </button>
+
+                    {/* Personas */}
+                    <button
+                      type="button"
+                      onClick={() => setClientFilterType("persona")}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                        clientFilterType === "persona"
+                          ? "bg-[#F0B900] text-slate-900 border-[#F0B900] shadow-md"
+                          : "bg-[#F0B900]/15 text-[#9E7300] dark:text-[#F0B900] border-[#F0B900]/30 hover:bg-[#F0B900]/25 dark:bg-[#F0B900]/20"
+                      }`}
+                    >
+                      <User className="h-3.5 w-3.5 shrink-0" />
+                      <span>Personas</span>
+                      <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                        clientFilterType === "persona" ? "bg-black/15 text-slate-900" : "bg-[#F0B900]/25 text-[#9E7300] dark:text-[#F0B900]"
+                      }`}>
+                        {personasCount}
+                      </span>
+                    </button>
+
+                    {/* Con Deuda */}
+                    <button
+                      type="button"
+                      onClick={() => setClientFilterType("deuda")}
+                      className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                        clientFilterType === "deuda"
+                          ? "bg-rose-600 text-white border-rose-600 shadow-md"
+                          : "bg-rose-50 dark:bg-rose-950/50 text-rose-700 dark:text-rose-300 border-rose-200 dark:border-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/50"
+                      }`}
+                    >
+                      <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+                      <span>Con Deuda</span>
+                      <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                        clientFilterType === "deuda" ? "bg-white/25 text-white" : "bg-rose-200/70 dark:bg-rose-900/60 text-rose-900 dark:text-rose-100"
+                      }`}>
+                        {clientesConDeudaCount}
+                      </span>
+                    </button>
+
+                    {/* Con Crédito */}
+                    {clientesConCreditoCount > 0 && (
+                      <button
+                        type="button"
+                        onClick={() => setClientFilterType("credito")}
+                        className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-bold transition-all duration-200 cursor-pointer shrink-0 whitespace-nowrap hover:shadow-xs ${
+                          clientFilterType === "credito"
+                            ? "bg-purple-600 text-white border-purple-600 shadow-md"
+                            : "bg-purple-50 dark:bg-purple-950/50 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800 hover:bg-purple-100 dark:hover:bg-purple-900/50"
+                        }`}
+                      >
+                        <CreditCard className="h-3.5 w-3.5 shrink-0" />
+                        <span>Con Crédito</span>
+                        <span className={`ml-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-black leading-none ${
+                          clientFilterType === "credito" ? "bg-white/25 text-white" : "bg-purple-200/70 dark:bg-purple-900/60 text-purple-900 dark:text-purple-100"
+                        }`}>
+                          {clientesConCreditoCount}
+                        </span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* CHIP DE SECTOR ACTIVO CON BOTÓN DE QUITAR */}
+                  {clientSectorFilter !== "all" && (
+                    <div className="inline-flex items-center gap-1.5 rounded-full border border-[#1B4B73]/30 bg-[#1B4B73]/10 text-[#1B4B73] dark:text-sky-300 px-3 py-1 text-xs font-bold shadow-2xs">
+                      <MapPin className="h-3.5 w-3.5 text-[#1B4B73] dark:text-sky-400" />
+                      <span>Sector: {inspectSectorOptions.find((s) => s.key === clientSectorFilter)?.label || clientSectorFilter}</span>
+                      <button
+                        type="button"
+                        onClick={() => setClientSectorFilter("all")}
+                        className="ml-1 hover:bg-[#1B4B73]/20 dark:hover:bg-[#1B4B73]/40 rounded-full p-0.5 transition-colors cursor-pointer"
+                        title="Quitar filtro de sector"
+                      >
+                        <XIcon className="h-3 w-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* GRID DE TARJETAS REDISEÑADAS (EXACTO /CLIENTES) */}
+              <div className="grid gap-3.5 md:grid-cols-2 xl:grid-cols-3">
+                {filteredInspectClients.map((c) => {
+                  const deuda = deudaInspectCliente(c.id);
+                  const total = totalGastadoInspectCliente(c.id);
+                  const isEmpresa = c.tipo === "Empresa";
+                  const rawPhone = (c.telefono || "").replace(/\D/g, "");
+
+                  return (
+                    <Card 
+                      key={c.id} 
+                      onClick={() => setSelectedInspectClienteId(c.id)}
+                      className="p-4 sm:p-5 rounded-2xl border border-border/80 bg-surface shadow-2xs hover:shadow-md hover:border-primary/50 hover:-translate-y-0.5 active:scale-[0.99] transition-all duration-200 flex flex-col justify-between h-full group cursor-pointer relative"
+                    >
+                      <div>
+                        {/* Header de la Tarjeta */}
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 min-w-0">
+                            {/* Avatar Icon con Colores Primarios (#1B4B73 y #F0B900) */}
+                            <div className={`h-11 w-11 rounded-2xl flex items-center justify-center shrink-0 border shadow-2xs transition-transform group-hover:scale-105 ${
+                              isEmpresa 
+                                ? "bg-[#1B4B73]/10 text-[#1B4B73] border-[#1B4B73]/25 dark:bg-[#1B4B73]/30 dark:text-sky-300 dark:border-[#1B4B73]/50" 
+                                : "bg-[#F0B900]/15 text-[#9E7300] border-[#F0B900]/30 dark:bg-[#F0B900]/25 dark:text-[#F0B900] dark:border-[#F0B900]/40"
+                            }`}>
+                              {isEmpresa ? <Building2 className="h-5.5 w-5.5" /> : <User className="h-5.5 w-5.5" />}
+                            </div>
+
+                            {/* Nombre y Badges Principales */}
+                            <div className="min-w-0 flex-1">
+                              <h4 
+                                className="font-display font-bold text-sm sm:text-base text-foreground line-clamp-1 leading-snug group-hover:text-primary transition-colors" 
+                                title={`${c.nombre} ${c.apellido || ""}`.trim()}
+                              >
+                                {c.nombre} {c.apellido || ""}
+                              </h4>
+
+                              <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
+                                <Badge 
+                                  variant="outline" 
+                                  className={`text-[10px] px-2 py-0.5 font-bold border ${
+                                    isEmpresa 
+                                      ? "border-[#1B4B73]/30 bg-[#1B4B73]/10 text-[#1B4B73] dark:bg-[#1B4B73]/25 dark:text-sky-300 dark:border-[#1B4B73]/40" 
+                                      : "border-[#F0B900]/40 bg-[#F0B900]/15 text-[#9E7300] dark:bg-[#F0B900]/25 dark:text-[#F0B900] dark:border-[#F0B900]/40"
+                                  }`}
+                                >
+                                  {isEmpresa ? "Empresa" : "Consumidor"}
+                                </Badge>
+
+                                {/* BADGE DESTACADO DE RNC / CÉDULA CON COLORES PRIMARIOS */}
+                                {c.cedula ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-[#1B4B73] text-white border border-[#1B4B73] shadow-xs">
+                                    <FileText className="h-2.5 w-2.5 text-[#F0B900] shrink-0" />
+                                    <span>RNC: <strong className="font-black text-[#F0B900]">{c.cedula}</strong></span>
+                                  </span>
+                                ) : isEmpresa ? (
+                                  <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-medium bg-[#1B4B73]/10 text-[#1B4B73] dark:text-[#F0B900] border border-[#1B4B73]/20">
+                                    Sin RNC
+                                  </span>
+                                ) : null}
+
+                                {Number(c.limite_credito || 0) > 0 && (
+                                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-bold border-purple-200 bg-purple-50 text-purple-700 dark:bg-purple-950/60 dark:text-purple-300">
+                                    Crédito: {formatRD(c.limite_credito)}
+                                  </Badge>
+                                )}
+
+                                {Number(c.descuento_fijo || 0) > 0 && (
+                                  <Badge variant="outline" className="text-[10px] px-2 py-0.5 font-bold border-emerald-300 bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-400 gap-1 flex items-center">
+                                    <Percent className="h-2.5 w-2.5" />
+                                    {c.descuento_fijo}% Desc.
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Botón rápido de editar */}
+                          <Button
+                            size="icon"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setEditingInspectCliente(c);
+                            }}
+                            className="h-8 w-8 rounded-xl text-muted-foreground hover:text-primary hover:bg-primary/10 shrink-0 cursor-pointer"
+                            title="Editar perfil"
+                          >
+                            <Pencil className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+
+                        {/* Datos de Contacto y Ubicación */}
+                        <div className="mt-3.5 space-y-1.5 text-xs text-muted-foreground bg-muted/30 p-2.5 rounded-xl border border-border/40">
+                          {/* Teléfono y WhatsApp */}
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              <span className="font-semibold text-foreground truncate">
+                                {formatPhoneRD(c.telefono) || c.telefono || "—"}
+                              </span>
+                            </div>
+
+                            {rawPhone && (
+                              <a
+                                href={`https://wa.me/${rawPhone.startsWith("1") ? rawPhone : `1${rawPhone}`}`}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-lg border border-emerald-200/60 dark:border-emerald-800/60 shrink-0"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <MessageSquare className="h-3 w-3" />
+                                <span>WhatsApp</span>
+                              </a>
+                            )}
+                          </div>
+
+                          {/* Email */}
+                          {c.email && (
+                            <div className="flex items-center gap-1.5 min-w-0 pt-0.5">
+                              <Mail className="h-3.5 w-3.5 text-slate-400 shrink-0" />
+                              <span className="truncate text-slate-600 dark:text-slate-300 font-medium">
+                                {c.email}
+                              </span>
+                            </div>
+                          )}
+
+                          {/* Dirección y Sector */}
+                          {(c.direccion || c.sector) && (
+                            <div className="flex items-start gap-1.5 min-w-0 pt-0.5">
+                              <MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0 mt-0.5" />
+                              <div className="truncate text-slate-600 dark:text-slate-300 font-medium flex items-center gap-1.5 flex-wrap">
+                                {c.sector && (
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setClientSectorFilter(normalizeText(c.sector));
+                                    }}
+                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-[#1B4B73]/10 text-[#1B4B73] hover:bg-[#1B4B73]/20 dark:bg-[#1B4B73]/25 dark:text-sky-300 transition-colors cursor-pointer"
+                                    title={`Filtrar clientes de ${c.sector}`}
+                                  >
+                                    <span>{c.sector}</span>
+                                  </button>
+                                )}
+                                {c.direccion && (
+                                  <span className="truncate text-xs" title={c.direccion}>
+                                    {c.direccion}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Footer Financiero (Total Facturado y Deuda) */}
+                      <div className="mt-3.5 pt-3 border-t border-border/60 grid grid-cols-2 gap-2 text-xs">
+                        <div>
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Total Facturado
+                          </span>
+                          <span className="font-display font-black text-sm text-foreground">
+                            {formatRD(total)}
+                          </span>
+                        </div>
+
+                        <div className="text-right">
+                          <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider block">
+                            Deuda Pendiente
+                          </span>
+                          <span className={`font-display font-black text-sm ${
+                            deuda > 0 ? "text-rose-600 dark:text-rose-400" : "text-emerald-600 dark:text-emerald-400"
+                          }`}>
+                            {formatRD(deuda)}
+                          </span>
+                        </div>
+                      </div>
+                    </Card>
+                  );
+                })}
+
+                {/* Estado Vacío */}
+                {filteredInspectClients.length === 0 && (
+                  <Card className="col-span-full p-12 text-center border border-dashed border-border/80 bg-surface/30 rounded-3xl py-16 flex flex-col items-center justify-center">
+                    <div className="rounded-2xl bg-indigo-50 dark:bg-indigo-950/60 p-4 mb-4 text-indigo-600 shadow-2xs">
+                      <Users className="h-10 w-10" />
+                    </div>
+                    <h3 className="font-display text-xl font-bold text-foreground">
+                      {clientsSearch || clientFilterType !== "all" || clientSectorFilter !== "all" ? "No se encontraron clientes" : "¡Aún no hay clientes registrados!"}
+                    </h3>
+                    <p className="text-xs sm:text-sm text-muted-foreground max-w-md mt-2 leading-relaxed">
+                      {clientsSearch || clientFilterType !== "all" || clientSectorFilter !== "all" 
+                        ? "Prueba cambiando el término de búsqueda o seleccionando otro filtro o sector en el panel superior."
+                        : "Registra a tus clientes recurrentes para llevar el control de sus pedidos, saldos y recordatorios de pago de forma organizada."}
+                    </p>
+                    {clientsSearch || clientFilterType !== "all" || clientSectorFilter !== "all" ? (
+                      <Button 
+                        onClick={() => { setClientsSearch(""); setClientFilterType("all"); setClientSectorFilter("all"); }} 
+                        variant="outline" 
+                        className="mt-5 font-bold rounded-xl cursor-pointer"
+                      >
+                        Limpiar filtros de búsqueda
+                      </Button>
+                    ) : (
+                      <Button 
+                        onClick={() => setShowNewInspectCliente(true)} 
+                        className="mt-6 bg-gradient-primary text-white font-bold transition-all duration-200 active:scale-95 shadow-md rounded-xl cursor-pointer"
+                      >
+                        <UserPlus className="mr-1.5 h-4 w-4" /> Registrar primer cliente
+                      </Button>
+                    )}
+                  </Card>
+                )}
+              </div>
+            </TabsContent>
 
             {/* ============================================================ */}
             {/* CONTENIDO 1: FINANZAS & CAJA                                 */}
@@ -2721,15 +3894,15 @@ function ReportesPage() {
 
                 <div className="rounded-2xl border border-border/70 overflow-hidden bg-surface shadow-2xs">
                   <div className="overflow-x-auto custom-scrollbar">
-                    <table className="w-full text-xs text-left border-collapse">
+                    <table className="w-full text-xs text-left border-collapse table-fixed min-w-[760px]">
                       <thead>
                         <tr className="bg-muted/40 text-[11px] font-bold uppercase tracking-wider text-muted-foreground border-b border-border/70">
-                          <th className="py-3 px-4">Cliente</th>
-                          <th className="py-3 px-4">Contacto</th>
-                          <th className="py-3 px-4 text-center">Facturas</th>
-                          <th className="py-3 px-4 text-center">Antigüedad</th>
-                          <th className="py-3 px-4 text-right">Total Facturado</th>
-                          <th className="py-3 px-4 text-right">Saldo Pendiente</th>
+                          <th className="py-3 px-4 w-[36%] min-w-[240px] max-w-[320px]">Cliente</th>
+                          <th className="py-3 px-4 w-[16%] min-w-[130px]">Contacto</th>
+                          <th className="py-3 px-4 w-[11%] min-w-[95px] text-center">Facturas</th>
+                          <th className="py-3 px-4 w-[13%] min-w-[105px] text-center">Antigüedad</th>
+                          <th className="py-3 px-4 w-[12%] min-w-[110px] text-right">Total Facturado</th>
+                          <th className="py-3 px-4 w-[12%] min-w-[110px] text-right">Saldo Pendiente</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-border/40">
@@ -2742,25 +3915,25 @@ function ReportesPage() {
                             return (
                               <tr key={d.cliente.id} className="hover:bg-muted/30 transition-colors group">
                                 {/* Cliente con Iniciales y Segmentación */}
-                                <td className="py-3.5 px-4">
-                                  <div className="flex items-center gap-3">
-                                    <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20">
+                                <td className="py-3.5 px-4 align-top">
+                                  <div className="flex items-start gap-3 min-w-0">
+                                    <div className="h-9 w-9 rounded-xl bg-primary/10 text-primary font-bold flex items-center justify-center text-xs shrink-0 border border-primary/20 mt-0.5">
                                       {initials}
                                     </div>
-                                    <div className="min-w-0">
-                                      <span className="font-bold text-sm text-foreground block truncate group-hover:text-primary transition-colors">
+                                    <div className="min-w-0 flex-1">
+                                      <span className="font-bold text-sm text-foreground block whitespace-normal break-words leading-snug group-hover:text-primary transition-colors">
                                         {d.cliente.nombre}
                                       </span>
-                                      <div className="flex items-center gap-1.5 text-[11px] mt-0.5 flex-wrap">
-                                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-muted/60 inline-flex items-center gap-1 ${d.categoriaColor}`}>
+                                      <div className="flex items-center gap-1.5 text-[11px] mt-1 flex-wrap">
+                                        <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-muted/60 inline-flex items-center gap-1 shrink-0 ${d.categoriaColor}`}>
                                           {d.totalOrdenesHistoricas >= 10 && <Sparkles className="h-2.5 w-2.5 text-amber-500" />}
                                           {d.categoriaCliente}
                                         </span>
-                                        <span className="text-[10px] text-muted-foreground font-medium">
+                                        <span className="text-[10px] text-muted-foreground font-medium shrink-0">
                                           • {d.totalOrdenesHistoricas} {d.totalOrdenesHistoricas === 1 ? 'orden realizada' : 'órdenes realizadas'}
                                         </span>
                                         {(d.cliente as any).rnc_cedula && (
-                                          <span className="text-[10px] text-muted-foreground font-mono">
+                                          <span className="text-[10px] text-muted-foreground font-mono shrink-0">
                                             • RNC: {(d.cliente as any).rnc_cedula}
                                           </span>
                                         )}
@@ -2770,7 +3943,7 @@ function ReportesPage() {
                                 </td>
 
                                 {/* Teléfono con Formato Estricto (XXX) XXX-XXXX */}
-                                <td className="py-3.5 px-4 text-muted-foreground">
+                                <td className="py-3.5 px-4 text-muted-foreground align-top">
                                   {d.cliente.telefono && d.cliente.telefono !== "---" ? (
                                     <span className="inline-flex items-center gap-1.5 font-medium text-foreground">
                                       <Phone className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -2782,7 +3955,7 @@ function ReportesPage() {
                                 </td>
 
                                 {/* Facturas Pendientes */}
-                                <td className="py-3.5 px-4 text-center">
+                                <td className="py-3.5 px-4 text-center align-top">
                                   <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-muted/60 border border-border/60 text-xs font-bold text-foreground tabular-nums">
                                     <FileText className="h-3 w-3 text-muted-foreground" />
                                     {d.facturasPendientes.length} {d.facturasPendientes.length === 1 ? 'factura' : 'facturas'}
@@ -2790,7 +3963,7 @@ function ReportesPage() {
                                 </td>
 
                                 {/* Antigüedad & Mora relativa al Plazo de Crédito */}
-                                <td className="py-3.5 px-4 text-center">
+                                <td className="py-3.5 px-4 text-center align-top">
                                   {(() => {
                                     const diasMora = d.diasMaxAntiguedad - (stats.aging.plazoDias || 30);
                                     const isEnPlazo = diasMora <= 0;
@@ -2820,12 +3993,12 @@ function ReportesPage() {
                                 </td>
 
                                 {/* Total Facturado */}
-                                <td className="py-3.5 px-4 text-right text-muted-foreground font-semibold tabular-nums text-xs sm:text-sm">
+                                <td className="py-3.5 px-4 text-right text-muted-foreground font-semibold tabular-nums text-xs sm:text-sm align-top">
                                   {formatRD(d.totalFacturado)}
                                 </td>
 
                                 {/* Saldo Pendiente */}
-                                <td className="py-3.5 px-4 text-right">
+                                <td className="py-3.5 px-4 text-right align-top">
                                   <div className="inline-flex items-center justify-end">
                                     <span className="px-2.5 py-1 rounded-xl bg-rose-50 dark:bg-rose-950/60 text-rose-600 dark:text-rose-400 border border-rose-200/80 dark:border-rose-900/60 font-bold font-display text-xs sm:text-sm tabular-nums tracking-tight">
                                       {formatRD(d.totalDeuda)}
@@ -6128,6 +7301,88 @@ function ReportesPage() {
             })()}
           </DialogContent>
         </Dialog>
+
+        {/* MODAL DE DETALLE DE ORDEN (TICKET, PRENDAS, DESGLOSE) */}
+        <Dialog open={!!viewingOrder} onOpenChange={(o) => !o && setViewingOrder(null)}>
+          <DialogContent className="max-w-3xl max-h-[86vh] overflow-hidden rounded-3xl p-4 sm:p-5">
+            {viewingOrder && (
+              <OrderDetail 
+                view={viewingOrder} 
+                tenant={selectedInspectTenant} 
+                clientes={inspectData?.clientes || []} 
+                empleados={inspectData?.empleados || []}
+                cambiarEstado={handleCambiarEstado} 
+                setView={setViewingOrder} 
+                onPrint={() => setShowOrderPrint(viewingOrder)}
+                onEdit={() => { 
+                  setEditingOrder(viewingOrder); 
+                  setViewingOrder(null); 
+                }}
+                setCobrarOrden={() => {
+                  toast.info("Para gestionar movimientos de caja y cobros directos, accede a la sucursal.");
+                }}
+              />
+            )}
+          </DialogContent>
+        </Dialog>
+
+        {/* MODAL DE EDICIÓN DE ORDEN INTEGRAL */}
+        {editingOrder && (
+          <EditOrderDialog 
+            key={editingOrder.id} 
+            orden={editingOrder} 
+            clientes={inspectData?.clientes || []} 
+            servicios={inspectData?.servicios || []} 
+            empleados={inspectData?.empleados || []} 
+            tenant={selectedInspectTenant || undefined}
+            onClose={() => setEditingOrder(null)}
+            onSaved={handleOrderSaved}
+          />
+        )}
+
+        {/* MODAL DE IMPRESIÓN DE TICKET */}
+        {showOrderPrint && (
+          <TicketPrintPortal 
+            orden={showOrderPrint} 
+            tenant={selectedInspectTenant || undefined} 
+            clientes={inspectData?.clientes || []}
+            empleados={inspectData?.empleados || []}
+            onClose={() => setShowOrderPrint(null)} 
+          />
+        )}
+
+        {/* MODAL DETALLE DE CLIENTE DE LA SUCURSAL (HISTORIAL, SERVICIOS, PRENDAS Y LIBRAS) */}
+        <ClienteDetalleModal
+          open={!!selectedInspectCliente}
+          onOpenChange={(open) => {
+            if (!open) setSelectedInspectClienteId(null);
+          }}
+          cliente={selectedInspectCliente}
+          ordenes={inspectData?.ordenes || []}
+          onEdit={(c) => {
+            setSelectedInspectClienteId(null);
+            setEditingInspectCliente(c);
+          }}
+        />
+
+        {/* DIALOG DE CLIENTE DE LA SUCURSAL (CREAR / EDITAR) */}
+        <ClienteDialog 
+          open={showNewInspectCliente || !!editingInspectCliente} 
+          onOpenChange={(o) => { 
+            if (!o) { 
+              setShowNewInspectCliente(false); 
+              setEditingInspectCliente(null); 
+            } 
+          }} 
+          cliente={editingInspectCliente} 
+          tenant={selectedInspectTenant || user?.tenant} 
+          onDone={async () => { 
+            setEditingInspectCliente(null); 
+            setShowNewInspectCliente(false); 
+            await refreshInspectClientes();
+          }} 
+          sectorSuggestions={inspectSectorOptions.map((s) => s.label)}
+        />
       </main>
 
       {/* PORTAL DE IMPRESIÓN COMPLETO */}
