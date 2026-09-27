@@ -147,8 +147,8 @@ serve(async (req) => {
                       const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
                       const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
                       if (neuroApiKey) {
-                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
-                          headers: { 'x-api-key': neuroApiKey }
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}?key=${encodeURIComponent(neuroApiKey)}`, {
+                          headers: { 'x-api-key': neuroApiKey, 'Authorization': `Bearer ${neuroApiKey}` }
                         })
                         if (mRes.ok) {
                           const buf = await mRes.arrayBuffer()
@@ -176,8 +176,8 @@ serve(async (req) => {
                       const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
                       const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
                       if (neuroApiKey) {
-                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
-                          headers: { 'x-api-key': neuroApiKey }
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}?key=${encodeURIComponent(neuroApiKey)}`, {
+                          headers: { 'x-api-key': neuroApiKey, 'Authorization': `Bearer ${neuroApiKey}` }
                         })
                         if (mRes.ok) {
                           const buf = await mRes.arrayBuffer()
@@ -207,8 +207,8 @@ serve(async (req) => {
                       const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
                       const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
                       if (neuroApiKey) {
-                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
-                          headers: { 'x-api-key': neuroApiKey }
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}?key=${encodeURIComponent(neuroApiKey)}`, {
+                          headers: { 'x-api-key': neuroApiKey, 'Authorization': `Bearer ${neuroApiKey}` }
                         })
                         if (mRes.ok) {
                           const buf = await mRes.arrayBuffer()
@@ -238,8 +238,8 @@ serve(async (req) => {
                       const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
                       const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
                       if (neuroApiKey) {
-                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
-                          headers: { 'x-api-key': neuroApiKey }
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}?key=${encodeURIComponent(neuroApiKey)}`, {
+                          headers: { 'x-api-key': neuroApiKey, 'Authorization': `Bearer ${neuroApiKey}` }
                         })
                         if (mRes.ok) {
                           const buf = await mRes.arrayBuffer()
@@ -494,6 +494,8 @@ serve(async (req) => {
         '',
         'http://localhost:8080',
         'http://localhost:8080/',
+        'https://klynncloud.com',
+        'https://app.klynncloud.com',
         'https://klynn.com.do',
         'https://app.klynn.com.do',
       ]

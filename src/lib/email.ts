@@ -218,7 +218,7 @@ export const acceptEmployeeInvitationServer = createServerFn({ method: "POST" })
   .inputValidator((data: AcceptEmployeeInvitationParams) => data)
   .handler(async ({ data }) => {
     try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 
       if (!serviceRoleKey) {
@@ -386,7 +386,7 @@ export const getEmpleadoByIdServer = createServerFn({ method: "POST" })
   .inputValidator((data: { id: string }) => data)
   .handler(async ({ data }) => {
     try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
       if (!serviceRoleKey || !data?.id) return null;
 
@@ -411,7 +411,7 @@ export const getEmpleadoByEmailAndTenantServer = createServerFn({ method: "POST"
   .inputValidator((data: { email: string; tenantId: string }) => data)
   .handler(async ({ data }) => {
     try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
       if (!serviceRoleKey || !data?.email || !data?.tenantId) return null;
 
@@ -437,7 +437,7 @@ export const getTenantsForUserServer = createServerFn({ method: "POST" })
   .inputValidator((data: { email: string; userId?: string }) => data)
   .handler(async ({ data }) => {
     try {
-      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const supabaseUrl = process.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
       const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
       if (!serviceRoleKey || !data?.email) return [];
 

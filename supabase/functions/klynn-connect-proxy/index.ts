@@ -6,9 +6,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-const DEFAULT_SERVER_URL = Deno.env.get('KLYNN_CONNECT_URL') || 'https://wa.klynn.com.do'
+const DEFAULT_SERVER_URL = Deno.env.get('KLYNN_CONNECT_URL') || 'https://wa.klynncloud.com'
 const DEFAULT_API_KEY = Deno.env.get('KLYNN_CONNECT_APIKEY') || 'klynn_evolution_secret_key_2026'
-const WEBHOOK_TARGET_URL = Deno.env.get('KLYNN_WEBHOOK_URL') || 'https://api.klynn.com.do/functions/v1/whatsapp-webhook'
+const WEBHOOK_TARGET_URL = Deno.env.get('KLYNN_WEBHOOK_URL') || 'https://api.klynncloud.com/functions/v1/whatsapp-webhook'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {

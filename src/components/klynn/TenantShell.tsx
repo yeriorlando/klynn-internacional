@@ -2759,7 +2759,7 @@ function UserMenu({ empleado, onLogout, onLock }: { empleado: any; onLogout: () 
           <DropdownMenuItem
             onSelect={() =>
               window.open(
-                "https://docs.klynn.com.do/",
+                "https://docs.klynncloud.com/",
                 "_blank",
                 "noopener,noreferrer",
               )

@@ -141,8 +141,8 @@ serve(async (req) => {
         }
 
         try {
-            const mediaRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
-                headers: { 'x-api-key': apiKey }
+            const mediaRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}?key=${encodeURIComponent(apiKey)}`, {
+                headers: { 'x-api-key': apiKey, 'Authorization': `Bearer ${apiKey}` }
             });
 
             if (!mediaRes.ok) {
@@ -236,7 +236,7 @@ serve(async (req) => {
             const isMetaOrNeuroAPI = body.object === 'whatsapp_business_account' || Array.isArray(body.entry);
             if (isMetaOrNeuroAPI) {
                 const entries = body.entry || [];
-                const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://api.klynn.com.do';
+                const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://api.klynncloud.com';
 
                 for (const entry of entries) {
                     const changes = entry.changes || [];
@@ -473,7 +473,7 @@ serve(async (req) => {
                             rawSender = alt;
                         } else if (body.instance) {
                             try {
-                                const evoUrl = Deno.env.get('KLYNN_CONNECT_URL') || 'https://wa.klynn.com.do';
+                                const evoUrl = Deno.env.get('KLYNN_CONNECT_URL') || 'https://wa.klynncloud.com';
                                 const evoKey = Deno.env.get('KLYNN_CONNECT_APIKEY') || 'klynn_evolution_secret_key_2026';
                                 const contRes = await fetch(`${evoUrl}/chat/findContacts/${body.instance}`, {
                                     method: 'POST',
@@ -655,7 +655,7 @@ serve(async (req) => {
                         // Si no viene en el webhook, obtenerlo directamente de Evolution API
                         if (!rawB64 && body.instance) {
                             try {
-                                const evoRes = await fetch(`https://wa.klynn.com.do/chat/getBase64FromMediaMessage/${body.instance}`, {
+                                const evoRes = await fetch(`https://wa.klynncloud.com/chat/getBase64FromMediaMessage/${body.instance}`, {
                                     method: 'POST',
                                     headers: {
                                         'Content-Type': 'application/json',
@@ -679,7 +679,7 @@ serve(async (req) => {
                             }
                         }
 
-                        mediaUrl = `https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}`;
+                        mediaUrl = `https://api.klynncloud.com/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}`;
                     } else if (isWasender) {
                         try {
                             const { data: tenantData } = await supabase

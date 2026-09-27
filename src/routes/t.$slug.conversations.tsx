@@ -283,7 +283,7 @@ function ConversationsPage() {
     if (!url) return "";
     if (url.startsWith("data:") || url.startsWith("blob:")) return url;
     if (url.includes("catalogo/conversations")) return url;
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
     if (url.includes("wasenderapi.com")) {
       const apiKey = wa?.api_key || "";
       return `${supabaseUrl}/functions/v1/wasender-proxy?action=media&url=${encodeURIComponent(url)}&api_key=${encodeURIComponent(apiKey)}`;
@@ -847,7 +847,7 @@ function ConversationsPage() {
       // Store lightweight reference in DB
       let finalStoredContent = initialDisplayContent;
       if (type !== 'text' && result.provider === "klynn_connect") {
-        finalStoredContent = `[${type}] https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}${filename ? '|' + filename : ''}`;
+        finalStoredContent = `[${type}] ${supabaseUrl}/functions/v1/klynn-connect-proxy?action=media&wamid=${wamid}${filename ? '|' + filename : ''}`;
       } else if (type !== "text" && result.mediaUrl) {
         finalStoredContent = `[${type}] ${result.mediaUrl}${filename ? '|' + filename : ''}`;
       }

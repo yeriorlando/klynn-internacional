@@ -369,7 +369,7 @@ ${topService ? `• Servicio destacado: *${topService.name}* (${topService.count
 ${attention}
 
 🔎 Reporte completo:
-https://klynn.com.do/reportes?tenantId=${encodeURIComponent(tenant.id)}`;
+https://klynncloud.com/reportes?tenantId=${encodeURIComponent(tenant.id)}`;
   }
 
   const title = isMonthly ? "RESUMEN EJECUTIVO MENSUAL" : "RESUMEN SEMANAL";
@@ -391,7 +391,7 @@ ${metrics.periodStart} al ${metrics.periodEnd}
 🛡️ Incidencias fiscales: *${metrics.fiscalIncidents}*
 ↔️ ${change}
 
-Consulta el detalle en Klynn.`;
+Consulta el detalle en Klynn Cloud.`;
 }
 
 async function sendEmail(tenant: any, config: SummaryConfig, metrics: Metrics) {
@@ -403,7 +403,7 @@ async function sendEmail(tenant: any, config: SummaryConfig, metrics: Metrics) {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: Deno.env.get("WEEKLY_SUMMARY_FROM") || "Klynn <soporte@klynn.com.do>",
+      from: Deno.env.get("WEEKLY_SUMMARY_FROM") || "Klynn Cloud <soporte@klynncloud.com>",
       to: [recipient],
       subject: `${metrics.frequency === "monthly" ? "Resumen ejecutivo mensual" : "Resumen semanal"} · ${tenant.nombre} · ${metrics.periodStart} al ${metrics.periodEnd}`,
       html: buildBusinessSummaryEmail(tenant, metrics),
@@ -443,7 +443,7 @@ async function sendWhatsApp(admin: any, tenant: any, globalConfig: any, config: 
   let response: Response;
 
   if (engine === "klynn_connect") {
-    const base = String(bank.klynn_connect_url || globalConfig?.klynn_connect_url || Deno.env.get("KLYNN_CONNECT_URL") || "https://wa.klynn.com.do").replace(/\/$/, "");
+    const base = String(bank.klynn_connect_url || globalConfig?.klynn_connect_url || Deno.env.get("KLYNN_CONNECT_URL") || "https://wa.klynncloud.com").replace(/\/$/, "");
     const apiKey = bank.klynn_connect_apikey || globalConfig?.klynn_connect_apikey || Deno.env.get("KLYNN_CONNECT_APIKEY") || "klynn_evolution_secret_key_2026";
     if (!apiKey) throw new Error("Klynn Connect no tiene API key configurada");
     const instance = wa.instance || `klynn_${String(tenant.slug || tenant.id).replace(/[^a-zA-Z0-9_]/g, "_")}`;

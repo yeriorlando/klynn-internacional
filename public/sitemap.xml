@@ -2,49 +2,49 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <!-- Páginas Principales -->
   <url>
-    <loc>https://klynn.com.do/</loc>
+    <loc>https://klynncloud.com/</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/login</loc>
+    <loc>https://klynncloud.com/login</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/registro</loc>
+    <loc>https://klynncloud.com/registro</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/descargar</loc>
+    <loc>https://klynncloud.com/descargar</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/recuperar</loc>
+    <loc>https://klynncloud.com/recuperar</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.4</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/terminos</loc>
+    <loc>https://klynncloud.com/terminos</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/privacidad</loc>
+    <loc>https://klynncloud.com/privacidad</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/cookies</loc>
+    <loc>https://klynncloud.com/cookies</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.2</priority>
@@ -52,19 +52,19 @@
 
   <!-- Landing Pages Geolocalizadas por Ciudad -->
   <url>
-    <loc>https://klynn.com.do/software-lavanderia-santo-domingo</loc>
+    <loc>https://klynncloud.com/software-lavanderia-santo-domingo</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/software-lavanderia-santiago</loc>
+    <loc>https://klynncloud.com/software-lavanderia-santiago</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/software-lavanderia-punta-cana</loc>
+    <loc>https://klynncloud.com/software-lavanderia-punta-cana</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
@@ -72,7 +72,7 @@
 
   <!-- Blog Index -->
   <url>
-    <loc>https://klynn.com.do/blog</loc>
+    <loc>https://klynncloud.com/blog</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>daily</changefreq>
     <priority>0.8</priority>
@@ -80,103 +80,103 @@
 
   <!-- Artículos del Blog (SEO & AEO Content) -->
   <url>
-    <loc>https://klynn.com.do/blog/5-formas-evitar-perder-ropa-lavanderia</loc>
+    <loc>https://klynncloud.com/blog/5-formas-evitar-perder-ropa-lavanderia</loc>
     <lastmod>2026-05-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/ventajas-enviar-ticket-whatsapp-rd</loc>
+    <loc>https://klynncloud.com/blog/ventajas-enviar-ticket-whatsapp-rd</loc>
     <lastmod>2026-05-10</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/guia-ncf-dgii-lavanderias-rd</loc>
+    <loc>https://klynncloud.com/blog/guia-ncf-dgii-lavanderias-rd</loc>
     <lastmod>2026-05-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/optimizar-delivery-santo-domingo-santiago</loc>
+    <loc>https://klynncloud.com/blog/optimizar-delivery-santo-domingo-santiago</loc>
     <lastmod>2026-05-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/trucos-fidelizar-clientes-lavanderia-rd</loc>
+    <loc>https://klynncloud.com/blog/trucos-fidelizar-clientes-lavanderia-rd</loc>
     <lastmod>2026-05-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/ahorro-electricidad-agua-lavanderia-rd</loc>
+    <loc>https://klynncloud.com/blog/ahorro-electricidad-agua-lavanderia-rd</loc>
     <lastmod>2026-05-12</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/pasos-abrir-lavanderia-exitosa-santo-domingo</loc>
+    <loc>https://klynncloud.com/blog/pasos-abrir-lavanderia-exitosa-santo-domingo</loc>
     <lastmod>2026-05-14</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/como-cuadrar-caja-lavanderia-sin-descuadres</loc>
+    <loc>https://klynncloud.com/blog/como-cuadrar-caja-lavanderia-sin-descuadres</loc>
     <lastmod>2026-05-15</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/lavanderias-piantini-bella-vista-gestion-sucursales</loc>
+    <loc>https://klynncloud.com/blog/lavanderias-piantini-bella-vista-gestion-sucursales</loc>
     <lastmod>2026-05-16</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/facturacion-electronica-dgii-lavanderias-rd</loc>
+    <loc>https://klynncloud.com/blog/facturacion-electronica-dgii-lavanderias-rd</loc>
     <lastmod>2026-05-17</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/formas-pago-digitales-lavanderias-rd</loc>
+    <loc>https://klynncloud.com/blog/formas-pago-digitales-lavanderias-rd</loc>
     <lastmod>2026-05-18</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/servicio-express-lavanderia-duplica-ticket</loc>
+    <loc>https://klynncloud.com/blog/servicio-express-lavanderia-duplica-ticket</loc>
     <lastmod>2026-05-19</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/mejores-plataformas-software-lavanderia-rd-comparativa</loc>
+    <loc>https://klynncloud.com/blog/mejores-plataformas-software-lavanderia-rd-comparativa</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/klynn-vs-cleancloud-cual-es-el-mejor-software-lavanderia-rd</loc>
+    <loc>https://klynncloud.com/blog/klynn-vs-cleancloud-cual-es-el-mejor-software-lavanderia-rd</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/por-que-usar-software-lavanderia-unica-forma-escalar-rd</loc>
+    <loc>https://klynncloud.com/blog/por-que-usar-software-lavanderia-unica-forma-escalar-rd</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/facturacion-electronica-dgii-ventajas-adelantarte-ley</loc>
+    <loc>https://klynncloud.com/blog/facturacion-electronica-dgii-ventajas-adelantarte-ley</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>
   </url>
   <url>
-    <loc>https://klynn.com.do/blog/guia-cuadre-caja-lavanderias-evita-perdidas</loc>
+    <loc>https://klynncloud.com/blog/guia-cuadre-caja-lavanderias-evita-perdidas</loc>
     <lastmod>2026-05-20</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.7</priority>

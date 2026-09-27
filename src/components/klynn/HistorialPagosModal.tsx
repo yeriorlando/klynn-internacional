@@ -472,7 +472,7 @@ export function HistorialPagosModal({ open, onOpenChange, tenant, plans, isAdmin
                     <div className="text-[11.5px] text-slate-600 leading-relaxed pt-1">
                       <div className="font-bold text-slate-800 text-xs tracking-tight">Simplifica tu lavandería</div>
                       <div>Santo Domingo Este, República Dominicana</div>
-                      <div>Tel: (829) 941-6546 • Soporte@klynn.com.do</div>
+                      <div>Tel: (829) 941-6546 • soporte@klynncloud.com</div>
                     </div>
                   </div>
 
@@ -614,7 +614,7 @@ export function HistorialPagosModal({ open, onOpenChange, tenant, plans, isAdmin
                 {/* PIE DE PÁGINA FORMAL */}
                 <div className="mt-12 pt-6 border-t border-slate-200 text-center text-[10.5px] text-slate-400">
                   <div className="font-bold text-slate-600">Klynn Cloud • Simplifica tu lavandería</div>
-                  <div>www.klynn.com.do • Soporte: (829) 941-6546 • Soporte@klynn.com.do</div>
+                  <div>www.klynncloud.com • Soporte: (829) 941-6546 • soporte@klynncloud.com</div>
                 </div>
               </div>
             </div>

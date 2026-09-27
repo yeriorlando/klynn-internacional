@@ -40,16 +40,16 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Klynn — Software de gestión para lavanderías en RD" },
-      { name: "description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
-      { name: "author", content: "Klynn" },
-      { property: "og:title", content: "Klynn — Software de gestión para lavanderías en RD" },
-      { property: "og:description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
+      { title: "Klynn Cloud — Software de Gestión para Lavanderías y Tintorerías" },
+      { name: "description", content: "Plataforma Cloud multi-tenant para lavanderías y tintorerías: punto de venta (POS), órdenes, control de caja, pasarela de pagos, tickets térmicos, WhatsApp y entregas." },
+      { name: "author", content: "Klynn Cloud" },
+      { property: "og:title", content: "Klynn Cloud — Software de Gestión para Lavanderías y Tintorerías" },
+      { property: "og:description", content: "Plataforma Cloud multi-tenant para lavanderías y tintorerías: punto de venta (POS), órdenes, control de caja, pasarela de pagos, tickets térmicos, WhatsApp y entregas." },
       { property: "og:type", content: "website" },
-      { name: "twitter:card", content: "summary" },
-      { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Klynn — Software de gestión para lavanderías en RD" },
-      { name: "twitter:description", content: "Plataforma SaaS multi-tenant para lavanderías dominicanas: órdenes, caja, ITBIS, tickets térmicos, clientes y entregas." },
+      { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:site", content: "@klynncloud" },
+      { name: "twitter:title", content: "Klynn Cloud — Software de Gestión para Lavanderías y Tintorerías" },
+      { name: "twitter:description", content: "Plataforma Cloud multi-tenant para lavanderías y tintorerías: punto de venta (POS), órdenes, control de caja, pasarela de pagos, tickets térmicos, WhatsApp y entregas." },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/05ff4a4b-0512-4fb9-b96c-1b005d4fa98a/id-preview-e1b6eddf--32655e9b-c01d-4ebb-89e1-08399bd65bae.lovable.app-1777726950641.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/05ff4a4b-0512-4fb9-b96c-1b005d4fa98a/id-preview-e1b6eddf--32655e9b-c01d-4ebb-89e1-08399bd65bae.lovable.app-1777726950641.png" },
       { name: "theme-color", content: "#1B4B73" },
@@ -121,7 +121,7 @@ function RootShell({ children }: { children: React.ReactNode }) {
                 __html: `
                   (function(h,o,t,j,a,r){
                       h.hj=h.hj||function(){(h.hj.q=h.hj.q||[]).push(arguments)};
-                      h._hjSettings={hjid:6708717,hjsv:6};
+                      h._hjSettings={hjid:6784943,hjsv:6};
                       a=o.getElementsByTagName('head')[0];
                       r=o.createElement('script');r.async=1;
                       r.src=t+h._hjSettings.hjid+j+h._hjSettings.hjsv;

@@ -1,16 +1,16 @@
-# Klynn - Software #1 para Lavanderías en República Dominicana
+# Klynn Cloud — Software Líder de Gestión para Lavanderías y Tintorerías
 
 ## Descripción
-Klynn es la plataforma de gestión líder para lavanderías y tintorerías en RD. Diseñada específicamente para el mercado dominicano, ofrece control total de operaciones, finanzas y logística.
+Klynn Cloud es la plataforma SaaS integral en la nube diseñada para modernizar y escalar lavanderías, tintorerías y centros de lavado a nivel internacional. Ofrece control total de operaciones, finanzas, cobros online y logística multidivisa.
 
 ## Características Principales
-- **Punto de Venta (POS):** Facturación adaptada a RD con ITBIS y NCF.
-- **Logística:** Gestión de repartidores y rutas de entrega a domicilio.
-- **Finanzas:** Control de caja, gastos y reportes para contabilidad (606/607).
-- **Clientes:** CRM con notificaciones automáticas por WhatsApp.
-- **Multi-sucursal:** Administración de múltiples locales desde una sola cuenta.
+- **Punto de Venta (POS):** Facturación rápida con soporte multidivisa y pasarela de pagos integrada.
+- **WhatsApp Integrado (Klynn Connect):** Notificaciones y tickets térmicos automáticos enviados directamente al WhatsApp del cliente.
+- **Logística y Entregas:** Control de repartidores, rutas de delivery y seguimiento en tiempo real.
+- **Finanzas:** Control de caja, arqueo, registro de gastos y reportes contables.
+- **Multi-sucursal:** Administración centralizada de múltiples sucursales desde una sola cuenta.
 
-## Soporte y Ubicación
-- **Región:** República Dominicana (Cobertura nacional).
-- **Soporte:** WhatsApp y soporte técnico local.
-- **URL:** https://klynn.com.do/
+## Cobertura y Soporte
+- **Cobertura:** Internacional (Latinoamérica, EE.UU. y global).
+- **Soporte:** WhatsApp y soporte vía soporte@klynncloud.com.
+- **URL:** https://klynncloud.com/

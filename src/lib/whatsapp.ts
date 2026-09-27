@@ -131,7 +131,7 @@ export async function sendWhatsAppMessage(
     if (provider === "klynn_connect") {
       const action = request.mediaUrl ? "send_media" : "send_message";
       const instanceName = wa.instance || getKlynnConnectInstanceName(tenant);
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
       const res = await fetch(
         `${supabaseUrl}/functions/v1/klynn-connect-proxy?action=${action}`,
         {
@@ -145,7 +145,7 @@ export async function sendWhatsAppMessage(
             mediaType: request.mediaType,
             fileName: request.fileName,
             caption: cleanCaption || cleanText || "",
-            server_url: globalCfg.klynn_connect_url || "https://wa.klynn.com.do",
+            server_url: globalCfg.klynn_connect_url || "https://wa.klynncloud.com",
             api_key: globalCfg.klynn_connect_apikey,
             delay: Math.floor(1200 + Math.random() * 800), // Simulación humana anti-ban
           }),
@@ -187,7 +187,7 @@ export async function sendWhatsAppMessage(
         return { ok: false, provider, reason: "Credenciales de WhatsApp Meta Cloud no configuradas" };
       }
 
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
       const res = await fetch(`${supabaseUrl}/functions/v1/meta-cloud-proxy?action=send_message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -257,7 +257,7 @@ export async function sendWhatsAppMessage(
       return { ok: false, provider, reason: "API Token de WASender faltante" };
     }
 
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
     let mediaUrl = request.mediaUrl;
     if (mediaUrl?.includes(";base64,")) {
       const uploadRes = await fetch(`${supabaseUrl}/functions/v1/wasender-proxy?action=upload`, {

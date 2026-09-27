@@ -818,7 +818,7 @@ export async function registerTenantInPronesoft(
       const res = await client.createAssociatedCompany({
         rnc: rncToRegister,
         name: companyName,
-        email: `ecf-${tenantId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}@klynn.com.do`,
+        email: `ecf-${tenantId.replace(/[^a-zA-Z0-9]/g, "").toLowerCase()}@klynncloud.com`,
         phone: tenantData?.telefono || "8299416534",
         address: tenantData?.direccion || "Santo Domingo Este",
         city: tenantData?.ciudad || "Santo Domingo",

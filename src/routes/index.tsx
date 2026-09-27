@@ -284,7 +284,7 @@ function LandingPage() {
             "@context": "https://schema.org",
             "@type": "SoftwareApplication",
             "name": "Klynn",
-            "url": "https://klynn.com.do/",
+            "url": "https://klynncloud.com/",
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Web",
             description:
@@ -312,10 +312,10 @@ function LandingPage() {
             "@context": "https://schema.org",
             "@type": "WebSite",
             "name": "Klynn",
-            "url": "https://klynn.com.do/",
+            "url": "https://klynncloud.com/",
             "potentialAction": {
               "@type": "SearchAction",
-              "target": "https://klynn.com.do/search?q={search_term_string}",
+              "target": "https://klynncloud.com/search?q={search_term_string}",
               "query-input": "required name=search_term_string"
             }
           }),
@@ -333,37 +333,37 @@ function LandingPage() {
                 "@type": "SiteNavigationElement",
                 "position": 1,
                 "name": "Países disponibles",
-                "url": "https://klynn.com.do/#paises"
+                "url": "https://klynncloud.com/#paises"
               },
               {
                 "@type": "SiteNavigationElement",
                 "position": 2,
                 "name": "Funciones y Características",
-                "url": "https://klynn.com.do/#features"
+                "url": "https://klynncloud.com/#features"
               },
               {
                 "@type": "SiteNavigationElement",
                 "position": 3,
                 "name": "Planes y Precios",
-                "url": "https://klynn.com.do/#planes"
+                "url": "https://klynncloud.com/#planes"
               },
               {
                 "@type": "SiteNavigationElement",
                 "position": 4,
                 "name": "Iniciar sesión",
-                "url": "https://klynn.com.do/login"
+                "url": "https://klynncloud.com/login"
               },
               {
                 "@type": "SiteNavigationElement",
                 "position": 5,
                 "name": "Crear cuenta gratis",
-                "url": "https://klynn.com.do/registro"
+                "url": "https://klynncloud.com/registro"
               },
               {
                 "@type": "SiteNavigationElement",
                 "position": 6,
                 "name": "Preguntas frecuentes",
-                "url": "https://klynn.com.do/#faq"
+                "url": "https://klynncloud.com/#faq"
               }
             ]
           }),
@@ -380,19 +380,19 @@ function LandingPage() {
                 "@type": "ListItem",
                 "position": 1,
                 "name": "Inicio",
-                "item": "https://klynn.com.do/"
+                "item": "https://klynncloud.com/"
               },
               {
                 "@type": "ListItem",
                 "position": 2,
                 "name": "Login",
-                "item": "https://klynn.com.do/login"
+                "item": "https://klynncloud.com/login"
               },
               {
                 "@type": "ListItem",
                 "position": 3,
                 "name": "Registro",
-                "item": "https://klynn.com.do/registro"
+                "item": "https://klynncloud.com/registro"
               }
             ]
           }),
@@ -1445,7 +1445,7 @@ function LandingPage() {
                     </div>
                   </div>
                   <div className="pt-1 flex items-center justify-between text-[10.5px] text-muted-foreground">
-                    <span>klynn.com.do/t/demo/o/4832</span>
+                    <span>klynncloud.com/t/demo/o/4832</span>
                     <span className="text-emerald-700 dark:text-emerald-400 font-bold">10:42 AM ✓✓</span>
                   </div>
                 </div>

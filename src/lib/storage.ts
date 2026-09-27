@@ -351,7 +351,7 @@ export interface WhatsAppConfig {
   enabled: boolean;
   api_key: string;
   instance: string; // nombre de instancia WapiSender o Klynn Connect
-  base_url?: string; // por defecto https://wasenderapi.com o https://wa.klynn.com.do
+  base_url?: string; // por defecto https://wasenderapi.com o https://wa.klynncloud.com
   provider?: "klynn_connect" | "meta_cloud" | "wasender" | "neuroapi";
   klynn_connect_status?: "open" | "close" | "connecting" | "disconnected";
   klynn_connect_phone?: string;
@@ -1000,7 +1000,7 @@ export const KEY = {
   detalles_nomina: "lvx:detalles_nomina",
 };
 
-export const ADMIN_EMAILS = ["admin@klynn.com.do"];
+export const ADMIN_EMAILS = ["admin@klynncloud.com", "admin@klynn.com.do", "yeriorlando@gmail.com"];
 
 export const PLANS: Plan[] = [
   {
@@ -3857,7 +3857,7 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   defaultPlanId: "basico",
   requireEmployeeOtp: false,
   whatsapp_engine: "klynn_connect",
-  klynn_connect_url: "https://wa.klynn.com.do",
+  klynn_connect_url: "https://wa.klynncloud.com",
   klynn_connect_apikey: "klynn_evolution_secret_key_2026",
   meta_app_id: "",
   meta_config_id: "",
@@ -3966,7 +3966,7 @@ export async function saveGlobalConfig(config: GlobalConfig) {
       country_plans: config.country_plans || config.bankDetails?.country_plans || DEFAULT_COUNTRY_PLANS,
       require_employee_otp: config.requireEmployeeOtp ?? false,
       whatsapp_engine: config.whatsapp_engine || "klynn_connect",
-      klynn_connect_url: config.klynn_connect_url || "https://wa.klynn.com.do",
+      klynn_connect_url: config.klynn_connect_url || "https://wa.klynncloud.com",
       klynn_connect_apikey: config.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
       meta_app_id: config.meta_app_id || "",
       meta_config_id: config.meta_config_id || "",
@@ -4012,7 +4012,7 @@ export async function triggerStandbySync(): Promise<{
   };
 }> {
   try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     const res = await fetch(`${supabaseUrl}/functions/v1/sync-standby`, {
@@ -4037,7 +4037,7 @@ export async function triggerStandbySync(): Promise<{
 
 export async function updateStandbyFrequency(frequency: string): Promise<boolean> {
   try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynncloud.com";
     const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
     await fetch(`${supabaseUrl}/functions/v1/sync-standby`, {
@@ -4174,7 +4174,7 @@ export async function inviteEmployeeByEmail(
   const redirectTo =
     typeof window !== "undefined"
       ? `${window.location.origin}/restablecer-contrasena?invitation=1`
-      : "https://klynn.com.do/restablecer-contrasena?invitation=1";
+      : "https://klynncloud.com/restablecer-contrasena?invitation=1";
   const { data, error } = await supabase.functions.invoke("employee-invitations", {
     body: {
       tenantId,

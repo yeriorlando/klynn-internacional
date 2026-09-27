@@ -960,7 +960,7 @@ function NuevaSucursalPage() {
                                 className="h-11 text-xs sm:text-sm pl-3.5 pr-28 sm:pr-32 rounded-xl border-slate-200 bg-white font-mono shadow-none"
                               />
                               <span className="absolute right-3 text-[11px] font-mono text-muted-foreground pointer-events-none">
-                                {currentCountry.code === "DO" ? ".klynn.com.do" : ".klynncloud.com"}
+                                {".klynncloud.com"}
                               </span>
                             </div>
                           </Field>
@@ -1051,7 +1051,7 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
             </div>
             <div className="font-mono text-xs font-bold text-[#1B4B73]">
-              {tenant.slug}.{tenant.pais_codigo === 'DO' || !tenant.pais_codigo ? 'klynn.com.do' : 'klynncloud.com'}
+              {tenant.slug}.klynncloud.com
             </div>
           </div>
           

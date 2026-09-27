@@ -4076,6 +4076,16 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     if (baseWa.base_url?.includes("wapisender")) {
       baseWa.base_url = "https://wasenderapi.com";
     }
+    // Compatibilidad bidireccional entre meta_phone_number_id y neuroapi_phone_number_id
+    if (baseWa.meta_phone_number_id && !baseWa.neuroapi_phone_number_id) {
+      baseWa.neuroapi_phone_number_id = baseWa.meta_phone_number_id;
+    }
+    if (!baseWa.meta_phone_number_id && baseWa.neuroapi_phone_number_id) {
+      baseWa.meta_phone_number_id = baseWa.neuroapi_phone_number_id;
+    }
+    if ((baseWa.neuroapi_phone_number_id || baseWa.meta_phone_number_id) && baseWa.provider === "neuroapi" && baseWa.neuroapi_status !== "disconnected") {
+      baseWa.neuroapi_status = "connected";
+    }
 
     const resolveTemplate = (key: keyof WhatsAppConfig, current?: string) => {
       const defaultVal = (DEFAULT_CONFIG.whatsapp as any)[key] || "";
@@ -4157,6 +4167,10 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   const isWASender = currentProvider === "wasender";
   const isNeuroAPI = currentProvider === "neuroapi" || currentProvider === "meta_cloud";
   const isMetaCloud = false;
+  const isNeuroConnected = (
+    draft.neuroapi_status === "connected" ||
+    (isNeuroAPI && Boolean(draft.neuroapi_phone_number_id || draft.meta_phone_number_id))
+  ) && Boolean(draft.neuroapi_phone_number_id || draft.meta_phone_number_id);
 
   const [testPhone, setTestPhone] = useState("");
   const [sending, setSending] = useState(false);
@@ -4178,12 +4192,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   // Consultar estado de conexión
   const checkStatus = async () => {
     try {
-      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=get_status`, {
+      const res = await fetch(`https://api.klynncloud.com/functions/v1/klynn-connect-proxy?action=get_status`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           instance_name: instanceName,
-          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynncloud.com",
           api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
         }),
       });
@@ -4227,12 +4241,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   // Función auxiliar para obtener el QR rápidamente
   async function fetchQrCode(): Promise<string | null> {
     try {
-      const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=get_qr`, {
+      const res = await fetch(`https://api.klynncloud.com/functions/v1/klynn-connect-proxy?action=get_qr`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           instance_name: instanceName,
-          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynncloud.com",
           api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
         }),
       });
@@ -4258,12 +4272,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
         setLoadingQr(false);
       } else {
         // 2. Si la instancia aún no emitió QR, asegurar creación/conexión
-        const res = await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
+        const res = await fetch(`https://api.klynncloud.com/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             instance_name: instanceName,
-            server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+            server_url: globalCfg?.klynn_connect_url || "https://wa.klynncloud.com",
             api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
           }),
         });
@@ -4332,12 +4346,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     try {
       let qr = await fetchQrCode();
       if (!qr) {
-        await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
+        await fetch(`https://api.klynncloud.com/functions/v1/klynn-connect-proxy?action=create_or_connect`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             instance_name: instanceName,
-            server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+            server_url: globalCfg?.klynn_connect_url || "https://wa.klynncloud.com",
             api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
           }),
         }).catch(() => ({}));
@@ -4358,12 +4372,12 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   async function handleDisconnect() {
     setDisconnecting(true);
     try {
-      await fetch(`https://api.klynn.com.do/functions/v1/klynn-connect-proxy?action=logout`, {
+      await fetch(`https://api.klynncloud.com/functions/v1/klynn-connect-proxy?action=logout`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           instance_name: instanceName,
-          server_url: globalCfg?.klynn_connect_url || "https://wa.klynn.com.do",
+          server_url: globalCfg?.klynn_connect_url || "https://wa.klynncloud.com",
           api_key: globalCfg?.klynn_connect_apikey || "klynn_evolution_secret_key_2026",
         }),
       });
@@ -4515,7 +4529,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
               const phoneIdCandidate = embeddedInfoRef.current.phone_number_id || draft.meta_phone_number_id || "";
               const wabaIdCandidate = embeddedInfoRef.current.waba_id || draft.meta_waba_id || "";
 
-              const res = await fetch(`https://api.klynn.com.do/functions/v1/meta-cloud-proxy?action=exchange_code`, {
+              const res = await fetch(`https://api.klynncloud.com/functions/v1/meta-cloud-proxy?action=exchange_code`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -4585,7 +4599,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     }
     setTestingMeta(true);
     try {
-      const res = await fetch(`https://api.klynn.com.do/functions/v1/meta-cloud-proxy?action=test_connection`, {
+      const res = await fetch(`https://api.klynncloud.com/functions/v1/meta-cloud-proxy?action=test_connection`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -4640,15 +4654,21 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
   const [showManualSync, setShowManualSync] = useState(false);
 
   const handleSyncNeuroAPINumber = useCallback(async (extra?: { phoneNumberId?: string; phoneNumber?: string; verifiedName?: string }) => {
+    // Si viene como evento de click en vez de objeto con datos
+    const safeExtra = (extra && typeof extra === 'object' && 'phoneNumberId' in extra) ? extra : undefined;
+    const phoneIdToSync = safeExtra?.phoneNumberId || draft.neuroapi_phone_number_id || draft.meta_phone_number_id;
+    const phoneToSync = safeExtra?.phoneNumber || draft.neuroapi_phone_number;
+    const nameToSync = safeExtra?.verifiedName || draft.neuroapi_verified_name;
+
     setSyncingNeuro(true);
     try {
       const res = await syncNeuroAPINumberServer({
         data: {
           tenantId: tenant.id,
           customApiKey: draft.neuroapi_api_key,
-          phoneNumberId: extra?.phoneNumberId,
-          phoneNumber: extra?.phoneNumber,
-          verifiedName: extra?.verifiedName,
+          phoneNumberId: phoneIdToSync,
+          phoneNumber: phoneToSync,
+          verifiedName: nameToSync,
         },
       });
 
@@ -4661,6 +4681,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
           neuroapi_status: "connected",
           neuroapi_is_coexistence: true,
           neuroapi_phone_number_id: res.data.phoneNumberId,
+          meta_phone_number_id: res.data.phoneNumberId,
           neuroapi_phone_number: res.data.phoneNumber,
           neuroapi_verified_name: res.data.verifiedName,
         };
@@ -4676,6 +4697,13 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
       setSyncingNeuro(false);
     }
   }, [tenant.id, draft, saveWA]);
+
+  // Auto-sincronizar con NeuroAPI si se selecciona Meta Oficial y no está completamente conectado
+  useEffect(() => {
+    if (isNeuroAPI && (!draft.neuroapi_phone_number || draft.neuroapi_status !== "connected")) {
+      handleSyncNeuroAPINumber();
+    }
+  }, [isNeuroAPI]);
 
   const handleConnectNeuroAPI = async () => {
     setConnectingNeuro(true);
@@ -5367,7 +5395,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                                 <div className="flex items-center gap-2">
                                   <Input
                                     readOnly
-                                    value="https://api.klynn.com.do/functions/v1/meta-cloud-proxy"
+                                    value="https://api.klynncloud.com/functions/v1/meta-cloud-proxy"
                                     className="h-9 text-xs font-mono bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white text-slate-700 dark:text-slate-300"
                                   />
                                   <Button
@@ -5375,7 +5403,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                                     size="sm"
                                     variant="outline"
                                     onClick={() => {
-                                      navigator.clipboard.writeText("https://api.klynn.com.do/functions/v1/meta-cloud-proxy");
+                                      navigator.clipboard.writeText("https://api.klynncloud.com/functions/v1/meta-cloud-proxy");
                                       toast.success("URL de devolución de llamada copiada");
                                     }}
                                     className="h-9 px-3 shrink-0 rounded-lg cursor-pointer bg-white dark:bg-slate-900 hover:bg-slate-100 dark:hover:bg-slate-800 border-slate-200 dark:border-slate-800 font-bold"
@@ -5526,7 +5554,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
 
                 <div className="flex items-center gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 shadow-2xs">
                   <code className="flex-1 text-[11px] font-mono break-all text-slate-700 dark:text-slate-300 select-all leading-normal px-1">
-                    {`https://api.klynn.com.do/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`}
+                    {`https://api.klynncloud.com/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`}
                   </code>
                   <Button
                     type="button"
@@ -5534,7 +5562,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                     size="icon"
                     className="h-8 w-8 rounded-lg shrink-0 hover:bg-emerald-50 hover:text-emerald-600 dark:hover:bg-emerald-950 border-slate-200/80 cursor-pointer"
                     onClick={() => {
-                      const urlStr = `https://api.klynn.com.do/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`;
+                      const urlStr = `https://api.klynncloud.com/functions/v1/whatsapp-webhook?tenant_id=${tenant.id}`;
                       navigator.clipboard.writeText(urlStr);
                       toast.success("¡Enlace de Webhook copiado!");
                     }}
@@ -5554,7 +5582,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
           {/* CUADRO DE CONEXIÓN NEUROAPI (META CLOUD API OFICIAL CON COEXISTENCIA) */}
           {isNeuroAPI && (
             <div className="space-y-4">
-              {draft.neuroapi_status === "connected" && draft.neuroapi_phone_number_id ? (
+              {isNeuroConnected ? (
                 /* Estado Conectado */
                 <div className="p-5 md:p-6 rounded-2xl border border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/15 flex flex-col sm:flex-row sm:items-center justify-between gap-5 transition-all">
                   <div className="flex items-start gap-4">
@@ -5574,7 +5602,11 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                         </Badge>
                       </div>
                       <h4 className="text-sm md:text-base font-bold text-foreground mt-1">
-                        {draft.neuroapi_phone_number ? `WhatsApp: ${draft.neuroapi_phone_number}` : "WhatsApp Oficial Vinculado"}
+                        {draft.neuroapi_phone_number
+                          ? `WhatsApp: ${draft.neuroapi_phone_number}`
+                          : (draft.neuroapi_phone_number_id || draft.meta_phone_number_id)
+                            ? `WhatsApp (ID: ${draft.neuroapi_phone_number_id || draft.meta_phone_number_id})`
+                            : "WhatsApp Oficial Vinculado"}
                       </h4>
                       <p className="text-xs text-muted-foreground mt-0.5">
                         {draft.neuroapi_verified_name ? `${draft.neuroapi_verified_name} · ` : ""}
@@ -5588,7 +5620,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                       size="sm"
                       disabled={syncingNeuro}
                       className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl font-semibold text-xs h-9 px-3.5 shadow-none border-0 flex items-center gap-1.5 cursor-pointer transition-colors"
-                      onClick={handleSyncNeuroAPINumber}
+                      onClick={() => handleSyncNeuroAPINumber()}
                     >
                       <RefreshCw className={`h-3.5 w-3.5 ${syncingNeuro ? "animate-spin" : ""}`} />
                       <span>{syncingNeuro ? "Sincronizando..." : "Verificar Estado"}</span>

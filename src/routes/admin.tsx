@@ -979,7 +979,7 @@ function AdminPage() {
   }
 
   function copyInvitationLink(codigo: string) {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://klynn.com.do";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://klynncloud.com";
     const link = `${origin}/registro?code=${codigo}`;
     if (typeof navigator !== "undefined" && navigator.clipboard) {
       navigator.clipboard.writeText(link);
@@ -988,7 +988,7 @@ function AdminPage() {
   }
 
   function shareWhatsAppInvitation(codigo: string, nota?: string) {
-    const origin = typeof window !== "undefined" ? window.location.origin : "https://klynn.com.do";
+    const origin = typeof window !== "undefined" ? window.location.origin : "https://klynncloud.com";
     const link = `${origin}/registro?code=${codigo}`;
     const greeting = nota ? `¡Hola ${nota}!` : "¡Hola!";
     const msg = `${greeting} Aquí tienes tu enlace exclusivo para registrar tu lavandería en Klynn Cloud con 14 días de prueba sin costo:\n\n🔗 ${link}\n\nCódigo de acceso: *${codigo}*`;
@@ -3517,7 +3517,7 @@ function AdminPage() {
                         ? "API Oficial de Meta con Coexistencia Móvil y Web mediante Connect Sessions de NeuroAPI (sin perder el acceso en tu celular)."
                         : (globalConfig.whatsapp_engine === 'wasender'
                           ? "Envío mediante API en la nube con API Key e ID de instancia personalizada."
-                          : "Conexión nativa con código QR en wa.klynn.com.do para envío de tickets, recibos y avisos automáticos sin costo por mensaje.")}
+                          : "Conexión nativa con código QR en wa.klynncloud.com para envío de tickets, recibos y avisos automáticos sin costo por mensaje.")}
                     </p>
                   </div>
                 </div>
@@ -4615,7 +4615,7 @@ function AdminPage() {
                 </Button>
               </div>
               <p className="text-[10px] text-muted-foreground truncate">
-                Enlace: <code className="font-mono text-primary font-bold">{typeof window !== 'undefined' ? window.location.origin : 'https://klynn.com.do'}/registro?code={previewCode}</code>
+                Enlace: <code className="font-mono text-primary font-bold">{typeof window !== 'undefined' ? window.location.origin : 'https://klynncloud.com'}/registro?code={previewCode}</code>
               </p>
             </div>
 

@@ -308,7 +308,7 @@ serve(async (req) => {
       const generatedPassword = `K!${crypto.randomUUID().replace(/-/g, "")}a1`;
 
       const res = await sdk.associatedCompanies.createAssociatedCompany({
-        email: payload.email || `ecf-${accountKey}@klynn.com.do`,
+        email: payload.email || `ecf-${accountKey}@klynncloud.com`,
         password: payload.password || generatedPassword,
         name: payload.name,
         rnc: payload.rnc,

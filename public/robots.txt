@@ -12,7 +12,7 @@ User-agent: PerplexityBot
 Allow: /
 
 # Sitemaps
-Sitemap: https://klynn.com.do/sitemap.xml
+Sitemap: https://klynncloud.com/sitemap.xml
 
 # Disallow admin and tenant routes from being indexed (private/tool pages)
 Disallow: /admin

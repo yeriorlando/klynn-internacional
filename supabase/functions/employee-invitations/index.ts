@@ -54,7 +54,7 @@ async function sendResendInvitationEmail(params: {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      from: Deno.env.get("INVITATION_FROM") || "Klynn <soporte@klynn.com.do>",
+      from: Deno.env.get("INVITATION_FROM") || "Klynn Cloud <soporte@klynncloud.com>",
       to: [params.email],
       subject: "Invitación: Te han invitado a Klynn",
       html,
@@ -348,11 +348,12 @@ serve(async (req) => {
       return json({ error: invitationError?.message || "No se pudo crear la invitación" }, 400);
     }
 
-    const defaultRedirect = "https://klynn.com.do/restablecer-contrasena?invitation=1";
+    const defaultRedirect = "https://klynncloud.com/restablecer-contrasena?invitation=1";
     let safeRedirect = defaultRedirect;
     try {
       const parsedRedirect = new URL(redirectTo || defaultRedirect);
-      const isAllowedHost = parsedRedirect.hostname === "klynn.com.do" ||
+      const isAllowedHost = parsedRedirect.hostname === "klynncloud.com" ||
+        parsedRedirect.hostname === "klynn.com.do" ||
         parsedRedirect.hostname === "localhost" ||
         parsedRedirect.hostname === "127.0.0.1";
       const isResetPath = parsedRedirect.pathname === "/restablecer-contrasena";

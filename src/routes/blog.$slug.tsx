@@ -106,7 +106,7 @@ function BlogPostView() {
               <Button variant="ghost" size="sm" className="rounded-full h-9 w-9 p-0 text-slate-500 hover:text-slate-900">
                 <Share2 className="h-4 w-4" />
               </Button>
-              <a href={`https://wa.me/?text=${encodeURIComponent(`Mira este artículo de Klynn: ${post.title} https://klynn.com.do/blog/${post.slug}`)}`} target="_blank" rel="noreferrer">
+              <a href={`https://wa.me/?text=${encodeURIComponent(`Mira este artículo de Klynn: ${post.title} https://klynncloud.com/blog/${post.slug}`)}`} target="_blank" rel="noreferrer">
                 <Button variant="ghost" size="sm" className="rounded-full h-9 w-9 p-0 text-emerald-600 hover:bg-emerald-50">
                   <MessageCircle className="h-4 w-4" />
                 </Button>

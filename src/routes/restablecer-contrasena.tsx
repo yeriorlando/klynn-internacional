@@ -489,7 +489,7 @@ function RestablecerContrasenaPage() {
 
           <div className="mt-6 text-center text-sm text-muted-foreground">
             ¿Necesitas ayuda?{' '}
-            <a href="mailto:soporte@klynn.com.do" className="font-bold text-primary hover:underline">
+            <a href="mailto:soporte@klynncloud.com" className="font-bold text-primary hover:underline">
               Contactar soporte
             </a>
           </div>

@@ -3,6 +3,20 @@ import { createClient } from "@supabase/supabase-js";
 
 export const NEUROAPI_BASE_URL = "https://api.neurochat.com.ec/api/v1/neuroapi";
 
+export function buildNeuroApiUrl(path: string, apiKey: string): string {
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+  const separator = cleanPath.includes("?") ? "&" : "?";
+  return `${NEUROAPI_BASE_URL}${cleanPath}${separator}key=${encodeURIComponent(apiKey)}`;
+}
+
+export function buildNeuroApiHeaders(apiKey: string, extraHeaders?: Record<string, string>): Record<string, string> {
+  return {
+    "x-api-key": apiKey,
+    "Authorization": `Bearer ${apiKey}`,
+    ...(extraHeaders || {}),
+  };
+}
+
 export interface CreateConnectSessionParams {
   tenantId: string;
   slug: string;
@@ -29,7 +43,7 @@ function getAdminClient() {
   const supabaseUrl = 
     process.env.VITE_SUPABASE_URL || 
     (typeof import.meta !== "undefined" && (import.meta as any).env?.VITE_SUPABASE_URL) || 
-    "https://api.klynn.com.do";
+    "https://api.klynncloud.com";
 
   const key = 
     process.env.SUPABASE_SERVICE_ROLE_KEY || 
@@ -124,16 +138,14 @@ export const createNeuroAPIConnectSessionServer = createServerFn({ method: "POST
         };
       }
 
-      const returnUrl = data.returnUrl || `https://klynn.com.do/t/${data.slug}/configuracion?tab=whatsapp&neuroapi_callback=1`;
-      const webhookUrl = `https://api.klynn.com.do/functions/v1/meta-cloud-proxy`;
+      const returnUrl = data.returnUrl || `https://klynncloud.com/t/${data.slug}/configuracion?tab=whatsapp&neuroapi_callback=1`;
+      const webhookUrl = `https://api.klynncloud.com/functions/v1/meta-cloud-proxy`;
       const webhookSecret = "klynn_webhook_secret";
 
-      const res = await fetch(`${NEUROAPI_BASE_URL}/connect/sessions`, {
+      const connectUrl = buildNeuroApiUrl("/connect/sessions", apiKey);
+      const res = await fetch(connectUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
+        headers: buildNeuroApiHeaders(apiKey, { "Content-Type": "application/json" }),
         body: JSON.stringify({
           service_type: "whatsapp_cloud_api",
           return_url: returnUrl,
@@ -206,86 +218,114 @@ export const syncNeuroAPINumberServer = createServerFn({ method: "POST" })
         return { ok: false, error: "Cliente de base de datos no disponible" };
       }
 
-      // Si se envían datos explícitos del número (vía callback o entrada manual), persistirlos de inmediato
-      if (data.phoneNumberId) {
-        const { data: tenantRow } = await client
-          .from("tenants")
-          .select("config")
-          .eq("id", data.tenantId)
-          .maybeSingle();
+      const apiKey = await resolveNeuroAPIKey(data.tenantId, data.customApiKey);
 
-        if (tenantRow?.config) {
-          const updatedConfig = {
-            ...tenantRow.config,
-            whatsapp: {
-              ...(tenantRow.config.whatsapp || {}),
-              provider: "neuroapi",
-              enabled: true,
-              neuroapi_status: "connected",
-              neuroapi_is_coexistence: true,
-              neuroapi_phone_number_id: data.phoneNumberId.trim(),
-              meta_phone_number_id: data.phoneNumberId.trim(),
-              neuroapi_phone_number: data.phoneNumber?.trim() || tenantRow.config.whatsapp?.neuroapi_phone_number,
-              neuroapi_verified_name: data.verifiedName?.trim() || tenantRow.config.whatsapp?.neuroapi_verified_name || "Klynn",
-            },
-          };
-          await client.from("tenants").update({ config: updatedConfig }).eq("id", data.tenantId);
-
-          // Auto-registrar webhook en NeuroAPI hacia meta-cloud-proxy
-          try {
-            const apiKey = await resolveNeuroAPIKey(data.tenantId, data.customApiKey);
-            if (apiKey) {
-              const numsRes = await fetch(`${NEUROAPI_BASE_URL}/messaging/webhooks/numbers`, {
-                headers: { "x-api-key": apiKey }
-              });
-              const numsJson = await numsRes.json().catch(() => ({}));
-              const matched = numsJson?.data?.find((n: any) => n.phone_number_id === data.phoneNumberId?.trim());
-              if (matched?.otp_phone_number_id) {
-                await fetch(`${NEUROAPI_BASE_URL}/messaging/webhooks/api`, {
-                  method: "POST",
-                  headers: { "Content-Type": "application/json", "x-api-key": apiKey },
-                  body: JSON.stringify({
-                    otp_phone_number_id: matched.otp_phone_number_id,
-                    url: "https://api.klynn.com.do/functions/v1/meta-cloud-proxy",
-                    secret: "klynn_webhook_secret",
-                    is_active: true
-                  })
-                });
-              }
-            }
-          } catch (e) {
-            console.warn("Aviso al auto-configurar webhook en NeuroAPI:", e);
-          }
-          return {
-            ok: true,
-            data: {
-              phoneNumberId: data.phoneNumberId.trim(),
-              phoneNumber: data.phoneNumber?.trim() || tenantRow.config.whatsapp?.neuroapi_phone_number,
-              verifiedName: data.verifiedName?.trim() || tenantRow.config.whatsapp?.neuroapi_verified_name || "Klynn",
-            },
-          };
-        }
-      }
-
-      // Consultar el registro actualizado del tenant en Supabase
       const { data: tenantRow, error: tErr } = await client
         .from("tenants")
         .select("config")
         .eq("id", data.tenantId)
         .maybeSingle();
 
-      if (tErr) {
-        return { ok: false, error: tErr.message };
+      if (tErr || !tenantRow) {
+        return { ok: false, error: tErr?.message || "Tenant no encontrado" };
       }
 
-      const wa = tenantRow?.config?.whatsapp;
-      if (wa && wa.neuroapi_status === "connected" && wa.neuroapi_phone_number_id) {
+      const currentWa = tenantRow.config?.whatsapp || {};
+      let targetPhoneId = data.phoneNumberId?.trim() || currentWa.neuroapi_phone_number_id || currentWa.meta_phone_number_id;
+      let targetPhone = data.phoneNumber?.trim() || currentWa.neuroapi_phone_number;
+      let targetName = data.verifiedName?.trim() || currentWa.neuroapi_verified_name || "Klynn";
+      let isVerifiedFromApi = false;
+
+      // Consultar números activos en NeuroAPI mediante ?key= y headers
+      if (apiKey) {
+        try {
+          const numbersUrl = buildNeuroApiUrl("/messaging/webhooks/numbers", apiKey);
+          const numsRes = await fetch(numbersUrl, {
+            headers: buildNeuroApiHeaders(apiKey),
+          });
+          const numsJson = await numsRes.json().catch(() => ({}));
+
+          if (numsJson?.success && Array.isArray(numsJson.data) && numsJson.data.length > 0) {
+            // 1. Coincidencia exacta por ID de número
+            let matched = targetPhoneId
+              ? numsJson.data.find((n: any) => String(n.phone_number_id).trim() === String(targetPhoneId).trim())
+              : null;
+
+            // 2. Coincidencia por teléfono si existe
+            if (!matched && targetPhone) {
+              const cleanTarget = targetPhone.replace(/\D/g, "");
+              matched = numsJson.data.find((n: any) => String(n.phone_number || "").replace(/\D/g, "").includes(cleanTarget));
+            }
+
+            // 3. Si no hay coincidencia, tomar el número con token activo
+            if (!matched) {
+              matched = numsJson.data.find((n: any) => n.token_status === "active") || numsJson.data[0];
+            }
+
+            if (matched) {
+              targetPhoneId = matched.phone_number_id;
+              targetPhone = matched.phone_number || targetPhone;
+              targetName = matched.waba_name || targetName;
+              isVerifiedFromApi = true;
+
+              // Registrar o actualizar automáticamente el webhook en NeuroAPI hacia meta-cloud-proxy
+              if (matched.otp_phone_number_id) {
+                const whUrl = buildNeuroApiUrl("/messaging/webhooks/api", apiKey);
+                await fetch(whUrl, {
+                  method: "POST",
+                  headers: buildNeuroApiHeaders(apiKey, { "Content-Type": "application/json" }),
+                  body: JSON.stringify({
+                    otp_phone_number_id: matched.otp_phone_number_id,
+                    url: "https://api.klynncloud.com/functions/v1/meta-cloud-proxy",
+                    secret: "klynn_webhook_secret",
+                    is_active: true,
+                  }),
+                }).catch(() => {});
+              }
+            }
+          }
+        } catch (apiErr) {
+          console.warn("Aviso al consultar números en NeuroAPI:", apiErr);
+        }
+      }
+
+      // Si tenemos un número confirmado (por API, por parámetros o ya registrado)
+      if (targetPhoneId && (isVerifiedFromApi || data.phoneNumberId || currentWa.neuroapi_status === "connected")) {
+        const updatedConfig = {
+          ...tenantRow.config,
+          whatsapp: {
+            ...currentWa,
+            provider: "neuroapi",
+            enabled: true,
+            neuroapi_status: "connected",
+            neuroapi_is_coexistence: true,
+            neuroapi_phone_number_id: targetPhoneId,
+            meta_phone_number_id: targetPhoneId,
+            neuroapi_phone_number: targetPhone || currentWa.neuroapi_phone_number,
+            neuroapi_verified_name: targetName || "Klynn",
+          },
+        };
+
+        await client.from("tenants").update({ config: updatedConfig }).eq("id", data.tenantId);
+
         return {
           ok: true,
           data: {
-            phoneNumberId: wa.neuroapi_phone_number_id,
-            phoneNumber: wa.neuroapi_phone_number,
-            verifiedName: wa.neuroapi_verified_name,
+            phoneNumberId: targetPhoneId,
+            phoneNumber: targetPhone || currentWa.neuroapi_phone_number,
+            verifiedName: targetName || "Klynn",
+          },
+        };
+      }
+
+      // Si el registro previo en BD ya estaba conectado
+      if (currentWa.neuroapi_status === "connected" && (currentWa.neuroapi_phone_number_id || currentWa.meta_phone_number_id)) {
+        return {
+          ok: true,
+          data: {
+            phoneNumberId: currentWa.neuroapi_phone_number_id || currentWa.meta_phone_number_id,
+            phoneNumber: currentWa.neuroapi_phone_number,
+            verifiedName: currentWa.neuroapi_verified_name || "Klynn",
           },
         };
       }
@@ -452,12 +492,10 @@ export const sendNeuroAPIMessageServer = createServerFn({ method: "POST" })
         };
       }
 
-      const res = await fetch(`${NEUROAPI_BASE_URL}/messaging/send`, {
+      const sendUrl = buildNeuroApiUrl("/messaging/send", apiKey);
+      const res = await fetch(sendUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-        },
+        headers: buildNeuroApiHeaders(apiKey, { "Content-Type": "application/json" }),
         body: JSON.stringify(bodyPayload),
       });
 
@@ -651,8 +689,9 @@ export const resolveInboundWhatsAppMediaServer = createServerFn({ method: "POST"
 
         try {
           // Descargar de NeuroAPI según especificación oficial
-          const mediaRes = await fetch(`${NEUROAPI_BASE_URL}/messaging/media/${mediaId}`, {
-            headers: { "x-api-key": apiKey }
+          const mediaUrl = buildNeuroApiUrl(`/messaging/media/${mediaId}`, apiKey);
+          const mediaRes = await fetch(mediaUrl, {
+            headers: buildNeuroApiHeaders(apiKey)
           });
 
           if (!mediaRes.ok) {

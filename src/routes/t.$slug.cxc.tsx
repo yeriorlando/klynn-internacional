@@ -299,7 +299,7 @@ function CuentasPorCobrarPage() {
           
           <div class="sep"></div>
           <div class="text-center" style="font-size:9px;color:#000;margin-top:10px">
-            Generado por Klynn · klynn.com.do
+            Generado por Klynn · klynncloud.com
           </div>
         </div>
         </body></html>`;
@@ -357,7 +357,7 @@ function CuentasPorCobrarPage() {
           <div style="font-size:10px;color:#64748b;font-weight:bold;text-transform:uppercase">TOTAL GENERAL POR COBRAR</div>
           <div style="font-size:20px;font-weight:bold;color:#dc2626">${formatRD(totalGeneral)}</div>
         </div>
-        <div class="foot"><span>Generado por Klynn · klynn.com.do</span><span>${new Date().toISOString()}</span></div>
+        <div class="foot"><span>Generado por Klynn · klynncloud.com</span><span>${new Date().toISOString()}</span></div>
         </body></html>`;
     }
 

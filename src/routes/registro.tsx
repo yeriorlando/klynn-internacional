@@ -1502,7 +1502,7 @@ function SuccessCard({ tenant, adminNombre, adminEmail, globalConfig, onEnter }:
               <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
             </div>
             <div className="font-mono text-xs font-semibold">
-              {IS_LOCAL_MODE ? `localhost:8080/t/${tenant.slug}` : `klynn.com.do/t/${tenant.slug}`}
+              {IS_LOCAL_MODE ? `localhost:8080/t/${tenant.slug}` : `klynncloud.com/t/${tenant.slug}`}
             </div>
           </div>
           

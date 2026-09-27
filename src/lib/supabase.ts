@@ -1,13 +1,19 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const defaultSupabaseUrl = 'https://api.klynncloud.com';
+const defaultSupabaseAnonKey = 'eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NTQ1NDMyMCwiZXhwIjo0OTQxMTI3OTIwLCJyb2xlIjoiYW5vbiJ9.TsHqtNcA63ts-rjsS0VijOHICQ-06AXymSoIaAmqov8';
 
-if (!supabaseUrl || !supabaseAnonKey) {
-  console.warn('Faltan las credenciales de Supabase en el archivo .env');
-}
+const supabaseUrl = 
+  import.meta.env?.VITE_SUPABASE_URL ||
+  (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_URL : undefined) ||
+  defaultSupabaseUrl;
 
-export const supabase = createClient(supabaseUrl || '', supabaseAnonKey || '', {
+const supabaseAnonKey = 
+  import.meta.env?.VITE_SUPABASE_ANON_KEY ||
+  (typeof process !== 'undefined' ? process.env?.VITE_SUPABASE_ANON_KEY : undefined) ||
+  defaultSupabaseAnonKey;
+
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
     persistSession: true,
     autoRefreshToken: true,

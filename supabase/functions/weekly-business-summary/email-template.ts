@@ -124,7 +124,7 @@ function buildMonthlyExecutiveEmail(tenant: any, metrics: SummaryEmailMetrics) {
   <table role="presentation" width="640" cellpadding="0" cellspacing="0" style="width:100%;max-width:640px;background:${palette.paper};border:1px solid ${palette.border};border-radius:18px;overflow:hidden">
     <tr><td style="height:5px;background:${palette.primary}"></td></tr>
     <tr><td style="padding:26px 28px 20px">
-      <img src="https://api.klynn.com.do/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="150" style="display:block;max-width:150px;height:auto;border:0">
+      <img src="https://api.klynncloud.com/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="150" style="display:block;max-width:150px;height:auto;border:0">
       <p style="margin:22px 0 4px;color:${palette.primary};font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.6px">Resumen ejecutivo mensual</p>
       <h1 style="font-size:25px;line-height:1.25;margin:0;color:${palette.ink}">${escapeHtml(tenant.nombre)}</h1>
       <p style="margin:7px 0 0;color:${palette.muted};font-size:13px">${metrics.periodStart} al ${metrics.periodEnd}</p>
@@ -174,7 +174,7 @@ function buildMonthlyExecutiveEmail(tenant: any, metrics: SummaryEmailMetrics) {
     </td></tr>
 
     <tr><td style="padding:2px 28px 28px"><h2 style="font-size:16px;margin:0 0 8px;color:${palette.ink}">Atención ejecutiva</h2>${alerts}
-      <a href="https://klynn.com.do/reportes?tenantId=${encodeURIComponent(tenant.id)}" style="display:block;background:${palette.primary};color:${palette.paper};text-decoration:none;text-align:center;border-radius:11px;padding:13px;margin-top:18px;font-weight:700">Abrir reportes completos</a>
+      <a href="https://klynncloud.com/reportes?tenantId=${encodeURIComponent(tenant.id)}" style="display:block;background:${palette.primary};color:${palette.paper};text-decoration:none;text-align:center;border-radius:11px;padding:13px;margin-top:18px;font-weight:700">Abrir reportes completos</a>
     </td></tr>
     <tr><td style="padding:16px;text-align:center;border-top:1px solid ${palette.border};color:${palette.muted};font-size:11px">Klynn Cloud · Tu lavandería, simplificada.</td></tr>
   </table></td></tr></table></body></html>`;
@@ -200,7 +200,7 @@ export function buildBusinessSummaryEmail(tenant: any, metrics: SummaryEmailMetr
   <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="width:100%;max-width:600px;background:#fff;border:1px solid #E2E8F0;border-radius:18px;overflow:hidden">
     <tr><td style="height:5px;background:#1B4B73"></td></tr>
     <tr><td style="padding:28px 30px 12px;text-align:center">
-      <img src="https://api.klynn.com.do/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="180" style="display:block;margin:auto;max-width:180px;height:auto;border:0">
+      <img src="https://api.klynncloud.com/storage/v1/object/public/assets/logotipo-klynn.png" alt="Klynn" width="180" style="display:block;margin:auto;max-width:180px;height:auto;border:0">
       <h1 style="font-size:23px;line-height:1.3;margin:22px 0 5px;color:#0F172A">${summaryName} de ${escapeHtml(tenant.nombre)}</h1>
       <p style="margin:0;color:#64748B;font-size:13px">${metrics.periodStart} al ${metrics.periodEnd}</p>
     </td></tr>
@@ -213,7 +213,7 @@ export function buildBusinessSummaryEmail(tenant: any, metrics: SummaryEmailMetr
       <div style="background:#EFF6FF;border:1px solid #DBEAFE;border-radius:12px;padding:15px;font-size:13px;line-height:1.7;color:#1E293B">
         <strong>${change}</strong><br>Órdenes pendientes: <strong>${metrics.pendingOrders}</strong><br>Incidencias fiscales del período: <strong>${metrics.fiscalIncidents}</strong>
       </div>
-      <a href="https://klynn.com.do/t/${encodeURIComponent(tenant.slug)}/reportes" style="display:block;background:#1B4B73;color:#fff;text-decoration:none;text-align:center;border-radius:11px;padding:13px;margin-top:18px;font-weight:700">Ver reportes en Klynn</a>
+      <a href="https://klynncloud.com/t/${encodeURIComponent(tenant.slug)}/reportes" style="display:block;background:#1B4B73;color:#fff;text-decoration:none;text-align:center;border-radius:11px;padding:13px;margin-top:18px;font-weight:700">Ver reportes en Klynn</a>
     </td></tr>
     <tr><td style="padding:16px;text-align:center;border-top:1px solid #F1F5F9;color:#94A3B8;font-size:11px">Klynn Cloud · Tu lavandería, simplificada.</td></tr>
   </table></td></tr></table></body></html>`;
