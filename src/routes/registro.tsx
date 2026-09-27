@@ -3,10 +3,10 @@ import { compressImage } from "@/lib/compressImage";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, Check, Building2, Palette, Package, UserCircle2, PartyPopper,
+  ArrowLeft, ArrowRight, Check, Palette, Package, UserCircle2, PartyPopper,
   AlertCircle, Search, MapPin, Upload, Image as ImageIcon, Receipt, MessageCircle, Sparkles,
   Eye, EyeOff, Cloud, Loader2, Droplet, Landmark, ShieldCheck, Trash2,
-  Store, Phone, User, Mail, Lock, ChevronRight,
+  Store, Phone, User, Mail, Lock, ChevronRight, Crown, CheckCircle2,
   Layers, Truck, Wallet, Tags, Users, BarChart3, QrCode, Shirt, Ticket, KeyRound,
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
@@ -21,11 +21,16 @@ import {
   sendSignUpOtp, resendSignUpOtp, verifyOtpAndRegisterTenant,
   setActiveTenant, uid, PROVINCIAS_RD, NCF_TIPOS, DEFAULT_CONFIG, getGlobalConfig, getPlans,
   updateECFConfig, saveECFConfig, validarCodigoInvitacion, marcarCodigoUsado,
+  getCountryPlans, formatCurrencyByCountry,
   type PlanId, type Tenant, type TenantConfig, type GlobalConfig, type Empleado, type Plan, type ECFConfig, type InvitacionCodigo,
 } from "@/lib/storage";
 import { consultarRNC } from "@/lib/fiscal";
 import { sendWelcomeEmail } from "@/lib/email";
 import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { Switch } from "@/components/ui/switch";
+import { getCountry, getCountryByCode, COUNTRIES, type CountryConfig } from "@/lib/countries";
+import { CountrySelect } from "@/components/klynn/CountrySelect";
+import { RegionSelectModal } from "@/components/klynn/RegionSelectModal";
 import { toast } from "sonner";
 
 // Definimos IS_LOCAL_MODE como false para asegurar compatibilidad 100% cloud
@@ -42,7 +47,7 @@ export const Route = createFileRoute("/registro")({
 });
 
 const STEPS = [
-  { id: 1, label: "Empresa", icon: Building2 },
+  { id: 1, label: "Empresa", icon: Store },
   { id: 2, label: "Marca", icon: Palette },
   { id: 3, label: "Plan", icon: Package },
   { id: 4, label: "Admin", icon: UserCircle2 },
@@ -153,6 +158,7 @@ const LAUNDRY_BUBBLES = [
 interface FormState {
   // empresa
   nombre: string;
+  pais_codigo: string;
   razon_social: string;
   rnc: string;
   telefono: string;
@@ -177,6 +183,7 @@ interface FormState {
 }
 
 const initial: FormState = {
+  pais_codigo: "DO",
   nombre: "",
   razon_social: "",
   rnc: "",
@@ -215,7 +222,21 @@ function RegistroPage() {
   }, []);
 
   const [step, setStep] = useState(1);
+  const [enableFiscalDoc, setEnableFiscalDoc] = useState(false);
   const [form, setForm] = useState<FormState>(initial);
+
+  const currentCountry = useMemo(() => {
+    return getCountryByCode(form.pais_codigo || "DO");
+  }, [form.pais_codigo]);
+
+  // Sincronizar planes con el país seleccionado
+  useEffect(() => {
+    getCountryPlans(form.pais_codigo || "DO").then((cPlans) => {
+      if (cPlans && cPlans.length > 0) {
+        setPlans(cPlans);
+      }
+    });
+  }, [form.pais_codigo]);
   const [errors, setErrors] = useState<Partial<Record<keyof FormState, string>>>({});
   const [provOpen, setProvOpen] = useState(false);
   const [createdTenant, setCreatedTenant] = useState<Tenant | null>(null);
@@ -325,6 +346,7 @@ function RegistroPage() {
   const lastSearchedRNCRef = useRef<string>("");
 
   async function handleSearchRNC(rncValue?: string, force = false) {
+    if (currentCountry.code !== "DO") return;
     const val = rncValue !== undefined ? rncValue : form.rnc;
     const cleanRnc = val.replace(/\D/g, "");
     if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) return;
@@ -374,10 +396,12 @@ function RegistroPage() {
     ];
   }, []);
 
+  const shouldSkipPlanStep = !globalConfig.requirePlanOnRegistration || !!invitacionValidada;
+
   const filteredSteps = useMemo(() => {
-    if (globalConfig.requirePlanOnRegistration) return STEPS;
-    return STEPS.filter(s => s.id !== 3);
-  }, [globalConfig.requirePlanOnRegistration]);
+    if (shouldSkipPlanStep) return STEPS.filter((s) => s.id !== 3);
+    return STEPS;
+  }, [shouldSkipPlanStep]);
 
   const slugOk = useMemo(
     () => form.slug.length >= 3 && /^[a-z0-9]+$/.test(form.slug) && isSlugAvailable(form.slug),
@@ -400,8 +424,9 @@ function RegistroPage() {
     const e: Partial<Record<keyof FormState, string>> = {};
     if (step === 1) {
       if (!form.nombre.trim()) e.nombre = "Requerido";
-      if (!form.telefono || form.telefono.replace(/\D/g, "").length < 10) e.telefono = "Teléfono inválido";
-      if (!form.provincia) e.provincia = "Selecciona tu provincia";
+      const cleanPhone = (form.telefono || "").replace(/\D/g, "");
+      if (!form.telefono || cleanPhone.length < 7) e.telefono = "Teléfono inválido";
+      if (!form.provincia) e.provincia = `Selecciona tu ${currentCountry.regionsLabel.toLowerCase().endsWith("s") ? currentCountry.regionsLabel.toLowerCase().slice(0, -1) : currentCountry.regionsLabel.toLowerCase()}`;
     }
     if (step === 2) {
       if (!slugOk) e.slug = "Subdominio inválido o no disponible";
@@ -472,9 +497,15 @@ function RegistroPage() {
     setOtpVerifying(true);
     setOtpError(null);
 
+    const taxRate = enableFiscalDoc ? currentCountry.tax.defaultRate : 0;
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
       nombre_sucursal: "Sucursal principal",
+      itbis_porcentaje: taxRate,
+      itbis_incluido: true,
+      cobrar_impuesto: enableFiscalDoc,
+      razon_social: form.razon_social || form.nombre,
+      modo_facturacion: currentCountry.code === "DO" && enableFiscalDoc ? "electronica" : "tradicional",
     };
     const cleanRnc = form.rnc.replace(/\D/g, "");
     const trialDays = invitacionValidada?.dias_trial || globalConfig.trialDays || 14;
@@ -483,7 +514,7 @@ function RegistroPage() {
       nombre: form.nombre,
       nombre_sucursal: "Sucursal principal",
       slug: form.slug,
-      rnc: cleanRnc || undefined,
+      rnc: cleanRnc || form.rnc.trim() || undefined,
       telefono: form.telefono,
       direccion: "",
       provincia: form.provincia,
@@ -496,6 +527,12 @@ function RegistroPage() {
       trial_hasta: new Date(Date.now() + trialDays * 86400000).toISOString(),
       creado_en: new Date().toISOString(),
       plan_fecha_inicio: new Date().toISOString(),
+      pais_codigo: currentCountry.code,
+      moneda_simbolo: currentCountry.currency.symbol,
+      moneda_codigo: currentCountry.currency.code,
+      impuesto_nombre: currentCountry.tax.name,
+      impuesto_porcentaje: taxRate,
+      documento_fiscal_label: currentCountry.doc.label,
       config,
     };
 
@@ -513,27 +550,29 @@ function RegistroPage() {
     try {
       await verifyOtpAndRegisterTenant(code, tenant, admin);
 
-      // Guardar configuración inicial fiscal (ecf_config) vinculada al tenant
-      try {
-        const rawRnc = form.rnc.trim();
-        const initialECFConfig: ECFConfig = {
-          id: crypto.randomUUID(),
-          tenant_id: tenant.id,
-          rnc_emisor: cleanRnc || rawRnc || "",
-          razon_social: form.razon_social || form.nombre,
-          nombre_comercial: form.nombre,
-          ambiente: "pruebas",
-          proveedor_ecf: "ef2",
-          ef2_environment: "TesteCF",
-          usar_credenciales_propias: false,
-          is_active: !!cleanRnc || !!rawRnc,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-        };
-        await saveECFConfig(initialECFConfig);
+      // Guardar configuración inicial fiscal (ecf_config) vinculada al tenant solo si es República Dominicana
+      if (currentCountry.code === "DO") {
+        try {
+          const rawRnc = form.rnc.trim();
+          const initialECFConfig: ECFConfig = {
+            id: crypto.randomUUID(),
+            tenant_id: tenant.id,
+            rnc_emisor: cleanRnc || rawRnc || "",
+            razon_social: form.razon_social || form.nombre,
+            nombre_comercial: form.nombre,
+            ambiente: "pruebas",
+            proveedor_ecf: "ef2",
+            ef2_environment: "TesteCF",
+            usar_credenciales_propias: false,
+            is_active: !!cleanRnc || !!rawRnc,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          await saveECFConfig(initialECFConfig);
 
-      } catch (ecfInitErr) {
-        console.warn("Aviso al inicializar ecf_config:", ecfInitErr);
+        } catch (ecfInitErr) {
+          console.warn("Aviso al inicializar ecf_config:", ecfInitErr);
+        }
       }
 
       // Enviar correo de bienvenida oficial con Resend
@@ -583,7 +622,7 @@ function RegistroPage() {
   function next() {
     if (!validateStep()) return;
     let nextStep = step + 1;
-    if (nextStep === 3 && !globalConfig.requirePlanOnRegistration) {
+    if (nextStep === 3 && shouldSkipPlanStep) {
       nextStep = 4;
     }
     if (nextStep <= 4) {
@@ -595,7 +634,7 @@ function RegistroPage() {
 
   function prev() { 
     let prevStep = step - 1;
-    if (prevStep === 3 && !globalConfig.requirePlanOnRegistration) {
+    if (prevStep === 3 && shouldSkipPlanStep) {
       prevStep = 2;
     }
     setStep((s) => Math.max(1, prevStep)); 
@@ -893,20 +932,24 @@ function RegistroPage() {
           <main className="container mx-auto pb-6 pt-2">
             {/* Banner de Invitación VIP Activa */}
             {invitacionValidada && (
-              <div className="mx-auto mb-3 max-w-2xl px-2">
-                <div className="flex items-center justify-between gap-2 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/30 text-emerald-900 shadow-xs">
-                  <div className="flex items-center gap-2 text-xs font-bold">
-                    <span className="flex h-6 w-6 items-center justify-center rounded-full bg-emerald-600 text-white text-[11px]">
-                      👑
+              <div className="mx-auto mb-3.5 max-w-2xl px-2">
+                <div className="flex items-center justify-between gap-3 p-2 sm:p-2.5 px-4 sm:px-5 rounded-full border border-slate-200/90 bg-white/95 backdrop-blur-xl shadow-xs">
+                  <div className="flex items-center gap-2 sm:gap-2.5 min-w-0">
+                    <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500 shrink-0" />
+                    <span className="text-xs sm:text-sm font-bold text-slate-800 shrink-0">
+                      Invitación Verificada:
                     </span>
-                    <span>
-                      Invitación Verificada: <strong className="font-mono text-emerald-800">{invitacionValidada.codigo}</strong>
-                      {invitacionValidada.nota ? ` (${invitacionValidada.nota})` : ""} • 14 días de prueba gratis habilitados
+                    <span className="px-3.5 py-1 rounded-full bg-[#1B4B73] text-white font-mono font-black text-xs sm:text-sm tracking-wider shadow-xs shrink-0">
+                      {invitacionValidada.codigo}
+                    </span>
+                    <span className="text-xs font-semibold text-slate-500 truncate hidden sm:inline">
+                      • {invitacionValidada.dias_trial || 14} días de prueba
                     </span>
                   </div>
-                  <Badge variant="outline" className="bg-emerald-100 text-emerald-800 border-emerald-300 font-extrabold text-[10px] uppercase shrink-0">
-                    Acceso VIP
-                  </Badge>
+                  <div className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-gradient-to-r from-amber-500 to-amber-600 text-white font-black text-[10.5px] uppercase tracking-wider shadow-xs shrink-0">
+                    <Crown className="h-3.5 w-3.5 fill-current text-white" />
+                    <span>ACCESO VIP</span>
+                  </div>
                 </div>
               </div>
             )}
@@ -1002,7 +1045,7 @@ function RegistroPage() {
                 <>
                   <div className="flex items-center gap-3.5 mb-4">
                     <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-[#F0B900] flex items-center justify-center shrink-0 shadow-xs">
-                      <Building2 className="h-5.5 w-5.5" />
+                      <Store className="h-5.5 w-5.5" />
                     </div>
                     <div>
                       <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-foreground leading-tight">Cuéntanos de tu lavandería</h1>
@@ -1010,51 +1053,130 @@ function RegistroPage() {
                     </div>
                   </div>
 
-                  {/* Asistente Inteligente DGII Banner Compacto */}
-                  <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.02] px-3.5 py-2.5 transition-all">
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                          <Landmark className="h-3.5 w-3.5" />
+                  {/* Selector de País con Banderas Reales HD */}
+                  <div className="mb-4">
+                    <label className="text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                      <span>País de tu lavandería *</span>
+                      <span className="text-[11px] text-muted-foreground font-normal">
+                        Moneda e impuestos automáticos
+                      </span>
+                    </label>
+                    <CountrySelect
+                      value={form.pais_codigo}
+                      onChange={(c) => {
+                        setEnableFiscalDoc(false);
+                        setForm((prev) => ({
+                          ...prev,
+                          pais_codigo: c.code,
+                          provincia: "",
+                          rnc: "",
+                          telefono: c.phonePrefix ? `${c.phonePrefix} ` : "",
+                        }));
+                      }}
+                    />
+                  </div>
+
+                  {/* Toggle para Activar/Desactivar Identificación Fiscal (RNC / RFC / NIT / CIF) */}
+                  <div className="mb-4 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-2xs transition-all">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                          <Landmark className="h-4 w-4" />
                         </div>
                         <div className="min-w-0">
-                          <div className="text-xs font-bold text-slate-800 flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                            <span className="whitespace-nowrap">¿Eres contribuyente ante DGII?</span>
-                            <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shrink-0 whitespace-nowrap">
-                              Consultar ante DGII
+                          <div className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5 flex-wrap">
+                            <span>
+                              {currentCountry.code === "DO"
+                                ? "¿Registrar RNC ante la DGII?"
+                                : `¿Registrar ${currentCountry.doc.label} y cobrar ${currentCountry.tax.name} (${currentCountry.tax.defaultRate}%)?`}
+                            </span>
+                            <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-0.2 text-[10px] font-semibold">
+                              Opcional
                             </span>
                           </div>
-                          <p className="text-[11px] text-muted-foreground">
-                            Escribe tu RNC o Cédula para autocompletar el nombre oficial.
+                          <p className="text-[11px] text-muted-foreground mt-0.5">
+                            {currentCountry.code === "DO"
+                              ? "Activa este toggle si deseas validar con la DGII o déjalo inactivo."
+                              : `Activa este toggle si deseas aplicar ${currentCountry.tax.name} y registrar tu ${currentCountry.doc.label}. Puedes cambiarlo en Configuración.`}
                           </p>
                         </div>
                       </div>
-                      <div className="relative flex items-center shrink-0 w-full sm:w-48">
-                        <Input 
-                          value={form.rnc} 
-                          onChange={(e) => {
-                            const val = e.target.value;
-                            update("rnc", val);
-                            const clean = val.replace(/\D/g, "");
-                            if (clean.length === 9 || clean.length === 11) {
-                              handleSearchRNC(clean);
-                            }
-                          }} 
-                          onBlur={() => handleSearchRNC()}
-                          placeholder="Ej: 133-19090-7" 
-                          className="h-8 text-xs pr-7 bg-white border-primary/25 focus-visible:ring-primary/20 shadow-none rounded-lg"
+
+                      <div className="shrink-0 flex items-center">
+                        <Switch
+                          checked={enableFiscalDoc}
+                          onCheckedChange={(checked) => {
+                            setEnableFiscalDoc(checked);
+                            if (!checked) update("rnc", "");
+                          }}
                         />
-                        <button
-                          type="button"
-                          onClick={() => handleSearchRNC(undefined, true)}
-                          disabled={loadingRNC}
-                          className="absolute right-1.5 text-muted-foreground hover:text-primary transition-colors p-0.5"
-                          title="Buscar en DGII"
-                        >
-                          {loadingRNC ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : <Search className="h-3.5 w-3.5 text-primary" />}
-                        </button>
                       </div>
                     </div>
+
+                    {/* Desplegable animado si el toggle está activado */}
+                    <AnimatePresence>
+                      {enableFiscalDoc && (
+                        <motion.div
+                          initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                          animate={{ opacity: 1, height: "auto", marginTop: 14 }}
+                          exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                          transition={{ duration: 0.22, ease: "easeOut" }}
+                          className="overflow-hidden border-t border-slate-100 pt-3.5 space-y-2.5"
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <label className="text-xs font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
+                              <span>Número de {currentCountry.doc.label}</span>
+                              <span className="text-[10px] font-normal text-muted-foreground">
+                                {currentCountry.code === "DO" ? "(9 u 11 dígitos)" : "(Oficial)"}
+                              </span>
+                            </label>
+                            {currentCountry.code === "DO" && (
+                              <span className="rounded-full bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
+                                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                Consulta DGII Activa
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="relative flex items-center">
+                            <Receipt className="absolute left-3.5 h-4 w-4 text-primary pointer-events-none" />
+                            <Input 
+                              value={form.rnc} 
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                update("rnc", val);
+                                if (currentCountry.code === "DO") {
+                                  const clean = val.replace(/\D/g, "");
+                                  if (clean.length === 9 || clean.length === 11) {
+                                    handleSearchRNC(clean);
+                                  }
+                                }
+                              }} 
+                              onBlur={() => {
+                                if (currentCountry.code === "DO") handleSearchRNC();
+                              }}
+                              placeholder={currentCountry.doc.placeholder} 
+                              className={`h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none focus-visible:ring-primary/20 ${
+                                currentCountry.code === "DO" ? "pr-32" : "pr-4"
+                              }`}
+                              autoFocus
+                            />
+                            {currentCountry.code === "DO" && (
+                              <button
+                                type="button"
+                                onClick={() => handleSearchRNC(undefined, true)}
+                                disabled={loadingRNC}
+                                className="absolute right-2 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                                title="Consultar RNC en DGII"
+                              >
+                                {loadingRNC ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Search className="h-3.5 w-3.5" />}
+                                <span>Consultar</span>
+                              </button>
+                            )}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
                   </div>
 
                   <div className="grid gap-3.5 sm:grid-cols-2">
@@ -1069,7 +1191,7 @@ function RegistroPage() {
                               if (!form.slugTouched) update("slug", slugify(e.target.value));
                             }} 
                             placeholder="Ej. Lavandería La Burbuja o Dinnca Comercial" 
-                            className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200"
+                            className="h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none font-medium"
                           />
                         </div>
                       </Field>
@@ -1079,22 +1201,25 @@ function RegistroPage() {
                         <Phone className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
                         <Input 
                           value={form.telefono} 
-                          onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} 
-                          placeholder="809-555-0142" 
-                          className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200" 
+                          onChange={(e) => {
+                            const v = e.target.value;
+                            update("telefono", currentCountry.code === "DO" ? formatPhoneRD(v) : v);
+                          }} 
+                          placeholder={currentCountry.phonePrefix ? `${currentCountry.phonePrefix} 555-0142` : "809-555-0142"} 
+                          className="h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none font-medium" 
                         />
                       </div>
                     </Field>
-                    <Field label="Provincia *" error={errors.provincia}>
+                    <Field label={`${currentCountry.regionsLabel} / Ubicación *`} error={errors.provincia}>
                       <button 
                         type="button" 
                         onClick={() => setProvOpen(true)} 
-                        className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-background px-3 text-xs sm:text-sm shadow-xs hover:bg-accent/30 transition-all"
+                        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 text-xs sm:text-sm shadow-none hover:bg-slate-50 transition-all cursor-pointer font-medium"
                       >
                         <div className="flex items-center gap-2 truncate">
                           <MapPin className="h-4 w-4 text-[#1B4B73] shrink-0" />
-                          <span className={form.provincia ? "text-foreground font-medium" : "text-muted-foreground"}>
-                            {form.provincia || "Selecciona tu provincia..."}
+                          <span className={form.provincia ? "text-slate-800 font-medium" : "text-muted-foreground"}>
+                            {form.provincia || `Selecciona tu ${currentCountry.regionsLabel.toLowerCase().endsWith("s") ? currentCountry.regionsLabel.toLowerCase().slice(0, -1) : currentCountry.regionsLabel.toLowerCase()}...`}
                           </span>
                         </div>
                         <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -1128,7 +1253,7 @@ function RegistroPage() {
                             <img src={form.logo_url} alt="logo" className="h-full w-full object-cover" />
                           ) : (
                             <div className="flex h-full w-full items-center justify-center bg-slate-50">
-                              <Building2 className="h-7 w-7 text-slate-300" />
+                              <Store className="h-7 w-7 text-slate-300" />
                             </div>
                           )}
                         </div>
@@ -1216,7 +1341,7 @@ function RegistroPage() {
                             </div>
                             <div className="flex items-center gap-3 shrink-0">
                               <div className="text-right">
-                                <span className="text-base font-bold text-slate-900">{formatRD(p.precio_mensual).replace("DOP", "RD$")}</span>
+                                <span className="text-base font-bold text-slate-900">{formatCurrencyByCountry(p.precio_mensual, form.pais_codigo)}</span>
                                 <span className="text-[10px] text-slate-400"> /mes</span>
                               </div>
                               <div className={`flex h-5 w-5 items-center justify-center rounded-full border transition-all ${
@@ -1402,30 +1527,29 @@ function RegistroPage() {
         )}
 
           {step < 6 && (
-            <div className="mt-5 flex items-center justify-between border-t border-border pt-4">
+            <div className="mt-6 flex items-center justify-between border-t border-slate-200/80 pt-4">
               <Button 
                 variant="outline" 
                 onClick={prev} 
                 disabled={step === 1 || otpSending || otpVerifying}
-                className="h-8 px-3.5 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
+                className="h-11 px-5 bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 text-sm font-bold rounded-xl shadow-2xs transition-all active:scale-[0.98]"
               >
-                <ArrowLeft className="mr-1 h-3.5 w-3.5" /> {step === 5 ? "Cambiar datos" : "Atrás"}
+                <ArrowLeft className="mr-2 h-4 w-4" /> {step === 5 ? "Cambiar datos" : "Atrás"}
               </Button>
               
               {step === 5 ? (
                 <Button 
                   onClick={() => handleVerifyAndFinalize()} 
                   disabled={otpCode.length < 6 || otpVerifying}
-                  size="sm"
-                  className="bg-[#1B4B73] hover:bg-[#1B4B73]/90 text-white shadow-sm font-bold h-8 px-5 text-xs"
+                  className="bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-sm font-bold h-11 px-6 text-sm rounded-xl transition-all active:scale-[0.98]"
                 >
                   {otpVerifying ? (
                     <>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Verificando...
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Verificando...
                     </>
                   ) : (
                     <>
-                      Verificar y Activar <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      Verificar y Activar <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
@@ -1433,16 +1557,15 @@ function RegistroPage() {
                 <Button 
                   onClick={next} 
                   disabled={otpSending}
-                  size="sm"
-                  className="bg-primary text-white shadow-sm hover:opacity-95 font-bold h-8 px-5 text-xs"
+                  className="bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-sm font-bold h-11 px-6 text-sm rounded-xl transition-all active:scale-[0.98]"
                 >
                   {otpSending ? (
                     <>
-                      <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> Enviando código...
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Enviando código...
                     </>
                   ) : (
                     <>
-                      {step === 4 ? "Continuar a Verificación" : "Continuar"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                      {step === 4 ? "Continuar a Verificación" : "Continuar"} <ArrowRight className="ml-2 h-4 w-4" />
                     </>
                   )}
                 </Button>
@@ -1454,7 +1577,17 @@ function RegistroPage() {
       )}
       </div>
 
-      <ProvinciaModal open={provOpen} onClose={() => setProvOpen(false)} value={form.provincia} onSelect={(p) => { update("provincia", p); setProvOpen(false); }} />
+      <RegionSelectModal
+        open={provOpen}
+        onClose={() => setProvOpen(false)}
+        onSelect={(p) => {
+          update("provincia", p);
+          setProvOpen(false);
+        }}
+        value={form.provincia}
+        countryCode={form.pais_codigo}
+        label={currentCountry.regionsLabel}
+      />
     </div>
   );
 }
@@ -1498,7 +1631,7 @@ function SuccessCard({ tenant, adminNombre, adminEmail, globalConfig, onEnter }:
         <div className="mx-auto mb-4 max-w-sm overflow-hidden rounded-xl border border-border bg-white text-left shadow-xs">
           <div className="flex items-center justify-between border-b border-border px-3.5 py-2">
             <div className="flex items-center gap-1.5">
-              <Building2 className="h-3.5 w-3.5 text-primary/60" />
+              <Store className="h-3.5 w-3.5 text-primary/60" />
               <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
             </div>
             <div className="font-mono text-xs font-semibold">
@@ -1530,83 +1663,6 @@ function SuccessCard({ tenant, adminNombre, adminEmail, globalConfig, onEnter }:
         </Button>
       </motion.div>
     </div>
-  );
-}
-
-function ProvinciaModal({ open, onClose, onSelect, value }: { open: boolean; onClose: () => void; onSelect: (p: string) => void; value: string }) {
-  const [q, setQ] = useState("");
-  const filtered = useMemo(
-    () => PROVINCIAS_RD.filter((p) => p.toLowerCase().includes(q.toLowerCase())),
-    [q]
-  );
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 grid place-items-center bg-foreground/40 p-4 backdrop-blur-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-        >
-          <motion.div
-            initial={{ scale: 0.7, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.7, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 280, damping: 24 }}
-            className="w-full max-w-md overflow-hidden rounded-3xl border border-border bg-surface shadow-elegant"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-border bg-gradient-hero p-5">
-              <div className="flex items-center gap-2">
-                <div className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-primary shadow-glow">
-                  <MapPin className="h-4 w-4 text-primary-foreground" />
-                </div>
-                <div>
-                  <h2 className="font-display text-xl">Selecciona tu provincia</h2>
-                  <p className="text-xs text-muted-foreground">Busca la ubicación de tu lavandería.</p>
-                </div>
-              </div>
-              <div className="relative mt-4">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  autoFocus
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Escribe aquí..."
-                  className="pl-9"
-                />
-              </div>
-            </div>
-            <div className="max-h-[50vh] overflow-y-auto p-2">
-              {filtered.length === 0 ? (
-                <div className="p-6 text-center text-sm text-muted-foreground">Sin resultados</div>
-              ) : (
-                filtered.map((p) => {
-                  const sel = p === value;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => onSelect(p)}
-                      className={`flex w-full items-center justify-between rounded-xl px-4 py-3 text-left text-sm transition ${
-                        sel ? "bg-accent text-foreground" : "hover:bg-accent/40"
-                      }`}
-                    >
-                      <span className="font-medium">{p}</span>
-                      {sel && <Check className="h-4 w-4 text-primary" />}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <div className="flex justify-end border-t border-border bg-surface-elevated px-5 py-3">
-              <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
   );
 }
 
