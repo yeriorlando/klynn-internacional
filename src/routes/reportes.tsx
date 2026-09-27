@@ -1951,13 +1951,12 @@ function ReportesPage() {
     const slug = auth?.tenant?.slug || selectedInspectTenant?.slug || (typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/)?.[1] : null);
     setIsLoggingOut(true);
     await logout();
-    setTimeout(() => {
-      if (slug && slug !== "admin") {
-        navigate({ to: "/t/$slug/login", params: { slug } });
-      } else {
-        navigate({ to: "/login" });
-      }
-    }, 450);
+    const targetUrl = slug && slug !== "admin" ? `/t/${slug}/login` : "/login";
+    if (typeof window !== "undefined") {
+      window.location.replace(targetUrl);
+    } else {
+      navigate({ to: targetUrl as any });
+    }
   }
 
   if (isLoggingOut) {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Lock, Unlock, LogOut, Eye, EyeOff, ShieldCheck, Store, CheckCircle2 } from "lucide-react";
+import { Lock, Unlock, LogOut, Eye, EyeOff, ShieldCheck, CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -456,11 +456,6 @@ export function PinLockScreen({
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 border border-white/90 backdrop-blur-md text-[11px] font-semibold text-[#1B4B73] shadow-sm">
               <span className={`h-2 w-2 rounded-full ${cajaAbierta ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
               <span>{cajaAbierta ? "Caja Abierta" : "Caja Cerrada"}</span>
-            </div>
-
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 border border-white/90 backdrop-blur-md text-[11px] font-semibold text-[#1B4B73] shadow-sm">
-              <Store className="h-3 w-3 text-[#1B4B73]" />
-              <span className="truncate max-w-[130px] font-bold">{tenant.nombre}</span>
             </div>
 
             <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/80 border border-white/90 backdrop-blur-md text-[11px] font-semibold text-emerald-700 shadow-sm">

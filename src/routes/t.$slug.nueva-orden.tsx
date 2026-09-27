@@ -30,6 +30,7 @@ import {
   ShoppingCart,
   User as UserIcon,
   X,
+  Eraser,
   Minus,
   CheckCircle2,
   Loader2,
@@ -108,6 +109,9 @@ import {
   nextOrdenNumero,
   formatRD,
   formatPhoneRD,
+  getActiveTenantLocalization,
+  getTenantCurrencySymbol,
+  getTenantTaxName,
   uid,
   DEFAULT_CONFIG,
   formatAmountInput,
@@ -140,7 +144,7 @@ import {
   can,
 } from "@/lib/storage";
 import { emitirECF, getNextNumberPronesoft } from "@/lib/fiscal";
-import { notificarWhatsApp, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
+import { notificarWhatsApp, construirMensajeWhatsAppPredeterminado, isWhatsAppAutomatedActive, toastWhatsAppSuccess } from "@/lib/whatsapp";
 import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
 import { showOrderCreatedToast } from "@/components/klynn/OrderCreatedToast";
@@ -553,7 +557,7 @@ function CreditFinancialStatusCard({
         ) : (
           <Badge className="bg-amber-600 text-white hover:bg-amber-600 border-none font-black text-[10px] tracking-wide px-2.5 py-0.5 shadow-xs shrink-0 flex items-center gap-1.5">
             <ShieldAlert className="h-3.5 w-3.5" />
-            SIN LÍNEA (RD$0)
+            SIN LÍNEA ({formatRD(0)})
           </Badge>
         )}
       </div>
@@ -659,7 +663,7 @@ function CreditFinancialStatusCard({
           <div className="flex items-center gap-2 p-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-800 dark:text-amber-300">
             <ShieldAlert className="h-3.5 w-3.5 text-amber-600 shrink-0" />
             <span>
-              El cliente no posee límite pre-aprobado (RD$0.00). Cualquier venta a crédito requerirá PIN de Administrador.
+              El cliente no posee límite pre-aprobado ({formatRD(0)}). Cualquier venta a crédito requerirá PIN de Administrador.
             </span>
           </div>
         )}
@@ -678,6 +682,9 @@ function NuevaOrdenPage() {
   const tenantId = tenant?.id ?? "";
 
   const cfg = tenant?.config || DEFAULT_CONFIG;
+  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
+  const taxName = tenant?.impuesto_nombre || getActiveTenantLocalization().impuesto_nombre || "ITBIS";
+  const taxRate = cfg.itbis_porcentaje !== undefined ? cfg.itbis_porcentaje : (tenant?.impuesto_porcentaje ?? 18);
   const modalidad = cfg.pos_modalidad_operativa || "FLEXIBLE";
   const enableServicios = modalidad === "SOLO_PRENDAS" ? false : (cfg.pos_habilitar_servicios !== false);
   const enablePrendas = cfg.pos_habilitar_prendas !== false;
@@ -891,7 +898,7 @@ function NuevaOrdenPage() {
   const [items, setItems] = useState<OrdenItem[]>([]);
   const [showAddItem, setShowAddItem] = useState(false);
   const [esUrgente, setEsUrgente] = useState(false);
-  const [aplicarItbis, setAplicarItbis] = useState(true);
+  const [aplicarItbis, setAplicarItbis] = useState(() => cfg.cobrar_impuesto !== false && taxRate > 0);
   const [descuento, setDescuento] = useState(0);
   const [fechaEntrega, setFechaEntrega] = useState<Date | undefined>(new Date());
   const [showDeliveryDatePickerPOS, setShowDeliveryDatePickerPOS] = useState(false);
@@ -2063,7 +2070,7 @@ function getMarbeteColorStyle(colorName?: string) {
   );
 
   // Cálculo detallado de ITBIS
-  const itbisRate = (cfg.itbis_porcentaje || 0) / 100;
+  const itbisRate = (taxRate || 0) / 100;
 
   // Separar montos gravables y exentos
   const itemsGravables = items.filter((it) => !it.is_exento);
@@ -2116,7 +2123,12 @@ function getMarbeteColorStyle(colorName?: string) {
   const subtotalBruto = subtotalGravableBase + subtotalExentoBase + costoServicios;
   const recargo = recargoTotal;
 
-  if (isFiscalActive && aplicarItbis && itbisRate > 0) {
+  const isDOTenant = (tenant?.pais_codigo || "DO") === "DO";
+  const shouldApplyTax = isDOTenant
+    ? (isFiscalActive && aplicarItbis && itbisRate > 0)
+    : (cfg.cobrar_impuesto !== false && aplicarItbis && itbisRate > 0);
+
+  if (shouldApplyTax) {
     if (cfg.itbis_incluido) {
       // ITBIS ya está en los precios.
       // Calculamos cuánto de la base gravable es ITBIS
@@ -2549,7 +2561,7 @@ function getMarbeteColorStyle(colorName?: string) {
       saldo = 0;
     } else if (condicionCobro === "ANTICIPO") {
       if (anticipoMonto <= 0) {
-        toast.error("Ingresa un monto de anticipo mayor a RD$0.00");
+        toast.error(`Ingresa un monto de anticipo mayor a ${formatRD(0)}`);
         releaseOrderCreation();
         return;
       }
@@ -2638,7 +2650,7 @@ function getMarbeteColorStyle(colorName?: string) {
       } else if (instrumentoPago === "MIXTO") {
         const sumaMixto = +(pagoEfectivo + pagoTarjeta + pagoTransferencia).toFixed(2);
         if (Math.abs(sumaMixto - pagado) > 0.01) {
-          toast.error(`La suma de los métodos (RD${sumaMixto}) debe ser igual al monto a cobrar (RD${pagado}).`);
+          toast.error(`La suma de los métodos (${formatRD(sumaMixto)}) debe ser igual al monto a cobrar (${formatRD(pagado)}).`);
           releaseOrderCreation();
           return;
         }
@@ -2679,7 +2691,10 @@ function getMarbeteColorStyle(colorName?: string) {
     }
 
     try {
-      const numero = await nextOrdenNumero(tenant.id);
+      const numero = await nextOrdenNumero(tenant.id, {
+        prefijo: cfg.ticket_prefijo_orden,
+        formato: cfg.ticket_formato_numero,
+      });
 
       const deliveryDate = new Date(fechaEntrega || new Date());
       const horasAdd = esUrgente
@@ -3055,7 +3070,7 @@ function getMarbeteColorStyle(colorName?: string) {
         const clienteSnapshot = { ...targetCliente };
         const ordenSnapshot = { ...ordenActualizada };
         const waConfig = tenant.config?.whatsapp;
-        const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+        const isAutomatedActive = isWhatsAppAutomatedActive(waConfig);
         const allowManual = (tenant.config?.whatsapp_web_manual ?? DEFAULT_CONFIG.whatsapp_web_manual ?? true) !== false;
         const clienteNombre = [clienteSnapshot.nombre, clienteSnapshot.apellido].filter((x) => x && x !== "null").join(" ") || clienteSnapshot.nombre;
 
@@ -3069,7 +3084,7 @@ function getMarbeteColorStyle(colorName?: string) {
               montoRecibido
             ).then(async (res) => {
               if (res.ok) {
-                toast.success("Recibo digital enviado por WhatsApp al cliente 📱");
+                toastWhatsAppSuccess("Recibo enviado por WhatsApp");
               } else {
                 if (res.reason && !res.reason.includes("desactivad") && !res.reason.includes("deshabilitad")) {
                   console.warn("WhatsApp automático no enviado:", res.reason);
@@ -3110,7 +3125,7 @@ function getMarbeteColorStyle(colorName?: string) {
                 });
               }
             });
-          }, 2000);
+          }, 150);
         } else if (allowManual) {
           setTimeout(async () => {
             try {
@@ -3744,12 +3759,17 @@ function getMarbeteColorStyle(colorName?: string) {
                   <div className="flex items-center gap-3">
                     <div className="flex flex-1 items-center gap-2 min-w-0">
                       <div
-                        className={`relative flex-1 rounded-xl transition-all duration-200 ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}
+                        className={`relative flex-1 rounded-2xl transition-all duration-200 ${searchGlow ? "ring-2 ring-primary/30 shadow-[0_0_12px_rgba(var(--primary),0.15)]" : ""}`}
                       >
-                        <Search className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                        <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                         <Input
                           value={posSearch}
                           onChange={(event) => setPosSearch(event.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Escape") {
+                              setPosSearch("");
+                            }
+                          }}
                           placeholder={
                             posFilterTab === "SERVICIOS"
                               ? "Búsqueda de servicios..."
@@ -3758,8 +3778,23 @@ function getMarbeteColorStyle(colorName?: string) {
                                 : "Buscar prenda o servicio..."
                           }
                           aria-label="Buscar en el catálogo"
-                          className="h-10 rounded-xl border-slate-200 bg-slate-50/80 pl-10 pr-3 shadow-none transition-colors focus-visible:border-primary/40 focus-visible:bg-white focus-visible:ring-2 focus-visible:ring-primary/15 dark:border-slate-700 dark:bg-slate-900/80 dark:focus-visible:bg-slate-900 text-xs font-medium"
+                          className="h-12 rounded-2xl border-slate-200/90 dark:border-slate-800 bg-slate-50/90 dark:bg-slate-900/90 pl-11 pr-26 shadow-2xs transition-all focus-visible:border-primary/50 focus-visible:bg-white dark:focus-visible:bg-slate-950 focus-visible:ring-4 focus-visible:ring-primary/10 text-sm font-medium font-display placeholder:text-slate-400 dark:placeholder:text-slate-500"
                         />
+
+                        {/* Botón interno rojo permanente para limpiar campo */}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setPosSearch("");
+                            const input = document.querySelector('input[placeholder*="Buscar prenda"]') as HTMLInputElement;
+                            if (input) input.focus();
+                          }}
+                          title="Limpiar campo de búsqueda"
+                          className="absolute right-2 top-1/2 -translate-y-1/2 h-8 px-2.5 rounded-xl bg-rose-500 hover:bg-rose-600 active:bg-rose-700 text-white flex items-center gap-1.5 text-xs font-bold font-display shadow-xs transition-all active:scale-95 cursor-pointer z-10"
+                        >
+                          <Eraser className="h-3.5 w-3.5 shrink-0" />
+                          <span>Limpiar</span>
+                        </button>
                       </div>
 
                       {enablePrendas && (posFilterTab === "PRENDAS" || cfg?.pos_modalidad_operativa === "PRENDAS_CON_SERVICIOS") && (
@@ -3767,7 +3802,7 @@ function getMarbeteColorStyle(colorName?: string) {
                           type="button"
                           variant="outline"
                           onClick={() => setShowCategoryModal(true)}
-                          className="h-10 px-3 bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl font-extrabold text-xs text-slate-700 dark:text-slate-200 shadow-2xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer"
+                          className="h-12 px-3.5 bg-slate-50 dark:bg-slate-900 border border-slate-200/90 dark:border-slate-700 rounded-2xl font-black font-display text-xs text-slate-700 dark:text-slate-200 shadow-2xs hover:bg-slate-100 dark:hover:bg-slate-800 transition-all uppercase tracking-wider flex items-center gap-2 cursor-pointer shrink-0"
                         >
                           <Tag className="h-3.5 w-3.5 text-primary shrink-0" />
                           <span className="truncate max-w-[130px]">
@@ -4126,8 +4161,8 @@ function getMarbeteColorStyle(colorName?: string) {
                                     </div>
 
                                     {item.por_libra && (
-                                      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-500/15 text-emerald-700 dark:text-emerald-300 text-[9px] font-black border border-emerald-500/25 backdrop-blur-xs">
-                                        <Scale className="h-2.5 w-2.5" />
+                                      <div className="absolute top-2 left-2 flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-emerald-600 text-white text-[9px] font-black shadow-xs">
+                                        <Scale className="h-2.5 w-2.5 text-white" />
                                         <span>Por Libra</span>
                                       </div>
                                     )}
@@ -4460,7 +4495,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                       >
                                         <Pencil className="h-3 w-3 text-[#F0B900] mr-1 shrink-0" />
                                         <span className="text-[10.5px] font-black text-slate-500 select-none mr-1">
-                                          RD$
+                                          {currencySymbol}
                                         </span>
                                         <PriceInput
                                           className="w-16 sm:w-20 h-5 p-0 text-right text-xs sm:text-[13px] font-black font-display text-slate-900 dark:text-slate-100 border-none bg-transparent focus:outline-none focus:ring-0 shadow-none !ring-0 !border-0 focus-visible:ring-0"
@@ -4694,7 +4729,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                        >
                                          <Pencil className="h-2.5 w-2.5 text-[#F0B900] mr-1 shrink-0" />
                                          <span className="text-[10px] font-black text-slate-500 select-none mr-0.5">
-                                           RD$
+                                           {currencySymbol}
                                          </span>
                                          <PriceInput
                                            className="w-14 sm:w-16 h-4.5 p-0 text-right text-xs font-black font-display text-slate-900 dark:text-slate-100 border-none bg-transparent focus:outline-none focus:ring-0 shadow-none !ring-0 !border-0 focus-visible:ring-0"
@@ -4906,7 +4941,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                 <div className="flex flex-col items-end gap-0.5">
                                   <div className="flex items-center gap-1.5">
                                     <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
-                                      RD$
+                                      {currencySymbol}
                                     </span>
                                     <PriceInput
                                       className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
@@ -4929,7 +4964,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               ) : (
                                 <div className="text-xs font-black text-primary">
                                   {isDetail && (it.precio_unitario || 0) === 0
-                                    ? "RD$0.00"
+                                    ? formatRD(0)
                                     : formatRD(it.cantidad * it.precio_unitario)}
                                 </div>
                               )}
@@ -4970,11 +5005,11 @@ function getMarbeteColorStyle(colorName?: string) {
               {fechaEntrega && (
                 <div
                   onClick={() => setShowDeliveryDatePickerPOS(true)}
-                  className="w-full flex items-center justify-between px-3 py-1.5 rounded-xl border border-transparent bg-primary text-white shadow-md hover:bg-primary/95 transition-all cursor-pointer group"
+                  className="w-full flex items-center justify-between px-3.5 py-2 rounded-xl border border-transparent bg-primary text-white shadow-md hover:bg-primary/95 transition-all cursor-pointer group"
                 >
-                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                  <div className="flex items-center gap-2.5 min-w-0 flex-1">
                     <CalendarIcon className="h-4 w-4 text-white shrink-0" />
-                    <span className="text-[13px] font-bold text-white whitespace-nowrap overflow-hidden text-ellipsis">
+                    <span className="text-[13px] font-bold font-display text-white whitespace-nowrap overflow-hidden text-ellipsis">
                       {(() => {
                         const weekday = fechaEntrega.toLocaleDateString("es-DO", {
                           weekday: "long",
@@ -4983,11 +5018,19 @@ function getMarbeteColorStyle(colorName?: string) {
                         const day = fechaEntrega.getDate();
                         const month = fechaEntrega.toLocaleDateString("es-DO", { month: "long" });
                         const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
-                        return `${capWeekday}, ${day} de ${capMonth}`;
+
+                        const hoy = new Date();
+                        hoy.setHours(0, 0, 0, 0);
+                        const target = new Date(fechaEntrega);
+                        target.setHours(0, 0, 0, 0);
+                        const diffDays = Math.round((target.getTime() - hoy.getTime()) / (1000 * 60 * 60 * 24));
+                        const tagDias = diffDays === 0 ? "Hoy" : diffDays === 1 ? "Mañana" : diffDays > 1 ? `${diffDays} días` : "";
+
+                        return `${capWeekday}, ${day} de ${capMonth}${tagDias ? ` · (${tagDias})` : ""}`;
                       })()}
                     </span>
                   </div>
-                  <span className="text-[10px] font-black uppercase tracking-wider px-2 py-0.5 rounded bg-yellow-400 text-black shrink-0 transition-all hover:bg-yellow-300 shadow-2xs ml-2">
+                  <span className="text-[10px] font-black uppercase font-display tracking-wider px-2.5 py-1 rounded-lg bg-yellow-400 text-slate-900 shrink-0 transition-all hover:bg-yellow-300 shadow-2xs ml-2">
                     Cambiar
                   </span>
                 </div>
@@ -5027,7 +5070,7 @@ function getMarbeteColorStyle(colorName?: string) {
                 )}
                 {itbis > 0 && (
                   <div className="flex justify-between text-xs text-muted-foreground font-bold">
-                    <span>ITBIS ({cfg.itbis_porcentaje}%)</span>
+                    <span>{taxName} ({taxRate}%)</span>
                     <span>{formatRD(itbis)}</span>
                   </div>
                 )}
@@ -5490,7 +5533,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                 {s.nombre}
                               </div>
                               <div className="mt-0.5 text-xs font-display font-extrabold text-emerald-600 tracking-tight">
-                                {s.precio > 0 ? formatRD(s.precio) : "RD$0.00"}
+                                {s.precio > 0 ? formatRD(s.precio) : formatRD(0)}
                               </div>
                             </div>
                             {srvCount > 0 && (
@@ -5570,7 +5613,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   <div className="flex flex-col items-end gap-1">
                                     <div className="flex items-center gap-1.5">
                                       <span className="text-xs font-bold text-muted-foreground select-none">
-                                        RD$
+                                        {currencySymbol}
                                       </span>
                                       <PriceInput
                                         className="w-24 sm:w-28 h-8.5 px-2 text-center text-sm font-black font-display border border-primary/40 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
@@ -5718,7 +5761,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               <div className="flex flex-col items-end gap-1">
                                 <div className="flex items-center gap-1.5">
                                   <span className="text-xs sm:text-sm font-black font-display text-muted-foreground select-none">
-                                    RD$
+                                    {currencySymbol}
                                   </span>
                                   <PriceInput
                                     className="w-24 sm:w-28 h-9 px-2 text-center !text-base sm:!text-lg md:!text-lg font-black font-display tracking-tight border-2 border-primary/50 bg-background focus:border-primary focus-visible:ring-1 focus-visible:ring-primary rounded-xl shadow-xs"
@@ -5740,7 +5783,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               </div>
                             ) : (
                               <div className="font-display text-lg">
-                                {isDetail && (it.precio_unitario || 0) === 0 ? "RD$0.00" : formatRD(it.cantidad * it.precio_unitario)}
+                                {isDetail && (it.precio_unitario || 0) === 0 ? formatRD(0) : formatRD(it.cantidad * it.precio_unitario)}
                               </div>
                             )}
                           </div>
@@ -5955,7 +5998,7 @@ function getMarbeteColorStyle(colorName?: string) {
                               <p className="mt-1 text-[10px] text-muted-foreground">
                                 Se guardará en la ficha del cliente si es nueva.
                               </p>
-                              <Field label="Costo de envío (RD$)">
+                              <Field label={`Costo de envío (${currencySymbol})`}>
                                 <PriceInput
                                   value={costoDomicilio}
                                   onChange={setCostoDomicilio}
@@ -5994,7 +6037,7 @@ function getMarbeteColorStyle(colorName?: string) {
                                   <Percent className="h-4 w-4" />
                                 </div>
                                 <span className="text-sm font-bold text-slate-800 dark:text-slate-200">
-                                  Aplicar ITBIS ({cfg.itbis_porcentaje}%)
+                                  Aplicar {taxName} ({taxRate}%)
                                 </span>
                               </div>
                               <Switch checked={aplicarItbis} onCheckedChange={setAplicarItbis} />
@@ -6230,7 +6273,7 @@ function getMarbeteColorStyle(colorName?: string) {
                           </div>
                           <div className="relative h-14">
                             <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-[#1B4B73]/60">
-                              RD$
+                              {currencySymbol}
                             </span>
                             <PriceInput
                               className="!h-full pl-14 !text-3xl font-black font-display bg-white dark:bg-slate-900 border-2 border-[#1B4B73]/30 focus-visible:ring-[#1B4B73]/30 rounded-xl text-[#1B4B73] dark:text-sky-300 shadow-2xs"
@@ -6258,7 +6301,7 @@ function getMarbeteColorStyle(colorName?: string) {
                             </Label>
                             <div className="rounded-2xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-3 flex items-center justify-between">
                               <div className="flex items-center gap-2 flex-1">
-                                <span className="font-black text-lg text-slate-400 pl-1">RD$</span>
+                                <span className="font-black text-lg text-slate-400 pl-1">{currencySymbol}</span>
                                 <PriceInput
                                   className="h-10 w-full !text-2xl font-black font-display bg-transparent border-none focus-visible:ring-0 text-[#1B4B73] dark:text-sky-200 p-0 shadow-none"
                                   value={recibido}
@@ -6285,11 +6328,9 @@ function getMarbeteColorStyle(colorName?: string) {
                                 : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600"
                             }`}>
                               <div className="flex items-center gap-1.5 pl-1">
-                                <span className="font-bold text-sm opacity-80">RD$</span>
+                                <span className="font-bold text-sm opacity-80">{currencySymbol}</span>
                                 <span className="text-2xl font-display font-black leading-none">
-                                  {formatRD(
-                                    recibido > total ? recibido - total : total - recibido
-                                  ).replace("RD$", "").trim()}
+                                  {(recibido > total ? recibido - total : total - recibido).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                                 </span>
                               </div>
                               <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
@@ -6430,7 +6471,7 @@ function getMarbeteColorStyle(colorName?: string) {
                             Cobro contra entrega (Pago al retirar)
                           </strong>
                           <span className="text-xs">
-                            La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo
+                            La orden se registrará con <b>{formatRD(0)} pagados</b> y se creará un saldo
                             pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a
                             retirar su ropa.
                           </span>
@@ -6500,7 +6541,7 @@ function getMarbeteColorStyle(colorName?: string) {
                             </Label>
                             <div className="relative h-13">
                               <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-base text-amber-600/40">
-                                RD$
+                                {currencySymbol}
                               </span>
                               <PriceInput
                                 className="!h-full pl-14 !text-2xl font-black font-display bg-white dark:bg-slate-900 border-2 border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 font-bold shadow-2xs"
@@ -8835,7 +8876,7 @@ function getMarbeteColorStyle(colorName?: string) {
 
                     <div className="relative h-11">
                       <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-sm text-amber-600/70">
-                        RD$
+                        {currencySymbol}
                       </span>
                       <PriceInput
                         className="!h-full pl-12 !text-lg font-black font-display bg-white dark:bg-slate-900 border-2 border-amber-400/50 focus-visible:ring-amber-400/30 rounded-xl text-amber-800 dark:text-amber-200 shadow-2xs"
@@ -8930,7 +8971,7 @@ function getMarbeteColorStyle(colorName?: string) {
                     </div>
                     <div className="relative h-13">
                       <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-[#1B4B73]/60">
-                        RD$
+                        {currencySymbol}
                       </span>
                       <PriceInput
                         className="!h-full pl-14 !text-2xl font-black font-display bg-white dark:bg-slate-900 border-2 border-[#1B4B73]/30 focus-visible:ring-[#1B4B73]/30 rounded-xl text-[#1B4B73] dark:text-sky-300 shadow-2xs"
@@ -8963,7 +9004,7 @@ function getMarbeteColorStyle(colorName?: string) {
                       <div className="rounded-2xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2.5 flex items-center justify-between">
                         <div className="flex items-center gap-2 flex-1">
                           <span className="font-black text-base text-slate-400 dark:text-slate-500 pl-1">
-                            RD$
+                            {currencySymbol}
                           </span>
                           <PriceInput
                             className="h-10 w-full !text-2xl font-black font-display bg-transparent border-none focus-visible:ring-0 text-[#1B4B73] dark:text-sky-200 p-0 shadow-none"
@@ -8991,13 +9032,9 @@ function getMarbeteColorStyle(colorName?: string) {
                           : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
                       }`}>
                         <div className="flex items-center gap-1.5 pl-1">
-                          <span className="font-bold text-sm opacity-80">RD$</span>
+                          <span className="font-bold text-sm opacity-80">{currencySymbol}</span>
                           <span className="text-2xl font-display font-black leading-none">
-                            {formatRD(
-                              recibido > montoCobroHoy
-                                ? recibido - montoCobroHoy
-                                : montoCobroHoy - recibido
-                            ).replace("RD$", "").trim()}
+                            {(recibido > montoCobroHoy ? recibido - montoCobroHoy : montoCobroHoy - recibido).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         </div>
                         <div className={`h-9 w-9 rounded-xl flex items-center justify-center shrink-0 ${
@@ -9155,7 +9192,7 @@ function getMarbeteColorStyle(colorName?: string) {
                       Cobro contra entrega (Pago al retirar)
                     </strong>
                     <span className="text-xs">
-                      La orden se registrará con <b>RD$0.00 pagados</b> y se creará un saldo
+                      La orden se registrará con <b>{formatRD(0)} pagados</b> y se creará un saldo
                       pendiente de <b>{formatRD(total)}</b> que se cobrará cuando el cliente venga a
                       retirar su ropa.
                     </span>
@@ -9225,7 +9262,7 @@ function getMarbeteColorStyle(colorName?: string) {
                       </Label>
                       <div className="relative h-12">
                         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-base text-amber-600/40">
-                          RD$
+                          {currencySymbol}
                         </span>
                         <PriceInput
                           className="!h-full pl-12 !text-2xl font-black font-display bg-white dark:bg-slate-900 border-2 border-amber-500/30 rounded-xl text-amber-700 dark:text-amber-300 font-bold shadow-2xs"
@@ -9813,14 +9850,14 @@ function DeliveryPOSDialog({
               <div className="space-y-2 rounded-2xl bg-slate-50/70 dark:bg-slate-900/40 p-3 border border-slate-100 dark:border-slate-800">
                 <div className="flex items-center justify-between">
                   <Label className="font-bold text-xs text-slate-800 dark:text-slate-200">
-                    Costo de Envío (RD$)
+                    Costo de Envío ({getActiveTenantLocalization().moneda_simbolo || "RD$"})
                   </Label>
                   <span className="text-[10px] text-slate-400">Se sumará al total</span>
                 </div>
 
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 font-black text-muted-foreground/60 text-xs">
-                    RD$
+                    {getActiveTenantLocalization().moneda_simbolo || "RD$"}
                   </span>
                   <PriceInput
                     value={cost}
@@ -10647,24 +10684,13 @@ function DeliveryDatePickerPOSDialog({
   cfg: any;
 }) {
   const [tempDate, setTempDate] = useState<Date | undefined>(fechaEntrega || new Date());
-  const [tempIsUrgente, setTempIsUrgente] = useState(esUrgente);
 
   // Sync internal state when opened
   useEffect(() => {
     if (open) {
       setTempDate(fechaEntrega || new Date());
-      setTempIsUrgente(esUrgente);
     }
-  }, [open, fechaEntrega, esUrgente]);
-
-  const aplicarAtajo = (horas: number, deUrgencia: boolean) => {
-    const d = new Date();
-    d.setHours(d.getHours() + horas);
-    // Reiniciar horas para basarnos solo en fecha limpia
-    d.setHours(12, 0, 0, 0);
-    setTempDate(d);
-    setTempIsUrgente(deUrgencia);
-  };
+  }, [open, fechaEntrega]);
 
   const handleSave = () => {
     if (tempDate) {
@@ -10675,203 +10701,147 @@ function DeliveryDatePickerPOSDialog({
     } else {
       setFechaEntrega(undefined);
     }
-    setEsUrgente(tempIsUrgente);
     onOpenChange(false);
   };
 
-  const tiempoEstandar = cfg.tiempo_entrega_estandar || 24;
-  const tiempoUrgente = cfg.tiempo_entrega_urgente || 6;
+  // Cálculo de conteo de días y estado
+  const getInfoDias = (targetDate?: Date) => {
+    if (!targetDate) return null;
+    const hoy = new Date();
+    hoy.setHours(0, 0, 0, 0);
+    const target = new Date(targetDate);
+    target.setHours(0, 0, 0, 0);
+
+    const diffTime = target.getTime() - hoy.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays === 0) {
+      return {
+        dias: 0,
+        badgeText: "Entrega Hoy",
+        badgeColor: "bg-emerald-600 text-white",
+        descripcion: "Mismo día de recepción (0 días)",
+      };
+    } else if (diffDays === 1) {
+      return {
+        dias: 1,
+        badgeText: "Mañana (1 día)",
+        badgeColor: "bg-sky-600 text-white",
+        descripcion: "Entrega programada en 24h",
+      };
+    } else if (diffDays > 1) {
+      return {
+        dias: diffDays,
+        badgeText: `En ${diffDays} días`,
+        badgeColor: "bg-[#1B4B73] text-white",
+        descripcion: `Plazo de ${diffDays} días (${diffDays * 24}h preparación)`,
+      };
+    } else {
+      const diasAtras = Math.abs(diffDays);
+      return {
+        dias: diffDays,
+        badgeText: `Fecha anterior`,
+        badgeColor: "bg-amber-600 text-white",
+        descripcion: `Seleccionado hace ${diasAtras} ${diasAtras === 1 ? "día" : "días"}`,
+      };
+    }
+  };
+
+  const infoDias = getInfoDias(tempDate);
+
+  const getFormattedDate = (d?: Date) => {
+    if (!d) return "No seleccionada";
+    const weekday = d.toLocaleDateString("es-DO", { weekday: "long" });
+    const day = d.getDate();
+    const month = d.toLocaleDateString("es-DO", { month: "long" });
+    const year = d.getFullYear();
+    const capWeekday = weekday.charAt(0).toUpperCase() + weekday.slice(1);
+    const capMonth = month.charAt(0).toUpperCase() + month.slice(1);
+    return `${capWeekday}, ${day} de ${capMonth} ${year}`;
+  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-[90vw] sm:max-w-[530px] rounded-xl p-4.5 border-none bg-white dark:bg-slate-950 shadow-2xl">
-        <DialogHeader className="pb-2.5 border-b border-border/40">
-          <DialogTitle className="text-sm font-black tracking-tight text-slate-800 dark:text-slate-100 flex items-center gap-2 uppercase">
-            <CalendarDays className="h-4 w-4 text-primary" />
-            Programar Entrega
-          </DialogTitle>
+      <DialogContent className="max-w-[92vw] sm:max-w-[360px] rounded-2xl p-4 sm:p-4.5 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-950 shadow-2xl">
+        {/* Encabezado Compacto */}
+        <DialogHeader className="pb-2 border-b border-border/40">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-[#1B4B73]/10 dark:bg-sky-400/10 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0">
+              <CalendarDays className="h-4 w-4" />
+            </div>
+            <div>
+              <DialogTitle className="text-sm font-black font-display tracking-tight text-slate-800 dark:text-slate-100 uppercase">
+                Fecha de Entrega
+              </DialogTitle>
+              <DialogDescription className="text-[11px] text-muted-foreground font-sans mt-0.5 leading-tight">
+                Selecciona el día de retiro en el calendario.
+              </DialogDescription>
+            </div>
+          </div>
         </DialogHeader>
 
-        <div className="flex flex-col sm:flex-row gap-4 py-3">
-          {/* Columna Izquierda: Atajos + Resumen */}
-          <div className="flex-1 flex flex-col justify-between gap-3">
-            <div>
-              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-2">
-                Atajos Rápidos
-              </span>
+        {/* Cuerpo: Calendario Compacto */}
+        <div className="flex flex-col items-center justify-center py-1">
+          <div className="w-full flex justify-center">
+            <Calendar
+              mode="single"
+              selected={tempDate}
+              onSelect={(d) => {
+                if (d) {
+                  const newD = new Date(d);
+                  newD.setHours(12, 0, 0, 0); // Limpio a mediodía neutro
+                  setTempDate(newD);
+                }
+              }}
+              locale={es}
+              className="rounded-xl border border-slate-200/70 dark:border-slate-800 p-1.5 bg-slate-50/40 dark:bg-slate-900/40 shadow-2xs [--cell-size:1.75rem]"
+            />
+          </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                {/* COLUMNA URGENTE */}
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => aplicarAtajo(tiempoUrgente, true)}
-                    className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-semibold tracking-tight transition-all text-center flex items-center justify-center gap-1 cursor-pointer h-9.5 ${
-                      tempIsUrgente &&
-                      tempDate &&
-                      Math.abs(
-                        tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000),
-                      ) < 60000
-                        ? "bg-rose-500 border-rose-500 text-white shadow-xs"
-                        : "bg-rose-50 border-rose-100 text-rose-700 hover:bg-rose-100/70 hover:text-rose-800 dark:bg-rose-950/20 dark:border-rose-900/40 dark:text-rose-400"
-                    }`}
-                  >
-                    <AlertTriangle
-                      className={`h-3.5 w-3.5 shrink-0 ${tempIsUrgente && tempDate && Math.abs(tempDate.getTime() - (new Date().getTime() + tiempoUrgente * 3600000)) < 60000 ? "text-white" : "text-rose-500"}`}
-                    />
-                    <span>Urgente ({tiempoUrgente}h)</span>
-                  </button>
-
-                  <div className="text-[9px] font-bold text-slate-400 dark:text-slate-500 block mb-1">
-                    Otros plazos urgentes:
-                  </div>
-                  <div className="grid grid-cols-2 gap-1">
-                    {[3, 6, 12]
-                      .filter((h) => h !== tiempoUrgente)
-                      .map((h) => {
-                        const isAct =
-                          tempIsUrgente &&
-                          tempDate &&
-                          Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) <
-                            60000;
-                        return (
-                          <button
-                            key={h}
-                            type="button"
-                            onClick={() => aplicarAtajo(h, true)}
-                            className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
-                              isAct
-                                ? "bg-rose-500 border-rose-500 text-white shadow-xs"
-                                : "border-rose-100 bg-rose-50/20 text-rose-600 hover:bg-rose-50 dark:border-rose-900/20 dark:bg-rose-950/10 dark:text-rose-400"
-                            }`}
-                          >
-                            {h}h
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
-
-                {/* COLUMNA ESTÁNDAR */}
-                <div className="space-y-2">
-                  <button
-                    type="button"
-                    onClick={() => aplicarAtajo(tiempoEstandar, false)}
-                    className={`w-full py-1.5 px-2 rounded-lg border text-[11px] font-semibold tracking-tight transition-all text-center flex items-center justify-center gap-1 cursor-pointer h-9.5 ${
-                      !tempIsUrgente &&
-                      tempDate &&
-                      Math.abs(
-                        tempDate.getTime() - (new Date().getTime() + tiempoEstandar * 3600000),
-                      ) < 60000
-                        ? "bg-primary border-primary text-white shadow-xs"
-                        : "bg-primary/5 border-primary/10 text-primary hover:bg-primary/10 dark:bg-primary/20 dark:border-primary/40 dark:text-primary-foreground"
-                    }`}
-                  >
-                    <span>
-                      Estándar (
-                      {tiempoEstandar >= 24 ? `${tiempoEstandar / 24}d` : `${tiempoEstandar}h`})
-                    </span>
-                  </button>
-
-                  <div className="text-[9px] font-bold text-slate-400 dark:text-slate-550 block mb-1">
-                    Otros plazos estándar:
-                  </div>
-                  <div className="grid grid-cols-3 gap-1">
-                    {[24, 48, 72, 96]
-                      .filter((h) => h !== tiempoEstandar)
-                      .map((h) => {
-                        const isAct =
-                          !tempIsUrgente &&
-                          tempDate &&
-                          Math.abs(tempDate.getTime() - (new Date().getTime() + h * 3600000)) <
-                            60000;
-                        const labelMap: Record<number, string> = {
-                          24: "1d",
-                          48: "2d",
-                          72: "3d",
-                          96: "4d",
-                        };
-                        return (
-                          <button
-                            key={h}
-                            type="button"
-                            onClick={() => aplicarAtajo(h, false)}
-                            className={`py-1 rounded-md border text-[10px] font-semibold transition-all text-center cursor-pointer h-7 ${
-                              isAct
-                                ? "bg-primary border-primary text-white shadow-xs"
-                                : "border-primary/10 bg-primary/5 text-primary hover:bg-primary/10 dark:border-primary/30 dark:bg-primary/10 dark:text-primary-foreground"
-                            }`}
-                          >
-                            {labelMap[h]}
-                          </button>
-                        );
-                      })}
-                  </div>
-                </div>
+          {/* Tarjeta de Resumen con Conteo Dinámico de Días Compacta */}
+          {tempDate && infoDias && (
+            <div className="mt-2.5 w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-2.5 flex items-center justify-between gap-2.5 shadow-2xs">
+              <div className="min-w-0 flex-1">
+                <span className="text-[9px] font-bold uppercase tracking-wider text-muted-foreground block font-display">
+                  Fecha Seleccionada
+                </span>
+                <span className="text-xs font-black text-slate-800 dark:text-slate-100 font-display truncate block mt-0.5">
+                  {getFormattedDate(tempDate)}
+                </span>
+                <span className="text-[10.5px] text-muted-foreground font-sans block mt-0.5">
+                  {infoDias.descripcion}
+                </span>
               </div>
-            </div>
 
-            {/* Resumen */}
-            <div className="p-3 rounded-xl border border-primary/10 bg-gradient-to-r from-primary/5 to-transparent relative overflow-hidden shadow-xs">
-              <div className="absolute top-0 left-0 bottom-0 w-1 bg-primary" />
-              <div className="pl-2">
-                <div className="text-[9px] font-black uppercase tracking-widest text-primary/70 mb-1">
-                  Fecha de entrega
-                </div>
-                <div className="text-[13px] font-black text-slate-800 dark:text-slate-100 capitalize">
-                  {tempDate
-                    ? tempDate.toLocaleDateString("es-DO", {
-                        weekday: "long",
-                        day: "numeric",
-                        month: "long",
-                      })
-                    : "No definida"}
-                </div>
-                {tempIsUrgente && (
-                  <span className="inline-block mt-1.5 px-2 py-0.5 rounded bg-rose-500/10 text-rose-600 dark:text-rose-455 text-[8px] font-black uppercase tracking-wider">
-                    Urgente (+{cfg.recargo_urgencia}%)
+              {/* Badge Dinámico del Conteo de Días */}
+              <div className="flex flex-col items-end shrink-0 gap-0.5">
+                <span className={`text-[11px] font-black font-display px-2.5 py-0.5 rounded-full shadow-2xs ${infoDias.badgeColor}`}>
+                  {infoDias.badgeText}
+                </span>
+                {esUrgente && (
+                  <span className="text-[8.5px] font-bold text-rose-500 font-display flex items-center gap-0.5">
+                    ⚡ Urgente
                   </span>
                 )}
               </div>
             </div>
-          </div>
-
-          {/* Columna Derecha: Calendario */}
-          <div className="flex justify-center items-center border-t sm:border-t-0 sm:border-l border-border/40 pt-3 sm:pt-0 sm:pl-4">
-            <div className="flex flex-col items-center">
-              <span className="text-[10px] font-black uppercase tracking-wider text-muted-foreground block mb-1.5 self-start sm:ml-1">
-                Selección de Fecha
-              </span>
-              <Calendar
-                mode="single"
-                selected={tempDate}
-                onSelect={(d) => {
-                  if (d) {
-                    const newD = new Date(d);
-                    newD.setHours(12, 0, 0, 0); // Limpio a mediodía neutro
-                    setTempDate(newD);
-                  }
-                }}
-                locale={es}
-                className="rounded-xl border border-primary/20 shadow-lg shadow-primary/5 bg-white dark:bg-slate-900 p-2.5 scale-90 sm:scale-95 origin-center"
-              />
-            </div>
-          </div>
+          )}
         </div>
 
-        <DialogFooter className="pt-3 border-t border-border/40 gap-1.5 flex-row justify-end">
+        {/* Footer Compacto */}
+        <DialogFooter className="pt-2 border-t border-border/40 flex-row items-center justify-end gap-2">
           <Button
             type="button"
             variant="outline"
             onClick={() => onOpenChange(false)}
-            className="rounded-lg border-border hover:bg-slate-100 dark:hover:bg-slate-900 text-xs font-bold cursor-pointer h-8 px-3"
+            className="rounded-lg border-slate-200 dark:border-slate-800 text-xs font-bold font-display cursor-pointer h-8 px-3.5 hover:bg-slate-100 dark:hover:bg-slate-900"
           >
             Cancelar
           </Button>
           <Button
             type="button"
             onClick={handleSave}
-            className="rounded-lg bg-primary hover:bg-primary/95 text-white text-xs font-bold cursor-pointer h-8 px-3"
+            className="rounded-lg bg-[#1B4B73] hover:bg-[#133857] text-white text-xs font-bold font-display cursor-pointer h-8 px-4.5 shadow-xs transition-all active:scale-[0.98]"
           >
             Aplicar Fecha
           </Button>

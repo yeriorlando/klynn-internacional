@@ -54,3 +54,5 @@ bin/
 obj/
 tools/**/bin/
 tools/**/obj/
+
+supabase/.temp/

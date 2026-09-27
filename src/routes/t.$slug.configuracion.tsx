@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   saveTenant, saveTenantConfig, DEFAULT_CONFIG, formatPhoneRD, formatCedulaRD, PROVINCIAS_RD, NCF_TIPOS,
-  formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD,
+  formatAmountInput, parseAmount, getPlans, updateTenantPlan, getGlobalConfig, formatRD, formatCurrencyByCountry,
   getTenantPlan, getTenantById, getECFConfig, saveECFConfig, getECFSequences, saveECFSequence, nextECFNumero, deleteECFSequence, updateECFConfig,
   isModuleEnabled, sendWeeklySummaryTest, getNextRenewalDate,
   authorizeCurrentTerminal, approveTerminalPairingRequest, revokeTerminal, isCurrentTerminalAuthorized,
@@ -42,16 +42,22 @@ import { toast } from "sonner";
 import { createPortal } from "react-dom";
 import { Ticket } from "@/components/klynn/Ticket";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
-import { WhatsAppOfficialIcon } from "@/components/klynn/WhatsAppManualToast";
+import { WhatsAppOfficialIcon, toastWhatsAppSuccess } from "@/components/klynn/WhatsAppManualToast";
+import { getCountry } from "@/lib/countries";
+import {
+  createNeuroAPIConnectSessionServer,
+  syncNeuroAPINumberServer,
+  disconnectNeuroAPIServer,
+} from "@/lib/neuroapi";
 import { 
   Building2, Shield, TrendingUp, Users, Trash2, ExternalLink, Plus, Pencil, 
   RefreshCw, Package, LogOut, MoreHorizontal, Key, Droplets as DropletsIcon,
   CreditCard, MessageCircle, Send, Loader2, Save, Image as ImageIcon, Upload, Calendar, Clock,
   User, Palette, FileText, Receipt, Banknote, Star, Sparkles, ArrowRight, ArrowLeft, Copy, Smartphone, CheckCircle2, ShieldCheck, PlusCircle, Bell, BellOff, Check, X, Zap, Laptop, Wrench,
-  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
+  FlaskConical, Globe, Printer, Bluetooth, Cpu, Usb, AlertTriangle, AlertCircle, Wifi, Cable, Monitor, Plug, Ban, Search, ClipboardList,
   Store, Mail, Phone, MapPin, Navigation, Layers, MessageSquare, FileEdit,
   Percent, Scale, Wallet, Shirt, Maximize2, Server, QrCode, Unlink, Lock, Tag, WashingMachine, Download, BadgePercent,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Hash, Settings2
 } from "lucide-react";
 import {
   encodeEscPos,
@@ -91,12 +97,31 @@ const NCF_NOMBRES: Record<string, string> = {
   E41: "COMPRAS", E43: "GASTOS MENORES", E44: "REGÍMENES ESPECIALES", E45: "GUBERNAMENTAL", E46: "EXPORTACIONES", E47: "PAGOS AL EXTERIOR",
 };
 
-function Field({ label, children, hint, span, icon: Icon, alignTop }: { label: string; children: React.ReactNode; hint?: string; span?: boolean; icon?: any; alignTop?: boolean }) {
+function Field({ 
+  label, 
+  badge,
+  children, 
+  hint, 
+  span, 
+  icon: Icon, 
+  alignTop 
+}: { 
+  label: React.ReactNode; 
+  badge?: React.ReactNode;
+  children: React.ReactNode; 
+  hint?: string; 
+  span?: boolean; 
+  icon?: any; 
+  alignTop?: boolean 
+}) {
   return (
     <div className={`flex flex-col gap-1.5 ${span ? "md:col-span-2" : ""}`}>
-      <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200`}>
-        {label}
-      </Label>
+      <div className="flex items-center justify-between gap-2 w-full">
+        <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200 whitespace-nowrap`}>
+          {label}
+        </Label>
+        {badge}
+      </div>
       <div className={`relative flex ${alignTop ? "items-start" : "items-center"} w-full`}>
         {Icon && (
           <div className={`absolute left-3.5 ${alignTop ? "top-3" : ""} flex items-center pointer-events-none text-[#1B4B73] dark:text-[#38bdf8] z-10`}>
@@ -106,6 +131,116 @@ function Field({ label, children, hint, span, icon: Icon, alignTop }: { label: s
         {children}
       </div>
       {hint && <p className="text-[11px] text-muted-foreground">{hint}</p>}
+    </div>
+  );
+}
+
+function TiempoEntregaControl({
+  label,
+  icon: Icon,
+  totalHoras,
+  onChange,
+  isUrgente = false,
+}: {
+  label: string;
+  icon: any;
+  totalHoras: number;
+  onChange: (horas: number) => void;
+  isUrgente?: boolean;
+}) {
+  const isMultipleOfDays = totalHoras >= 24 && totalHoras % 24 === 0 && !isUrgente;
+  const [unit, setUnit] = useState<"horas" | "dias">(isMultipleOfDays ? "dias" : "horas");
+  const [amount, setAmount] = useState<number>(isMultipleOfDays ? totalHoras / 24 : totalHoras);
+
+  useEffect(() => {
+    if (unit === "dias") {
+      setAmount(totalHoras >= 24 && totalHoras % 24 === 0 ? totalHoras / 24 : Math.max(1, Math.round(totalHoras / 24)));
+    } else {
+      setAmount(totalHoras);
+    }
+  }, [totalHoras, unit]);
+
+  const handleAmountChange = (newAmount: number) => {
+    const val = Math.max(1, newAmount || 1);
+    setAmount(val);
+    const newTotalHours = unit === "dias" ? val * 24 : val;
+    onChange(newTotalHours);
+  };
+
+  const handleUnitChange = (newUnit: "horas" | "dias") => {
+    setUnit(newUnit);
+    if (newUnit === "dias") {
+      const days = Math.max(1, Math.round(totalHoras / 24));
+      setAmount(days);
+      onChange(days * 24);
+    } else {
+      setAmount(totalHoras);
+      onChange(totalHoras);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-center justify-between gap-1 w-full">
+        <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5`}>
+          <Icon className={`h-4 w-4 shrink-0 ${isUrgente ? "text-amber-500" : "text-[#1B4B73] dark:text-sky-400"}`} />
+          <span className="truncate">{label}</span>
+        </Label>
+        
+        {/* Badge con color sólido */}
+        <span
+          className={`text-[10.5px] font-black font-display px-2.5 py-0.5 rounded-full shrink-0 shadow-xs ${
+            isUrgente
+              ? "bg-amber-500 text-white"
+              : "bg-[#1B4B73] text-white"
+          }`}
+        >
+          {totalHoras >= 24 && totalHoras % 24 === 0
+            ? `${totalHoras / 24} ${totalHoras === 24 ? "día" : "días"} (${totalHoras}h)`
+            : `${totalHoras} ${totalHoras === 1 ? "hora" : "horas"}`}
+        </span>
+      </div>
+
+      <div className="flex items-center gap-1.5 h-11 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 px-2.5 shadow-2xs focus-within:border-[#1B4B73] focus-within:ring-2 focus-within:ring-[#1B4B73]/15 transition-all">
+        <input
+          type="number"
+          min={1}
+          max={unit === "dias" ? 30 : 720}
+          value={amount}
+          onChange={(e) => handleAmountChange(parseInt(e.target.value, 10) || 1)}
+          className="w-full bg-transparent px-2 text-base font-bold font-display text-slate-800 dark:text-slate-100 outline-none"
+        />
+
+        {/* Pestañas Horas / Días con color de fondo */}
+        <div className="flex items-center p-0.5 bg-slate-100 dark:bg-slate-900 rounded-lg shrink-0 border border-slate-200/80 dark:border-slate-800">
+          <button
+            type="button"
+            onClick={() => handleUnitChange("horas")}
+            className={`px-3 py-1 text-xs font-bold font-display rounded-md transition-all cursor-pointer ${
+              unit === "horas"
+                ? isUrgente
+                  ? "bg-amber-500 text-white shadow-2xs"
+                  : "bg-[#1B4B73] text-white shadow-2xs"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+            }`}
+          >
+            Horas
+          </button>
+          <button
+            type="button"
+            onClick={() => handleUnitChange("dias")}
+            className={`px-3 py-1 text-xs font-bold font-display rounded-md transition-all cursor-pointer ${
+              unit === "dias"
+                ? isUrgente
+                  ? "bg-amber-500 text-white shadow-2xs"
+                  : "bg-[#1B4B73] text-white shadow-2xs"
+                : "text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200"
+            }`}
+          >
+            Días
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1248,10 +1383,11 @@ function ConfigPage() {
   const tenantId = auth?.tenant?.id ?? "";
 
   const [tenant, setTenant] = useState<Tenant | null>(null);
+  const tenantCountryCode = tenant?.pais_codigo || auth?.tenant?.pais_codigo || "DO";
   const [activeTab, setActiveTab] = useState("perfil");
   const [billingPeriod, setBillingPeriod] = useState<"monthly" | "yearly">("monthly");
   
-  const { data: plans = [] } = usePlans();
+  const { data: plans = [] } = usePlans(tenantCountryCode);
   const { data: globalConfigData } = useGlobalConfig();
   const { data: ecfConfig, isLoading: loadingECF } = useECFConfig(tenantId);
   const { data: ecfSequences = [] } = useECFSequences(tenantId);
@@ -1538,10 +1674,13 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
   // Prueba de impresión por navegador (window.print)
   function handleTestBrowserPrint() {
     if (!tenant) return;
+    const testPrefix = ((cfg.ticket_prefijo_orden || "KL").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "KL");
+    const testFormat = cfg.ticket_formato_numero || "estandar";
+    const testYm = `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}`;
     const fakeOrden = {
       id: "demo-test",
       tenant_id: tenant?.id || "",
-      numero: "KL-TEST-0001",
+      numero: testFormat === "corto" ? `${testPrefix}-0001` : `${testPrefix}-${testYm}-0001`,
       cliente_id: "demo-cli",
       empleado_id: "demo-emp",
       servicios: ["Lavado y secado"],
@@ -1642,6 +1781,16 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
   const hasFiscal = isModuleEnabled(tenant, 'facturacion_fiscal', plan);
   const hasWA = isModuleEnabled(tenant, 'whatsapp', plan);
   const wa: WhatsAppConfig = cfg.whatsapp || DEFAULT_CONFIG.whatsapp!;
+  const tenantCountry = getCountry(tenant?.pais_codigo || "DO");
+  const regionLabel = tenantCountry.regionsLabel === "Regiones"
+    ? "Región"
+    : (tenantCountry.regionsLabel ? tenantCountry.regionsLabel.replace(/s$/, "") : "Provincia");
+  const countryRegions = (tenantCountry.regions && tenantCountry.regions.length > 0)
+    ? tenantCountry.regions
+    : PROVINCIAS_RD;
+  const regionsToRender = tenant.provincia && !countryRegions.includes(tenant.provincia)
+    ? [tenant.provincia, ...countryRegions]
+    : countryRegions;
   // Impresora Windows (POS80): siempre lista para probar vía diálogo del navegador.
   const isPrinterConnected = true;
 
@@ -1720,12 +1869,22 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
               { id: 'factura', label: 'Ticket', icon: FileText },
               { id: 'caja', label: 'Caja', icon: Banknote },
               { id: 'seguridad', label: 'Seguridad', icon: Shield },
-              { id: 'fiscal', label: 'Fiscal', icon: ShieldCheck, module: 'facturacion_fiscal' },
+              { 
+                id: 'fiscal', 
+                label: 'Fiscal', 
+                icon: ShieldCheck, 
+                module: 'facturacion_fiscal' 
+              },
               { id: 'whatsapp', label: 'WhatsApp', icon: MessageCircle },
               { id: 'notificaciones', label: 'Notificaciones', icon: Bell },
               { id: 'plan', label: 'Plan', icon: CreditCard },
             ]
-            .filter(t => !t.module || isModuleEnabled(tenant, t.module, plans.find(p => p.id === tenant?.plan_id)))
+            .filter(t => {
+              if (t.id === 'fiscal' && tenant?.pais_codigo && tenant.pais_codigo !== "DO") {
+                return true;
+              }
+              return !t.module || isModuleEnabled(tenant, t.module, plans.find(p => p.id === tenant?.plan_id));
+            })
             .map(t => {
               const isActive = activeTab === t.id;
               const Icon = t.icon;
@@ -1776,19 +1935,35 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
 
             <div className="space-y-6">
               {/* Sección 1: Datos de Contacto y Nombre */}
-              <div className="grid gap-5 md:grid-cols-2 lg:grid-cols-4">
-                <Field label="Nombre comercial de la empresa" icon={Building2}>
+              <div className="grid gap-5 sm:grid-cols-2">
+                <Field 
+                  label="Nombre de la lavandería *" 
+                  badge={
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-white bg-slate-700 dark:bg-slate-800 px-2.5 py-0.5 rounded-full shadow-xs select-none whitespace-nowrap shrink-0">
+                      Marca matriz
+                    </span>
+                  }
+                  icon={Store}
+                >
                   <Input 
                     className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-medium`} 
-                    placeholder="Ej: Lavandería Klynn" 
+                    placeholder="Ej. Lavandería Las Américas" 
                     value={tenant.nombre} 
                     onChange={(e) => setTenant({ ...tenant, nombre: e.target.value })} 
                   />
                 </Field>
-                <Field label="Nombre de la sucursal" icon={Store}>
+                <Field 
+                  label="Denominación de la sucursal *" 
+                  badge={
+                    <span className="text-[9.5px] font-black uppercase tracking-wider text-white bg-[#1B4B73] px-2.5 py-0.5 rounded-full shadow-xs select-none whitespace-nowrap shrink-0">
+                      Sede / Ubicación
+                    </span>
+                  }
+                  icon={Store}
+                >
                   <Input 
                     className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-medium`} 
-                    placeholder="Ej: Sucursal principal, Bella Vista..." 
+                    placeholder="Ej. Sucursal Bella Vista" 
                     value={tenant.nombre_sucursal || tenant.config?.nombre_sucursal || ""} 
                     onChange={(e) => {
                       const val = e.target.value;
@@ -1803,9 +1978,12 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                 <Field label="Teléfono de contacto" icon={Phone}>
                   <Input 
                     className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
-                    placeholder="Ej: 809-000-0000" 
-                    value={tenant.telefono} 
-                    onChange={(e) => setTenant({ ...tenant, telefono: formatPhoneRD(e.target.value) })} 
+                    placeholder={tenantCountry.phonePlaceholder || "Ej: 809-000-0000"} 
+                    value={tenant.telefono || ""} 
+                    onChange={(e) => setTenant({ 
+                      ...tenant, 
+                      telefono: (tenant.pais_codigo || "DO") === "DO" ? formatPhoneRD(e.target.value) : e.target.value 
+                    })} 
                   />
                 </Field>
                 <Field label="Correo electrónico" icon={Mail}>
@@ -1820,15 +1998,65 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
               </div>
 
               {/* Sección 2: Ubicación */}
-              <div className="grid gap-5 md:grid-cols-2">
-                <Field label="Provincia" icon={MapPin}>
+              <div className="grid gap-5 md:grid-cols-3">
+                <div className="flex flex-col gap-1.5">
+                  <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center justify-between`}>
+                    <span>País</span>
+                    <span className="text-[10px] text-muted-foreground font-normal">Registrado</span>
+                  </Label>
+                  <div className="flex h-11 w-full items-center justify-between gap-2.5 rounded-xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 px-3.5 shadow-2xs cursor-default select-none">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="relative flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-slate-100 shadow-2xs">
+                        <img
+                          src={`https://flagcdn.com/w80/${tenantCountry.code.toLowerCase()}.png`}
+                          alt={tenantCountry.name}
+                          className="h-full w-full object-cover scale-110 rounded-full"
+                          loading="lazy"
+                        />
+                      </div>
+                      <span className="text-sm font-bold text-slate-900 dark:text-slate-100 tracking-tight truncate">
+                        {tenantCountry.name}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <div className="inline-flex items-center gap-1 rounded-full bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 text-emerald-800 dark:text-emerald-300 border border-emerald-200/70 dark:border-emerald-800/50 shadow-2xs">
+                        <span className="text-[10.5px] font-extrabold text-emerald-950 dark:text-emerald-200">
+                          {tenantCountry.currency.code}
+                        </span>
+                        <span className="text-[10.5px] font-black text-emerald-600 dark:text-emerald-400">
+                          ({tenantCountry.currency.symbol})
+                        </span>
+                      </div>
+                      <div className="hidden sm:inline-flex items-center gap-1 rounded-full bg-indigo-50 dark:bg-indigo-950/40 px-2 py-0.5 text-indigo-800 dark:text-indigo-300 border border-indigo-200/70 dark:border-indigo-800/50 shadow-2xs">
+                        <span className="text-[10px] font-bold text-indigo-950 dark:text-indigo-200">
+                          {tenantCountry.tax.name}
+                        </span>
+                        <span className="text-[10px] font-extrabold text-indigo-600 dark:text-indigo-400">
+                          {tenantCountry.tax.defaultRate}%
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <Field label={regionLabel} icon={MapPin}>
                   <Select value={tenant.provincia || ""} onValueChange={(v) => setTenant({ ...tenant, provincia: v })}>
                     <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
-                      <SelectValue placeholder="Selecciona la provincia..." />
+                      <SelectValue placeholder={`Selecciona ${regionLabel.toLowerCase()}...`} />
                     </SelectTrigger>
-                    <SelectContent>
-                      {PROVINCIAS_RD.map((p) => (
-                        <SelectItem key={p} value={p}>{p}</SelectItem>
+                    <SelectContent className="max-h-72 p-1.5 rounded-2xl border-slate-200/90 dark:border-slate-800 shadow-2xl bg-white dark:bg-slate-900 custom-scrollbar">
+                      {regionsToRender.map((p) => (
+                        <SelectItem
+                          key={p}
+                          value={p}
+                          icon={
+                            <div className="flex h-7.5 w-7.5 shrink-0 items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-500 dark:text-slate-400 group-data-[state=checked]:bg-[#1B4B73]/15 group-data-[state=checked]:text-[#1B4B73] dark:group-data-[state=checked]:bg-sky-400/20 dark:group-data-[state=checked]:text-sky-300 group-data-[highlighted]:!bg-white/20 group-data-[highlighted]:!text-white group-hover:!bg-white/20 group-hover:!text-white group-data-[highlighted]:shadow-xs transition-all duration-150">
+                              <MapPin className="h-4 w-4" />
+                            </div>
+                          }
+                        >
+                          <span className="truncate">{p}</span>
+                        </SelectItem>
                       ))}
                     </SelectContent>
                   </Select>
@@ -1837,7 +2065,7 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                   <Input 
                     className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
                     placeholder="Calle Principal #123, Edificio Los Laureles" 
-                    value={tenant.direccion} 
+                    value={tenant.direccion || ""} 
                     onChange={(e) => setTenant({ ...tenant, direccion: e.target.value })} 
                   />
                 </Field>
@@ -2154,32 +2382,112 @@ Web Bluetooth (Chrome/Edge): ${webBluetoothAvailable}
                   </Select>
                 </Field>
 
-                <Field label="Tiempo de entrega estándar" icon={Clock}>
-                  <Select value={String(cfg.tiempo_entrega_estandar || 24)} onValueChange={(v) => updateCfg({ tiempo_entrega_estandar: Number(v) })}>
-                    <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="24">1 DÍA (24 HORAS)</SelectItem>
-                      <SelectItem value="48">2 DÍAS (48 HORAS)</SelectItem>
-                      <SelectItem value="72">3 DÍAS (72 HORAS)</SelectItem>
-                      <SelectItem value="96">4 DÍAS (96 HORAS)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                <TiempoEntregaControl
+                  label="Tiempo de entrega estándar"
+                  icon={Clock}
+                  totalHoras={cfg.tiempo_entrega_estandar || 24}
+                  onChange={(horas) => updateCfg({ tiempo_entrega_estandar: horas })}
+                  isUrgente={false}
+                />
 
-                <Field label="Tiempo de entrega URGENTE" icon={Zap}>
-                  <Select value={String(cfg.tiempo_entrega_urgente || 6)} onValueChange={(v) => updateCfg({ tiempo_entrega_urgente: Number(v) })}>
-                    <SelectTrigger className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`}>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="3">3 HORAS</SelectItem>
-                      <SelectItem value="6">6 HORAS</SelectItem>
-                      <SelectItem value="12">12 HORAS</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </Field>
+                <TiempoEntregaControl
+                  label="Tiempo de entrega URGENTE"
+                  icon={Zap}
+                  totalHoras={cfg.tiempo_entrega_urgente || 6}
+                  onChange={(horas) => updateCfg({ tiempo_entrega_urgente: horas })}
+                  isUrgente={true}
+                />
+              </div>
+
+              {/* Sección: Identificación y Numeración de Tickets */}
+              <div className="rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/40 p-5 md:p-6 space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-200/70 dark:border-slate-800">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                      <Hash className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-display font-bold text-sm text-foreground">
+                        Identificación y Formato de Tickets
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        Personaliza el prefijo de tu lavandería y la estructura del número de orden impreso.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Vista previa en vivo */}
+                  <div className="flex items-center gap-2 bg-white dark:bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs self-start sm:self-auto">
+                    <span className="text-[11px] font-bold text-muted-foreground uppercase tracking-wider">Vista previa:</span>
+                    <span className="font-display font-black text-sm tracking-tight text-[#1B4B73] dark:text-sky-400 bg-sky-50 dark:bg-sky-950/60 px-2.5 py-0.5 rounded-lg border border-sky-200/70 dark:border-sky-800/60 tabular-nums">
+                      {((cfg.ticket_prefijo_orden || "KL").trim().toUpperCase().replace(/[^A-Z0-9]/g, "") || "KL")}-
+                      {(cfg.ticket_formato_numero === "corto"
+                        ? "0046"
+                        : `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}-0046`)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid gap-5 md:grid-cols-2 pt-1">
+                  {/* Campo 1: Prefijo personalizado */}
+                  <Field 
+                    label="Prefijo de Ticket / Orden" 
+                    icon={Tag}
+                    badge={<span className="text-[10.5px] font-semibold text-muted-foreground">Máx. 5 letras</span>}
+                    hint="Código institucional para tus tickets (por defecto KL, ej: LAV, TINT, ORD, SUC1)."
+                  >
+                    <Input
+                      type="text"
+                      maxLength={5}
+                      value={cfg.ticket_prefijo_orden ?? "KL"}
+                      onChange={(e) => {
+                        const clean = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, "");
+                        updateCfg({ ticket_prefijo_orden: clean });
+                      }}
+                      placeholder="KL"
+                      className={`${FIELD} pl-10.5 font-display font-black text-base tracking-wider uppercase rounded-xl border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 focus-visible:ring-[#1B4B73]`}
+                    />
+                  </Field>
+
+                  {/* Campo 2: Selector de Formato */}
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex items-center justify-between gap-2 w-full">
+                      <Label className={`${LABEL} font-bold text-xs text-slate-700 dark:text-slate-200 flex items-center gap-1.5`}>
+                        <Calendar className="h-4 w-4 text-[#1B4B73] dark:text-[#38bdf8]" />
+                        <span>Formato de Secuencia</span>
+                      </Label>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 h-11">
+                      <button
+                        type="button"
+                        onClick={() => updateCfg({ ticket_formato_numero: "estandar" })}
+                        className={`flex items-center justify-center gap-1.5 px-2.5 rounded-xl border text-xs font-bold font-display transition-all cursor-pointer ${
+                          (cfg.ticket_formato_numero ?? "estandar") === "estandar"
+                            ? "border-[#1B4B73] bg-[#1B4B73] text-white shadow-xs"
+                            : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+                        }`}
+                      >
+                        <span>Con Fecha (Año/Mes)</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateCfg({ ticket_formato_numero: "corto" })}
+                        className={`flex items-center justify-center gap-1.5 px-2.5 rounded-xl border text-xs font-bold font-display transition-all cursor-pointer ${
+                          cfg.ticket_formato_numero === "corto"
+                            ? "border-[#1B4B73] bg-[#1B4B73] text-white shadow-xs"
+                            : "border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-900"
+                        }`}
+                      >
+                        <span>Secuencia Corta</span>
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">
+                      {(cfg.ticket_formato_numero ?? "estandar") === "estandar"
+                        ? "Recomendado por defecto: Incluye año y mes para control mensual (ej: LAV-202609-0046)."
+                        : "Simple y corto: Solo prefijo y correlativo sin fechas, fácil de dictar (ej: LAV-0046)."}
+                    </p>
+                  </div>
+                </div>
               </div>
 
               {/* Fila 2: Mensajes y Textos */}
@@ -2716,13 +3024,13 @@ Tel: ${tenant.telefono || "---"}
 ORDEN: ${printingFakeTicket.orden.numero}
 Fecha: ${new Date().toLocaleString("es-DO")}
 --------------------------------
-1x Lavado y secado       RD$150.00
-2x Prenda de prueba A    RD$240.00
-1x Prenda de prueba B    RD$250.00
+1x Lavado y secado       ${tenant.moneda_simbolo || "RD$"}150.00
+2x Prenda de prueba A    ${tenant.moneda_simbolo || "RD$"}240.00
+1x Prenda de prueba B    ${tenant.moneda_simbolo || "RD$"}250.00
 --------------------------------
-Subtotal:                RD$490.00
-ITBIS 18%:                RD$88.20
-TOTAL:                   RD$578.20
+Subtotal:                ${tenant.moneda_simbolo || "RD$"}490.00
+${tenant.impuesto_nombre || "ITBIS"} ${tenant.impuesto_porcentaje ?? 18}%:                ${tenant.moneda_simbolo || "RD$"}88.20
+TOTAL:                   ${tenant.moneda_simbolo || "RD$"}578.20
 --------------------------------
 ESTADO PAGO: PAGADA
 --------------------------------
@@ -2764,7 +3072,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                   />
                 </Field>
 
-                <Field label="Umbral diferencia caja (RD$)" icon={Scale}>
+                <Field label={`Umbral diferencia caja (${tenant.moneda_simbolo || "RD$"})`} icon={Scale}>
                   <Input 
                     className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
                     value={formatAmountInput(String(cfg.umbral_diferencia_caja))} 
@@ -2772,7 +3080,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                   />
                 </Field>
 
-                <Field label="Máx caja chica (RD$)" icon={Wallet}>
+                <Field label={`Máx caja chica (${tenant.moneda_simbolo || "RD$"})`} icon={Wallet}>
                   <Input 
                     className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
                     value={formatAmountInput(String(cfg.monto_max_caja_chica))} 
@@ -3294,11 +3602,11 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                     </div>
                   )}
 
-                  <div className="space-y-0.5 mb-2">
+                    <div className="space-y-0.5 mb-2">
                     <div className="font-display text-xl font-bold text-foreground leading-none">{p.nombre}</div>
                     <div className="flex flex-col pt-1">
                       <div className="text-3xl font-black text-primary leading-tight">
-                        {formatRD(price)}
+                        {formatCurrencyByCountry(price, tenantCountryCode)}
                         <span className="text-xs font-normal text-muted-foreground">{period}</span>
                       </div>
                       {billingPeriod === "yearly" && (
@@ -3329,7 +3637,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                         <circle cx="12" cy="12" r="10" />
                         <path d="m9 12 2 2 4-4" />
                       </svg>
-                      <span>{p.limite_ordenes_mes ?? "∞"} Órdenes/facturas/mes</span>
+                      <span>{p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString(tenantCountryCode === "DO" ? "es-DO" : "es")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</span>
                     </div>
 
                     <div className="border-t border-border/60 pt-3 mt-3 text-left">
@@ -3503,7 +3811,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                         </div>
                         <h3 className="font-display text-xl font-bold text-foreground leading-tight">{p.nombre}</h3>
                         <div className="mt-0.5 flex items-baseline gap-1">
-                          <span className="text-2xl font-black text-primary leading-tight">{formatRD(price)}</span>
+                          <span className="text-2xl font-black text-primary leading-tight">{formatCurrencyByCountry(price, tenantCountryCode)}</span>
                           <span className="text-[11px] font-medium text-muted-foreground">{period}</span>
                         </div>
                         {billingPeriod === "yearly" && (
@@ -3538,7 +3846,7 @@ Atendido por: ${printingFakeTicket.empleado.nombre}
                             <span>Facturación</span>
                           </div>
                           <div className="text-xs font-bold text-foreground">
-                            {p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes ilimitadas"}
+                            {p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString(tenantCountryCode === "DO" ? "es-DO" : "es")} Órdenes/mes` : "Órdenes ilimitadas"}
                           </div>
                         </div>
 
@@ -3758,7 +4066,7 @@ function ExpandingTextarea({ value, onChange, placeholder, ...props }: any) {
 function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: { 
   tenant: Tenant; wa: WhatsAppConfig; saveWA: (w: Partial<WhatsAppConfig>) => void; enabled: boolean; onTabChange: (t: string) => void;
 }) {
-  const { data: plans = [] } = usePlans();
+  const { data: plans = [] } = usePlans(tenant?.pais_codigo || "DO");
   const { data: globalCfg } = useGlobalConfig();
   const engine = globalCfg?.whatsapp_engine || "klynn_connect";
   const instanceName = wa.instance || getKlynnConnectInstanceName(tenant);
@@ -3844,13 +4152,15 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     };
   });
 
-  const currentProvider = draft.provider || engine || "klynn_connect";
+  const currentProvider = (draft.provider === "meta_cloud" ? "neuroapi" : draft.provider) || engine || "klynn_connect";
   const isKlynnConnect = currentProvider === "klynn_connect";
-  const isMetaCloud = currentProvider === "meta_cloud";
   const isWASender = currentProvider === "wasender";
+  const isNeuroAPI = currentProvider === "neuroapi" || currentProvider === "meta_cloud";
+  const isMetaCloud = false;
 
-  const [testPhone, setTestPhone] = useState(tenant.telefono || "");
+  const [testPhone, setTestPhone] = useState("");
   const [sending, setSending] = useState(false);
+  const [neuroConnectUrl, setNeuroConnectUrl] = useState<string>("");
 
   // Estados Klynn Connect
   const [kcStatus, setKcStatus] = useState<"checking" | "open" | "close" | "connecting">(
@@ -4321,6 +4631,165 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     toast.success("WhatsApp Meta Cloud desvinculado");
   };
 
+  // Estados y Handlers NeuroAPI (Meta Cloud API Oficial con Coexistencia)
+  const [connectingNeuro, setConnectingNeuro] = useState(false);
+  const [syncingNeuro, setSyncingNeuro] = useState(false);
+  const [disconnectingNeuro, setDisconnectingNeuro] = useState(false);
+  const [manualPhoneId, setManualPhoneId] = useState("");
+  const [manualPhone, setManualPhone] = useState("");
+  const [showManualSync, setShowManualSync] = useState(false);
+
+  const handleSyncNeuroAPINumber = useCallback(async (extra?: { phoneNumberId?: string; phoneNumber?: string; verifiedName?: string }) => {
+    setSyncingNeuro(true);
+    try {
+      const res = await syncNeuroAPINumberServer({
+        data: {
+          tenantId: tenant.id,
+          customApiKey: draft.neuroapi_api_key,
+          phoneNumberId: extra?.phoneNumberId,
+          phoneNumber: extra?.phoneNumber,
+          verifiedName: extra?.verifiedName,
+        },
+      });
+
+      if (res.ok && res.data) {
+        toast.success(`¡WhatsApp Oficial conectado con éxito! Tel: ${res.data.phoneNumber || ""}`);
+        const updated: WhatsAppConfig = {
+          ...draft,
+          provider: "neuroapi",
+          enabled: true,
+          neuroapi_status: "connected",
+          neuroapi_is_coexistence: true,
+          neuroapi_phone_number_id: res.data.phoneNumberId,
+          neuroapi_phone_number: res.data.phoneNumber,
+          neuroapi_verified_name: res.data.verifiedName,
+        };
+        setDraft(updated);
+        saveWA(updated);
+      } else if (res.error && !(res as any).notConnected) {
+        toast.info(res.error);
+      }
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error al sincronizar número: " + (err?.message || ""));
+    } finally {
+      setSyncingNeuro(false);
+    }
+  }, [tenant.id, draft, saveWA]);
+
+  const handleConnectNeuroAPI = async () => {
+    setConnectingNeuro(true);
+    try {
+      const res = await createNeuroAPIConnectSessionServer({
+        data: {
+          tenantId: tenant.id,
+          slug: tenant.slug,
+          returnUrl: typeof window !== "undefined" ? `${window.location.origin}/t/${tenant.slug}/configuracion?tab=whatsapp&neuroapi_callback=1` : undefined,
+          customApiKey: draft.neuroapi_api_key,
+        },
+      });
+
+      if (!res.ok || !res.url) {
+        toast.error(res.error || "No se pudo iniciar la sesión con Meta");
+        setConnectingNeuro(false);
+        return;
+      }
+
+      setNeuroConnectUrl(res.url);
+
+      // Abrir ventana popup para el Embedded Signup con Coexistencia
+      const width = 640;
+      const height = 750;
+      const left = typeof window !== "undefined" ? window.screenX + (window.outerWidth - width) / 2 : 100;
+      const top = typeof window !== "undefined" ? window.screenY + (window.outerHeight - height) / 2 : 100;
+      const popup = window.open(
+        res.url,
+        "neuroapi_connect",
+        `width=${width},height=${height},left=${left},top=${top},status=no,toolbar=no,menubar=no`,
+      );
+
+      const timer = setInterval(() => {
+        if (!popup || popup.closed) {
+          clearInterval(timer);
+          setConnectingNeuro(false);
+          handleSyncNeuroAPINumber();
+        }
+      }, 1500);
+    } catch (err: any) {
+      console.error(err);
+      toast.error("Error al abrir conexión con Meta: " + (err?.message || ""));
+      setConnectingNeuro(false);
+    }
+  };
+
+  const handleDisconnectNeuroAPI = async () => {
+    setDisconnectingNeuro(true);
+    try {
+      await disconnectNeuroAPIServer({
+        data: { tenantId: tenant.id },
+      });
+      const updated: WhatsAppConfig = {
+        ...draft,
+        neuroapi_status: "disconnected",
+        neuroapi_phone_number_id: undefined,
+        neuroapi_phone_number: undefined,
+        neuroapi_waba_id: undefined,
+      };
+      setDraft(updated);
+      saveWA(updated);
+      toast.info("WhatsApp Oficial desvinculado.");
+    } catch (err: any) {
+      toast.error("Error al desvincular: " + (err?.message || ""));
+    } finally {
+      setDisconnectingNeuro(false);
+    }
+  };
+
+  // Escuchar mensaje del popup de NeuroAPI tras el Embedded Signup
+  useEffect(() => {
+    const handlePopupMsg = (e: MessageEvent) => {
+      if (e.data?.type === "NEUROAPI_CONNECTED") {
+        handleSyncNeuroAPINumber({
+          phoneNumberId: e.data?.phoneNumberId,
+          phoneNumber: e.data?.phoneNumber,
+          verifiedName: e.data?.verifiedName,
+        });
+      }
+    };
+    window.addEventListener("message", handlePopupMsg);
+    return () => window.removeEventListener("message", handlePopupMsg);
+  }, [handleSyncNeuroAPINumber]);
+
+  // Detectar si la ventana actual fue abierta como callback de NeuroAPI
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("neuroapi_callback") === "1" || urlParams.get("status") === "success") {
+        const pId = urlParams.get("phone_number_id") || urlParams.get("phoneNumberId");
+        const phone = urlParams.get("phone") || urlParams.get("displayPhone");
+        const name = urlParams.get("verified_name") || urlParams.get("wabaName");
+
+        if (window.opener) {
+          try {
+            window.opener.postMessage({ 
+              type: "NEUROAPI_CONNECTED",
+              phoneNumberId: pId || undefined,
+              phoneNumber: phone || undefined,
+              verifiedName: name || undefined,
+            }, "*");
+          } catch (_) {}
+          window.close();
+        } else {
+          handleSyncNeuroAPINumber({
+            phoneNumberId: pId || undefined,
+            phoneNumber: phone || undefined,
+            verifiedName: name || undefined,
+          });
+        }
+      }
+    }
+  }, [handleSyncNeuroAPINumber]);
+
   async function probar() {
     if (!testPhone) {
       toast.error("Ingresa un número para enviar la prueba");
@@ -4336,7 +4805,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
     );
     setSending(false);
     if (r.ok) {
-      toast.success("¡Mensaje de prueba enviado con éxito! ✓");
+      toastWhatsAppSuccess("Mensaje de prueba enviado con éxito");
     } else {
       const msg = typeof r.reason === "string" ? r.reason : "Error al procesar el envío";
       toast.error(msg);
@@ -4466,7 +4935,7 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                     <div>
                       <h4 className="text-xs md:text-sm font-bold text-foreground flex items-center gap-1.5">
                         Klynn Connect
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300">
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 font-bold">
                           Código QR
                         </Badge>
                       </h4>
@@ -4485,29 +4954,29 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                 </p>
               </div>
 
-              {/* Opción 2: Meta Cloud API Oficial */}
+              {/* Opción 2: Meta Oficial Coexistencia (NeuroAPI) */}
               <div 
                 onClick={() => {
-                  const updated: WhatsAppConfig = { ...draft, provider: "meta_cloud" };
+                  const updated: WhatsAppConfig = { ...draft, provider: "neuroapi" };
                   setDraft(updated);
                   saveWA(updated);
                 }}
                 className={`relative p-4 rounded-2xl border-2 transition-all cursor-pointer flex flex-col justify-between ${
-                  currentProvider === "meta_cloud"
-                    ? "border-blue-500 bg-blue-50/30 dark:bg-blue-950/20 shadow-xs"
+                  currentProvider === "neuroapi"
+                    ? "border-purple-600 bg-purple-50/40 dark:bg-purple-950/25 shadow-xs"
                     : "border-border/70 hover:border-slate-300 dark:hover:border-slate-700 bg-card"
                 }`}
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex items-center gap-2.5">
-                    <div className="h-8 w-8 rounded-xl bg-blue-500/15 text-blue-600 dark:text-blue-400 flex items-center justify-center font-bold">
-                      <Globe className="h-4 w-4" />
+                    <div className="h-8 w-8 rounded-xl bg-purple-500/15 text-purple-600 dark:text-purple-400 flex items-center justify-center font-bold">
+                      <Sparkles className="h-4 w-4" />
                     </div>
                     <div>
                       <h4 className="text-xs md:text-sm font-bold text-foreground flex items-center gap-1.5">
-                        Meta Cloud API
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300 border-blue-300 font-bold">
-                          Oficial • 0% Baneo
+                        Meta Oficial
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300 border-purple-300 font-bold">
+                          Coexistencia Móvil
                         </Badge>
                       </h4>
                     </div>
@@ -4515,13 +4984,13 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
                   <input
                     type="radio"
                     name="wa_provider"
-                    checked={currentProvider === "meta_cloud"}
+                    checked={currentProvider === "neuroapi"}
                     onChange={() => {}}
-                    className="accent-blue-600 mt-1 cursor-pointer"
+                    className="accent-purple-600 mt-1 cursor-pointer"
                   />
                 </div>
                 <p className="text-[11px] text-muted-foreground mt-2 leading-relaxed">
-                  WhatsApp Oficial de Meta en 1 clic. Cero riesgo de bloqueo y facturación directa con Meta.
+                  WhatsApp Oficial en 1 clic. Conserva tu app en el teléfono y envía tickets automáticos con Klynn.
                 </p>
               </div>
 
@@ -5082,6 +5551,209 @@ function WhatsAppTab({ tenant, wa, saveWA, enabled, onTabChange }: {
             </div>
           )}
 
+          {/* CUADRO DE CONEXIÓN NEUROAPI (META CLOUD API OFICIAL CON COEXISTENCIA) */}
+          {isNeuroAPI && (
+            <div className="space-y-4">
+              {draft.neuroapi_status === "connected" && draft.neuroapi_phone_number_id ? (
+                /* Estado Conectado */
+                <div className="p-5 md:p-6 rounded-2xl border border-emerald-500/30 bg-emerald-50/20 dark:bg-emerald-950/15 flex flex-col sm:flex-row sm:items-center justify-between gap-5 transition-all">
+                  <div className="flex items-start gap-4">
+                    <div className="h-12 w-12 rounded-2xl bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 shadow-2xs">
+                      <CheckCircle2 className="h-6 w-6" />
+                    </div>
+                    <div>
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <Badge variant="outline" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 font-bold text-[10px] uppercase tracking-wide">
+                          ● Conectado
+                        </Badge>
+                        <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 font-bold text-[10px] uppercase tracking-wide">
+                          Coexistencia Móvil Activa
+                        </Badge>
+                        <Badge variant="outline" className="bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300 border-purple-300 font-bold text-[10px] uppercase tracking-wide">
+                          Meta Oficial
+                        </Badge>
+                      </div>
+                      <h4 className="text-sm md:text-base font-bold text-foreground mt-1">
+                        {draft.neuroapi_phone_number ? `WhatsApp: ${draft.neuroapi_phone_number}` : "WhatsApp Oficial Vinculado"}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {draft.neuroapi_verified_name ? `${draft.neuroapi_verified_name} · ` : ""}
+                        Tu aplicación móvil de WhatsApp Business sigue funcionando normalmente mientras Klynn despacha tickets y avisos desde la nube.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                    <Button
+                      size="sm"
+                      disabled={syncingNeuro}
+                      className="bg-slate-900 hover:bg-slate-800 text-white dark:bg-slate-100 dark:text-slate-900 rounded-xl font-semibold text-xs h-9 px-3.5 shadow-none border-0 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      onClick={handleSyncNeuroAPINumber}
+                    >
+                      <RefreshCw className={`h-3.5 w-3.5 ${syncingNeuro ? "animate-spin" : ""}`} />
+                      <span>{syncingNeuro ? "Sincronizando..." : "Verificar Estado"}</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      disabled={disconnectingNeuro}
+                      className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl font-semibold text-xs h-9 px-3.5 shadow-none border-0 flex items-center gap-1.5 cursor-pointer transition-colors"
+                      onClick={handleDisconnectNeuroAPI}
+                    >
+                      {disconnectingNeuro ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Unlink className="h-3.5 w-3.5" />}
+                      <span>Desvincular</span>
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Estado Desconectado */
+                <div className="p-6 md:p-8 rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-emerald-50/40 via-background to-sky-50/30 dark:from-emerald-950/20 dark:via-background dark:to-sky-950/20 space-y-6 shadow-sm">
+                  <div className="flex flex-col md:flex-row md:items-center justify-between gap-5">
+                    <div className="space-y-1.5 max-w-xl">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge variant="outline" className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 font-bold text-[10px]">
+                          COEXISTENCIA MÓVIL + NUBE
+                        </Badge>
+                        <Badge variant="outline" className="bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300 border-blue-300 font-bold text-[10px]">
+                          OFICIAL META CLOUD API
+                        </Badge>
+                      </div>
+                      <h4 className="text-lg md:text-xl font-bold text-foreground">
+                        Conectar WhatsApp Oficial con Coexistencia
+                      </h4>
+                      <p className="text-xs md:text-sm text-muted-foreground leading-relaxed">
+                        Conecta el WhatsApp Business de tu lavandería en 1 clic mediante el flujo oficial de Meta. <strong>No perderás el acceso a tu app en el celular:</strong> podrás seguir chateando y respondiendo a tus clientes desde tu teléfono mientras Klynn envía tickets y avisos de entrega automáticos desde la nube.
+                      </p>
+                    </div>
+
+                    <div className="shrink-0 flex flex-col items-start md:items-end gap-2">
+                      <Button
+                        type="button"
+                        onClick={handleConnectNeuroAPI}
+                        disabled={connectingNeuro}
+                        className="bg-[#1877F2] hover:bg-[#166fe5] text-white font-bold h-12 px-6 rounded-xl shadow-md flex items-center gap-2.5 cursor-pointer text-sm"
+                      >
+                        {connectingNeuro ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            <span>Abriendo conexión Meta...</span>
+                          </>
+                        ) : (
+                          <>
+                            <svg className="h-4 w-4 fill-white shrink-0" viewBox="0 0 24 24">
+                              <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
+                            </svg>
+                            <span>Conectar WhatsApp con Facebook</span>
+                          </>
+                        )}
+                      </Button>
+                      <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+                        <Check className="h-3 w-3 text-emerald-600" /> Embedded Signup Oficial v4
+                      </span>
+                      {neuroConnectUrl && (
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            navigator.clipboard.writeText(neuroConnectUrl);
+                            toast.success("Enlace de conexión copiado al portapapeles");
+                          }}
+                          className="rounded-xl text-[11px] font-semibold h-7 border-border hover:bg-muted flex items-center gap-1.5 cursor-pointer mt-1"
+                        >
+                          <Copy className="h-3 w-3" />
+                          <span>Copiar enlace de conexión</span>
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Advertencia para bloqueadores de anuncios */}
+                  <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-900 dark:text-amber-200 flex items-start gap-2.5">
+                    <AlertCircle className="h-4 w-4 text-amber-600 dark:text-amber-400 shrink-0 mt-0.5" />
+                    <div className="space-y-0.5">
+                      <strong className="block font-bold">¿La ventana dice "No se pudo cargar el SDK de Meta"?</strong>
+                      <p className="text-[11.5px] leading-relaxed text-amber-800 dark:text-amber-300">
+                        Ocurre cuando tienes un bloqueador de anuncios (AdBlock, uBlock, Brave Shields o extensiones de privacidad) que bloquea el dominio <code className="font-mono bg-amber-100 dark:bg-amber-950 px-1 py-0.5 rounded">connect.facebook.net</code>. Pausa tu AdBlocker para <strong>neurochat.com.ec</strong> o abre el enlace en una ventana sin bloqueadores y presiona F5.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* 3 Beneficios Clave */}
+                  <div className="grid gap-3 sm:grid-cols-3 pt-2">
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+                      <strong className="block text-foreground font-bold mb-1">📱 Tu celular sigue activo</strong>
+                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                        No se desconecta tu WhatsApp Business. Puedes responder audios, llamadas y mensajes desde tu smartphone.
+                      </p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+                      <strong className="block text-foreground font-bold mb-1">🛡️ Cero riesgo de baneo</strong>
+                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                        Conexión 100% aprobada y verificada a través de la infraestructura oficial de Meta Cloud API.
+                      </p>
+                    </div>
+                    <div className="p-3.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-xs">
+                      <strong className="block text-foreground font-bold mb-1">⚡ 100% Automático</strong>
+                      <p className="text-muted-foreground text-[11px] leading-relaxed">
+                        Los clientes reciben su recibo al pagar y el aviso cuando la ropa esté lista sin clics manuales del cajero.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Sincronización Manual / Respaldo de ID */}
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => setShowManualSync(!showManualSync)}
+                      className="text-xs text-muted-foreground hover:text-foreground font-semibold flex items-center gap-1.5 cursor-pointer"
+                    >
+                      <Settings2 className="h-3.5 w-3.5" />
+                      <span>{showManualSync ? "Ocultar sincronización manual" : "¿Ya vinculaste en Meta y deseas sincronizarlo manualmente por ID?"}</span>
+                    </button>
+
+                    {showManualSync && (
+                      <div className="mt-3 p-4 rounded-xl bg-slate-50 dark:bg-slate-900/60 border border-slate-200 dark:border-slate-800 space-y-3">
+                        <p className="text-xs text-muted-foreground">
+                          Si completaste el flujo en NeuroChat / Meta pero tu navegador no redirigió automáticamente, ingresa el <strong>ID del Número</strong> (o teléfono) que aparece en tu panel de NeuroAPI:
+                        </p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          <div>
+                            <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">ID del Número (Phone Number ID)</Label>
+                            <Input
+                              placeholder="Ej: 955404110990107"
+                              value={manualPhoneId}
+                              onChange={(e) => setManualPhoneId(e.target.value)}
+                              className="h-9 text-xs mt-1"
+                            />
+                          </div>
+                          <div>
+                            <Label className="text-[11px] font-bold text-slate-700 dark:text-slate-300">Número de WhatsApp</Label>
+                            <Input
+                              placeholder="Ej: +1 849-918-2727"
+                              value={manualPhone}
+                              onChange={(e) => setManualPhone(e.target.value)}
+                              className="h-9 text-xs mt-1"
+                            />
+                          </div>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          disabled={!manualPhoneId.trim() || syncingNeuro}
+                          onClick={() => handleSyncNeuroAPINumber({ phoneNumberId: manualPhoneId.trim(), phoneNumber: manualPhone.trim() })}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs h-8 px-4 rounded-lg cursor-pointer"
+                        >
+                          {syncingNeuro ? <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> : <Check className="h-3.5 w-3.5 mr-1.5" />}
+                          <span>Guardar y Activar Conexión</span>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Eventos automáticos */}
           <div className="space-y-3 pt-2">
             <div className="flex items-center gap-2">
@@ -5433,7 +6105,7 @@ function SubscriptionModal({ open, onOpenChange, plan, period, bank, tenant, onS
             <div className="text-[10px] font-bold uppercase tracking-widest opacity-70 mb-0.5">Pasarela de Pago Segura</div>
             <h2 className="text-xl font-display leading-tight">Suscripción {plan.nombre}</h2>
             <div className="mt-1.5 flex items-baseline gap-2">
-              <span className="text-2xl font-bold">{formatRD(price).replace("DOP", "RD$")}</span>
+              <span className="text-2xl font-bold">{formatCurrencyByCountry(price, tenant?.pais_codigo || plan?.pais_codigo || "DO")}</span>
               <span className="text-xs opacity-70">/{period === "monthly" ? "mes" : "año"}</span>
             </div>
           </div>
@@ -5473,7 +6145,7 @@ function SubscriptionModal({ open, onOpenChange, plan, period, bank, tenant, onS
               </div>
               <div className="flex items-center justify-between text-muted-foreground">
                 <span>Monto a pagar:</span>
-                <span className="font-bold text-primary">{formatRD(price)}</span>
+                <span className="font-bold text-primary">{formatCurrencyByCountry(price, tenant?.pais_codigo || plan?.pais_codigo || "DO")}</span>
               </div>
             </div>
 
@@ -5677,6 +6349,330 @@ function SuccessModal({ open, onOpenChange, planName }: { open: boolean; onOpenC
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+function FiscalTabInternational({
+  tenant,
+  onRefresh,
+  onTenantUpdate,
+}: {
+  tenant: Tenant;
+  onRefresh?: () => void;
+  onTenantUpdate?: (t: Tenant) => void;
+}) {
+  const country = getCountry(tenant.pais_codigo || "DO");
+  const cfg: TenantConfig = tenant.config || DEFAULT_CONFIG;
+
+  const resolvedTaxRate = (() => {
+    if (tenant.impuesto_porcentaje !== undefined && tenant.impuesto_porcentaje > 0) {
+      return tenant.impuesto_porcentaje;
+    }
+    if (tenant.pais_codigo && tenant.pais_codigo !== "DO") {
+      if (cfg.itbis_porcentaje !== undefined && cfg.itbis_porcentaje > 0 && cfg.itbis_porcentaje !== 18) {
+        return cfg.itbis_porcentaje;
+      }
+      return country.tax.defaultRate;
+    }
+    return cfg.itbis_porcentaje && cfg.itbis_porcentaje > 0 ? cfg.itbis_porcentaje : country.tax.defaultRate;
+  })();
+
+  const [cobrarImpuesto, setCobrarImpuesto] = useState<boolean>(
+    cfg.cobrar_impuesto ?? (cfg.itbis_porcentaje !== undefined ? cfg.itbis_porcentaje > 0 : true)
+  );
+  const [impuestoPorcentaje, setImpuestoPorcentaje] = useState<number>(resolvedTaxRate);
+  const [impuestoIncluido, setImpuestoIncluido] = useState<boolean>(
+    Boolean(cfg.itbis_incluido)
+  );
+  const [mostrarColumnaImpuesto, setMostrarColumnaImpuesto] = useState<boolean>(
+    cfg.mostrar_columna_itbis ?? true
+  );
+
+  const [documentoFiscal, setDocumentoFiscal] = useState<string>(tenant.rnc || "");
+  const [razonSocial, setRazonSocial] = useState<string>(tenant.razon_social || cfg.razon_social || "");
+  const [direccionFiscal, setDireccionFiscal] = useState<string>(tenant.direccion || "");
+  const [saving, setSaving] = useState<boolean>(false);
+
+  async function handleToggleCobrar(checked: boolean) {
+    setCobrarImpuesto(checked);
+    try {
+      const effectiveRate = checked ? Number(impuestoPorcentaje || country.tax.defaultRate) : 0;
+      const updatedConfig: TenantConfig = {
+        ...cfg,
+        cobrar_impuesto: checked,
+        itbis_porcentaje: effectiveRate,
+      };
+      const updatedTenant: Tenant = {
+        ...tenant,
+        impuesto_porcentaje: effectiveRate,
+        config: updatedConfig,
+      };
+      onTenantUpdate?.(updatedTenant);
+      await saveTenant(updatedTenant);
+      toast.success(
+        checked
+          ? `Cobro de ${country.tax.name} activado (${effectiveRate}%)`
+          : `Cobro de ${country.tax.name} desactivado (precios netos sin recargo)`
+      );
+      onRefresh?.();
+    } catch (err: any) {
+      toast.error("Error al actualizar impuesto: " + (err.message || "desconocido"));
+    }
+  }
+
+  async function handleSaveAll() {
+    setSaving(true);
+    try {
+      const effectiveRate = cobrarImpuesto ? Number(impuestoPorcentaje || country.tax.defaultRate) : 0;
+      const updatedConfig: TenantConfig = {
+        ...cfg,
+        cobrar_impuesto: cobrarImpuesto,
+        itbis_porcentaje: effectiveRate,
+        itbis_incluido: impuestoIncluido,
+        mostrar_columna_itbis: mostrarColumnaImpuesto,
+        razon_social: razonSocial.trim(),
+      };
+      const updatedTenant: Tenant = {
+        ...tenant,
+        rnc: documentoFiscal.trim() || undefined,
+        razon_social: razonSocial.trim() || undefined,
+        direccion: direccionFiscal.trim() || tenant.direccion,
+        impuesto_nombre: country.tax.name,
+        impuesto_porcentaje: effectiveRate,
+        documento_fiscal_label: country.doc.label,
+        config: updatedConfig,
+      };
+      onTenantUpdate?.(updatedTenant);
+      await saveTenant(updatedTenant);
+      toast.success(`Ajustes fiscales de ${country.name} guardados correctamente`);
+      onRefresh?.();
+    } catch (err: any) {
+      toast.error("Error al guardar: " + (err.message || "desconocido"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-6 animate-in fade-in duration-300">
+      {/* Banner de Identidad Local */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-card shadow-xs">
+        <div className="flex items-center gap-3.5">
+          <div className="relative flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200 dark:border-slate-700 bg-white shadow-xs">
+            <img
+              src={`https://flagcdn.com/w80/${country.code.toLowerCase()}.png`}
+              alt={country.name}
+              className="h-full w-full object-cover scale-110 rounded-full"
+            />
+          </div>
+          <div>
+            <div className="flex items-center gap-2 flex-wrap">
+              <h2 className="text-lg font-display font-black text-foreground tracking-tight">
+                Ajustes Fiscales y Tributarios
+              </h2>
+              <span className="rounded-full bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 px-2.5 py-0.5 text-xs font-extrabold border border-slate-200 dark:border-slate-700">
+                {country.name}
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Moneda: <strong>{country.currency.code} ({country.currency.symbol})</strong> · Impuesto local: <strong>{country.tax.name}</strong> · Documento: <strong>{country.doc.label}</strong>
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-3 py-1 rounded-full border ${
+            cobrarImpuesto 
+              ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-400 border-emerald-200 dark:border-emerald-800" 
+              : "bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700"
+          }`}>
+            <span className={`h-2 w-2 rounded-full ${cobrarImpuesto ? "bg-emerald-500 animate-pulse" : "bg-slate-400"}`} />
+            {cobrarImpuesto ? `${country.tax.name} Activo (${impuestoPorcentaje}%)` : `${country.tax.name} Inactivo`}
+          </span>
+        </div>
+      </div>
+
+      {/* 1. Configuración de Impuestos */}
+      <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+        <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+          <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Banknote className="h-5.5 w-5.5" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+              Configuración de Impuestos ({country.tax.name})
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Define si tu lavandería cobra {country.tax.name} en sus ventas y la modalidad de desglose.
+            </p>
+          </div>
+        </div>
+
+        {/* Toggle Maestro */}
+        <div 
+          onClick={() => handleToggleCobrar(!cobrarImpuesto)}
+          className="flex items-center justify-between p-4.5 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer select-none"
+        >
+          <div className="flex items-center gap-3.5">
+            <div className="h-10 w-10 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+              <Percent className="h-5 w-5" />
+            </div>
+            <div>
+              <span className="text-sm font-bold text-foreground block">
+                ¿Cobrar {country.tax.name} en tus órdenes?
+              </span>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {cobrarImpuesto 
+                  ? `Se calculará y aplicará el ${country.tax.name} (${impuestoPorcentaje}%) en las órdenes del punto de venta.` 
+                  : `Tus órdenes se cobrarán a precio neto directo, sin recargos adicionales de impuestos.`}
+              </p>
+            </div>
+          </div>
+          <Switch 
+            checked={cobrarImpuesto} 
+            onCheckedChange={handleToggleCobrar}
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+
+        {/* Opciones cuando está activo el cobro de impuesto */}
+        {cobrarImpuesto && (
+          <div className="grid gap-4 md:grid-cols-3 pt-1 animate-in fade-in duration-200">
+            <Field label={`Tasa de ${country.tax.name} (%)`} icon={Percent} hint={`Tasa estándar en ${country.name}: ${country.tax.defaultRate}%`}>
+              <Input 
+                className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800 font-bold`} 
+                type="number"
+                min={0}
+                max={100}
+                value={impuestoPorcentaje} 
+                onChange={(e) => setImpuestoPorcentaje(Number(e.target.value))} 
+              />
+            </Field>
+
+            <div 
+              onClick={() => setImpuestoIncluido(!impuestoIncluido)}
+              className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <Receipt className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-foreground block">Precios incluyen {country.tax.name}</span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">Desglosar internamente del precio de lista.</p>
+                </div>
+              </div>
+              <Switch 
+                checked={impuestoIncluido} 
+                onCheckedChange={setImpuestoIncluido} 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+
+            <div 
+              onClick={() => setMostrarColumnaImpuesto(!mostrarColumnaImpuesto)}
+              className="flex items-center justify-between p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/50 hover:bg-slate-50 dark:hover:bg-slate-900 transition-colors cursor-pointer select-none"
+            >
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+                  <BadgePercent className="h-4.5 w-4.5" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-foreground block">Columna en Ticket</span>
+                  <p className="text-[11px] text-muted-foreground mt-0.5">
+                    {mostrarColumnaImpuesto ? `Imprimir columna de ${country.tax.name}` : `Ocultar columna de ${country.tax.name}`}
+                  </p>
+                </div>
+              </div>
+              <Switch 
+                checked={mostrarColumnaImpuesto} 
+                onCheckedChange={setMostrarColumnaImpuesto} 
+                onClick={(e) => e.stopPropagation()}
+              />
+            </div>
+          </div>
+        )}
+      </Card>
+
+      {/* 2. Datos Fiscales del Negocio */}
+      <Card className={`${CARD} rounded-2xl border-slate-200/80 dark:border-slate-800 shadow-sm bg-card p-6 md:p-8 space-y-6`}>
+        <div className="flex items-center gap-3.5 pb-5 border-b border-border/70">
+          <div className="h-11 w-11 rounded-xl bg-[#1B4B73] text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Building2 className="h-5.5 w-5.5" />
+          </div>
+          <div>
+            <h3 className="font-display font-bold text-lg text-foreground leading-tight">
+              Datos Fiscales del Contribuyente ({country.doc.label})
+            </h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Información oficial que se imprimirá en los comprobantes y tickets de entrega de tu lavandería.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field 
+            label={`Número de ${country.doc.label} *`} 
+            hint={`Identificación tributaria oficial en ${country.name}`}
+            icon={ShieldCheck}
+          >
+            <Input 
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+              value={documentoFiscal}
+              onChange={(e) => setDocumentoFiscal(e.target.value.toUpperCase())}
+              placeholder={country.doc.placeholder || `Ej: ${country.doc.mask || "12345678-9"}`}
+            />
+          </Field>
+
+          <Field 
+            label="Razón Social o Nombre Legal" 
+            hint="Nombre con el que estás registrado ante las autoridades"
+            icon={Building2}
+          >
+            <Input 
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+              value={razonSocial}
+              onChange={(e) => setRazonSocial(e.target.value)}
+              placeholder="Ej. Lavandería Las Palmas S.A."
+            />
+          </Field>
+
+          <Field 
+            label="Dirección Fiscal" 
+            hint="Domicilio legal que aparecerá en el encabezado de los tickets"
+            span
+            icon={MapPin}
+          >
+            <Input 
+              className={`${FIELD} pl-10.5 rounded-xl border-slate-200 dark:border-slate-800`} 
+              value={direccionFiscal}
+              onChange={(e) => setDireccionFiscal(e.target.value)}
+              placeholder="Ej. Calle Principal #123, Local 4"
+            />
+          </Field>
+        </div>
+
+        {/* Tip Informativo */}
+        <div className="rounded-xl border border-sky-100 bg-sky-50/60 dark:border-sky-900/50 dark:bg-sky-950/20 p-4 flex items-start gap-3 text-xs text-sky-900 dark:text-sky-300">
+          <ShieldCheck className="h-5 w-5 text-sky-600 dark:text-sky-400 shrink-0 mt-0.5" />
+          <div className="leading-relaxed">
+            <span className="font-bold">Facturación Comercial en {country.name}:</span> Los comprobantes térmicos impresos (57mm / 80mm) y digitales de Klynn incluirán de forma automática tu <strong>{country.doc.label}</strong>, <strong>Razón Social</strong> y el desglose de <strong>{country.tax.name}</strong> según las prácticas comerciales locales de tu país.
+          </div>
+        </div>
+
+        {/* Botón de Guardado */}
+        <div className="flex justify-end pt-2 border-t border-border/70">
+          <Button 
+            onClick={handleSaveAll}
+            disabled={saving}
+            className="h-11 px-6 rounded-xl font-bold bg-[#1B4B73] hover:bg-[#163e5f] text-white shadow-md hover:shadow-lg transition-all active:scale-98 cursor-pointer gap-2"
+          >
+            {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+            <span>Guardar Configuración Fiscal</span>
+          </Button>
+        </div>
+      </Card>
+    </div>
   );
 }
 
@@ -6018,6 +7014,16 @@ function FiscalTab({ tenant, config, sequences, onRefresh, enabled, onTabChange,
   const tradSequences = sequences.filter(s => s.tipo_ecf.startsWith('B') || s.prefijo === 'B');
   // Electronic e-CF sequences
   const elecSequences = sequences.filter(s => s.tipo_ecf.startsWith('E') || s.prefijo === 'E');
+
+  if ((tenant.pais_codigo || "DO") !== "DO") {
+    return (
+      <FiscalTabInternational
+        tenant={tenant}
+        onRefresh={onRefresh}
+        onTenantUpdate={onTenantUpdate}
+      />
+    );
+  }
 
   if (!enabled) {
     return (

@@ -71,6 +71,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import {
   formatRD,
+  getActiveTenantLocalization,
   uid,
   savePeriodoNomina,
   deletePeriodoNomina,
@@ -2076,11 +2077,11 @@ function NominaPage() {
                   htmlFor="monto_anticipo"
                   className="text-xs font-bold text-slate-600 dark:text-slate-400"
                 >
-                  Monto del Adelanto (RD$)*
+                  Monto del Adelanto ({getActiveTenantLocalization().moneda_simbolo || "RD$"})*
                 </Label>
                 <div className="relative">
                   <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
-                    RD$
+                    {getActiveTenantLocalization().moneda_simbolo || "RD$"}
                   </span>
                   <PriceInput
                     id="monto_anticipo"

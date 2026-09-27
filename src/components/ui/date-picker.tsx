@@ -130,8 +130,8 @@ export function DMYDatePicker({
           type="button"
           disabled={disabled}
           className={cn(
-            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm shadow-2xs font-mono font-semibold text-slate-900 dark:text-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 focus:border-[#1B4B73] disabled:opacity-50 disabled:pointer-events-none",
-            !value && "text-muted-foreground font-sans font-normal",
+            "flex h-10 w-full items-center justify-between rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 px-3.5 py-2 text-sm shadow-2xs font-sans font-medium text-slate-900 dark:text-slate-100 cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-slate-800/60 focus:outline-none focus:ring-2 focus:ring-[#1B4B73]/20 focus:border-[#1B4B73] disabled:opacity-50 disabled:pointer-events-none",
+            !value && "text-muted-foreground font-normal",
             className
           )}
         >

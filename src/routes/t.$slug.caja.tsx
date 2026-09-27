@@ -75,6 +75,8 @@ import {
   saveTenant,
   saveGasto,
   formatRD,
+  getActiveTenantLocalization,
+  getTenantCurrencySymbol,
   formatDateTimeRD,
   uid,
   CATEGORIAS_GASTOS,
@@ -1115,7 +1117,7 @@ function AmountField({
 
       <div className="flex items-center justify-center gap-1.5 py-1">
         <span className="font-display text-lg font-bold text-slate-400 dark:text-slate-500 select-none">
-          RD$
+          {getActiveTenantLocalization().moneda_simbolo || "RD$"}
         </span>
         <input
           type="text"
@@ -1324,7 +1326,7 @@ function MovDialog({
             <Label className="mb-1.5 block">Monto</Label>
             <div className="relative group">
               <div className="pointer-events-none absolute left-0 top-0 bottom-0 flex items-center justify-center px-4 border-r border-slate-200 bg-white rounded-l-xl transition-colors group-focus-within:border-primary/30 group-focus-within:bg-primary/5">
-                <span className="text-sm font-black text-primary/60">RD$</span>
+                <span className="text-sm font-black text-primary/60">{tenant?.moneda_simbolo || "RD$"}</span>
               </div>
               <input
                 type="text"
@@ -2211,7 +2213,7 @@ function HistoricoCierresDialog({
                             <td className="px-3.5 py-2.5 text-right">
                               {difEf === 0 ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 border border-slate-200 dark:bg-slate-800 dark:text-slate-300">
-                                  RD$0.00
+                                  {formatRD(0)}
                                 </span>
                               ) : difEf < 0 ? (
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/40 dark:text-rose-300">
@@ -3952,11 +3954,11 @@ function ReporteMovimientosTurnoThermal({
           <div className="space-y-1.5 text-[11px]">
             <div className="flex justify-between items-center">
               <span className="font-semibold text-black/80">Efectivo Contado en Caja:</span>
-              <span className="font-bold">RD$ ____________</span>
+              <span className="font-bold">{tenant?.moneda_simbolo || "RD$"} ____________</span>
             </div>
             <div className="flex justify-between items-center">
               <span className="font-semibold text-black/80">Diferencia (Sobrante/Faltante):</span>
-              <span className="font-bold">RD$ ____________</span>
+              <span className="font-bold">{tenant?.moneda_simbolo || "RD$"} ____________</span>
             </div>
             <div className="pt-2 text-center text-[10px] font-bold uppercase">
               [  ] CONFORME   /   [  ] CON OBSERVACIÓN
@@ -4112,7 +4114,7 @@ function SetCajaChicaDialog({
         <div className="py-6">
           <div className="relative group">
             <div className="pointer-events-none absolute left-0 top-0 bottom-0 flex items-center justify-center px-4 border-r border-slate-200 bg-white rounded-l-xl transition-colors group-focus-within:border-primary/30 group-focus-within:bg-primary/5">
-              <span className="text-sm font-black text-primary/60">RD$</span>
+              <span className="text-sm font-black text-primary/60">{tenant?.moneda_simbolo || "RD$"}</span>
             </div>
             <input
               type="text"

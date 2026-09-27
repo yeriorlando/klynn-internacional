@@ -19,6 +19,7 @@ import {
   getTenantByIdServer,
   saveTenantConfigServer,
 } from "./server-auth";
+import { getCountry } from "./countries";
 
 export const IS_LOCAL_MODE = import.meta.env.VITE_APP_MODE === "local";
 
@@ -52,6 +53,9 @@ export interface Plan {
   precio_sucursal_adicional?: number;
   polar_sucursal_url?: string;
   limite_sucursales_adicionales?: number;
+  pais_codigo?: string;
+  moneda_simbolo?: string;
+  moneda_codigo?: string;
 }
 
 export interface BankDetails {
@@ -60,6 +64,7 @@ export interface BankDetails {
   rnc: string;
   tipo_cuenta: string;
   numero_cuenta: string;
+  country_plans?: Record<string, Plan[]>;
   standby_sync_frequency?: "1h" | "2h" | "4h" | "6h" | "12h" | "24h";
   standby_last_sync_at?: string;
   standby_last_sync_duration?: string;
@@ -76,14 +81,17 @@ export interface GlobalConfig {
   requirePlanOnRegistration: boolean;
   trialDays: number;
   defaultPlanId: PlanId;
+  country_plans?: Record<string, Plan[]>;
   bankDetails?: BankDetails;
   requireEmployeeOtp?: boolean;
-  whatsapp_engine?: "klynn_connect" | "meta_cloud" | "wasender";
+  whatsapp_engine?: "klynn_connect" | "meta_cloud" | "wasender" | "neuroapi";
   klynn_connect_url?: string;
   klynn_connect_apikey?: string;
   meta_app_id?: string;
   meta_config_id?: string;
   meta_app_secret?: string;
+  neuroapi_master_api_key?: string;
+  neuroapi_enabled?: boolean;
   fiscal_environment_policy?: "per_tenant" | "TesteCF" | "CerteCF" | "eCF";
   standby_sync_frequency?: "1h" | "2h" | "4h" | "6h" | "12h" | "24h";
   standby_last_sync_at?: string;
@@ -174,6 +182,13 @@ export interface Tenant {
   plan_fecha_inicio?: string;
   auto_renovacion?: boolean;
   nombre_sucursal?: string;
+  // Localización Internacional
+  pais_codigo?: string;
+  moneda_simbolo?: string;
+  moneda_codigo?: string;
+  impuesto_nombre?: string;
+  impuesto_porcentaje?: number;
+  documento_fiscal_label?: string;
 }
 
 export function getTenantBranchName(tenant?: Partial<Tenant> | null): string {
@@ -191,7 +206,11 @@ export interface TenantConfig {
   itbis_incluido: boolean;
   itbis_porcentaje: number;
   mostrar_columna_itbis?: boolean;
+  cobrar_impuesto?: boolean;
+  razon_social?: string;
   formato_ticket: "57mm" | "80mm";
+  ticket_prefijo_orden?: string;
+  ticket_formato_numero?: "estandar" | "corto";
   impresora_tipo?: "usb" | "bluetooth" | "serial" | "sistema";
   impresora_perfil?: "basica" | "estandar" | "completa";
   impresora_serial_baud?: number;
@@ -279,6 +298,14 @@ export interface TenantConfig {
   // Sesión Única para Empleados
   impedir_sesiones_simultaneas?: boolean;
   active_employee_sessions?: Record<string, string>;
+
+  // Localización Internacional
+  pais_codigo?: string;
+  moneda_simbolo?: string;
+  moneda_codigo?: string;
+  impuesto_nombre?: string;
+  impuesto_porcentaje?: number;
+  documento_fiscal_label?: string;
 }
 
 export interface TerminalAutorizada {
@@ -325,7 +352,7 @@ export interface WhatsAppConfig {
   api_key: string;
   instance: string; // nombre de instancia WapiSender o Klynn Connect
   base_url?: string; // por defecto https://wasenderapi.com o https://wa.klynn.com.do
-  provider?: "klynn_connect" | "meta_cloud" | "wasender";
+  provider?: "klynn_connect" | "meta_cloud" | "wasender" | "neuroapi";
   klynn_connect_status?: "open" | "close" | "connecting" | "disconnected";
   klynn_connect_phone?: string;
   klynn_connect_profile_pic?: string;
@@ -336,6 +363,15 @@ export interface WhatsAppConfig {
   meta_phone_number?: string;
   meta_verified_name?: string;
   meta_status?: "connected" | "disconnected" | "expired";
+  // NeuroAPI (WhatsApp Oficial con Coexistencia)
+  neuroapi_phone_number_id?: string;
+  neuroapi_waba_id?: string;
+  neuroapi_phone_number?: string;
+  neuroapi_verified_name?: string;
+  neuroapi_session_id?: string;
+  neuroapi_status?: "connected" | "disconnected";
+  neuroapi_is_coexistence?: boolean;
+  neuroapi_api_key?: string;
   notif_orden_creada: boolean;
   notif_orden_lista: boolean;
   notif_orden_entregada: boolean;
@@ -1039,13 +1075,1182 @@ export const PLANS: Plan[] = [
     precio_sucursal_adicional: 1500,
     limite_sucursales_adicionales: 5,
     polar_sucursal_url: "",
+    pais_codigo: "DO",
+    moneda_simbolo: "RD$",
+    moneda_codigo: "DOP",
   },
 ];
+
+export const DEFAULT_COUNTRY_PLANS: Record<string, Plan[]> = {
+  DO: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 1300,
+      precio_anual: 12000,
+      limite_empleados: 2,
+      limite_ordenes_mes: 300,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 1000,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "DO",
+      moneda_simbolo: "RD$",
+      moneda_codigo: "DOP",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 2800,
+      precio_anual: 28500,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 1200,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "DO",
+      moneda_simbolo: "RD$",
+      moneda_codigo: "DOP",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 10000,
+      precio_anual: 110000,
+      limite_empleados: 999,
+      limite_ordenes_mes: null,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: true,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 1500,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "DO",
+      moneda_simbolo: "RD$",
+      moneda_codigo: "DOP",
+    },
+  ],
+  MX: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 350,
+      precio_anual: 3500,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 250,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "MX",
+      moneda_simbolo: "$",
+      moneda_codigo: "MXN",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 900,
+      precio_anual: 9000,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 400,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "MX",
+      moneda_simbolo: "$",
+      moneda_codigo: "MXN",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 1300,
+      precio_anual: 13000,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 600,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "MX",
+      moneda_simbolo: "$",
+      moneda_codigo: "MXN",
+    },
+  ],
+  PE: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 69,
+      precio_anual: 690,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 49,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "PE",
+      moneda_simbolo: "S/",
+      moneda_codigo: "PEN",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 169,
+      precio_anual: 1690,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 79,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "PE",
+      moneda_simbolo: "S/",
+      moneda_codigo: "PEN",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 249,
+      precio_anual: 2490,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 109,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "PE",
+      moneda_simbolo: "S/",
+      moneda_codigo: "PEN",
+    },
+  ],
+  CO: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 69000,
+      precio_anual: 690000,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 45000,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "CO",
+      moneda_simbolo: "$",
+      moneda_codigo: "COP",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 179000,
+      precio_anual: 1790000,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 75000,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "CO",
+      moneda_simbolo: "$",
+      moneda_codigo: "COP",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 259000,
+      precio_anual: 2590000,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 95000,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "CO",
+      moneda_simbolo: "$",
+      moneda_codigo: "COP",
+    },
+  ],
+  PA: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 19,
+      precio_anual: 190,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 12,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "PA",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 49,
+      precio_anual: 490,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 20,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "PA",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 75,
+      precio_anual: 750,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 30,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "PA",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+  ],
+  CR: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 9900,
+      precio_anual: 99000,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 6000,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "CR",
+      moneda_simbolo: "₡",
+      moneda_codigo: "CRC",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 24900,
+      precio_anual: 249000,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 10000,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "CR",
+      moneda_simbolo: "₡",
+      moneda_codigo: "CRC",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 37900,
+      precio_anual: 379000,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 15000,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "CR",
+      moneda_simbolo: "₡",
+      moneda_codigo: "CRC",
+    },
+  ],
+  CL: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 18000,
+      precio_anual: 180000,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 11000,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "CL",
+      moneda_simbolo: "$",
+      moneda_codigo: "CLP",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 46000,
+      precio_anual: 460000,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 19000,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "CL",
+      moneda_simbolo: "$",
+      moneda_codigo: "CLP",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 72000,
+      precio_anual: 720000,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 28000,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "CL",
+      moneda_simbolo: "$",
+      moneda_codigo: "CLP",
+    },
+  ],
+  EC: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 19,
+      precio_anual: 190,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 12,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "EC",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 45,
+      precio_anual: 450,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 18,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "EC",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 69,
+      precio_anual: 690,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 28,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "EC",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+  ],
+  ES: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 19,
+      precio_anual: 190,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 12,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "ES",
+      moneda_simbolo: "€",
+      moneda_codigo: "EUR",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 45,
+      precio_anual: 450,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 18,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "ES",
+      moneda_simbolo: "€",
+      moneda_codigo: "EUR",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 69,
+      precio_anual: 690,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 28,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "ES",
+      moneda_simbolo: "€",
+      moneda_codigo: "EUR",
+    },
+  ],
+  GT: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 149,
+      precio_anual: 1490,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 90,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "GT",
+      moneda_simbolo: "Q",
+      moneda_codigo: "GTQ",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 349,
+      precio_anual: 3490,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 150,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "GT",
+      moneda_simbolo: "Q",
+      moneda_codigo: "GTQ",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 549,
+      precio_anual: 5490,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 220,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "GT",
+      moneda_simbolo: "Q",
+      moneda_codigo: "GTQ",
+    },
+  ],
+  HN: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 475,
+      precio_anual: 4750,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 290,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "HN",
+      moneda_simbolo: "L",
+      moneda_codigo: "HNL",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 1125,
+      precio_anual: 11250,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 480,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "HN",
+      moneda_simbolo: "L",
+      moneda_codigo: "HNL",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 1725,
+      precio_anual: 17250,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 700,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "HN",
+      moneda_simbolo: "L",
+      moneda_codigo: "HNL",
+    },
+  ],
+  SV: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 19,
+      precio_anual: 190,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 12,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "SV",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 45,
+      precio_anual: 450,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 18,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "SV",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 69,
+      precio_anual: 690,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 28,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "SV",
+      moneda_simbolo: "$",
+      moneda_codigo: "USD",
+    },
+  ],
+  UY: [
+    {
+      id: "basico",
+      nombre: "Básico",
+      precio_mensual: 760,
+      precio_anual: 7600,
+      limite_empleados: 2,
+      limite_ordenes_mes: 250,
+      limite_whatsapp_mes: 300,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: false,
+        procesos: true,
+        estanteria: true,
+        pos_offline: false,
+        promociones: false,
+        nomina: false,
+        cxp: false,
+      },
+      precio_sucursal_adicional: 480,
+      limite_sucursales_adicionales: 1,
+      polar_sucursal_url: "",
+      pais_codigo: "UY",
+      moneda_simbolo: "$",
+      moneda_codigo: "UYU",
+    },
+    {
+      id: "pro",
+      nombre: "Pro",
+      precio_mensual: 1800,
+      precio_anual: 18000,
+      limite_empleados: 10,
+      limite_ordenes_mes: 1000,
+      limite_whatsapp_mes: 1000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      destacado: true,
+      precio_sucursal_adicional: 750,
+      limite_sucursales_adicionales: 3,
+      polar_sucursal_url: "",
+      pais_codigo: "UY",
+      moneda_simbolo: "$",
+      moneda_codigo: "UYU",
+    },
+    {
+      id: "enterprise",
+      nombre: "Enterprise",
+      precio_mensual: 2800,
+      precio_anual: 28000,
+      limite_empleados: 999,
+      limite_ordenes_mes: 1500,
+      limite_whatsapp_mes: 5000,
+      modulos: {
+        whatsapp: true,
+        facturacion_fiscal: false,
+        multisucursal: true,
+        logistica: true,
+        procesos: true,
+        estanteria: true,
+        pos_offline: true,
+        promociones: true,
+        nomina: true,
+        cxp: true,
+      },
+      precio_sucursal_adicional: 1100,
+      limite_sucursales_adicionales: 5,
+      polar_sucursal_url: "",
+      pais_codigo: "UY",
+      moneda_simbolo: "$",
+      moneda_codigo: "UYU",
+    },
+  ],
+};
+
+export function formatCurrencyByCountry(amount: number, countryCode: string = "DO"): string {
+  const c = getCountry(countryCode);
+  const decimals = c.currency.decimals ?? 2;
+  const numStr = Number(amount || 0).toLocaleString(countryCode === "DO" ? "es-DO" : "es", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  });
+  return `${c.currency.symbol} ${numStr}`;
+}
+
+export async function getAllCountryPlans(): Promise<Record<string, Plan[]>> {
+  try {
+    const cfg = await getGlobalConfig();
+    const stored = cfg.country_plans || cfg.bankDetails?.country_plans;
+    if (stored && typeof stored === "object") {
+      const merged: Record<string, Plan[]> = { ...DEFAULT_COUNTRY_PLANS };
+      for (const [code, list] of Object.entries(stored)) {
+        if (Array.isArray(list) && list.length > 0) {
+          merged[code] = list;
+        }
+      }
+      return merged;
+    }
+  } catch (_) {}
+  return DEFAULT_COUNTRY_PLANS;
+}
+
+export async function getCountryPlans(countryCode?: string): Promise<Plan[]> {
+  const code = (countryCode || "DO").toUpperCase();
+  const all = await getAllCountryPlans();
+  if (all[code] && all[code].length > 0) {
+    return all[code];
+  }
+  if (DEFAULT_COUNTRY_PLANS[code]) {
+    return DEFAULT_COUNTRY_PLANS[code];
+  }
+  // Generar con moneda del país si no existe en la lista previa
+  const country = getCountry(code);
+  const basePlans = DEFAULT_COUNTRY_PLANS["DO"].map((p) => ({
+    ...p,
+    pais_codigo: country.code,
+    moneda_simbolo: country.currency.symbol,
+    moneda_codigo: country.currency.code,
+  }));
+  return basePlans;
+}
+
+export async function saveCountryPlans(countryCode: string, plans: Plan[]): Promise<void> {
+  const code = (countryCode || "DO").toUpperCase();
+  const currentCfg = await getGlobalConfig();
+  const existingMap = currentCfg.country_plans || currentCfg.bankDetails?.country_plans || DEFAULT_COUNTRY_PLANS;
+  const updatedMap = {
+    ...existingMap,
+    [code]: plans,
+  };
+  await saveGlobalConfig({
+    ...currentCfg,
+    country_plans: updatedMap,
+    bankDetails: {
+      ...(currentCfg.bankDetails || {} as any),
+      country_plans: updatedMap,
+    },
+  });
+  invalidateGlobalConfigCache();
+}
 
 let _cachedPlans: Plan[] = PLANS;
 
 export function getTenantPlan(tenant: Tenant | null, dynamicPlans?: Plan[]): Plan {
-  const list = dynamicPlans || _cachedPlans || PLANS;
+  if (dynamicPlans && dynamicPlans.length > 0) {
+    if (!tenant) return dynamicPlans[0];
+    return dynamicPlans.find((p) => p.id === tenant.plan_id) || dynamicPlans[0];
+  }
+  const countryCode = (tenant?.pais_codigo || "DO").toUpperCase();
+  const list = DEFAULT_COUNTRY_PLANS[countryCode] || DEFAULT_COUNTRY_PLANS["DO"] || PLANS;
   if (!tenant) return list[0] || PLANS[0];
   return list.find((p) => p.id === tenant.plan_id) || list[0] || PLANS[0];
 }
@@ -1123,11 +2328,20 @@ export function isModuleEnabled(
 }
 
 export const DEFAULT_CONFIG: TenantConfig = {
+  pais_codigo: "DO",
+  moneda_simbolo: "RD$",
+  moneda_codigo: "DOP",
+  impuesto_nombre: "ITBIS",
+  impuesto_porcentaje: 18,
+  documento_fiscal_label: "RNC",
   nombre_sucursal: "Sucursal principal",
+  cobrar_impuesto: true,
   itbis_incluido: false,
   itbis_porcentaje: 18,
   mostrar_columna_itbis: true,
   formato_ticket: "80mm",
+  ticket_prefijo_orden: "KL",
+  ticket_formato_numero: "estandar",
   impresora_tipo: "usb",
   impresora_perfil: "basica",
   impresora_serial_baud: 9600,
@@ -2232,22 +3446,40 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
   const cleanSlug = slug.toLowerCase();
   const cacheKey = `klynn_tenant_cache_${cleanSlug}`;
 
-  // 1. Si no hay conexión o ya está en caché, intentar leer primero si offline
-  if (typeof window !== "undefined" && !navigator.onLine) {
+  // 1. Si ya está en caché local, usarlo inmediatamente en 0ms
+  if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try {
-        return JSON.parse(cachedStr);
+        const cached = JSON.parse(cachedStr);
+        if (cached && (cached.slug === cleanSlug || cached.id)) {
+          // Si estamos online, refrescar en segundo plano sin bloquear el render
+          if (navigator.onLine) {
+            supabase
+              .from("tenants")
+              .select("*")
+              .eq("slug", cleanSlug)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (data) {
+                  localStorage.setItem(cacheKey, JSON.stringify(data));
+                  localStorage.setItem(`klynn_tenant_id_${data.id}`, JSON.stringify(data));
+                }
+              })
+              .catch(() => {});
+          }
+          return cached;
+        }
       } catch {}
     }
   }
 
-  // 2. Intentar buscar en Supabase con timeout de seguridad
+  // 2. Intentar buscar en Supabase con timeout de seguridad (1.5s)
   try {
     const fetchPromise = supabase.from("tenants").select("*").eq("slug", cleanSlug).maybeSingle();
 
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500),
     );
 
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
@@ -2263,9 +3495,13 @@ export async function getTenantBySlug(slug: string): Promise<Tenant | undefined>
     console.warn("Aviso al obtener tenant por slug:", e);
   }
 
-  // Fallback a Server Function nativa (resuelve siempre en 1ms sin CORS)
+  // Fallback a Server Function nativa con timeout seguro (1.5s)
   try {
-    const serverTenant = await getTenantBySlugServer({ data: { slug: cleanSlug } });
+    const serverPromise = getTenantBySlugServer({ data: { slug: cleanSlug } });
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 1500),
+    );
+    const serverTenant = await Promise.race([serverPromise, timeoutPromise]);
     if (serverTenant) {
       if (typeof window !== "undefined") {
         localStorage.setItem(cacheKey, JSON.stringify(serverTenant));
@@ -2292,11 +3528,28 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
   if (!id || id === "__loading__" || id === "undefined") return undefined;
   const cacheKey = `klynn_tenant_id_${id}`;
 
-  if (typeof window !== "undefined" && !navigator.onLine) {
+  if (typeof window !== "undefined") {
     const cachedStr = localStorage.getItem(cacheKey);
     if (cachedStr) {
       try {
-        return JSON.parse(cachedStr);
+        const cached = JSON.parse(cachedStr);
+        if (cached && cached.id === id) {
+          if (navigator.onLine) {
+            supabase
+              .from("tenants")
+              .select("*")
+              .eq("id", id)
+              .maybeSingle()
+              .then(({ data }) => {
+                if (data) {
+                  localStorage.setItem(cacheKey, JSON.stringify(data));
+                  if (data.slug) localStorage.setItem(`klynn_tenant_cache_${data.slug}`, JSON.stringify(data));
+                }
+              })
+              .catch(() => {});
+          }
+          return cached;
+        }
       } catch {}
     }
     const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
@@ -2311,7 +3564,7 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
   try {
     const fetchPromise = supabase.from("tenants").select("*").eq("id", id).maybeSingle();
     const timeoutPromise = new Promise<{ data: any; error: any }>((resolve) =>
-      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 2000),
+      setTimeout(() => resolve({ data: null, error: { message: "timeout" } }), 1500),
     );
     const { data, error } = await Promise.race([fetchPromise, timeoutPromise]);
 
@@ -2327,7 +3580,11 @@ export async function getTenantById(id: string): Promise<Tenant | undefined> {
 
   // Fallback a Server Function nativa (service_role garantizado sin RLS)
   try {
-    const serverTenant = await getTenantByIdServer({ data: { tenantId: id } });
+    const serverPromise = getTenantByIdServer({ data: { tenantId: id } });
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 1500),
+    );
+    const serverTenant = await Promise.race([serverPromise, timeoutPromise]);
     if (serverTenant) {
       if (typeof window !== "undefined") {
         localStorage.setItem(cacheKey, JSON.stringify(serverTenant));
@@ -2610,7 +3867,16 @@ export const DEFAULT_GLOBAL_CONFIG: GlobalConfig = {
   standby_last_sync_duration: "14s",
 };
 
+let cachedGlobalConfig: { data: GlobalConfig; expiresAt: number } | null = null;
+
+export function invalidateGlobalConfigCache() {
+  cachedGlobalConfig = null;
+}
+
 export async function getGlobalConfig(): Promise<GlobalConfig> {
+  if (cachedGlobalConfig && cachedGlobalConfig.expiresAt > Date.now()) {
+    return cachedGlobalConfig.data;
+  }
   try {
     const { data, error } = await supabase
       .from("global_config")
@@ -2619,7 +3885,7 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
       .maybeSingle();
     if (!error && data) {
       const bank = data.bank_details ?? data.bankDetails;
-      return {
+      const resConfig: GlobalConfig = {
         requirePlanOnRegistration:
           data.require_plan_on_registration ??
           data.requirePlanOnRegistration ??
@@ -2628,6 +3894,7 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
         defaultPlanId:
           data.default_plan_id ?? data.defaultPlanId ?? DEFAULT_GLOBAL_CONFIG.defaultPlanId,
         bankDetails: bank,
+        country_plans: bank?.country_plans || (data as any)?.country_plans || DEFAULT_COUNTRY_PLANS,
         requireEmployeeOtp:
           data.require_employee_otp ??
           bank?.require_employee_otp ??
@@ -2656,6 +3923,14 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
           bank?.meta_app_secret ??
           (data as any)?.meta_app_secret ??
           "",
+        neuroapi_master_api_key:
+          bank?.neuroapi_master_api_key ??
+          (data as any)?.neuroapi_master_api_key ??
+          "",
+        neuroapi_enabled:
+          bank?.neuroapi_enabled ??
+          (data as any)?.neuroapi_enabled ??
+          false,
         fiscal_environment_policy:
           (data as any)?.fiscal_environment_policy ??
           DEFAULT_GLOBAL_CONFIG.fiscal_environment_policy,
@@ -2675,6 +3950,8 @@ export async function getGlobalConfig(): Promise<GlobalConfig> {
         standby_last_sync_metrics:
           bank?.standby_last_sync_metrics ?? (data as any)?.standby_last_sync_metrics,
       };
+      cachedGlobalConfig = { data: resConfig, expiresAt: Date.now() + 60000 };
+      return resConfig;
     }
   } catch (e) {
     console.error("Error fetching global config:", e);
@@ -2686,6 +3963,7 @@ export async function saveGlobalConfig(config: GlobalConfig) {
   try {
     const bankDetailsToSave = {
       ...(config.bankDetails || {}),
+      country_plans: config.country_plans || config.bankDetails?.country_plans || DEFAULT_COUNTRY_PLANS,
       require_employee_otp: config.requireEmployeeOtp ?? false,
       whatsapp_engine: config.whatsapp_engine || "klynn_connect",
       klynn_connect_url: config.klynn_connect_url || "https://wa.klynn.com.do",
@@ -2693,6 +3971,8 @@ export async function saveGlobalConfig(config: GlobalConfig) {
       meta_app_id: config.meta_app_id || "",
       meta_config_id: config.meta_config_id || "",
       meta_app_secret: config.meta_app_secret || "",
+      neuroapi_master_api_key: config.neuroapi_master_api_key || "",
+      neuroapi_enabled: config.neuroapi_enabled ?? (config.whatsapp_engine === "neuroapi"),
       standby_sync_frequency: config.standby_sync_frequency || "2h",
       standby_last_sync_at: config.standby_last_sync_at,
       standby_last_sync_duration: config.standby_last_sync_duration || "14s",
@@ -2710,6 +3990,7 @@ export async function saveGlobalConfig(config: GlobalConfig) {
       updated_at: new Date().toISOString(),
     });
     if (error) throw error;
+    invalidateGlobalConfigCache();
   } catch (e) {
     console.error("Error saving global config:", e);
     throw e;
@@ -3861,10 +5142,57 @@ export async function getOrdenById(id: string): Promise<Orden | undefined> {
 
 export { computeNextOrderSequence, extractOrderSequenceNumber } from "./order-sequence";
 
-export async function nextOrdenNumero(tenant_id: string): Promise<string> {
+export async function nextOrdenNumero(
+  tenant_id: string,
+  options?: { prefijo?: string; formato?: "estandar" | "corto" },
+): Promise<string> {
   const realId = resolveTenantId(tenant_id);
   const d = new Date();
   const ym = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+  // 0. Resolver prefijo y formato configurados para el negocio
+  let prefijo = (options?.prefijo || "").trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+  let formato = options?.formato;
+
+  if (!prefijo || !formato) {
+    try {
+      if (typeof window !== "undefined") {
+        const cachedStr = localStorage.getItem(`klynn_tenant_id_${realId}`);
+        if (cachedStr) {
+          const parsed = JSON.parse(cachedStr);
+          if (!prefijo && parsed?.config?.ticket_prefijo_orden) {
+            prefijo = String(parsed.config.ticket_prefijo_orden).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+          }
+          if (!formato && parsed?.config?.ticket_formato_numero) {
+            formato = parsed.config.ticket_formato_numero;
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Fallback a getTenantById si aún no se resuelve
+  if (!prefijo || !formato) {
+    try {
+      const t = await getTenantById(realId);
+      if (t?.config) {
+        if (!prefijo && t.config.ticket_prefijo_orden) {
+          prefijo = String(t.config.ticket_prefijo_orden).trim().toUpperCase().replace(/[^A-Z0-9]/g, "");
+        }
+        if (!formato && t.config.ticket_formato_numero) {
+          formato = t.config.ticket_formato_numero;
+        }
+      }
+    } catch {}
+  }
+
+  if (!prefijo) prefijo = "KL";
+  if (!formato) formato = "estandar";
+
+  const buildNumber = (next: number) => {
+    const pad = String(next).padStart(4, "0");
+    return formato === "corto" ? `${prefijo}-${pad}` : `${prefijo}-${ym}-${pad}`;
+  };
 
   // 0. Refrescar sesión de Supabase si está por expirar
   await ensureFreshSupabaseSession().catch(() => {});
@@ -3896,7 +5224,7 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
   // 2. Si no hay conexión a internet, resolver con las secuencias locales
   if (typeof window !== "undefined" && !navigator.onLine) {
     const next = computeNextOrderSequence(localSeqs);
-    return `KL-${ym}-${String(next).padStart(4, "0")}`;
+    return buildNumber(next);
   }
 
   // 3. Consultar la base de datos en Supabase para obtener las órdenes recientes del tenant
@@ -3918,10 +5246,10 @@ export async function nextOrdenNumero(tenant_id: string): Promise<string> {
 
     const allSeqs = remoteSeqs.length > 0 ? [...remoteSeqs, ...localSeqs] : localSeqs;
     const next = computeNextOrderSequence(allSeqs);
-    return `KL-${ym}-${String(next).padStart(4, "0")}`;
+    return buildNumber(next);
   } catch (e) {
     const next = computeNextOrderSequence(localSeqs);
-    return `KL-${ym}-${String(next).padStart(4, "0")}`;
+    return buildNumber(next);
   }
 }
 
@@ -6026,7 +7354,9 @@ export async function login(
 
 export async function logout() {
   try {
-    await supabase.auth.signOut();
+    const signOutPromise = supabase.auth.signOut();
+    const timeoutPromise = new Promise((resolve) => setTimeout(resolve, 600));
+    await Promise.race([signOutPromise, timeoutPromise]).catch(() => {});
   } catch (e) {
     console.warn("Error signing out from Supabase:", e);
   }
@@ -6043,11 +7373,10 @@ export async function logout() {
       localStorage.removeItem("klynn_read_virtuals");
       localStorage.removeItem("klynn_deleted_virtuals");
       sessionStorage.removeItem("klynn_screen_locked");
-      // Limpiar cachés de tenants y empleados para evitar filtración de perfiles
+      // Limpiar cachés de sesión de empleados para evitar filtración de credenciales
+      // (Se preserva klynn_tenant_cache_ y klynn_tenant_id_ para que la pantalla de login abra instantáneamente sin depender de red)
       Object.keys(localStorage).forEach((key) => {
         if (
-          key.startsWith("klynn_tenant_cache_") ||
-          key.startsWith("klynn_tenant_id_") ||
           key.startsWith("klynn_emp_id_") ||
           key.startsWith("klynn_empleados_")
         ) {
@@ -6533,9 +7862,196 @@ export async function checkPlanLimits(tenant: Tenant | string) {
 export function uid(_prefix = "id"): string {
   return crypto.randomUUID();
 }
-export function formatRD(n: number): string {
-  // en-US for comma thousands + period decimal, prefixed with RD$
-  return `RD$${new Intl.NumberFormat("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n || 0)}`;
+export interface ActiveLocalization {
+  moneda_simbolo: string;
+  moneda_codigo: string;
+  impuesto_nombre: string;
+  impuesto_porcentaje: number;
+  pais_codigo: string;
+  decimals: number;
+}
+
+export function getActiveTenantLocalization(): ActiveLocalization {
+  let pais_codigo = "DO";
+  let moneda_simbolo = "RD$";
+  let moneda_codigo = "DOP";
+  let impuesto_nombre = "ITBIS";
+  let impuesto_porcentaje = 18;
+  let decimals = 2;
+
+  if (typeof window !== "undefined") {
+    try {
+      // 1. Prioridad: usuario autenticado actualmente en sesión
+      const lastAuthStr = localStorage.getItem("klynn_last_auth_user");
+      if (lastAuthStr) {
+        const parsed = JSON.parse(lastAuthStr);
+        const t = parsed?.tenant;
+        if (t) {
+          if (t.pais_codigo) pais_codigo = t.pais_codigo;
+          else if (t.config?.pais_codigo) pais_codigo = t.config.pais_codigo;
+
+          if (t.moneda_simbolo) moneda_simbolo = t.moneda_simbolo;
+          else if (t.config?.moneda_simbolo) moneda_simbolo = t.config.moneda_simbolo;
+
+          if (t.moneda_codigo) moneda_codigo = t.moneda_codigo;
+          else if (t.config?.moneda_codigo) moneda_codigo = t.config.moneda_codigo;
+
+          if (t.impuesto_nombre) impuesto_nombre = t.impuesto_nombre;
+          else if (t.config?.impuesto_nombre) impuesto_nombre = t.config.impuesto_nombre;
+
+          if (t.impuesto_porcentaje !== undefined && t.impuesto_porcentaje !== null) {
+            impuesto_porcentaje = Number(t.impuesto_porcentaje);
+          } else if (t.config?.impuesto_porcentaje !== undefined && t.config?.impuesto_porcentaje !== null) {
+            impuesto_porcentaje = Number(t.config.impuesto_porcentaje);
+          }
+        }
+      }
+
+      // 2. Cache por slug del tenant en la URL actual (/t/:slug) o klynn_active_tenant
+      const match = window.location.pathname.match(/\/t\/([^/]+)/);
+      const currentSlug = match ? match[1] : localStorage.getItem("klynn_active_tenant");
+      if (currentSlug && currentSlug !== "admin") {
+        const cached = localStorage.getItem(`klynn_tenant_cache_${currentSlug}`);
+        if (cached) {
+          const t = JSON.parse(cached);
+          if (t) {
+            if (t.pais_codigo) pais_codigo = t.pais_codigo;
+            else if (t.config?.pais_codigo) pais_codigo = t.config.pais_codigo;
+
+            if (t.moneda_simbolo) moneda_simbolo = t.moneda_simbolo;
+            else if (t.config?.moneda_simbolo) moneda_simbolo = t.config.moneda_simbolo;
+
+            if (t.moneda_codigo) moneda_codigo = t.moneda_codigo;
+            else if (t.config?.moneda_codigo) moneda_codigo = t.config.moneda_codigo;
+
+            if (t.impuesto_nombre) impuesto_nombre = t.impuesto_nombre;
+            else if (t.config?.impuesto_nombre) impuesto_nombre = t.config.impuesto_nombre;
+
+            if (t.impuesto_porcentaje !== undefined && t.impuesto_porcentaje !== null) {
+              impuesto_porcentaje = Number(t.impuesto_porcentaje);
+            } else if (t.config?.impuesto_porcentaje !== undefined && t.config?.impuesto_porcentaje !== null) {
+              impuesto_porcentaje = Number(t.config.impuesto_porcentaje);
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  // Si el país no es República Dominicana pero por defecto quedó con valores de RD (RD$, ITBIS)
+  // o si no tiene símbolo específico, auto-completar desde el catálogo oficial de países:
+  if (pais_codigo && pais_codigo !== "DO") {
+    const country = getCountry(pais_codigo);
+    if (country) {
+      if (moneda_simbolo === "RD$" || !moneda_simbolo) {
+        moneda_simbolo = country.currency.symbol;
+      }
+      if (moneda_codigo === "DOP" || !moneda_codigo) {
+        moneda_codigo = country.currency.code;
+      }
+      if (impuesto_nombre === "ITBIS" || !impuesto_nombre) {
+        impuesto_nombre = country.tax.name;
+      }
+      decimals = country.currency.decimals;
+    }
+  } else if (pais_codigo === "COP" || pais_codigo === "CO" || pais_codigo === "CLP" || pais_codigo === "CL") {
+    decimals = 0;
+  }
+
+  return {
+    moneda_simbolo,
+    moneda_codigo,
+    impuesto_nombre,
+    impuesto_porcentaje,
+    pais_codigo,
+    decimals,
+  };
+}
+
+export function getTenantCurrencySymbol(tenant?: Partial<Tenant> | Partial<TenantConfig> | null): string {
+  if (tenant) {
+    const sym = tenant.moneda_simbolo || ("config" in tenant && tenant.config?.moneda_simbolo);
+    const country = tenant.pais_codigo || ("config" in tenant && tenant.config?.pais_codigo);
+    if (sym && (sym !== "RD$" || country === "DO")) return sym;
+    if (country && country !== "DO") {
+      return getCountry(country).currency.symbol;
+    }
+  }
+  return getActiveTenantLocalization().moneda_simbolo;
+}
+
+export function getTenantTaxName(tenant?: Partial<Tenant> | Partial<TenantConfig> | null): string {
+  if (tenant) {
+    const tax = tenant.impuesto_nombre || ("config" in tenant && tenant.config?.impuesto_nombre);
+    const country = tenant.pais_codigo || ("config" in tenant && tenant.config?.pais_codigo);
+    if (tax && (tax !== "ITBIS" || country === "DO")) return tax;
+    if (country && country !== "DO") {
+      return getCountry(country).tax.name;
+    }
+  }
+  return getActiveTenantLocalization().impuesto_nombre;
+}
+
+export function formatMoney(
+  n: number,
+  tenantOrSymbol?: Partial<Tenant> | Partial<TenantConfig> | string | null,
+  options?: { decimals?: number }
+): string {
+  const activeLoc = getActiveTenantLocalization();
+
+  let symbol = activeLoc.moneda_simbolo;
+  let decimals = options?.decimals ?? activeLoc.decimals;
+  let countryCode = activeLoc.pais_codigo;
+
+  if (typeof tenantOrSymbol === "string" && tenantOrSymbol) {
+    if (tenantOrSymbol !== "RD$" || activeLoc.pais_codigo === "DO") {
+      symbol = tenantOrSymbol;
+    }
+  } else if (tenantOrSymbol && typeof tenantOrSymbol === "object") {
+    const rawCountry =
+      tenantOrSymbol.pais_codigo ||
+      ("config" in tenantOrSymbol && tenantOrSymbol.config?.pais_codigo);
+
+    if (rawCountry) {
+      countryCode = rawCountry;
+    }
+
+    const rawSymbol =
+      tenantOrSymbol.moneda_simbolo ||
+      ("config" in tenantOrSymbol && tenantOrSymbol.config?.moneda_simbolo);
+
+    if (rawSymbol && (rawSymbol !== "RD$" || countryCode === "DO")) {
+      symbol = rawSymbol;
+    } else if (countryCode && countryCode !== "DO") {
+      const c = getCountry(countryCode);
+      if (c) symbol = c.currency.symbol;
+    }
+
+    if (options?.decimals === undefined) {
+      if (countryCode === "COP" || countryCode === "CO" || countryCode === "CLP" || countryCode === "CL") {
+        decimals = 0;
+      } else {
+        const c = getCountry(countryCode);
+        if (c) decimals = c.currency.decimals;
+      }
+    }
+  }
+
+  const formatted = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+  }).format(n || 0);
+
+  const spacing = symbol.length > 2 && !symbol.includes("$") ? " " : "";
+  return `${symbol}${spacing}${formatted}`;
+}
+
+export function formatRD(
+  n: number,
+  tenantOrSymbol?: Partial<Tenant> | Partial<TenantConfig> | string | null,
+  options?: { decimals?: number }
+): string {
+  return formatMoney(n, tenantOrSymbol, options);
 }
 export function formatNumber(n: number, decimals = 2): string {
   return new Intl.NumberFormat("en-US", {
@@ -7611,6 +9127,113 @@ export async function crearNotificacion(notif: {
     });
   } catch (e) {
     console.warn("Supabase Realtime Broadcast error:", e);
+  }
+}
+
+// ============ Centro de Comunicados Administrativos (Super Admin) ============
+
+export async function enviarComunicadoAdmin(options: {
+  tenantId?: string; // "all" o UUID específico
+  titulo: string;
+  mensaje: string;
+  tipo?: string;
+  link?: string | null;
+}): Promise<{ ok: boolean; count: number; error?: string }> {
+  try {
+    const isGlobal = !options.tenantId || options.tenantId === "all";
+    let targetTenants: { id: string; nombre?: string }[] = [];
+
+    if (isGlobal) {
+      const { data: allTenants, error: tErr } = await supabase
+        .from("tenants")
+        .select("id, nombre")
+        .neq("estado", "ELIMINADO");
+      if (tErr || !allTenants || allTenants.length === 0) {
+        return { ok: false, count: 0, error: "No se encontraron lavanderías activas" };
+      }
+      targetTenants = allTenants;
+    } else {
+      targetTenants = [{ id: options.tenantId! }];
+    }
+
+    const tipoNotif = options.tipo || "ADMIN_ANUNCIO";
+    const nowIso = new Date().toISOString();
+
+    const notifsToInsert = targetTenants.map((t) => ({
+      id: uid("notif"),
+      tenant_id: t.id,
+      titulo: options.titulo,
+      mensaje: options.mensaje,
+      tipo: tipoNotif,
+      leida: false,
+      link: options.link || null,
+      created_at: nowIso,
+    }));
+
+    // 1. Inserción en lotes en Base de Datos Supabase
+    const { error: insertErr } = await supabase.from("notificaciones").insert(notifsToInsert);
+    if (insertErr) {
+      console.warn("Aviso al insertar notificaciones en DB:", insertErr);
+    }
+
+    // 2. Transmisión Realtime por cada lavandería
+    for (const notif of notifsToInsert) {
+      try {
+        // BroadcastChannel local entre pestañas
+        if (typeof window !== "undefined" && "BroadcastChannel" in window) {
+          const bc = new BroadcastChannel(`klynn_tenant_${notif.tenant_id}`);
+          bc.postMessage({ type: "NUEVA_NOTIFICACION", notificacion: notif });
+          bc.close();
+        }
+
+        // Supabase Realtime channel
+        const channel = supabase.channel(`tenant_events_${notif.tenant_id}`);
+        channel.subscribe((status) => {
+          if (status === "SUBSCRIBED") {
+            channel
+              .send({
+                type: "broadcast",
+                event: "nueva_notificacion",
+                payload: notif,
+              })
+              .then(() => {
+                setTimeout(() => supabase.removeChannel(channel), 1200);
+              });
+          }
+        });
+      } catch (bcErr) {
+        console.warn("Aviso en broadcast de comunicado:", bcErr);
+      }
+    }
+
+    return { ok: true, count: targetTenants.length };
+  } catch (err: any) {
+    return { ok: false, count: 0, error: err.message || "Error al enviar comunicado" };
+  }
+}
+
+export async function getHistorialComunicadosAdmin(): Promise<Notificacion[]> {
+  try {
+    const { data, error } = await supabase
+      .from("notificaciones")
+      .select("*")
+      .or("tipo.ilike.ADMIN_%,tipo.eq.BROADCAST")
+      .order("created_at", { ascending: false })
+      .limit(60);
+
+    if (error || !data) return [];
+    return data as Notificacion[];
+  } catch {
+    return [];
+  }
+}
+
+export async function eliminarComunicadoAdmin(id: string): Promise<boolean> {
+  try {
+    const { error } = await supabase.from("notificaciones").delete().eq("id", id);
+    return !error;
+  } catch {
+    return false;
   }
 }
 

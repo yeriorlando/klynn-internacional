@@ -445,3 +445,25 @@ export const saveTenantConfigServer = createServerFn({ method: "POST" })
     }
   });
 
+export const consultarRNCServer = createServerFn({ method: "POST" })
+  .inputValidator((data: { rnc: string }) => data)
+  .handler(async ({ data }) => {
+    try {
+      const cleanRnc = String(data?.rnc || "").replace(/\D/g, "");
+      if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) return null;
+      const res = await fetch(`https://dgii-rnc.pronesoft.com/get/${cleanRnc}`, {
+        headers: { "Content-Type": "application/json" },
+      });
+      if (res.ok) {
+        const json = await res.json();
+        if (json && json.name) {
+          return json;
+        }
+      }
+    } catch (e) {
+      console.warn("[consultarRNCServer] Error al consultar en dgii-rnc.pronesoft.com:", e);
+    }
+    return null;
+  });
+
+

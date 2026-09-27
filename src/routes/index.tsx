@@ -49,26 +49,28 @@ import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { LandingNavbar } from "@/components/klynn/LandingNavbar";
-import { PLANS as STATIC_PLANS, formatRD, getPlans, type Plan } from "@/lib/storage";
-import DRMap from "@/components/klynn/DRMap";
+import { PLANS as STATIC_PLANS, formatRD, getPlans, getCountryPlans, formatCurrencyByCountry, type Plan } from "@/lib/storage";
+import { COUNTRIES, getCountry } from "@/lib/countries";
+import { COUNTRY_DEMO_DATA, type CountryDemoData } from "@/components/klynn/landing/CountryDemoData";
+import { InteractiveTicket } from "@/components/klynn/landing/InteractiveTicket";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Klynn — Software #1 para lavanderías en República Dominicana | POS, ITBIS y NCF" },
+      { title: "Klynn — Software #1 para Lavanderías en Latinoamérica y España | POS, Facturación y Tickets" },
       {
         name: "description",
         content:
-          "La plataforma #1 para lavanderías en República Dominicana. Controla tus sucursales, repartidores, caja y WhatsApp desde la nube. ¡Simplifica tu operación y crece hoy mismo!",
+          "La plataforma líder para lavanderías en 13 países: República Dominicana, México, Colombia, Panamá, España y más. Facturación fiscal, tickets térmicos 57/80mm, WhatsApp y control total en la nube.",
       },
       {
         name: "keywords",
         content:
-          "plataforma para lavanderías RD, software para lavanderías República Dominicana, sistema POS lavandería RD, gestión lavandería dominicana, control de repartidores lavandería, software lavandería Santo Domingo, programa lavandería Santiago",
+          "software para lavanderías, sistema POS lavandería internacional, gestión lavanderías tintorerías, software lavanderia colombia, software lavanderia mexico, software lavanderia panama, software lavanderia chile, software lavanderia peru, software lavanderia espana, software lavanderia republica dominicana",
       },
-      { property: "og:title", content: "Klynn — Software para lavanderías en República Dominicana" },
-      { property: "og:description", content: "Moderniza tu lavandería con nuestra plataforma integral. Controla sucursales, repartidores y caja desde la nube. Prueba gratis 14 días." },
-      { property: "og:locale", content: "es_DO" },
+      { property: "og:title", content: "Klynn — Software para Lavanderías en Latinoamérica y España" },
+      { property: "og:description", content: "Moderniza tu lavandería en tu país. Moneda local, cálculo de impuestos, tickets térmicos, repartidores y caja en la nube. Prueba gratis 14 días." },
+      { property: "og:locale", content: "es_419" },
     ],
   }),
   loader: async () => {
@@ -84,69 +86,97 @@ export const Route = createFileRoute("/")({
 });
 
 const features = [
-  { icon: Receipt, title: "Órdenes y facturas con NCF", desc: "Flujo guiado de nueva orden con prendas, peso y cobro mixto. ITBIS 18% y secuencias NCF (B01, B02, B14, B15) configurables por sucursal." },
-  { icon: Printer, title: "Tickets térmicos 57/80mm", desc: "Impresión ESC/POS compatible con Epson, Xprinter, Bixolon y Star. Logo, RNC y pie de página personalizados." },
+  { icon: Receipt, title: "Órdenes y facturación", desc: "Flujo ágil con prendas, peso y cobro mixto. Configurable con impuestos de tu país (ITBIS 18% para RD, IVA, IGV, ITBMS)." },
+  { icon: Printer, title: "Tickets térmicos 57/80mm", desc: "Impresión ESC/POS compatible con Epson, Xprinter, Bixolon y Star. Logo y pie de página personalizados." },
   { icon: Wallet, title: "Caja y cuadre diario", desc: "Apertura, movimientos en vivo, gastos de caja chica, cobros por efectivo, tarjeta y transferencia. Cierre con firma del cajero." },
-  { icon: Users, title: "CRM dominicano", desc: "Historial por cliente, deudas, abonos, clientes VIP y crédito autorizado. Cumpleaños y avisos automáticos por WhatsApp." },
-  { icon: Truck, title: "Entregas a domicilio", desc: "Asigna repartidores, rutas por sector (Naco, Piantini, Bella Vista, Los Jardinesâ€¦) y notifica al cliente al salir y al llegar." },
-  { icon: BarChart3, title: "Reportes para la DGII", desc: "606, 607 y resumen de ITBIS exportable en CSV y XLSX. Llega listo a tu contador cada mes." },
-  { icon: Scissors, title: "Módulo de sastrería", desc: "Ajustes, ruedos, cierres y composturas con medidas y entrega coordinada con el lavado." },
-  { icon: Package, title: "Lavado por libra y prendas", desc: "Cobra por peso (lb/kg) o por prenda. Combina ambos en la misma orden con cargos de planchado, suavizante o rapidez." },
-  { icon: Smartphone, title: "WhatsApp integrado", desc: "Envía recibos, recordatorios de retiro y promociones desde el sistema. Tu cliente recibe el ticket en su celular." },
-  { icon: Layers, title: "Estantería y ganchos", desc: "Mapea casilleros, rieles y conveyors. Ubica cualquier prenda y entrega en 5 segundos sin confusiones." },
+  { icon: Users, title: "CRM y fidelización", desc: "Historial por cliente, deudas, abonos, clientes VIP y crédito autorizado. Cumpleaños y avisos automáticos por WhatsApp." },
+  { icon: Truck, title: "Entregas a domicilio", desc: "Asigna repartidores, rutas por sector o comuna y notifica al cliente con enlaces de seguimiento al salir y al llegar." },
+  { icon: BarChart3, title: "Reportes contables y de ventas", desc: "Resumen detallado de ingresos, cobros e impuestos exportable en CSV y XLSX. Llega listo a tu contador en cada período." },
+  { icon: Scissors, title: "Módulo de sastrería", desc: "Ajustes, ruedos, cierres y composturas con medidas y fecha de entrega coordinada con el lavado." },
+  { icon: Package, title: "Lavado por peso y prendas", desc: "Cobra por peso (kg o lb) o por prenda individual. Combina ambos en la misma orden con cargos de planchado o urgencia." },
+  { icon: Smartphone, title: "WhatsApp integrado", desc: "Envía recibos digitales, recordatorios de retiro y promociones desde el sistema directo al móvil del cliente." },
+  { icon: Layers, title: "Estantería y ganchos", desc: "Mapea casilleros, rieles y conveyors rotativos. Ubica cualquier prenda y entrega en 5 segundos sin confusiones." },
   { icon: WifiOff, title: "Modo Offline & Contingencia", desc: "Sigue facturando, cobrando e imprimiendo tickets térmicos aunque no haya internet. Sincronización automática con la nube." },
+  { icon: Globe, title: "13 Países con moneda nativa", desc: "Adaptado con monedas, prefijos telefónicos e impuestos para RD, México, Colombia, Panamá, Costa Rica, Perú, Chile, España y más." },
 ];
 
 const testimonios = [
   {
     nombre: "Rosa Guzmán",
-    negocio: "MR Lavandería Express, Haina, San Cristóbal",
-    texto: "Klynn marcó un antes y un después en mi lavandería. Hoy mantengo mi CXC organizada, no pierdo facturas y tengo control total de la operación. Es ahorro de tiempo y atención al cliente más eficiente gracias a la automatización. La plataforma es intuitiva y el soporte técnico vía WhatsApp brinda respuesta inmediata. Gracias Klynn por facilitarme la gestión.",
+    negocio: "MR Lavandería Express · Haina, San Cristóbal",
+    paisCode: "do",
+    paisNombre: "República Dominicana",
+    texto: "Klynn marcó un antes y un después en mi lavandería. Hoy mantengo mi CXC organizada, no pierdo facturas y tengo control total de la operación. Es ahorro de tiempo y atención al cliente más eficiente gracias a la automatización. Soporte por WhatsApp inmediato.",
   },
   {
-    nombre: "Manuel Tavárez",
-    negocio: "Express Wash, Santiago de los Caballeros",
-    texto: "El soporte responde al instante por WhatsApp y la plataforma es sumamente fácil de usar. La generación de comprobantes fiscales y reportes me ahorra horas de trabajo cada mes.",
+    nombre: "Carlos Arismendi",
+    negocio: "Tintorería & Planchaduría Condesa · CDMX",
+    paisCode: "mx",
+    paisNombre: "México",
+    texto: "Implementar Klynn en nuestras dos sucursales en México fue facilísimo. El cálculo de IVA 16%, los tickets de 80mm y los mensajes automáticos de WhatsApp cuando la ropa está lista nos ahorraron horas todos los días.",
   },
   {
-    nombre: "Carolina Méndez",
-    negocio: "Cleanette, Punta Cana",
-    texto: "Superviso mis sucursales directamente desde la laptop en mi oficina. Veo en tiempo real cuánto vende cada local y el estado del dinero en caja al cierre del día. Excelente sistema.",
+    nombre: "Valentina Morales",
+    negocio: "LavaFácil El Poblado · Medellín",
+    paisCode: "co",
+    paisNombre: "Colombia",
+    texto: "El soporte técnico responde de inmediato. Cobrar por kilos o prendas en pesos colombianos y poder sincronizar las órdenes aunque se caiga el internet nos da una tranquilidad enorme en el mostrador.",
+  },
+  {
+    nombre: "Rodrigo Valenzuela",
+    negocio: "Lavaseco Las Condes · Santiago",
+    paisCode: "cl",
+    paisNombre: "Chile",
+    texto: "El tablero Kanban y la estantería virtual con número de ganchos nos permitieron reducir los tiempos de entrega de 4 minutos a 15 segundos. Los clientes quedan fascinados con el recibo digital.",
+  },
+  {
+    nombre: "Sofía Barahona",
+    negocio: "Lavandería & DryClean Costa del Este · Ciudad de Panamá",
+    paisCode: "pa",
+    paisNombre: "Panamá",
+    texto: "Configuramos el ITBMS al 7% en dos minutos. Klynn es súper visual, amigable para las cajeras y el seguimiento de domicilios con repartidores funciona impecable.",
+  },
+  {
+    nombre: "Javier Méndez",
+    negocio: "Tintorería Salamanca · Madrid",
+    paisCode: "es",
+    paisNombre: "España",
+    texto: "Buscábamos un software moderno que no pareciera de los años 90. Klynn tiene un diseño impecable, gestiona IVA al 21% y los clientes valoran muchísimo los avisos por WhatsApp.",
   },
 ];
 
 const faqs = [
   {
-    q: "¿Klynn cumple con la normativa de la DGII en República Dominicana?",
-    a: "Sí. Manejamos secuencias NCF (B01 consumidor final, B02 consumo, B14 régimen especial, B15 gubernamental), ITBIS 18% configurable y exportación de los formatos 606 y 607 en CSV y XLSX listos para tu contador o para subir al portal de la DGII.",
+    q: "¿Klynn funciona en mi país?",
+    a: "Sí. Klynn está disponible y optimizado en 13 países: República Dominicana, México, Colombia, Panamá, Costa Rica, Perú, Chile, Ecuador, España, Guatemala, Honduras, El Salvador y Uruguay. Al registrarte seleccionas tu país y el sistema se adapta automáticamente a tu moneda local, impuestos y formato de comprobante.",
   },
   {
-    q: "¿Necesito internet siempre para usarlo?",
-    a: "Recomendamos conexión estable, pero el sistema sigue tomando órdenes en modo offline y sincroniza cuando vuelve la conexión. Ideal para apagones o problemas con Claro, Altice o Viva.",
+    q: "¿Cómo maneja los impuestos y comprobantes de mi país?",
+    a: "El sistema incorpora las tasas de impuestos y tipos de documentos vigentes de cada territorio: ITBIS 18% y e-CF (DGII en República Dominicana), IVA 16% y RFC (SAT en México), IVA 19% y NIT (DIAN en Colombia), ITBMS 7% y RUC (DGI en Panamá), IGV 18% (SUNAT en Perú), IVA 19% y RUT (SII en Chile), IVA 21% y CIF/NIF (AEAT en España), entre otros. Además puedes ajustar alícuotas personalizadas en cualquier momento.",
+  },
+  {
+    q: "¿Necesito internet siempre para usar Klynn?",
+    a: "No obligatoriamente. Klynn cuenta con un Modo Offline POS integrado: si se interrumpe la conexión o sufres un corte de energía temporal, tu mostrador sigue cobrando, registrando prendas e imprimiendo tickets térmicos en tu equipo local. Todo se sincroniza con la nube en cuanto vuelve la conexión.",
   },
   {
     q: "¿Funciona con mi impresora térmica?",
-    a: "Sí. Soportamos impresoras térmicas ESC/POS de 57mm y 80mm: Epson TM-T20, Xprinter XP-58, Bixolon SRP, Star Micronics y compatibles que se venden en CCN, PriceSmart, Plaza Lama y tiendas de tecnología en todo el país.",
+    a: "Sí. Soportamos impresoras térmicas estándar ESC/POS de 57mm y 80mm: Epson TM-T20, Xprinter XP-58/XP-80, Bixolon SRP, Star Micronics, Rongta y modelos genéricos USB, Bluetooth o Red en todos los países.",
   },
   {
-    q: "¿Puedo usarlo desde el celular?",
-    a: "Sí. Klynn es 100% web y responsive. Funciona en computadoras, tablets, iPhone y Android sin instalar nada. Ideal para que el dueño revise ventas desde la casa o la playa.",
+    q: "¿Puedo usarlo desde el celular o tablet?",
+    a: "Sí. Klynn es 100% web responsive y funciona como Progressive Web App (PWA). Puedes usarlo en computadoras Windows o Mac, iPads, tablets Android y smartphones sin necesidad de instalaciones complejas.",
   },
   {
-    q: "¿Cuánto cuesta y en qué moneda?",
-    a: "Todos los planes están en pesos dominicanos (RD$) sin sorpresas de tasa de cambio. Empiezas con 14 días gratis sin tarjeta de crédito. Después eliges el plan que se ajuste a tu lavandería.",
+    q: "¿Cuánto cuesta y en qué moneda se paga?",
+    a: "Ofrecemos tarifas adaptadas a cada país y pagos en moneda local o USD mediante tarjeta de crédito/débito internacional o transferencia bancaria. Cuentas con 14 días de prueba gratuita sin tarjeta de crédito para validar la plataforma en tu negocio.",
   },
   {
     q: "¿Puedo manejar varias sucursales?",
-    a: "Sí. Desde el plan Pro puedes administrar múltiples sucursales con caja independiente, empleados por sucursal y reportes consolidados. Perfecto para cadenas en Santo Domingo, Santiago, La Vega o la zona Este.",
+    a: "Sí. Klynn soporta multi-sucursal con conmutador rápido. Cada local tiene su caja independiente, empleados por sucursal y catálogos, con reportes consolidados en tiempo real para el administrador.",
   },
   {
-    q: "¿Mis datos están seguros?",
-    a: "Sí. Tus datos viven cifrados en la nube con copias de seguridad diarias. Cada empleado tiene su usuario y permisos por rol (cajero, admin, repartidor) para que nadie vea más de lo que debe.",
-  },
-  {
-    q: "¿Ofrecen soporte en español?",
-    a: "Por supuesto. Equipo dominicano que responde por WhatsApp, correo y videollamada en horario laboral RD. Te ayudamos a configurar tu primera lavandería sin costo.",
+    q: "¿Mis datos están seguros y respaldados?",
+    a: "Absolutamente. La información reside en infraestructura cloud de alta disponibilidad con cifrado en tránsito y reposo, y copias de seguridad continuas. El acceso está controlado por roles y permisos granulares (cajero, administrador, repartidor).",
   },
 ];
 
@@ -211,6 +241,10 @@ function LandingPage() {
   const [plans, setPlans] = useState<Plan[]>(initialPlans || STATIC_PLANS);
   const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
   const [activeWaTab, setActiveWaTab] = useState<"lista" | "recibo">("lista");
+  const [selectedCountryCode, setSelectedCountryCode] = useState<string>("DO");
+
+  const selectedCountry = getCountry(selectedCountryCode);
+  const countryDemo = COUNTRY_DEMO_DATA[selectedCountryCode] || COUNTRY_DEMO_DATA["DO"];
 
   // Interceptar invitaciones y tokens de recuperación que lleguen a la raíz
   useEffect(() => {
@@ -229,10 +263,14 @@ function LandingPage() {
   }, []);
 
   useEffect(() => {
-    getPlans().then((p) => {
-      if (p && p.length > 0) setPlans(p);
+    let active = true;
+    getCountryPlans(selectedCountryCode).then((p) => {
+      if (active && p && p.length > 0) setPlans(p);
     });
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [selectedCountryCode]);
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -250,19 +288,20 @@ function LandingPage() {
             "applicationCategory": "BusinessApplication",
             "operatingSystem": "Web",
             description:
-              "Software de gestión para lavanderías en República Dominicana con ITBIS, NCF, tickets térmicos, caja, clientes y reportes DGII.",
+              "Software de gestión para lavanderías y tintorerías en Latinoamérica y España con facturación fiscal, tickets térmicos, WhatsApp, caja, clientes y reportes.",
             offers: {
-              "@type": "Offer",
-              price: "1500",
-              priceCurrency: "DOP",
+              "@type": "AggregateOffer",
+              priceCurrency: selectedCountry.currency.code,
+              lowPrice: "25",
+              highPrice: "99",
             },
             aggregateRating: {
               "@type": "AggregateRating",
               ratingValue: "4.9",
-              ratingCount: "127",
+              ratingCount: "284",
             },
-            areaServed: { "@type": "Country", name: "Dominican Republic" },
-            inLanguage: "es-DO",
+            areaServed: COUNTRIES.map((c) => ({ "@type": "Country", name: c.name })),
+            inLanguage: "es",
           }),
         }}
       />
@@ -293,30 +332,36 @@ function LandingPage() {
               {
                 "@type": "SiteNavigationElement",
                 "position": 1,
+                "name": "Países disponibles",
+                "url": "https://klynn.com.do/#paises"
+              },
+              {
+                "@type": "SiteNavigationElement",
+                "position": 2,
                 "name": "Funciones y Características",
                 "url": "https://klynn.com.do/#features"
               },
               {
                 "@type": "SiteNavigationElement",
-                "position": 2,
+                "position": 3,
                 "name": "Planes y Precios",
                 "url": "https://klynn.com.do/#planes"
               },
               {
                 "@type": "SiteNavigationElement",
-                "position": 3,
+                "position": 4,
                 "name": "Iniciar sesión",
                 "url": "https://klynn.com.do/login"
               },
               {
                 "@type": "SiteNavigationElement",
-                "position": 4,
+                "position": 5,
                 "name": "Crear cuenta gratis",
                 "url": "https://klynn.com.do/registro"
               },
               {
                 "@type": "SiteNavigationElement",
-                "position": 5,
+                "position": 6,
                 "name": "Preguntas frecuentes",
                 "url": "https://klynn.com.do/#faq"
               }
@@ -356,88 +401,185 @@ function LandingPage() {
 
       <LandingNavbar />
 
-      {/* HERO SECTION - EXACT HUM-07 HTML 1:1 REPLICATION */}
-      <section className="hero">
-        <div className="hero__grid">
-          <div className="hero__lead">
-            <div className="inline-flex items-center gap-2 text-xs font-semibold tracking-wide text-slate-500 mb-3 select-none">
+      {/* HERO SECTION */}
+      <section className="relative overflow-hidden bg-gradient-to-b from-sky-50/60 via-white to-sky-50/20 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 border-b border-border/60 pt-4 sm:pt-6 md:pt-8 pb-10 md:pb-14">
+        <div className="mx-auto max-w-6xl px-6">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 lg:gap-10 items-center">
+            {/* Columna Izquierda: Lead */}
+            <div className="flex flex-col justify-center">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/95 dark:bg-slate-900/95 border border-sky-200/80 dark:border-sky-800/80 shadow-[0_4px_14px_-2px_rgba(27,75,115,0.12)] backdrop-blur-md mb-3.5 select-none self-start transition-all hover:border-sky-300 hover:shadow-md">
+                <div className="flex items-center justify-center h-6 w-6 rounded-full bg-gradient-to-tr from-[#1B4B73] via-[#0284c7] to-[#38bdf8] text-white shadow-xs">
+                  <Cloud className="h-3.5 w-3.5 fill-white/20 stroke-[2.2]" />
+                </div>
+                <span className="text-xs font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                  Plataforma en la nube
+                </span>
+                <span className="h-3.5 w-px bg-slate-200 dark:bg-slate-700 mx-0.5" />
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase tracking-wider text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/70 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  100% Online
+                </span>
+              </div>
+
+              <h1 className="text-3xl sm:text-4xl lg:text-[38px] xl:text-[40px] font-black tracking-tight text-slate-900 dark:text-white leading-[1.14]">
+                El software #1 para{" "}
+                <span className="relative inline-block text-[#1B4B73] dark:text-sky-400">
+                  lavanderías
+                  <svg
+                    className="absolute -bottom-1 sm:-bottom-1.5 left-0 w-full h-3 sm:h-3.5 text-[#F0B900] pointer-events-none"
+                    viewBox="0 0 200 12"
+                    fill="none"
+                    preserveAspectRatio="none"
+                  >
+                    <path
+                      d="M3 8.5C40 2 120 2 197 7.5"
+                      stroke="currentColor"
+                      strokeWidth="3.5"
+                      strokeLinecap="round"
+                    />
+                  </svg>
+                </span>{" "}
+                en Latinoamérica y España.
+              </h1>
+
+              <p className="mt-3.5 sm:mt-4 text-base sm:text-lg text-slate-600 dark:text-slate-300 leading-relaxed max-w-xl">
+                Controla caja, órdenes, facturación con impuestos locales, tickets térmicos 57/80mm y notificaciones por WhatsApp desde la nube. Multi-sucursal, en moneda de tu país y con soporte en tu idioma.
+              </p>
+
+              <div className="mt-6 flex flex-wrap items-center gap-3.5">
+                <Link
+                  to="/registro"
+                  className="btn btn--anil font-bold text-white shadow-md hover:shadow-lg"
+                >
+                  Comenzar prueba de 14 días <span className="btn__arrow">→</span>
+                </Link>
+                <a
+                  href="https://wa.link/vxstq4"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn--yellow font-bold text-slate-900 shadow-md hover:shadow-lg"
+                >
+                  Solicitar demostración
+                </a>
+              </div>
+
+              {/* Badges de confianza en una sola línea */}
+              <div className="mt-6 flex items-center gap-2 flex-nowrap overflow-x-auto pt-4 border-t border-slate-200/60 dark:border-slate-800">
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-[0_2px_6px_-2px_rgba(15,23,42,0.06)] whitespace-nowrap shrink-0 transition-all hover:-translate-y-0.5 hover:shadow-xs">
+                  <div className="h-5 w-5 rounded-full bg-sky-100/90 dark:bg-sky-950/80 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-200/80 dark:border-sky-900 shadow-3xs">
+                    <CreditCard className="h-2.5 w-2.5 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[11.5px] font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                    Sin tarjeta de crédito
+                  </span>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-[0_2px_6px_-2px_rgba(15,23,42,0.06)] whitespace-nowrap shrink-0 transition-all hover:-translate-y-0.5 hover:shadow-xs">
+                  <div className="h-5 w-5 rounded-full bg-emerald-100/90 dark:bg-emerald-950/80 text-emerald-600 dark:text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-200/80 dark:border-emerald-900 shadow-3xs">
+                    <Globe className="h-2.5 w-2.5 stroke-[2.4]" />
+                  </div>
+                  <span className="text-[11.5px] font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                    13 países soportados
+                  </span>
+                </div>
+
+                <div className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/90 dark:border-slate-800 shadow-[0_2px_6px_-2px_rgba(15,23,42,0.06)] whitespace-nowrap shrink-0 transition-all hover:-translate-y-0.5 hover:shadow-xs">
+                  <div className="h-5 w-5 rounded-full bg-sky-100/90 dark:bg-sky-950/80 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0 border border-sky-200/80 dark:border-sky-900 shadow-3xs">
+                    <Cloud className="h-2.5 w-2.5 stroke-[2.2]" />
+                  </div>
+                  <span className="text-[11.5px] font-bold text-slate-800 dark:text-slate-100 tracking-tight">
+                    Datos en la nube
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* Columna Derecha: Mockup Visual con landing.webp */}
+            <motion.div
+              initial={{ opacity: 0, y: 15, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="flex items-center justify-center relative w-full"
+            >
+              {/* Fondos ambientales y resplandor */}
+              <div className="absolute top-1/4 right-0 w-72 h-72 bg-amber-300/20 dark:bg-amber-400/10 rounded-full blur-3xl pointer-events-none -z-10" />
+              <div className="absolute bottom-2 left-0 w-64 h-64 bg-sky-300/20 dark:bg-sky-500/10 rounded-full blur-2xl pointer-events-none -z-10" />
+
+              <div className="relative w-full flex items-center justify-center">
+                <img
+                  src="/landing.webp"
+                  alt="Klynn — Software de Gestión Operativa para Lavanderías y Tintorerías en Latinoamérica y España"
+                  className="w-full h-auto object-contain max-h-[440px] drop-shadow-xl hover:scale-[1.01] transition-transform duration-300"
+                  loading="eager"
+                  fetchPriority="high"
+                />
+              </div>
+            </motion.div>
+          </div>
+        </div>
+      </section>
+
+      {/* ─── PAÍSES DISPONIBLES (DIRECTAMENTE DEBAJO DEL HERO) ─── */}
+      <section className="border-y border-border bg-slate-50/80 dark:bg-slate-900/60 py-10 md:py-12" id="paises">
+        <div className="mx-auto max-w-7xl px-6">
+          <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-8">
+            <div>
+              <div className="inline-flex items-center gap-2 text-xs font-bold tracking-wider uppercase text-primary mb-2">
+                <Globe className="h-4 w-4" />
+                <span>Disponibilidad Regional</span>
+              </div>
+              <h2 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white">
+                Disponible en 13 países para tu lavandería
+              </h2>
+              <p className="mt-1.5 text-sm sm:text-base text-muted-foreground max-w-2xl">
+                Klynn está listo para operar en lavanderías y tintorerías de toda Latinoamérica y España.
+              </p>
+            </div>
+            <div className="hidden lg:flex items-center gap-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 px-3.5 py-1.5 rounded-full shrink-0">
               <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Software de Gestión Operativa</span>
-            </div>
-            <h1 className="hero__title">
-              El software #1 para <span style={{ color: "var(--color-anil, #1B4B73)" }}>lavanderías</span> en República Dominicana.
-            </h1>
-            <p className="hero__lede">
-              Cobra con ITBIS y NCF, imprime tickets térmicos 57/80mm, controla caja, clientes y entregas desde una sola pantalla. Multi-sucursal, en pesos dominicanos y con soporte criollo por WhatsApp.
-            </p>
-            <div className="hero__cta">
-              <Link to="/registro" className="btn btn--anil">
-                Comenzar prueba de 14 días <span className="btn__arrow">→</span>
-              </Link>
-              <a href="https://wa.link/vxstq4" target="_blank" rel="noopener noreferrer" className="btn btn--outline btn--ink">
-                Solicitar demostración
-              </a>
-            </div>
-            <div className="hero__checks">
-              <span><span className="check-icon">✓</span> Sin tarjeta de crédito</span>
-              <span><span className="check-icon">✓</span> Cancela cuando quieras</span>
-              <span><span className="check-icon">✓</span> Datos en la nube</span>
+              <span>13 Países Soportados</span>
             </div>
           </div>
 
-          <div className="hero__stage">
-            <div className="ticket-card" id="starter">
-              <div className="ticket-card__head">
-                <div className="ticket-card__logo">
-                  <span className="bub-mark" aria-hidden="true"></span>
-                </div>
-                <p className="ticket-card__title">Lavandería La Burbuja</p>
-                <p className="ticket-card__sub">RNC: 131-12345-6<br />Tel: 809-555-0142</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-3">
+            {COUNTRIES.map((c) => (
+              <div
+                key={c.code}
+                className="flex flex-col items-center justify-center p-4 rounded-2xl border border-slate-200/90 dark:border-slate-800 bg-white dark:bg-slate-900/90 shadow-2xs hover:shadow-md hover:border-slate-300 dark:hover:border-slate-700 transition-all duration-200 hover:-translate-y-0.5 text-center min-h-[110px]"
+              >
+                <img
+                  src={`https://flagcdn.com/w80/${c.code.toLowerCase()}.png`}
+                  alt={`Bandera de ${c.name}`}
+                  width={56}
+                  height={38}
+                  className="w-14 h-9.5 object-cover rounded-md shadow-sm border border-slate-200/80 dark:border-slate-700 mb-2.5 shrink-0"
+                  loading="lazy"
+                />
+                <span className="font-bold text-xs sm:text-sm text-slate-900 dark:text-white leading-snug">
+                  {c.name}
+                </span>
               </div>
-              <hr className="ticket-card__hr" />
-              <div className="ticket-card__meta">
-                <div>ORDEN: KL-202605-0042</div>
-                <div>NCF: B0200000123</div>
-                <div>Fecha: 02/05/2026 10:30 AM</div>
-                <div>Cliente: Juan Pérez</div>
+            ))}
+
+            {/* Tarjeta 14: Expansión / Próximamente */}
+            <div className="flex flex-col items-center justify-center p-4 rounded-2xl border border-dashed border-slate-300 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/40 text-center min-h-[110px]">
+              <div className="w-14 h-9.5 rounded-md bg-muted/80 flex items-center justify-center text-xl shadow-2xs border border-dashed border-slate-300 dark:border-slate-700 mb-2.5 shrink-0">
+                🌎
               </div>
-              <hr className="ticket-card__hr" />
-              <div className="ticket-card__items">
-                <div className="ticket-card__item">
-                  <span>Camisa M/L x2</span>
-                  <span>RD$ 300.00</span>
-                </div>
-                <div className="ticket-card__item">
-                  <span>Pantalón vestir x1</span>
-                  <span>RD$ 200.00</span>
-                </div>
-                <div className="ticket-card__item">
-                  <span>Lavado/lb 3.5lb</span>
-                  <span>RD$ 280.00</span>
-                </div>
-              </div>
-              <hr className="ticket-card__hr" />
-              <div className="ticket-card__totals">
-                <div className="ticket-card__total-row">
-                  <span>Subtotal</span>
-                  <span>RD$ 780.00</span>
-                </div>
-                <div className="ticket-card__total-row">
-                  <span>ITBIS 18%</span>
-                  <span>RD$ 140.40</span>
-                </div>
-                <div className="ticket-card__total-row ticket-card__total-row--final">
-                  <span>TOTAL</span>
-                  <span>RD$ 920.40</span>
-                </div>
-              </div>
-              <p className="ticket-card__footer">¡Gracias por su visita! 🧺 · 57mm / 80mm</p>
+              <a
+                href="https://wa.link/vxstq4"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-bold text-xs sm:text-sm text-primary hover:underline leading-snug"
+              >
+                ¿Tu país no está?
+              </a>
             </div>
           </div>
         </div>
       </section>
 
-      {/* ─── EL IMPACTO EN TU LAVANDERÍA (HUM-07 1:1) ─── */}
+      {/* ─── EL IMPACTO EN TU LAVANDERÍA ─── */}
       <section className="border-y border-border bg-surface-elevated py-16 md:py-20" id="impacto">
         <div className="mx-auto max-w-6xl px-6">
           <div className="mb-12 text-center">
@@ -459,16 +601,16 @@ function LandingPage() {
             </div>
             <div className="bignum">
               <dd className="bignum__v">
-                <CountUp to={100} />
-                <span className="bignum__u">%</span>
+                <CountUp to={13} />
+                <span className="bignum__u">países</span>
               </dd>
-              <dt className="bignum__k">Facturación electrónica 100% operativa con NCF, e-CF e ITBIS integrado.</dt>
+              <dt className="bignum__k">Plataforma internacional adaptada con divisas e impuestos de cada país.</dt>
             </div>
             <div className="bignum">
               <dd className="bignum__v">
                 <CountUp to={0} />
               </dd>
-              <dt className="bignum__k">Prendas extraviadas gracias a la gestión eficaz del sistema Klynn.</dt>
+              <dt className="bignum__k">Prendas extraviadas gracias a la estantería y control de ganchos.</dt>
             </div>
           </dl>
         </div>
@@ -480,27 +622,27 @@ function LandingPage() {
           <div>
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">¿Por qué Klynn?</div>
             <h2 className="text-balance text-4xl md:text-5xl">
-              Deja la libreta y el Excel. <span className="text-primary">Tu lavandería merece más.</span>
+              Deja la libreta y el Excel. <span className="text-primary">Tu lavandería merece un estándar internacional.</span>
             </h2>
             <p className="mt-5 text-lg text-muted-foreground">
-              En República Dominicana, la mayoría de las lavanderías todavía anota órdenes a mano,
-              pierde tickets y cuadra la caja "a ojo". El resultado: prendas perdidas, clientes molestos
-              y dinero que se va sin saber por dónde.
+              En cualquier ciudad de Latinoamérica o España, demasiadas lavanderías todavía anotan pedidos en papel,
+              pierden tickets y cuadran la caja "a ojo". El resultado: prendas traspapeladas, clientes molestos
+              y fugas de dinero silenciosas.
             </p>
             <p className="mt-4 text-lg text-muted-foreground">
-              Klynn nació en Santo Domingo para resolver exactamente eso. Un sistema diseñado con
-              dueños de lavanderías dominicanas, que entiende cómo se cobra aquí, cómo se factura el
-              ITBIS y cómo se entrega en sectores como Naco, Bella Vista o Los Cacicazgos.
+              Klynn fue diseñado junto a dueños reales de lavanderías y tintorerías para resolver eso de raíz:
+              cálculo exacto de impuestos locales (ITBIS en RD, IVA, IGV, ITBMS), tickets térmicos
+              universales y notificaciones automáticas por WhatsApp.
             </p>
           </div>
           <div className="grid gap-4 sm:grid-cols-2">
             {[
-              { icon: Calculator, t: "ITBIS automático", d: "18% calculado en cada factura, sin errores." },
-              { icon: FileText, t: "NCF por tipo", d: "B01, B02, B14, B15 con secuencias auto." },
-              { icon: Banknote, t: "Pesos dominicanos", d: "Sin conversiones, sin tasas raras." },
-              { icon: Cloud, t: "100% en la nube", d: "Entra desde cualquier dispositivo." },
-              { icon: WifiOff, t: "Modo Offline POS", d: "Sigue cobrando e imprimiendo sin internet." },
-              { icon: Headphones, t: "Soporte criollo", d: "Te respondemos en WhatsApp en minutos." },
+              { icon: Calculator, t: "Impuestos automáticos", d: "Configura ITBIS 18%, IVA 16%/19%/21%, IGV o ITBMS según tu país sin cálculos manuales." },
+              { icon: FileText, t: "Tickets y comprobantes", d: "Tickets térmicos claros para mostrador y soporte de comprobantes oficiales para República Dominicana." },
+              { icon: Banknote, t: "Moneda de tu país", d: "Cobra en pesos dominicanos, mexicanos, colombianos, euros, dólares o tu divisa local." },
+              { icon: Cloud, t: "100% en la nube", d: "Entra desde cualquier computadora, tablet o móvil." },
+              { icon: WifiOff, t: "Modo Offline POS", d: "Sigue cobrando e imprimiendo aunque no haya internet." },
+              { icon: Headphones, t: "Soporte en español", d: "Atención directa vía WhatsApp por especialistas." },
             ].map((b) => (
               <div key={b.t} className="rounded-2xl border border-border bg-surface p-5 shadow-card">
                 <b.icon className="mb-3 h-5 w-5 text-primary" />
@@ -517,9 +659,9 @@ function LandingPage() {
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="mb-14 mx-auto max-w-2xl text-center">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Operación completa</div>
-            <h2 className="text-balance text-3xl md:text-4xl">Todo lo que necesita una lavandería moderna en RD.</h2>
+            <h2 className="text-balance text-3xl md:text-4xl">Todo lo que necesita una lavandería moderna en tu país.</h2>
             <p className="mt-4 text-lg text-muted-foreground">
-              Diseñado junto a lavanderías de Santo Domingo, Santiago y la zona Este. Cubrimos cada paso desde
+              Diseñado junto a lavanderías de Latinoamérica y España. Cubrimos cada paso desde
               que el cliente entra por la puerta hasta el cierre de caja del día.
             </p>
           </div>
@@ -653,26 +795,27 @@ function LandingPage() {
                             </p>
 
                             <div className="bg-black/20 rounded-lg p-2.5 my-2 space-y-1.5 text-[11px] text-slate-200 border border-white/5">
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-300 flex items-center gap-1.5"><Package className="h-3.5 w-3.5 text-emerald-400" /> Camisa M/L x2:</span>
-                                <span className="font-mono">RD$ 300.00</span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-300 flex items-center gap-1.5"><Scissors className="h-3.5 w-3.5 text-emerald-400" /> Pantalón vestir x1:</span>
-                                <span className="font-mono">RD$ 200.00</span>
-                              </div>
-                              <div className="flex justify-between items-center">
-                                <span className="text-slate-300 flex items-center gap-1.5"><Droplets className="h-3.5 w-3.5 text-emerald-400" /> Lavado 3.5 lb:</span>
-                                <span className="font-mono">RD$ 280.00</span>
-                              </div>
+                              {countryDemo.items.slice(0, 3).map((it, idx) => (
+                                <div key={idx} className="flex justify-between items-center">
+                                  <span className="text-slate-300 flex items-center gap-1.5">
+                                    {idx === 0 ? <Package className="h-3.5 w-3.5 text-emerald-400" /> : idx === 1 ? <Scissors className="h-3.5 w-3.5 text-emerald-400" /> : <Droplets className="h-3.5 w-3.5 text-emerald-400" />}
+                                    {it.name}:
+                                  </span>
+                                  <span className="font-mono">
+                                    {countryDemo.currencySymbol} {it.price.toLocaleString("es-ES", { minimumFractionDigits: countryDemo.currencyDecimals, maximumFractionDigits: countryDemo.currencyDecimals })}
+                                  </span>
+                                </div>
+                              ))}
                               <div className="border-t border-white/10 pt-1.5 flex justify-between font-bold text-white text-xs">
-                                <span>TOTAL ITBIS INCL.:</span>
-                                <span className="text-[#25D366]">RD$ 920.40</span>
+                                <span>TOTAL {countryDemo.taxName} INCL.:</span>
+                                <span className="text-[#25D366]">
+                                  {countryDemo.currencySymbol} {(countryDemo.items.slice(0, 3).reduce((acc, it) => acc + it.price, 0) * (1 + countryDemo.taxRate / 100)).toLocaleString("es-ES", { minimumFractionDigits: countryDemo.currencyDecimals, maximumFractionDigits: countryDemo.currencyDecimals })}
+                                </span>
                               </div>
                             </div>
 
                             <div className="text-[11px] text-slate-300 space-y-1 mt-2">
-                              <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> Sucursal Naco · Av. Tiradentes #42</div>
+                              <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> {countryDemo.sampleAddress}</div>
                               <div className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> Horario retiro: Lun-Sáb 8am - 7pm</div>
                             </div>
 
@@ -704,40 +847,44 @@ function LandingPage() {
                         transition={{ duration: 0.25 }}
                         className="space-y-3.5"
                       >
-                        {/* 1. Outbound Auto-Receipt / NCF Notification */}
+                        {/* 1. Outbound Auto-Receipt / Fiscal Notification */}
                         <div className="flex justify-end">
                           <div className="bg-[#005c4b] text-slate-100 rounded-2xl rounded-tr-none p-3.5 max-w-[92%] shadow-md border border-[#007a63]/50">
                             <div className="text-center font-bold text-xs text-[#25D366] tracking-wider uppercase mb-1.5 flex items-center justify-center gap-1.5">
-                              <FileText className="h-3.5 w-3.5" /> FACTURA PARA CONSUMIDOR FINAL
+                              <FileText className="h-3.5 w-3.5" /> {countryDemo.docType}
                             </div>
                             <div className="text-[11px] text-slate-200 space-y-1.5 font-mono bg-black/25 p-3 rounded-xl border border-white/5">
-                              <div className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> <strong>Lavandería La Burbuja</strong></div>
-                              <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" /> RNC: 131-12345-6</div>
-                              <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Av. Tiradentes #42, Naco</div>
+                              <div className="flex items-center gap-1.5"><Building2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> <strong>{countryDemo.sampleStoreName}</strong></div>
+                              <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" /> {countryDemo.docLabel}: {countryDemo.sampleDocNum}</div>
+                              <div className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-slate-400 shrink-0" /> {countryDemo.sampleAddress}</div>
                               <div className="border-t border-white/10 my-1 pt-1.5 text-slate-300 space-y-1">
                                 <div className="flex items-center gap-1.5"><Receipt className="h-3.5 w-3.5 text-slate-400 shrink-0" /> ORDEN: <strong>KL-202605-0042</strong></div>
-                                <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" /> NCF: <strong>B0200000123</strong></div>
+                                <div className="flex items-center gap-1.5"><FileText className="h-3.5 w-3.5 text-slate-400 shrink-0" /> {countryDemo.docLabel}: <strong>{countryDemo.sampleFiscalSequence}</strong></div>
                                 <div className="flex items-center gap-1.5"><Clock className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Fecha: 02/05/2026 10:30 AM</div>
                               </div>
                               <div className="border-t border-white/10 my-1 pt-1.5 text-slate-300 space-y-1">
                                 <div className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-slate-400 shrink-0" /> CLIENTE: Juan Pérez</div>
-                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Tel: (809) 555-0142</div>
+                                <div className="flex items-center gap-1.5"><Phone className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Tel: ({countryDemo.phonePrefix}) 555-0142</div>
                               </div>
                               <div className="border-t border-white/10 my-1 pt-1.5 space-y-1">
                                 <div className="text-emerald-300 font-bold font-sans text-xs flex items-center gap-1.5 mb-1"><Package className="h-3.5 w-3.5 text-emerald-400 shrink-0" /> DETALLE PRENDAS:</div>
-                                <div className="pl-2">• Camisa M/L x2: RD$ 300.00</div>
-                                <div className="pl-2">• Pantalón vestir x1: RD$ 200.00</div>
-                                <div className="pl-2">• Lavado/lb 3.5lb: RD$ 280.00</div>
+                                {countryDemo.items.slice(0, 3).map((it, idx) => (
+                                  <div key={idx} className="pl-2">
+                                    • {it.name}: {countryDemo.currencySymbol} {it.price.toLocaleString("es-ES", { minimumFractionDigits: countryDemo.currencyDecimals, maximumFractionDigits: countryDemo.currencyDecimals })}
+                                  </div>
+                                ))}
                               </div>
                               <div className="border-t border-white/10 my-1 pt-1.5 font-bold space-y-0.5">
-                                <div>SUBTOTAL: RD$ 780.00</div>
-                                <div>ITBIS (18%): RD$ 140.40</div>
-                                <div className="text-white text-xs mt-0.5">TOTAL: <span className="text-[#25D366]">RD$ 920.40</span></div>
+                                <div>SUBTOTAL: {countryDemo.currencySymbol} {countryDemo.items.slice(0, 3).reduce((acc, it) => acc + it.price, 0).toLocaleString("es-ES", { minimumFractionDigits: countryDemo.currencyDecimals, maximumFractionDigits: countryDemo.currencyDecimals })}</div>
+                                <div>{countryDemo.taxName} ({countryDemo.taxRate}%): {countryDemo.currencySymbol} {(countryDemo.items.slice(0, 3).reduce((acc, it) => acc + it.price, 0) * (countryDemo.taxRate / 100)).toLocaleString("es-ES", { minimumFractionDigits: countryDemo.currencyDecimals, maximumFractionDigits: countryDemo.currencyDecimals })}</div>
+                                <div className="text-white text-xs mt-0.5">
+                                  TOTAL: <span className="text-[#25D366]">{countryDemo.currencySymbol} {(countryDemo.items.slice(0, 3).reduce((acc, it) => acc + it.price, 0) * (1 + countryDemo.taxRate / 100)).toLocaleString("es-ES", { minimumFractionDigits: countryDemo.currencyDecimals, maximumFractionDigits: countryDemo.currencyDecimals })}</span>
+                                </div>
                               </div>
                               <div className="border-t border-white/10 my-1 pt-1.5 text-[10px] text-slate-300 font-sans space-y-1">
-                                <div className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Pago: EFECTIVO (Recibido: RD$ 1,000.00 | Vuelto: RD$ 79.60)</div>
+                                <div className="flex items-center gap-1.5"><CreditCard className="h-3.5 w-3.5 text-slate-400 shrink-0" /> Pago: EFECTIVO · Liquidado</div>
                                 <div className="flex items-center gap-2">
-                                  <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-slate-400" /> Saldo: RD$ 0.00</span>
+                                  <span className="flex items-center gap-1"><Shield className="h-3 w-3 text-slate-400" /> Saldo: {countryDemo.currencySymbol} 0.00</span>
                                   <span className="flex items-center gap-1 text-emerald-400 font-bold"><Check className="h-3 w-3 text-emerald-400" /> Estado: RECIBIDA</span>
                                 </div>
                               </div>
@@ -1470,17 +1617,35 @@ function LandingPage() {
       <section className="mx-auto max-w-6xl px-6 py-20">
         <div className="mb-14 text-center">
           <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Lo que dicen los dueños</div>
-          <h2 className="text-balance text-4xl md:text-5xl">Lavanderías dominicanas hablando claro.</h2>
+          <h2 className="text-balance text-4xl md:text-5xl">Lavanderías de toda la región hablando claro.</h2>
+          <p className="mt-3 text-muted-foreground text-sm sm:text-base max-w-2xl mx-auto">
+            Dueños de República Dominicana, México, Colombia, Chile, Panamá y España que optimizaron su mostrador, caja y entregas con Klynn.
+          </p>
         </div>
-        <div className="grid gap-6 md:grid-cols-3">
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {testimonios.map((t) => (
-            <div key={t.nombre} className="rounded-2xl border border-border bg-surface p-7 shadow-card">
-              <div className="flex gap-0.5 text-gold">
-                {Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-4 w-4 fill-gold" />)}
+            <div key={t.nombre} className="rounded-2xl border border-border bg-surface p-7 shadow-card flex flex-col justify-between">
+              <div>
+                <div className="flex items-center justify-between gap-2 mb-3">
+                  <div className="flex gap-0.5 text-gold">
+                    {Array.from({ length: 5 }).map((_, i) => <Star key={i} className="h-4 w-4 fill-gold" />)}
+                  </div>
+                  <span className="text-xs font-bold text-slate-600 dark:text-slate-300 bg-muted/70 px-2.5 py-1 rounded-full border border-border/60 flex items-center gap-1.5 shrink-0">
+                    <img
+                      src={`https://flagcdn.com/w80/${t.paisCode}.png`}
+                      alt={`Bandera de ${t.paisNombre}`}
+                      width={16}
+                      height={11}
+                      className="w-4 h-2.5 object-cover rounded-xs shrink-0 shadow-2xs border border-black/10"
+                      loading="lazy"
+                    />
+                    <span>{t.paisNombre}</span>
+                  </span>
+                </div>
+                <p className="mt-2 text-sm leading-relaxed text-foreground italic">"{t.texto}"</p>
               </div>
-              <p className="mt-4 text-base leading-relaxed text-foreground">"{t.texto}"</p>
               <div className="mt-5 border-t border-border pt-4">
-                <div className="font-display text-base">{t.nombre}</div>
+                <div className="font-display font-bold text-base text-slate-900 dark:text-white">{t.nombre}</div>
                 <div className="text-xs text-muted-foreground">{t.negocio}</div>
               </div>
             </div>
@@ -1492,14 +1657,51 @@ function LandingPage() {
       <section id="planes" className="border-y border-border bg-surface-elevated">
         <div className="mx-auto max-w-6xl px-6 py-20">
           <div className="mb-14 text-center">
-            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Planes en RD$</div>
+            <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary inline-flex items-center justify-center gap-1.5">
+              <img
+                src={`https://flagcdn.com/w80/${selectedCountry.code.toLowerCase()}.png`}
+                alt={`Bandera de ${selectedCountry.name}`}
+                width={18}
+                height={12}
+                className="w-4.5 h-3 object-cover rounded shadow-2xs border border-slate-300/60 shrink-0"
+              />
+              <span>Precios en {selectedCountry.name} ({selectedCountry.currency.symbol} {selectedCountry.currency.code})</span>
+            </div>
             <h2 className="text-balance text-4xl md:text-5xl">Precios honestos, sin sorpresas.</h2>
             <p className="mx-auto mt-4 max-w-xl text-lg text-muted-foreground">
-              <strong className="font-bold text-slate-900 dark:text-white">14 días de prueba gratis</strong> en cualquier plan. Cambia o cancela cuando quieras. Pagos en pesos dominicanos.
+              <strong className="font-bold text-slate-900 dark:text-white">14 días de prueba gratis</strong> en cualquier plan. Cambia o cancela cuando quieras.
+              {selectedCountryCode === "DO" ? " Pagos en pesos dominicanos." : ` Adaptado a la moneda de ${selectedCountry.name}.`}
             </p>
 
+            {/* Selector de país para los precios */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-1.5 max-w-3xl mx-auto">
+              <span className="text-xs font-bold text-slate-500 mr-1">Ver precios para:</span>
+              {COUNTRIES.map((c) => (
+                <button
+                  key={c.code}
+                  type="button"
+                  onClick={() => setSelectedCountryCode(c.code)}
+                  className={`text-xs px-2.5 py-1 rounded-lg font-bold border transition-all cursor-pointer flex items-center gap-1.5 ${
+                    c.code === selectedCountryCode
+                      ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-xs"
+                      : "bg-surface text-muted-foreground border-border hover:border-slate-300 dark:hover:border-slate-700"
+                  }`}
+                >
+                  <img
+                    src={`https://flagcdn.com/w80/${c.code.toLowerCase()}.png`}
+                    alt={`Bandera de ${c.name}`}
+                    width={16}
+                    height={11}
+                    className="w-4 h-2.5 object-cover rounded-xs shrink-0 shadow-2xs"
+                  />
+                  <span>{c.code}</span>
+                  <span className="hidden sm:inline opacity-80 text-[10px]">({c.currency.code})</span>
+                </button>
+              ))}
+            </div>
+
             {/* TOGGLE MENSUAL / ANUAL */}
-            <div className="mt-10 flex items-center justify-center gap-4">
+            <div className="mt-8 flex items-center justify-center gap-4">
               <span className={`text-sm font-bold transition-colors ${billingCycle === "monthly" ? "text-primary" : "text-muted-foreground"}`}>Pago Mensual</span>
               <button
                 onClick={() => setBillingCycle(billingCycle === "monthly" ? "yearly" : "monthly")}
@@ -1521,9 +1723,12 @@ function LandingPage() {
 
           <div className="grid gap-6 md:grid-cols-3">
             {plans.filter(p => !p.es_especial).map((plan) => {
-              const price = billingCycle === "monthly" ? plan.precio_mensual : (plan.precio_anual || (plan.precio_mensual * 12 * 0.85));
+              const rawPrice = billingCycle === "monthly" ? plan.precio_mensual : (plan.precio_anual || (plan.precio_mensual * 12 * 0.85));
               const polarUrl = billingCycle === "monthly" ? plan.polar_product_monthly_url : plan.polar_product_yearly_url;
-              const checkoutUrl = polarUrl || "/registro";
+              const checkoutUrl = polarUrl || `/registro?country=${selectedCountryCode}&plan=${plan.id}`;
+
+              // Dynamic localized price calculation
+              const displayPrice = formatCurrencyByCountry(rawPrice, selectedCountryCode);
 
               return (
                 <div
@@ -1536,7 +1741,7 @@ function LandingPage() {
                   <div className="flex flex-col">
                     <div className="font-display text-2xl font-bold text-slate-900">{plan.nombre}</div>
                     <div className="mt-1.5 flex items-baseline gap-1">
-                      <span className="font-display text-3xl font-bold tracking-tight text-slate-900">{formatRD(price).replace("DOP", "RD$")}</span>
+                      <span className="font-display text-3xl font-bold tracking-tight text-slate-900">{displayPrice}</span>
                     </div>
                     <div className="-mt-0.5 text-xs font-semibold text-slate-500">{billingCycle === "monthly" ? "por mes" : "por año"}</div>
                   </div>
@@ -1556,7 +1761,7 @@ function LandingPage() {
                           <circle cx="12" cy="12" r="10" />
                           <path d="m9 12 2 2 4-4" />
                         </svg>
-                        <span>{plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</span>
+                        <span>{plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString(selectedCountryCode === "DO" ? "es-DO" : "es")} órdenes/facturas/mes` : "Órdenes/facturas ilimitadas"}</span>
                       </div>
                       <div className="flex items-center gap-2.5 text-slate-700 font-semibold">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
@@ -1665,7 +1870,7 @@ function LandingPage() {
                     </a>
                   ) : (
                     <Link
-                      to="/registro"
+                      to={`/registro?country=${selectedCountryCode}&plan=${plan.id}`}
                       className={`plan-btn mt-auto ${plan.destacado ? "plan-btn--yellow" : "plan-btn--outline"}`}
                     >
                       {plan.destacado ? `Probar Plan ${plan.nombre}` : plan.id === "enterprise" ? "Contactar ventas" : "Comenzar 14 días gratis"}
@@ -1682,7 +1887,7 @@ function LandingPage() {
               {plans.filter(p => !!p.es_especial).map((plan) => {
                 const price = billingCycle === "monthly" ? plan.precio_mensual : (plan.precio_anual || (plan.precio_mensual * 12 * 0.85));
                 const polarUrl = billingCycle === "monthly" ? plan.polar_product_monthly_url : plan.polar_product_yearly_url;
-                const checkoutUrl = polarUrl || "/registro";
+                const checkoutUrl = polarUrl || `/registro?country=${selectedCountryCode}&plan=${plan.id}`;
                 const specialLabel = plan.titulo_especial?.trim() || "Plan especial";
 
                 return (
@@ -1702,7 +1907,7 @@ function LandingPage() {
                         <div className="font-display text-xl font-bold text-slate-900 dark:text-white leading-tight">{plan.nombre}</div>
                         <div className="mt-0.5 flex items-baseline gap-1">
                           <span className="font-display text-2xl font-black tracking-tight text-slate-900 dark:text-white">
-                            {formatRD(price).replace("DOP", "RD$")}
+                            {formatCurrencyByCountry(price, selectedCountryCode)}
                           </span>
                           <span className="text-[11px] font-medium text-slate-500">
                             {billingCycle === "monthly" ? "/mes" : "/año"}
@@ -1728,7 +1933,7 @@ function LandingPage() {
                             <span>Facturación</span>
                           </div>
                           <div className="text-xs font-bold text-slate-800 dark:text-slate-200">
-                            {plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes ilimitadas"}
+                            {plan.limite_ordenes_mes ? `${plan.limite_ordenes_mes.toLocaleString(selectedCountryCode === "DO" ? "es-DO" : "es")} Órdenes/mes` : "Órdenes ilimitadas"}
                           </div>
                         </div>
 
@@ -1758,7 +1963,7 @@ function LandingPage() {
                           </a>
                         ) : (
                           <Link
-                            to="/registro"
+                            to={`/registro?country=${selectedCountryCode}&plan=${plan.id}`}
                             className="plan-btn w-full sm:w-auto h-9 px-5 text-xs font-bold shrink-0 plan-btn--outline bg-card hover:bg-muted/80 shadow-2xs"
                           >
                             Comenzar 14 días gratis
@@ -1885,7 +2090,10 @@ function LandingPage() {
         <div className="mx-auto max-w-4xl px-6 py-24">
           <div className="mb-12 text-center">
             <div className="mb-3 text-xs font-semibold uppercase tracking-wider text-primary">Preguntas frecuentes</div>
-            <h2 className="text-balance text-4xl md:text-5xl">Lo que más nos preguntan en RD.</h2>
+            <h2 className="text-balance text-4xl md:text-5xl">Todo lo que necesitas saber.</h2>
+            <p className="mt-3 text-muted-foreground text-sm sm:text-base">
+              Respuestas claras sobre cobertura en tu país, facturación, impresoras y puesta en marcha.
+            </p>
           </div>
           <div className="space-y-4">
             {faqs.map((f) => (
@@ -1905,14 +2113,14 @@ function LandingPage() {
       <section className="mx-auto max-w-7xl px-6 py-16">
         <div className="grid gap-6 md:grid-cols-3">
           {[
-            { icon: MessageCircle, t: "WhatsApp", d: "+1 (849) 918-2727", s: "Lun–Sáb 8am–8pm" },
-            { icon: Phone, t: "Teléfono", d: "+1 (849) 918-2727", s: "Soporte técnico" },
-            { icon: Globe, t: "Oficina", d: "Av. 27 de Febrero, Santo Domingo", s: "República Dominicana" },
+            { icon: MessageCircle, t: "WhatsApp Directo", d: "+1 (849) 918-2727", s: "Atención comercial y técnica" },
+            { icon: Globe, t: "Presencia Internacional", d: "13 Países Activos", s: "Latinoamérica y España" },
+            { icon: Shield, t: "Seguridad Cloud", d: "Cifrado & Respaldos", s: "Disponibilidad 99.9% garantizada" },
           ].map((c) => (
             <div key={c.t} className="rounded-2xl border border-border bg-surface p-6 shadow-card">
               <c.icon className="mb-3 h-6 w-6 text-primary" />
-              <div className="font-display text-lg font-bold text-slate-900">{c.t}</div>
-              <div className="mt-1 text-sm font-bold text-slate-900">{c.d}</div>
+              <div className="font-display text-lg font-bold text-slate-900 dark:text-white">{c.t}</div>
+              <div className="mt-1 text-sm font-bold text-slate-900 dark:text-slate-100">{c.d}</div>
               <div className="text-xs text-muted-foreground">{c.s}</div>
             </div>
           ))}
@@ -1925,12 +2133,13 @@ function LandingPage() {
             <div>
               <Logo size="sm" className="[&_img]:!h-[52px]" />
               <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
-                Software de gestión hecho en República Dominicana 🇩🇴 para lavanderías que quieren crecer ordenadas, cobrar bien y dormir tranquilas.
+                Software de gestión y punto de venta para lavanderías y tintorerías en Latinoamérica y España. Facturación electrónica, tickets térmicos y WhatsApp automatizado.
               </p>
             </div>
             <div>
               <div className="mb-3 text-sm font-semibold">Producto</div>
               <ul className="space-y-2 text-xs text-muted-foreground">
+                <li><a href="#paises" className="hover:text-foreground">Países disponibles</a></li>
                 <li><a href="#features" className="hover:text-foreground">Funciones</a></li>
                 <li><a href="#planes" className="hover:text-foreground">Planes y precios</a></li>
                 <li><a href="#desktop" className="hover:text-foreground">Klynn Desktop</a></li>
@@ -1944,15 +2153,19 @@ function LandingPage() {
                 <li><Link to="/blog" className="hover:text-foreground">Blog y Consejos</Link></li>
                 <li><a href="#faq" className="hover:text-foreground">Preguntas frecuentes</a></li>
                 <li><a href="#sectores" className="hover:text-foreground">¿Para quién es?</a></li>
-                <li><span>Reportes DGII (606/607)</span></li>
+                <li><a href="#impacto" className="hover:text-foreground">Impacto operativo</a></li>
               </ul>
             </div>
             <div>
-              <div className="mb-3 text-sm font-semibold">Ciudades</div>
-              <ul className="space-y-2 text-xs text-muted-foreground">
-                <li><Link to="/software-lavanderia-santo-domingo" className="hover:text-foreground">Santo Domingo</Link></li>
-                <li><Link to="/software-lavanderia-santiago" className="hover:text-foreground">Santiago</Link></li>
-                <li><Link to="/software-lavanderia-punta-cana" className="hover:text-foreground">Punta Cana / Bávaro</Link></li>
+              <div className="mb-3 text-sm font-semibold">Países soportados</div>
+              <ul className="space-y-1.5 text-xs text-muted-foreground">
+                <li><a href="#paises" className="hover:text-foreground">🇩🇴 República Dominicana</a></li>
+                <li><a href="#paises" className="hover:text-foreground">🇲🇽 México</a></li>
+                <li><a href="#paises" className="hover:text-foreground">🇨🇴 Colombia</a></li>
+                <li><a href="#paises" className="hover:text-foreground">🇵🇦 Panamá · 🇨🇷 Costa Rica</a></li>
+                <li><a href="#paises" className="hover:text-foreground">🇵🇪 Perú · 🇨🇱 Chile</a></li>
+                <li><a href="#paises" className="hover:text-foreground">🇪🇸 España · 🇪🇨 Ecuador</a></li>
+                <li><a href="#paises" className="hover:text-foreground font-semibold text-primary">Ver los 13 países →</a></li>
               </ul>
             </div>
             <div>
@@ -1966,14 +2179,14 @@ function LandingPage() {
           </div>
           <div className="mt-10 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 md:flex-row">
             <p className="text-xs text-muted-foreground">
-              © {new Date().getFullYear()} Klynn · Hecho con 🧼 en República Dominicana
+              © {new Date().getFullYear()} Klynn · Hecho para lavanderías en Latinoamérica y España 🌎
             </p>
             <div className="flex items-center gap-4 text-xs text-muted-foreground">
               <Link to="/terminos" className="hover:text-foreground">Términos</Link>
               <Link to="/privacidad" className="hover:text-foreground">Privacidad</Link>
               <div className="flex items-center gap-3 ml-4">
                 <span className="flex items-center gap-1"><Shield className="h-3 w-3" /> Datos seguros</span>
-                <span className="flex items-center gap-1"><CreditCard className="h-3 w-3" /> Pagos en RD$</span>
+                <span className="flex items-center gap-1"><Globe className="h-3 w-3" /> 13 Países</span>
               </div>
             </div>
           </div>

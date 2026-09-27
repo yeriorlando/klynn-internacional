@@ -23,6 +23,8 @@ export interface ExportComparativaVentasOptions {
   modeLabel: string; // "Día", "Semana", "Mes", "Año"
   periods: { id: string; label: string; displayLabel?: string }[];
   periodResults: PeriodResultVentasExport[];
+  currencySymbol?: string;
+  currencyCode?: string;
 }
 
 const THEME_COLORS: Record<string, { headerBg: string; headerLight: string; textColor: string }> = {
@@ -57,7 +59,11 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
     tenantName = "Klynn Lavandería",
     modeLabel = "Mes",
     periodResults = [],
+    currencySymbol = "RD$",
+    currencyCode = "DOP",
   } = options;
+
+  const excelCurrencyFormat = `"${currencySymbol} "#,##0.00`;
 
   if (periodResults.length === 0) return;
 
@@ -83,7 +89,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
     const p = periodResults[i];
     columnsMeta.push(
       { header: `${p.id}: ${p.displayLabel}`, kind: "value", pId: p.id },
-      { header: `Dif. RD$ (${p.id} vs A)`, kind: "diff", pId: p.id },
+      { header: `Dif. ${currencySymbol} (${p.id} vs A)`, kind: "diff", pId: p.id },
       { header: `Var. % (${p.id} vs A)`, kind: "pct", pId: p.id }
     );
   }
@@ -116,7 +122,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
   // Tarjeta 1: Período Base A (Cols 0-1)
   kpiRowTitles.push(`TOTAL FACTURADO (${pA.id})`, "");
   kpiRowValues.push(pA.total, "");
-  kpiRowNotes.push(`${pA.count} órdenes · Ticket: RD$ ${pA.ticketPromedio.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "");
+  kpiRowNotes.push(`${pA.count} órdenes · Ticket: ${currencySymbol} ${pA.ticketPromedio.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`, "");
 
   // Tarjeta 2: Período Comparativo (B o C según corresponda) (Cols 2-3)
   const pComp = periodResults.length > 1 ? periodResults[1] : null;
@@ -126,7 +132,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
     const pctStr = pct >= 0 ? `+${pct.toFixed(1)}%` : `${pct.toFixed(1)}%`;
     kpiRowTitles.push(`TOTAL FACTURADO (${pComp.id})`, "");
     kpiRowValues.push(pComp.total, "");
-    kpiRowNotes.push(`${pComp.count} órdenes · Var vs A: ${pctStr} (${diff >= 0 ? "+" : ""}RD$ ${diff.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`, "");
+    kpiRowNotes.push(`${pComp.count} órdenes · Var vs A: ${pctStr} (${diff >= 0 ? "+" : ""}${currencySymbol} ${diff.toLocaleString("es-DO", { minimumFractionDigits: 2, maximumFractionDigits: 2 })})`, "");
   } else {
     kpiRowTitles.push("", "");
     kpiRowValues.push("", "");
@@ -219,7 +225,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
   ];
   periodResults.forEach((p) => {
     payColumnsMeta.push(
-      { header: `Monto RD$ (${p.id})`, kind: "amount" },
+      { header: `Monto ${currencySymbol} (${p.id})`, kind: "amount" },
       { header: `% Mix (${p.id})`, kind: "share" }
     );
   });
@@ -256,7 +262,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
   // Pie de nota
   aoa.push([]);
   aoa.push([
-    `* Reporte generado oficialmente desde Klynn Cloud POS. Cifras expresadas en Pesos Dominicanos (RD$ / DOP).`,
+    `* Reporte generado oficialmente desde Klynn Cloud POS. Cifras expresadas en ${currencySymbol} (${currencyCode}).`,
   ]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
@@ -350,7 +356,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
           alignment: { horizontal: "center", vertical: "center" },
         };
         if (typeof vCell.v === "number") {
-          vCell.z = '"RD$ "#,##0.00';
+          vCell.z = excelCurrencyFormat;
         }
       }
       const nCell = ws[`${cL}6`];
@@ -424,9 +430,9 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
 
       if (!isFirstCol) {
         if (colMeta.kind === "diff") {
-          // DIFERENCIA EN PESOS (RD$) O UNIDADES
+          // DIFERENCIA EN MONEDA O UNIDADES
           if (metric.isCurrency) {
-            cell.z = '"RD$ "#,##0.00';
+            cell.z = excelCurrencyFormat;
           } else if (metric.isInteger) {
             cell.z = '#,##0';
           } else {
@@ -453,7 +459,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
         } else {
           // VALOR NORMAL DEL PERÍODO
           if (metric.isCurrency) {
-            cell.z = '"RD$ "#,##0.00';
+            cell.z = excelCurrencyFormat;
           } else if (metric.isInteger) {
             cell.z = '#,##0';
           } else {
@@ -521,7 +527,7 @@ export function exportVentasComparativaToExcel(options: ExportComparativaVentasO
           cell.z = "0.0%";
           cell.s.font.italic = true;
         } else {
-          cell.z = '"RD$ "#,##0.00';
+          cell.z = excelCurrencyFormat;
         }
       }
     }

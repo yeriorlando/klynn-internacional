@@ -2,7 +2,7 @@ import { QRCodeSVG } from "qrcode.react";
 import { useMemo, useState, useEffect, useRef } from "react";
 import { createPortal, flushSync } from "react-dom";
 import { Search, Printer, Eye, X, XCircle, MessageCircle, DownloadCloud, MoreVertical, MoreHorizontal, ArrowUpCircle, ArrowDownCircle, FileText, Download, FileSpreadsheet, DollarSign, Coins, Loader2, Check, CheckCircle2, ArrowLeft, ChevronLeft, ChevronRight, Phone, Activity, Shirt, UserCog, Inbox, RefreshCw, Truck, Wallet, Scale, User, Sparkles, Droplets, Wind, Tag, MapPin, Layers, Copy } from "lucide-react";
-import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
+import { notificarWhatsApp, calcularDiasEnAlmacen, fueNotificadoHoy, construirMensajeWhatsAppPredeterminado, isWhatsAppAutomatedActive, toastWhatsAppSuccess } from "@/lib/whatsapp";
 import { showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { PageHeader } from "@/components/klynn/PageHeader";
@@ -33,10 +33,11 @@ import {
   getOrdenes, saveOrden, getClientes, getClienteById, getEmpleadoById, formatRD, formatDateRD, formatDateTimeRD, formatPhoneRD, getServicios,
   type Orden, type EstadoOrden, type Cliente, type Caja, type MetodoPago, type Empleado, type Tenant, type EstanteriaZona,
   checkPlanLimits, getCajaAbierta, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveECFDocument, IS_LOCAL_MODE,
-  updateOrdenEstado, can
+  updateOrdenEstado, can, getActiveTenantLocalization
 } from "@/lib/storage";
 import { emitirECF, getECFConfig, isECFReady, formatEcfStatus } from "@/lib/fiscal";
 import { showDGIIToast } from "@/components/klynn/DGIIToast";
+import { showOrderPaidToast } from "@/components/klynn/OrderCreatedToast";
 import { toast } from "sonner";
 import { AlertTriangle, Rocket, Building2, Zap, Calendar, CalendarDays, Receipt, CircleCheck, Ban, LayoutGrid, Banknote, CreditCard, Trash2, Clock, Gift, ShieldCheck, ShieldAlert } from "lucide-react";
 import { supabase, ensureFreshSupabaseSession } from "@/lib/supabase";
@@ -720,14 +721,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
         if (!isConsumidorFinal && hasClientPhone && cli) {
           const waConfig = tenant.config?.whatsapp;
-          const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+          const isAutomatedActive = isWhatsAppAutomatedActive(waConfig);
           const allowManual = (tenant.config?.whatsapp_web_manual ?? true) !== false;
           const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
 
           if (isAutomatedActive) {
             notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then(async (res) => {
               if (res.ok) {
-                toast.success("WhatsApp enviado al cliente ✅");
+                toastWhatsAppSuccess("WhatsApp enviado al cliente");
               } else if (allowManual) {
                 const msg = await construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista");
                 showWhatsAppManualToast({
@@ -798,14 +799,14 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
 
       if (!isConsumidorFinal && hasClientPhone && cli) {
         const waConfig = tenant.config?.whatsapp;
-        const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+        const isAutomatedActive = isWhatsAppAutomatedActive(waConfig);
         const allowManual = (tenant.config?.whatsapp_web_manual ?? true) !== false;
         const clienteNombre = [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre;
 
         if (isAutomatedActive) {
           notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then(async (r) => {
             if (r.ok) {
-              toast.success("WhatsApp enviado al cliente ✅");
+              toastWhatsAppSuccess("WhatsApp enviado al cliente");
             } else if (allowManual) {
               const msg = await construirMensajeWhatsAppPredeterminado(tenant, cli, ordenActualizada, "lista");
               showWhatsAppManualToast({
@@ -2625,7 +2626,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
               </div>
             </div>
             <div>
-              <label className="mb-1.5 block text-xs font-bold">Monto adicional (RD$)</label>
+              <label className="mb-1.5 block text-xs font-bold">Monto adicional ({tenant?.moneda_simbolo || "RD$"})</label>
               <Input
                 type="number"
                 min={0.01}
@@ -2733,7 +2734,7 @@ export function OrdenesPage({ authUser, embedded = false }: OrdenesPageProps = {
             </div>
             {codigoCredito === "03" && (
               <div>
-                <label className="mb-1.5 block text-xs font-bold">Monto a corregir (RD$)</label>
+                <label className="mb-1.5 block text-xs font-bold">Monto a corregir ({tenant?.moneda_simbolo || "RD$"})</label>
                 <Input
                   type="number"
                   min={0.01}
@@ -4563,6 +4564,7 @@ export interface CobrarOrdenDialogProps {
 }
 
 export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, clientes, queryClient, showPrintPortal, onSuccess }: CobrarOrdenDialogProps) {
+  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
   const user = useRequireAuth();
   const isAuthorized = user?.empleado?.rol === "ADMIN" || user?.empleado?.rol === "SUPERVISOR";
   const [metodo, setMetodo] = useState<MetodoPago>("EFECTIVO");
@@ -4813,11 +4815,17 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
         });
       }
 
-      toast.success(
-        nuevoSaldo === 0
-          ? `Orden #${orden.numero} saldada correctamente RD${montoAPagar} ✅`
-          : `Abono de RD${montoAPagar} registrado a la orden #${orden.numero} ✅`
-      );
+      const targetNombre = cli
+        ? [cli.nombre, cli.apellido].filter((x) => x && x !== "null").join(" ") || cli.nombre
+        : undefined;
+
+      showOrderPaidToast({
+        numero: orden.numero,
+        monto: montoAPagar,
+        isSaldada: nuevoSaldo === 0,
+        clienteNombre: targetNombre,
+        currencySymbol,
+      });
       
       queryClient.invalidateQueries({ queryKey: ["ordenes", tenant.id] });
       queryClient.invalidateQueries({ queryKey: ["movimientos", tenant.id] });
@@ -5013,7 +5021,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                   <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
                     <div className="flex items-center gap-1.5 flex-1">
                       <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">
-                        RD$
+                        {currencySymbol}
                       </span>
                       <input
                         type="text"
@@ -5041,9 +5049,9 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                       : "border-emerald-100 dark:border-emerald-900/40 bg-emerald-50/40 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400"
                   }`}>
                     <div className="flex items-center gap-1.5 pl-1">
-                      <span className="font-bold text-xs opacity-80">RD$</span>
+                      <span className="font-bold text-xs opacity-80">{currencySymbol}</span>
                       <span className="text-xl sm:text-2xl font-display font-black leading-none">
-                        {formatRD(faltante > 0 ? faltante : vuelto).replace("RD$", "").trim()}
+                        {(faltante > 0 ? faltante : vuelto).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </span>
                     </div>
                     <div className={`h-7 w-7 rounded-lg flex items-center justify-center shrink-0 ${
@@ -5070,7 +5078,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                     onClick={() => setRecibido((prev) => prev + add)}
                     className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-[#1B4B73]/10 dark:hover:bg-[#1B4B73]/30 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 text-[11px] font-black transition-all cursor-pointer shrink-0 shadow-2xs"
                   >
-                    +{add} RD$
+                    +{formatRD(add)}
                   </button>
                 ))}
                 <button
@@ -5093,7 +5101,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 </label>
                 <div className="rounded-xl border-2 border-indigo-100 dark:border-indigo-900/40 bg-indigo-50/40 dark:bg-indigo-950/20 p-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-1">
-                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">RD$</span>
+                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">{currencySymbol}</span>
                     <input
                       type="text"
                       className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-indigo-900 dark:text-indigo-200 p-0 shadow-none"
@@ -5132,7 +5140,7 @@ export function CobrarOrdenDialog({ orden, onClose, tenant, cajaAbierta, cliente
                 </label>
                 <div className="rounded-xl border-2 border-sky-100 dark:border-sky-900/40 bg-sky-50/40 dark:bg-sky-950/20 p-2 flex items-center justify-between">
                   <div className="flex items-center gap-1.5 flex-1">
-                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">RD$</span>
+                    <span className="font-black text-sm text-slate-400 dark:text-slate-500 pl-1">{currencySymbol}</span>
                     <input
                       type="text"
                       className="h-8 w-full !text-xl sm:!text-2xl font-black font-display bg-transparent border-none outline-none focus:outline-none focus:ring-0 text-sky-900 dark:text-sky-200 p-0 shadow-none"

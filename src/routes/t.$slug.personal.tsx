@@ -73,6 +73,7 @@ import {
   deleteEmpleado,
   getOrdenes,
   formatRD,
+  getActiveTenantLocalization,
   calcularTarifaHoraExtra,
   uid,
   PERMISOS_SISTEMA,
@@ -1405,7 +1406,7 @@ function EmpleadoDialog({
                 <div className="grid gap-2.5 sm:grid-cols-2">
                   <div className="space-y-1">
                     <Label className="text-xs font-bold text-slate-700 dark:text-slate-300">
-                      Sueldo Base Mensual (RD$)
+                      Sueldo Base Mensual ({getActiveTenantLocalization().moneda_simbolo || "RD$"})
                     </Label>
                     <PriceInput
                       value={f.salario_base || 0}

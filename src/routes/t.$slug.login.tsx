@@ -2,7 +2,7 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { 
-  ArrowRight, ArrowLeft, Lock, Mail, Building2, AlertCircle, Eye, EyeOff, 
+  ArrowRight, ArrowLeft, Lock, Mail, Store, AlertCircle, Eye, EyeOff, 
   MapPin, ShieldCheck, Laptop, RefreshCw, Copy, Check, Loader2, ShieldAlert, CheckCircle2, Clock
 } from "lucide-react";
 import { toast } from "sonner";
@@ -446,8 +446,8 @@ function TenantLoginPage() {
                     alt={tenant.nombre} 
                   />
                 ) : (
-                  <div className="h-12 w-12 rounded-2xl bg-blue-50 border border-blue-200/70 flex items-center justify-center shadow-2xs">
-                    <Building2 className="h-6 w-6 text-[#1B4B73]" />
+                  <div className="h-13 w-13 rounded-full bg-[#1B4B73] text-white flex items-center justify-center shadow-md shadow-[#1B4B73]/25 ring-4 ring-blue-50/80 transition-transform hover:scale-105">
+                    <Store className="h-6.5 w-6.5 text-white" />
                   </div>
                 )}
               </div>
@@ -616,7 +616,7 @@ function TenantLoginPage() {
                   to="/login" 
                   className="w-full h-9.5 inline-flex items-center justify-center gap-2 px-3.5 rounded-xl border border-slate-200/90 bg-slate-50/80 hover:bg-slate-100 text-xs font-bold text-slate-700 transition-all shadow-2xs hover:border-[#1B4B73]/40 cursor-pointer"
                 >
-                  <Building2 className="h-3.5 w-3.5 text-[#1B4B73]" />
+                  <Store className="h-3.5 w-3.5 text-[#1B4B73]" />
                   <span>Cambiar de lavandería</span>
                 </Link>
               </div>

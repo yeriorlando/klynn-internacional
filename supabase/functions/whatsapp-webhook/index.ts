@@ -113,42 +113,308 @@ serve(async (req) => {
 
     const url = new URL(req.url)
 
+    // 0. DESCARGAR / SERVIR MULTIMEDIA DE NEUROAPI (GET)
+    if (req.method === 'GET' && url.searchParams.get('action') === 'media') {
+        const mediaId = url.searchParams.get('media_id');
+        const tenantId = url.searchParams.get('tenant_id');
+        if (!mediaId) {
+            return new Response('Missing media_id', { status: 400, headers: corsHeaders });
+        }
+
+        const supabase = createClient(
+            Deno.env.get('SUPABASE_URL') ?? '',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+        );
+
+        let apiKey = Deno.env.get('NEUROAPI_MASTER_KEY') || '';
+        if (!apiKey && tenantId) {
+            const { data: tenant } = await supabase.from('tenants').select('config').eq('id', tenantId).maybeSingle();
+            apiKey = tenant?.config?.whatsapp?.neuroapi_api_key || '';
+        }
+        if (!apiKey) {
+            const { data: globalRow } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle();
+            apiKey = globalRow?.bank_details?.neuroapi_master_api_key || '';
+        }
+
+        if (!apiKey) {
+            return new Response('NeuroAPI Key not configured', { status: 500, headers: corsHeaders });
+        }
+
+        try {
+            const mediaRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
+                headers: { 'x-api-key': apiKey }
+            });
+
+            if (!mediaRes.ok) {
+                return new Response(`Error al obtener archivo (${mediaRes.status})`, { status: mediaRes.status, headers: corsHeaders });
+            }
+
+            const contentType = mediaRes.headers.get('content-type') || 'application/octet-stream';
+            const bodyBuffer = await mediaRes.arrayBuffer();
+
+            return new Response(bodyBuffer, {
+                status: 200,
+                headers: {
+                    ...corsHeaders,
+                    'Content-Type': contentType,
+                    'Cache-Control': 'public, max-age=86400',
+                }
+            });
+        } catch (err: any) {
+            return new Response(`Error descargando media: ${err.message}`, { status: 500, headers: corsHeaders });
+        }
+    }
+
     // Webhook Verification (GET)
     if (req.method === 'GET') {
-        const mode = url.searchParams.get('hub.mode')
-        const token = url.searchParams.get('hub.verify_token')
-        const challenge = url.searchParams.get('hub.challenge')
+        const mode = url.searchParams.get('hub.mode');
+        const token = url.searchParams.get('hub.verify_token');
+        const challenge = url.searchParams.get('hub.challenge');
 
-        if (mode && token) {
-            if (mode === 'subscribe') {
-                console.log('Webhook verified successfully')
-                return new Response(challenge, { status: 200 })
-            }
+        if (mode === 'subscribe' || challenge) {
+            console.log('Webhook verified successfully');
+            return new Response(challenge || 'ok', { status: 200 });
         }
-        return new Response('Verification failed', { status: 403 })
+        return new Response('Verification failed', { status: 403 });
     }
 
     // Handle Incoming Events (POST)
     if (req.method === 'POST') {
         try {
-            const body = await req.json()
+            const body = await req.json();
             const supabase = createClient(
                 Deno.env.get('SUPABASE_URL') ?? '',
                 Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-            )
+            );
 
             // RAW LOGGING for audit/webhook_logs if table exists
             try {
                 await supabase.from('webhook_logs').insert({
                     payload: body,
                     headers: Object.fromEntries(req.headers.entries())
-                })
+                });
             } catch (e) {
                 // Ignore if webhook_logs table does not exist
-                console.log("Could not write raw webhook log", e)
+                console.log("Could not write raw webhook log", e);
             }
 
-            // Detect provider format
+            // A) Evento de Conexión de NeuroAPI (whatsapp.connected)
+            if (body.event === 'whatsapp.connected') {
+                const phone = body.data?.phones?.[0];
+                const sessionId = body.session_id;
+                let tenantId = url.searchParams.get('tenant_id');
+
+                if (!tenantId && sessionId) {
+                    const { data: allTenants } = await supabase.from('tenants').select('id, config');
+                    const match = allTenants?.find((t: any) => t.config?.whatsapp?.neuroapi_session_id === sessionId);
+                    if (match) tenantId = match.id;
+                }
+
+                if (tenantId && phone) {
+                    const { data: tRow } = await supabase.from('tenants').select('config').eq('id', tenantId).maybeSingle();
+                    if (tRow) {
+                        const updated = {
+                            ...tRow.config,
+                            whatsapp: {
+                                ...(tRow.config?.whatsapp || {}),
+                                provider: 'neuroapi',
+                                enabled: true,
+                                neuroapi_status: 'connected',
+                                neuroapi_is_coexistence: true,
+                                neuroapi_phone_number_id: phone.phoneNumberId,
+                                neuroapi_phone_number: phone.displayPhone,
+                                neuroapi_verified_name: phone.verifiedName || 'Klynn',
+                            }
+                        };
+                        await supabase.from('tenants').update({ config: updated }).eq('id', tenantId);
+                    }
+                }
+                return new Response(JSON.stringify({ ok: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' }, status: 200 });
+            }
+
+            // B) Eventos Oficiales de Meta Cloud API / NeuroAPI
+            const isMetaOrNeuroAPI = body.object === 'whatsapp_business_account' || Array.isArray(body.entry);
+            if (isMetaOrNeuroAPI) {
+                const entries = body.entry || [];
+                const supabaseUrl = Deno.env.get('SUPABASE_URL') || 'https://api.klynn.com.do';
+
+                for (const entry of entries) {
+                    const changes = entry.changes || [];
+                    for (const change of changes) {
+                        const value = change.value;
+                        if (!value) continue;
+
+                        const phoneNumberId = value.metadata?.phone_number_id;
+
+                        // 1. Estados de entrega (sent / delivered / read / failed)
+                        if (Array.isArray(value.statuses)) {
+                            for (const st of value.statuses) {
+                                const wamid = st.id;
+                                const status = st.status;
+                                if (wamid && status) {
+                                    await supabase
+                                        .from('messages')
+                                        .update({ status })
+                                        .eq('wamid', wamid)
+                                        .catch(() => {});
+                                }
+                            }
+                        }
+
+                        // 2. Mensajes entrantes de clientes
+                        if (Array.isArray(value.messages) && value.messages.length > 0) {
+                            let tenantId = url.searchParams.get('tenant_id');
+
+                            if (!tenantId && phoneNumberId) {
+                                const { data: allTenants } = await supabase.from('tenants').select('id, config');
+                                const match = allTenants?.find((t: any) =>
+                                    String(t.config?.whatsapp?.neuroapi_phone_number_id || t.config?.whatsapp?.meta_phone_number_id || '').trim() === String(phoneNumberId).trim()
+                                );
+                                if (match) tenantId = match.id;
+                            }
+
+                            if (!tenantId) {
+                                const { data: allTenants } = await supabase.from('tenants').select('id, config');
+                                const fallback = allTenants?.find((t: any) => t.config?.whatsapp?.provider === 'neuroapi' || t.config?.whatsapp?.provider === 'meta_cloud');
+                                if (fallback) tenantId = fallback.id;
+                            }
+
+                            if (!tenantId) {
+                                console.warn('[whatsapp-webhook] No tenant found for Meta/NeuroAPI message');
+                                continue;
+                            }
+
+                            const contacts = value.contacts || [];
+
+                            for (const msg of value.messages) {
+                                const wamid = msg.id;
+                                if (!wamid) continue;
+
+                                // Deduplicación
+                                const { data: existing } = await supabase
+                                    .from('messages')
+                                    .select('id')
+                                    .eq('wamid', wamid)
+                                    .maybeSingle();
+
+                                if (existing) continue;
+
+                                const fromRaw = String(msg.from || '').replace(/\D/g, '');
+                                const contactObj = contacts.find((c: any) => String(c.wa_id || '').replace(/\D/g, '') === fromRaw);
+                                const pushName = contactObj?.profile?.name || fromRaw;
+
+                                let content = '';
+                                let mediaTypeStr = '';
+                                const msgType = msg.type || 'text';
+
+                                if (msgType === 'text') {
+                                    content = msg.text?.body || '';
+                                } else if (msgType === 'image') {
+                                    mediaTypeStr = 'image';
+                                    const mediaId = msg.image?.id;
+                                    const caption = msg.image?.caption ? `\n${msg.image.caption}` : '';
+                                    const mediaUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?action=media&media_id=${mediaId}&tenant_id=${tenantId}`;
+                                    content = `[image] ${mediaUrl}|imagen.jpg${caption}`;
+                                } else if (msgType === 'audio') {
+                                    mediaTypeStr = 'audio';
+                                    const mediaId = msg.audio?.id;
+                                    const mediaUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?action=media&media_id=${mediaId}&tenant_id=${tenantId}`;
+                                    content = `[audio] ${mediaUrl}|audio.ogg`;
+                                } else if (msgType === 'document') {
+                                    mediaTypeStr = 'document';
+                                    const mediaId = msg.document?.id;
+                                    const filename = msg.document?.filename || 'documento.pdf';
+                                    const caption = msg.document?.caption ? `\n${msg.document.caption}` : '';
+                                    const mediaUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?action=media&media_id=${mediaId}&tenant_id=${tenantId}`;
+                                    content = `[document] ${mediaUrl}|${filename}${caption}`;
+                                } else if (msgType === 'video') {
+                                    mediaTypeStr = 'video';
+                                    const mediaId = msg.video?.id;
+                                    const caption = msg.video?.caption ? `\n${msg.video.caption}` : '';
+                                    const mediaUrl = `${supabaseUrl}/functions/v1/whatsapp-webhook?action=media&media_id=${mediaId}&tenant_id=${tenantId}`;
+                                    content = `[video] ${mediaUrl}|video.mp4${caption}`;
+                                } else {
+                                    content = msg.text?.body || 'Mensaje recibido';
+                                }
+
+                                if (!content.trim()) continue;
+
+                                const lastMsgPreview = mediaTypeStr
+                                    ? `📎 ${mediaTypeStr === 'image' ? '📷 Imagen' : mediaTypeStr === 'video' ? '🎥 Video' : mediaTypeStr === 'audio' ? '🎤 Audio' : '📄 Documento'}`
+                                    : content.substring(0, 100);
+
+                                // Buscar o crear conversación
+                                let conversation: any = null;
+                                const { data: convs } = await supabase
+                                    .from('conversations')
+                                    .select('id, unread')
+                                    .eq('tenant_id', tenantId)
+                                    .eq('phone', fromRaw)
+                                    .order('time', { ascending: false })
+                                    .limit(1);
+
+                                if (convs && convs.length > 0) {
+                                    conversation = convs[0];
+                                } else {
+                                    const { data: newConv, error: convErr } = await supabase
+                                        .from('conversations')
+                                        .insert({
+                                            tenant_id: tenantId,
+                                            name: pushName,
+                                            phone: fromRaw,
+                                            status: 'activa',
+                                            agent: 'humano',
+                                            unread: 0,
+                                            last_msg: lastMsgPreview,
+                                            time: new Date().toISOString()
+                                        })
+                                        .select()
+                                        .single();
+
+                                    if (convErr && convErr.code === '23505') {
+                                        const { data: ex } = await supabase
+                                            .from('conversations')
+                                            .select('id, unread')
+                                            .eq('tenant_id', tenantId)
+                                            .eq('phone', fromRaw)
+                                            .maybeSingle();
+                                        conversation = ex;
+                                    } else {
+                                        conversation = newConv;
+                                    }
+                                }
+
+                                if (conversation) {
+                                    // Insertar mensaje en messages
+                                    const msgTime = msg.timestamp ? new Date(Number(msg.timestamp) * 1000).toISOString() : new Date().toISOString();
+                                    await supabase.from('messages').insert({
+                                        tenant_id: tenantId,
+                                        conversation_id: conversation.id,
+                                        role: 'user',
+                                        content,
+                                        wamid,
+                                        time: msgTime,
+                                        status: 'delivered',
+                                        payload: msg,
+                                    });
+
+                                    // Actualizar conversación
+                                    await supabase.from('conversations').update({
+                                        last_msg: lastMsgPreview,
+                                        time: msgTime,
+                                        unread: (conversation.unread || 0) + 1,
+                                        status: 'activa',
+                                    }).eq('id', conversation.id);
+                                }
+                            }
+                        }
+                    }
+                }
+
+                return new Response('ok', { status: 200, headers: corsHeaders });
+            }
+
+            // Detect provider format (Evolution / WASender)
             const isWasender = body.event === 'messages.received' && body.data;
             const isEvolution = (body.event === 'messages.upsert' || body.event === 'MESSAGES_UPSERT') && body.data;
 

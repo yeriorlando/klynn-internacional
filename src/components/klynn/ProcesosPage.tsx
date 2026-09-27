@@ -43,7 +43,7 @@ import {
 import { TicketPrintPortal } from "@/components/klynn/OrdenesPage";
 import { usePlans, useOrdenes, useClientes, useEmpleados, useServicios, useMetasServicios } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
-import { notificarWhatsApp, calcularDiasEnAlmacen, construirMensajeWhatsAppPredeterminado } from "@/lib/whatsapp";
+import { notificarWhatsApp, calcularDiasEnAlmacen, construirMensajeWhatsAppPredeterminado, toastWhatsAppSuccess, toastWhatsAppLoading } from "@/lib/whatsapp";
 import { WhatsAppOfficialIcon, showWhatsAppManualToast } from "@/components/klynn/WhatsAppManualToast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -449,12 +449,12 @@ export function ProcesosPage() {
           if (isOffline) {
             toast.info(`Orden ${numLimpio} lista (guardada en local). Notificación de WhatsApp pendiente.`);
           } else if (autoSendWhatsApp && user?.tenant) {
-            toast.loading("Enviando WhatsApp a " + cli.nombre + "...", { id: `wa-${orden.id}` });
+            toastWhatsAppLoading("Enviando WhatsApp a " + cli.nombre + "...", { id: `wa-${orden.id}` });
             const res = await notificarWhatsApp(user.tenant, cli, ordenActualizada, "lista");
             toast.dismiss(`wa-${orden.id}`);
 
             if (res.ok) {
-              toast.success(`Notificación enviada a ${cli.nombre}`, {
+              toastWhatsAppSuccess(`Notificación enviada a ${cli.nombre}`,  {
                 description: `Orden ${numLimpio} notificada con éxito.`,
                 duration: 4000,
               });

@@ -1103,7 +1103,7 @@ function EstanteriaPage() {
                       <span className="text-xs font-black text-slate-900 dark:text-white">#{ord.numero}</span>
                       <p className="text-[11px] font-bold text-slate-600 dark:text-slate-300">{c?.nombre || "Consumidor Final"}</p>
                       <p className="text-[10px] text-muted-foreground">
-                        {ord.items?.length || 0} prendas · RD$ {ord.total.toFixed(2)}
+                        {ord.items?.length || 0} prendas · {formatRD(ord.total)}
                       </p>
                     </div>
                     <Badge variant="outline" className="text-xs font-bold text-emerald-600 border-emerald-300">

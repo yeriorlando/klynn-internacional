@@ -50,6 +50,7 @@ import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import {
   formatRD,
+  getActiveTenantLocalization,
   type Orden,
   type OrdenItem,
   type Cliente,
@@ -1428,6 +1429,7 @@ export function EditOrderDialog({
   onClose: () => void;
   onSaved: (orden: Orden) => void;
 }) {
+  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
   const [context, setContext] = useState<OrderEditContext | null>(null);
   const [draft, setDraft] = useState<Orden | null>(null);
   const [reason, setReason] = useState("");
@@ -2230,7 +2232,7 @@ export function EditOrderDialog({
 
                                 <div className="relative h-10">
                                   <span className="absolute left-3 top-2.5 text-xs font-black text-muted-foreground">
-                                    RD$
+                                    {currencySymbol}
                                   </span>
                                   <Input
                                     id="edit-discount"
@@ -2293,7 +2295,7 @@ export function EditOrderDialog({
                                 </div>
                                 <div className="relative">
                                   <span className="absolute left-3 top-2.5 text-xs font-black text-muted-foreground">
-                                    RD$
+                                    {currencySymbol}
                                   </span>
                                   <Input
                                     id="edit-shipping"

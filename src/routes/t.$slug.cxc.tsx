@@ -9,10 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { supabase } from "@/lib/supabase";
-import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveTenant, formatDateTimeRD } from "@/lib/storage";
+import { formatRD, saveOrden, saveMovimiento, uid, nextECFNumero, nextNCFTradicional, saveTenant, formatDateTimeRD, getActiveTenantLocalization } from "@/lib/storage";
 import { emitirECF, getECFConfig } from "@/lib/fiscal";
 import type { Orden, Cliente, Tenant, MetodoPago, EstadoOrden } from "@/lib/storage";
-import { sendWhatsAppMessage, removerIconosWhatsApp } from "@/lib/whatsapp";
+import { sendWhatsAppMessage, removerIconosWhatsApp, isWhatsAppAutomatedActive, toastWhatsAppSuccess } from "@/lib/whatsapp";
 import { toast } from "sonner";
 import { useCajaAbierta, useOrdenes, useClientes, useMovimientos } from "@/hooks/use-queries";
 import { useQueryClient } from "@tanstack/react-query";
@@ -225,11 +225,11 @@ function CuentasPorCobrarPage() {
             <div><b>Orden:</b> ${o.numero} (${new Date(o.creado_en).toLocaleDateString("es-DO")})</div>
             <div style="display:flex;justify-content:between">
               <span>Mora: ${o.dias_antiguedad} ${o.dias_antiguedad === 1 ? "día" : "días"}</span>
-              <span style="margin-left:auto">Total: ${formatRD(o.total).replace("RD$", "")}</span>
+              <span style="margin-left:auto">Total: ${formatRD(o.total)}</span>
             </div>
             <div style="display:flex;justify-content:between;font-weight:bold">
-              <span>Abonado: ${formatRD(o.pagado).replace("RD$", "")}</span>
-              <span style="margin-left:auto;color:#000">Saldo: ${formatRD(o.saldo).replace("RD$", "")}</span>
+              <span>Abonado: ${formatRD(o.pagado)}</span>
+              <span style="margin-left:auto;color:#000">Saldo: ${formatRD(o.saldo)}</span>
             </div>
           </div>
           <div style="border-top:1px dotted #000;margin:3px 0"></div>
@@ -416,7 +416,7 @@ function CuentasPorCobrarPage() {
     const msg = `Estimado/a *${cli.cliente_nombre}${cli.cliente_apellido ? " " + cli.cliente_apellido : ""}*,\n\nLe contactamos de parte de *${user.tenant.nombre}* para recordarle que tiene un saldo pendiente de pago.\n\n*Detalle de órdenes pendientes:*\n\n${ordenesStr}\n\n*Total adeudado: ${formatRD(cli.total_deuda)}*\nDías de la deuda más antigua: ${cli.dias_max} ${cli.dias_max === 1 ? "día" : "días"}\n\n💳 *¿Deseas pagar por transferencia bancaria o reportar un abono? Responde con la palabra "CUENTA" para enviarte nuestros datos o adjunta tu comprobante por aquí.*\n\n_${user.tenant.nombre}${user.tenant.telefono ? " — " + user.tenant.telefono : ""}_`;
 
     const waConfig = user.tenant.config?.whatsapp;
-    const isAutomatedActive = Boolean(waConfig?.enabled && (waConfig?.instance || waConfig?.meta_phone_number_id));
+    const isAutomatedActive = isWhatsAppAutomatedActive(waConfig);
     const allowManual = (user.tenant.config?.whatsapp_web_manual ?? true) !== false;
 
     if (!isAutomatedActive) {
@@ -1159,7 +1159,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
       }
 
       const isOffline = typeof navigator !== "undefined" && !navigator.onLine;
-      toast.success(`Se cobraron RD$${montoAPagar.toFixed(2)} de la deuda de ${cliente.cliente_nombre}${isOffline ? " (guardado en local)" : ""} ✅`);
+      toast.success(`Se cobraron ${formatRD(montoAPagar)} de la deuda de ${cliente.cliente_nombre}${isOffline ? " (guardado en local)" : ""} ✅`);
       
       queryClient.invalidateQueries({ queryKey: ['ordenes', tenantId] });
       queryClient.invalidateQueries({ queryKey: ['movimientos', tenantId] });
@@ -1240,7 +1240,7 @@ function CobrarDeudaClienteDialog({ cliente, onClose, tenantId, tenant, cajaAbie
                 {metodo === "EFECTIVO" ? "Monto Recibido" : "Monto a Cobrar"}
               </label>
               <div className="relative h-14">
-                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/40">RD$</span>
+                <span className="absolute left-4 top-1/2 -translate-y-1/2 font-black text-lg text-muted-foreground/40">{getActiveTenantLocalization().moneda_simbolo || "RD$"}</span>
                 <Input
                   className="h-full pl-14 text-2xl md:text-3xl font-black bg-background border border-primary/20 focus-visible:ring-emerald-500 focus-visible:ring-offset-0 rounded-2xl transition-all"
                   value={recibido ? formatAmountInput(String(recibido)) : ""}

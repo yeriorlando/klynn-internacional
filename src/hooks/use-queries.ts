@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { 
   getClientes, getOrdenes, getCatalogo, getServicios, 
   getCajaAbierta, getGastos, getEmpleados, getMovimientos,
-  getECFConfig, getCajas, getECFDocuments, getPlans, 
+  getECFConfig, getCajas, getECFDocuments, getPlans, getCountryPlans,
   getGlobalConfig, getECFSequences, getMetasServicios,
   getPromociones, getSuplidores, getFacturasCXP, getAbonosCXP,
   getPeriodosNomina, getDetallesNomina, getAnticiposNomina,
@@ -138,10 +138,10 @@ export function useECFDocuments(tenantId: string) {
   });
 }
 
-export function usePlans() {
+export function usePlans(countryCode?: string) {
   return useQuery({
-    queryKey: ['plans'],
-    queryFn: () => getPlans(),
+    queryKey: ['plans', countryCode || 'DO'],
+    queryFn: () => getCountryPlans(countryCode),
   });
 }
 

@@ -6,6 +6,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+let lastPurgeCall = 0
+
+async function purgeExpiredInboundMedia(supabase: any) {
+  const now = Date.now()
+  if (now - lastPurgeCall < 30 * 60 * 1000) return
+  lastPurgeCall = now
+  try {
+    const { data: files } = await supabase.storage.from('catalogo').list('conversations', { limit: 200 })
+    if (!files || files.length === 0) return
+    const cutoff = now - (24 * 60 * 60 * 1000)
+    const toDelete = files
+      .filter((f: any) => f.name !== '.emptyFolderPlaceholder' && f.created_at && new Date(f.created_at).getTime() < cutoff)
+      .map((f: any) => `conversations/${f.name}`)
+    if (toDelete.length > 0) {
+      console.log(`[Meta Proxy] Purgando ${toDelete.length} archivos expirados (>24h)...`)
+      await supabase.storage.from('catalogo').remove(toDelete)
+    }
+  } catch (_) {}
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -33,6 +53,9 @@ serve(async (req) => {
           Deno.env.get('SUPABASE_URL') ?? '',
           Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
+
+        // Limpieza automática no-bloqueante de archivos mayores a 24 horas
+        void purgeExpiredInboundMedia(supabase)
 
         const entries = body.entry || []
         for (const entry of entries) {
@@ -117,15 +140,125 @@ serve(async (req) => {
                   content = msg.text?.body || ''
                 } else if (msgType === 'image') {
                   const caption = msg.image?.caption ? `\n${msg.image.caption}` : ''
-                  content = `[image] (imagen de WhatsApp)${caption}`
+                  let storedUrl = ''
+                  const mediaId = msg.image?.id
+                  if (mediaId) {
+                    try {
+                      const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
+                      const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
+                      if (neuroApiKey) {
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
+                          headers: { 'x-api-key': neuroApiKey }
+                        })
+                        if (mRes.ok) {
+                          const buf = await mRes.arrayBuffer()
+                          const filePath = `conversations/inbound_${mediaId}.jpg`
+                          const { error: upErr } = await supabase.storage.from('catalogo').upload(filePath, new Uint8Array(buf), {
+                            contentType: mRes.headers.get('content-type') || 'image/jpeg',
+                            upsert: true
+                          })
+                          if (!upErr) {
+                            const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('[Meta Webhook] Error cacheando imagen en storage:', e)
+                    }
+                  }
+                  content = storedUrl ? `[image] ${storedUrl}|imagen.jpg${caption}` : `[image] (imagen de WhatsApp)${caption}`
                 } else if (msgType === 'audio') {
-                  content = `[audio] (nota de voz)`
+                  let storedUrl = ''
+                  const mediaId = msg.audio?.id
+                  if (mediaId) {
+                    try {
+                      const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
+                      const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
+                      if (neuroApiKey) {
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
+                          headers: { 'x-api-key': neuroApiKey }
+                        })
+                        if (mRes.ok) {
+                          const buf = await mRes.arrayBuffer()
+                          const filePath = `conversations/inbound_${mediaId}.ogg`
+                          const { error: upErr } = await supabase.storage.from('catalogo').upload(filePath, new Uint8Array(buf), {
+                            contentType: mRes.headers.get('content-type') || 'audio/ogg',
+                            upsert: true
+                          })
+                          if (!upErr) {
+                            const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('[Meta Webhook] Error cacheando audio en storage:', e)
+                    }
+                  }
+                  content = storedUrl ? `[audio] ${storedUrl}|audio.ogg` : `[audio] (nota de voz)`
                 } else if (msgType === 'document') {
                   const filename = msg.document?.filename || 'documento.pdf'
-                  content = `[document] |${filename}`
+                  const caption = msg.document?.caption ? `\n${msg.document.caption}` : ''
+                  let storedUrl = ''
+                  const mediaId = msg.document?.id
+                  if (mediaId) {
+                    try {
+                      const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
+                      const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
+                      if (neuroApiKey) {
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
+                          headers: { 'x-api-key': neuroApiKey }
+                        })
+                        if (mRes.ok) {
+                          const buf = await mRes.arrayBuffer()
+                          const ext = filename.split('.').pop() || 'pdf'
+                          const filePath = `conversations/inbound_${mediaId}.${ext}`
+                          const { error: upErr } = await supabase.storage.from('catalogo').upload(filePath, new Uint8Array(buf), {
+                            contentType: mRes.headers.get('content-type') || 'application/pdf',
+                            upsert: true
+                          })
+                          if (!upErr) {
+                            const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('[Meta Webhook] Error cacheando documento en storage:', e)
+                    }
+                  }
+                  content = storedUrl ? `[document] ${storedUrl}|${filename}${caption}` : `[document] |${filename}${caption}`
                 } else if (msgType === 'video') {
                   const caption = msg.video?.caption ? `\n${msg.video.caption}` : ''
-                  content = `[video] (video de WhatsApp)${caption}`
+                  let storedUrl = ''
+                  const mediaId = msg.video?.id
+                  if (mediaId) {
+                    try {
+                      const { data: gCfg } = await supabase.from('global_config').select('bank_details').eq('id', 1).maybeSingle()
+                      const neuroApiKey = gCfg?.bank_details?.neuroapi_master_api_key || Deno.env.get('NEUROAPI_MASTER_KEY')
+                      if (neuroApiKey) {
+                        const mRes = await fetch(`https://api.neurochat.com.ec/api/v1/neuroapi/messaging/media/${mediaId}`, {
+                          headers: { 'x-api-key': neuroApiKey }
+                        })
+                        if (mRes.ok) {
+                          const buf = await mRes.arrayBuffer()
+                          const filePath = `conversations/inbound_${mediaId}.mp4`
+                          const { error: upErr } = await supabase.storage.from('catalogo').upload(filePath, new Uint8Array(buf), {
+                            contentType: mRes.headers.get('content-type') || 'video/mp4',
+                            upsert: true
+                          })
+                          if (!upErr) {
+                            const { data: pubData } = supabase.storage.from('catalogo').getPublicUrl(filePath)
+                            if (pubData?.publicUrl) storedUrl = pubData.publicUrl
+                          }
+                        }
+                      }
+                    } catch (e) {
+                      console.warn('[Meta Webhook] Error cacheando video en storage:', e)
+                    }
+                  }
+                  content = storedUrl ? `[video] ${storedUrl}|video.mp4${caption}` : `[video] (video de WhatsApp)${caption}`
                 } else {
                   content = msg.text?.body || 'Mensaje recibido'
                 }

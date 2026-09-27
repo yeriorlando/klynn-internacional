@@ -1,3 +1,4 @@
+import { toastWhatsAppSuccess } from "@/components/klynn/WhatsAppManualToast";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useMemo, useState, useCallback, useDeferredValue, memo } from "react";
 import { toast } from "sonner";
@@ -322,7 +323,7 @@ function LogisticaPage() {
           const { notificarWhatsApp } = await import("@/lib/whatsapp");
           const res = await notificarWhatsApp(tenant, cli, next, "en_camino");
           if (res.ok) {
-            toast.success("Cliente notificado por WhatsApp");
+            toastWhatsAppSuccess("Cliente notificado por WhatsApp");
           } else if (cli.telefono && isRepartidor) {
             // Si no tiene bot API de WhatsApp configurado, abrir chat directo de WhatsApp 1-tap para avisar al cliente
             const rawPhone = cli.telefono.replace(/\D/g, "");

@@ -3,7 +3,7 @@ import { compressImage } from "@/lib/compressImage";
 import { useEffect, useMemo, useState, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  ArrowLeft, ArrowRight, Check, Building2, Palette, Package, PartyPopper,
+  ArrowLeft, ArrowRight, Check, Palette, Package, PartyPopper,
   AlertCircle, Search, MapPin, Upload, Image as ImageIcon, Sparkles,
   Cloud, Loader2, Droplet, Store, Phone, ChevronRight, Landmark,
   Layers, Truck, Wallet, Receipt, MessageCircle,
@@ -14,6 +14,7 @@ import { SeedBootstrap } from "@/components/klynn/SeedBootstrap";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import {
   PLANS, formatRD, formatPhoneRD, isSlugAvailable, registerBranch, getTenantsForUser, getPlans,
   setActiveTenant, uid, PROVINCIAS_RD, DEFAULT_CONFIG, getGlobalConfig,
@@ -24,6 +25,9 @@ import {
 } from "@/lib/storage";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { consultarRNC } from "@/lib/fiscal";
+import { getCountry, getCountryByCode } from "@/lib/countries";
+import { CountrySelect } from "@/components/klynn/CountrySelect";
+import { RegionSelectModal } from "@/components/klynn/RegionSelectModal";
 import { toast } from "sonner";
 
 export const Route = createFileRoute("/nueva-sucursal")({
@@ -41,65 +45,6 @@ const STEPS = [
   { id: 3, label: "Listo", icon: Sparkles },
 ];
 
-const KLYNN_MODULES_LEFT = [
-  {
-    id: "procesos",
-    title: "Control de Procesos",
-    subtitle: "Lavado, Secado & Planchado",
-    icon: Layers,
-    bgClass: "bg-[#1B4B73]/10 text-[#1B4B73]",
-    floatY: [-7, 7, -7],
-    dur: 5.5,
-  },
-  {
-    id: "fiscal",
-    title: "Facturación Electrónica e-CF",
-    subtitle: "Comprobantes B01, B02, B14",
-    icon: Landmark,
-    bgClass: "bg-blue-600/10 text-blue-700",
-    floatY: [7, -7, 7],
-    dur: 6.2,
-  },
-  {
-    id: "estanteria",
-    title: "Estantería Virtual",
-    subtitle: "Ubicación de prendas y racks",
-    icon: Package,
-    bgClass: "bg-sky-600/10 text-sky-700",
-    floatY: [-6, 6, -6],
-    dur: 5.8,
-  },
-];
-
-const KLYNN_MODULES_RIGHT = [
-  {
-    id: "whatsapp",
-    title: "Avisos por WhatsApp",
-    subtitle: "Prendas listas y entregas",
-    icon: MessageCircle,
-    bgClass: "bg-emerald-500/10 text-emerald-600",
-    floatY: [7, -7, 7],
-    dur: 5.2,
-  },
-  {
-    id: "delivery",
-    title: "Logística & Delivery",
-    subtitle: "Rutas y choferes a domicilio",
-    icon: Truck,
-    bgClass: "bg-sky-500/10 text-sky-600",
-    floatY: [-7, 7, -7],
-    dur: 6.5,
-  },
-  {
-    id: "caja",
-    title: "Cuadre de Cajas & Pagos",
-    subtitle: "Turnos, efectivo y tarjetas",
-    icon: Wallet,
-    bgClass: "bg-amber-500/10 text-amber-600",
-    floatY: [6, -6, 6],
-    dur: 5.9,
-  },
-];
 
 const LAUNDRY_BUBBLES = [
   // Lado Izquierdo
@@ -144,6 +89,7 @@ const LAUNDRY_BUBBLES = [
 interface FormState {
   nombre: string;
   nombre_sucursal: string;
+  pais_codigo: string;
   rnc: string;
   razon_social: string;
   telefono: string;
@@ -159,6 +105,7 @@ interface FormState {
 const initial: FormState = {
   nombre: "",
   nombre_sucursal: "",
+  pais_codigo: "",
   rnc: "",
   razon_social: "",
   telefono: "",
@@ -180,10 +127,16 @@ function NuevaSucursalPage() {
   const navigate = useNavigate();
   const [globalConfig, setGlobalConfig] = useState<GlobalConfig>(DEFAULT_GLOBAL_CONFIG);
   const [step, setStep] = useState(1);
+  const [enableFiscalDoc, setEnableFiscalDoc] = useState(false);
   const [form, setForm] = useState<FormState>(() => ({
     ...initial,
+    pais_codigo: auth?.tenant?.pais_codigo || "DO",
     plan_id: DEFAULT_GLOBAL_CONFIG.defaultPlanId
   }));
+
+  const currentCountry = useMemo(() => {
+    return getCountryByCode(form.pais_codigo || auth?.tenant?.pais_codigo || "DO");
+  }, [form.pais_codigo, auth?.tenant?.pais_codigo]);
 
   useEffect(() => {
     getGlobalConfig().then(cfg => {
@@ -193,9 +146,19 @@ function NuevaSucursalPage() {
 
     // Cargar datos por defecto de la empresa matriz
     if (auth?.tenant) {
+      const rawNombre = auth.tenant.nombre || "";
+      const isGenericAdmin = 
+        auth.tenant.id === "admin" || 
+        rawNombre.toLowerCase().includes("administración global") || 
+        rawNombre.toLowerCase().includes("administracion global");
+      const defaultNombre = isGenericAdmin ? "" : rawNombre;
+
+      const originCountry = auth.tenant.pais_codigo || "DO";
+
       setForm(f => ({
         ...f,
-        nombre: f.nombre || auth.tenant.nombre || "",
+        nombre: f.nombre || defaultNombre,
+        pais_codigo: auth.tenant.pais_codigo || f.pais_codigo || "DO",
         rnc: f.rnc || auth.tenant.rnc || "",
         razon_social: f.razon_social || auth.tenant.config?.razon_social || "",
         color_primario: f.color_primario || auth.tenant.color_primario || "#1B4B73",
@@ -242,6 +205,7 @@ function NuevaSucursalPage() {
   const lastSearchedRNCRef = useRef<string>("");
 
   async function handleSearchRNC(rncValue?: string, force = false) {
+    if (currentCountry.code !== "DO") return;
     const val = rncValue !== undefined ? rncValue : form.rnc;
     const cleanRnc = val.replace(/\D/g, "");
     if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) return;
@@ -308,10 +272,12 @@ function NuevaSucursalPage() {
   function validateStep(): boolean {
     const e: Partial<Record<keyof FormState, string>> = {};
     if (step === 1) {
-      if (!form.nombre_sucursal.trim()) e.nombre_sucursal = "Ingresa el nombre de la sucursal (ej: Bella Vista)";
-      if (!form.nombre.trim()) e.nombre = "Requerido";
-      if (!form.telefono || form.telefono.replace(/\D/g, "").length < 10) e.telefono = "Teléfono inválido";
-      if (!form.provincia) e.provincia = "Selecciona tu provincia";
+      if (!form.nombre_sucursal.trim()) e.nombre_sucursal = "Ingresa la denominación de la sucursal (ej: Sucursal Bella Vista)";
+      if (!form.nombre.trim()) e.nombre = "Ingresa el nombre de la lavandería";
+      if (!form.telefono || form.telefono.replace(/\D/g, "").length < (currentCountry.code === "DO" ? 10 : 7)) {
+        e.telefono = "Teléfono inválido";
+      }
+      if (!form.provincia) e.provincia = `Selecciona tu ${currentCountry.regionsLabel.toLowerCase().slice(0, -1) || "ubicación"}`;
     }
     if (step === 2) {
       if (!slugOk) e.slug = "Subdominio inválido o no disponible";
@@ -324,8 +290,18 @@ function NuevaSucursalPage() {
     if (!auth) return;
 
     const branchName = form.nombre_sucursal.trim() || "Nueva Sucursal";
+    const isDOTenant = currentCountry.code === "DO";
+    const shouldCobrarImpuesto = isDOTenant ? true : enableFiscalDoc;
+    const effectiveTaxRate = shouldCobrarImpuesto ? currentCountry.tax.defaultRate : 0;
+
     const config: TenantConfig = {
       ...DEFAULT_CONFIG,
+      pais_codigo: currentCountry.code,
+      moneda_simbolo: currentCountry.currency.symbol,
+      moneda_codigo: currentCountry.currency.code,
+      impuesto_nombre: currentCountry.tax.name,
+      impuesto_porcentaje: effectiveTaxRate,
+      cobrar_impuesto: shouldCobrarImpuesto,
       nombre_sucursal: branchName,
       razon_social: form.razon_social || auth.tenant.config?.razon_social || "",
     };
@@ -346,6 +322,12 @@ function NuevaSucursalPage() {
       estado: auth.tenant.estado,
       trial_hasta: auth.tenant.trial_hasta,
       creado_en: new Date().toISOString(),
+      pais_codigo: form.pais_codigo || auth.tenant.pais_codigo || currentCountry.code,
+      moneda_simbolo: currentCountry.currency.symbol,
+      moneda_codigo: currentCountry.currency.code,
+      impuesto_nombre: currentCountry.tax.name,
+      impuesto_porcentaje: effectiveTaxRate,
+      documento_fiscal_label: currentCountry.doc.label,
       config,
     };
 
@@ -527,54 +509,7 @@ function NuevaSucursalPage() {
         ))}
       </div>
 
-      {/* 3. Tarjetas de Módulos Flotantes de Klynn con Iconos SVG (visibles en pantallas grandes) */}
-      <div className="fixed inset-0 z-0 pointer-events-none hidden xl:block max-w-7xl mx-auto">
-        {/* Columna Izquierda: 3 Módulos Oficiales */}
-        <div className="absolute left-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
-          {KLYNN_MODULES_LEFT.map((m) => {
-            const ModIcon = m.icon;
-            return (
-              <motion.div
-                key={m.id}
-                animate={{ y: m.floatY }}
-                transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
-              >
-                <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
-                  <ModIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
-                  <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
 
-        {/* Columna Derecha: 3 Módulos Oficiales */}
-        <div className="absolute right-4 top-28 bottom-20 flex flex-col justify-between w-64 pointer-events-none">
-          {KLYNN_MODULES_RIGHT.map((m) => {
-            const ModIcon = m.icon;
-            return (
-              <motion.div
-                key={m.id}
-                animate={{ y: m.floatY }}
-                transition={{ duration: m.dur, repeat: Infinity, ease: "easeInOut" }}
-                className="flex items-center gap-3 px-3.5 py-2.5 rounded-2xl bg-white/90 border border-white/90 shadow-[0_10px_30px_rgba(27,75,115,0.12)] backdrop-blur-md pointer-events-auto hover:scale-105 transition-transform"
-              >
-                <div className={`h-9 w-9 rounded-xl flex items-center justify-center font-bold shrink-0 ${m.bgClass}`}>
-                  <ModIcon className="h-5 w-5" />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs font-extrabold text-slate-800 tracking-tight truncate">{m.title}</p>
-                  <p className="text-[10px] font-medium text-slate-500 truncate">{m.subtitle}</p>
-                </div>
-              </motion.div>
-            );
-          })}
-        </div>
-      </div>
 
       <div className="relative z-10">
         <header className="flex flex-col items-center justify-center pt-5 pb-1 px-6 relative">
@@ -704,74 +639,205 @@ function NuevaSucursalPage() {
                         </div>
                       </div>
 
-                      {/* Asistente Inteligente DGII Banner Compacto */}
-                      <div className="mb-4 rounded-xl border border-primary/15 bg-primary/[0.02] px-3.5 py-2.5 transition-all">
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                          <div className="flex items-center gap-2.5 min-w-0">
-                            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                              <Landmark className="h-3.5 w-3.5" />
+                      {/* Selector de País con Banderas Reales HD */}
+                      <div className="mb-4">
+                        <label className="text-xs font-bold text-slate-800 mb-1.5 flex items-center justify-between">
+                          <span>País de la sucursal *</span>
+                          <span className="text-[11px] text-muted-foreground font-normal">
+                            Moneda e impuestos automáticos
+                          </span>
+                        </label>
+                        <CountrySelect
+                          value={form.pais_codigo}
+                          onChange={(c) => {
+                            setEnableFiscalDoc(false);
+                            setForm((prev) => ({
+                              ...prev,
+                              pais_codigo: c.code,
+                              provincia: "",
+                              rnc: "",
+                              telefono: c.phonePrefix ? `${c.phonePrefix} ` : "",
+                            }));
+                          }}
+                        />
+                      </div>
+
+                      {/* Toggle para Activar/Desactivar Identificación Fiscal (RNC / RFC / NIT) */}
+                      <div className="mb-4 rounded-2xl border border-slate-200/90 bg-white p-3.5 shadow-2xs transition-all">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                              <Landmark className="h-4 w-4" />
                             </div>
                             <div className="min-w-0">
-                              <div className="text-xs font-bold text-slate-800 flex items-center gap-2 flex-wrap sm:flex-nowrap">
-                                <span className="whitespace-nowrap">¿Eres contribuyente ante DGII?</span>
-                                <span className="rounded bg-emerald-100 text-emerald-700 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wider shrink-0 whitespace-nowrap">
-                                  Consultar ante DGII
+                              <div className="text-xs sm:text-sm font-bold text-slate-900 tracking-tight flex items-center gap-1.5 flex-wrap">
+                                <span>
+                                  {currentCountry.code === "DO"
+                                    ? "¿Registrar RNC ante la DGII?"
+                                    : `¿Registrar ${currentCountry.doc.label} y cobrar ${currentCountry.tax.name} (${currentCountry.tax.defaultRate}%)?`}
+                                </span>
+                                <span className="rounded-full bg-slate-100 text-slate-600 px-2 py-0.2 text-[10px] font-semibold">
+                                  Opcional
                                 </span>
                               </div>
-                              <p className="text-[11px] text-muted-foreground">
-                                Escribe tu RNC o Cédula para autocompletar el nombre oficial.
+                              <p className="text-[11px] text-muted-foreground mt-0.5">
+                                {currentCountry.code === "DO"
+                                  ? "Activa este toggle si deseas validar con la DGII o déjalo inactivo."
+                                  : `Activa este toggle si deseas aplicar ${currentCountry.tax.name} y registrar tu ${currentCountry.doc.label}. Puedes cambiarlo en Configuración.`}
                               </p>
                             </div>
                           </div>
-                          <div className="relative flex items-center shrink-0 w-full sm:w-48">
-                            <Input 
-                              value={form.rnc} 
-                              onChange={(e) => {
-                                const val = e.target.value;
-                                update("rnc", val);
-                                const clean = val.replace(/\D/g, "");
-                                if (clean.length === 9 || clean.length === 11) {
-                                  handleSearchRNC(clean);
-                                }
-                              }} 
-                              onBlur={() => handleSearchRNC()}
-                              placeholder="Ej: 133-19090-7" 
-                              className="h-8 text-xs pr-7 bg-white border-primary/25 focus-visible:ring-primary/20 shadow-none rounded-lg"
+
+                          <div className="shrink-0 flex items-center">
+                            <Switch
+                              checked={enableFiscalDoc}
+                              onCheckedChange={(checked) => {
+                                setEnableFiscalDoc(checked);
+                                if (!checked) update("rnc", "");
+                              }}
                             />
-                            <button
-                              type="button"
-                              onClick={() => handleSearchRNC(undefined, true)}
-                              disabled={loadingRNC}
-                              className="absolute right-1.5 text-muted-foreground hover:text-primary transition-colors p-0.5"
-                              title="Buscar en DGII"
-                            >
-                              {loadingRNC ? <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" /> : <Search className="h-3.5 w-3.5 text-primary" />}
-                            </button>
                           </div>
                         </div>
+
+                        {/* Desplegable animado si el toggle está activado */}
+                        <AnimatePresence>
+                          {enableFiscalDoc && (
+                            <motion.div
+                              initial={{ opacity: 0, height: 0, marginTop: 0 }}
+                              animate={{ opacity: 1, height: "auto", marginTop: 14 }}
+                              exit={{ opacity: 0, height: 0, marginTop: 0 }}
+                              transition={{ duration: 0.22, ease: "easeOut" }}
+                              className="overflow-hidden border-t border-slate-100 pt-3.5 space-y-2.5"
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <label className="text-xs font-bold text-slate-800 tracking-tight flex items-center gap-1.5">
+                                  <span>Número de {currentCountry.doc.label}</span>
+                                  <span className="text-[10px] font-normal text-muted-foreground">
+                                    {currentCountry.code === "DO" ? "(9 u 11 dígitos)" : "(Oficial)"}
+                                  </span>
+                                </label>
+                                {currentCountry.code === "DO" && (
+                                  <span className="rounded-full bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 text-[10px] font-bold text-emerald-800 flex items-center gap-1">
+                                    <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                                    Consulta DGII Activa
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="relative flex items-center">
+                                <Receipt className="absolute left-3.5 h-4 w-4 text-primary pointer-events-none" />
+                                <Input 
+                                  value={form.rnc} 
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    update("rnc", val);
+                                    if (currentCountry.code === "DO") {
+                                      const clean = val.replace(/\D/g, "");
+                                      if (clean.length === 9 || clean.length === 11) {
+                                        handleSearchRNC(clean);
+                                      }
+                                    }
+                                  }} 
+                                  onBlur={() => {
+                                    if (currentCountry.code === "DO") handleSearchRNC();
+                                  }}
+                                  placeholder={currentCountry.doc.placeholder} 
+                                  className={`h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none focus-visible:ring-primary/20 ${
+                                    currentCountry.code === "DO" ? "pr-32" : "pr-4"
+                                  }`}
+                                  autoFocus
+                                />
+
+                                {currentCountry.code === "DO" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleSearchRNC(undefined, true)}
+                                    disabled={loadingRNC}
+                                    className="absolute right-1.5 h-8 px-3 rounded-lg bg-primary text-white text-xs font-bold flex items-center gap-1.5 shadow-2xs hover:opacity-95 transition-all disabled:opacity-50 cursor-pointer"
+                                    title="Buscar en DGII"
+                                  >
+                                    {loadingRNC ? (
+                                      <>
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                        <span>Buscando...</span>
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Search className="h-3.5 w-3.5" />
+                                        <span>Consultar</span>
+                                      </>
+                                    )}
+                                  </button>
+                                )}
+                              </div>
+
+                              {form.razon_social && (
+                                <motion.div 
+                                  initial={{ opacity: 0, y: -4 }}
+                                  animate={{ opacity: 1, y: 0 }}
+                                  className="flex items-center gap-2 rounded-xl bg-slate-50 border border-slate-200/80 px-3 py-2 text-xs font-medium text-slate-700"
+                                >
+                                  <span className="font-bold text-slate-900">Razón Social:</span>
+                                  <span className="text-primary font-semibold truncate">{form.razon_social}</span>
+                                </motion.div>
+                              )}
+
+                              <p className="text-[11px] text-muted-foreground flex items-center gap-1.5 pt-0.5">
+                                <span className="font-semibold text-slate-700">Nota:</span>
+                                <span>
+                                  {currentCountry.code === "DO"
+                                    ? "Consultaremos en tiempo real tu nombre y estado fiscal registrado ante la DGII."
+                                    : `Se utilizará para los comprobantes fiscales y tickets de esta sucursal.`}
+                                </span>
+                              </p>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
 
                       <div className="grid gap-3.5 sm:grid-cols-2">
-                        <Field label="Nombre de lavandería / marca *" error={errors.nombre}>
+                        <Field 
+                          label={
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-xs font-bold text-slate-800">Nombre de la lavandería *</span>
+                              <span className="text-[9.5px] font-black uppercase tracking-wider text-white bg-slate-700 dark:bg-slate-800 px-2.5 py-0.5 rounded-full shadow-xs select-none">
+                                Marca matriz
+                              </span>
+                            </div>
+                          }
+                          hint="Marca de la empresa a la que pertenece esta sucursal"
+                          error={errors.nombre}
+                        >
                           <div className="relative flex items-center">
-                            <Building2 className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
+                            <Store className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
                             <Input 
                               value={form.nombre} 
                               onChange={(e) => update("nombre", e.target.value)} 
-                              placeholder="Ej. Lavandería Reyna" 
-                              className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200"
+                              placeholder="Ej. Lavandería Las Américas" 
+                              className="h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none font-medium"
                             />
                           </div>
                         </Field>
 
-                        <Field label="Nombre de la sucursal *" error={errors.nombre_sucursal}>
+                        <Field 
+                          label={
+                            <div className="flex items-center justify-between w-full">
+                              <span className="text-xs font-bold text-slate-800">Denominación de la sucursal *</span>
+                              <span className="text-[9.5px] font-black uppercase tracking-wider text-white bg-[#1B4B73] px-2.5 py-0.5 rounded-full shadow-xs select-none">
+                                Sede / Ubicación
+                              </span>
+                            </div>
+                          }
+                          hint="Identificador único para diferenciar esta sucursal"
+                          error={errors.nombre_sucursal}
+                        >
                           <div className="relative flex items-center">
                             <Store className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
                             <Input 
                               value={form.nombre_sucursal} 
                               onChange={(e) => update("nombre_sucursal", e.target.value)} 
-                              placeholder="Ej. Bella Vista, Naco..." 
-                              className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 font-medium"
+                              placeholder="Ej. Sucursal Bella Vista" 
+                              className="h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none font-medium"
                               autoFocus
                             />
                           </div>
@@ -782,22 +848,29 @@ function NuevaSucursalPage() {
                             <Phone className="absolute left-3.5 h-4 w-4 text-[#1B4B73] pointer-events-none" />
                             <Input 
                               value={form.telefono} 
-                              onChange={(e) => update("telefono", formatPhoneRD(e.target.value))} 
-                              placeholder="809-555-0142" 
-                              className="h-10 text-xs sm:text-sm pl-10 rounded-xl border-slate-200" 
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                if (currentCountry.code === "DO") {
+                                  update("telefono", formatPhoneRD(val));
+                                } else {
+                                  update("telefono", val);
+                                }
+                              }} 
+                              placeholder={currentCountry.phonePlaceholder} 
+                              className="h-11 text-xs sm:text-sm pl-10 rounded-xl border-slate-200 bg-white shadow-none" 
                             />
                           </div>
                         </Field>
-                        <Field label="Provincia *" error={errors.provincia}>
+                        <Field label={`${currentCountry.regionsLabel} / Ubicación *`} error={errors.provincia}>
                           <button 
                             type="button" 
                             onClick={() => setProvOpen(true)} 
-                            className="flex h-10 w-full items-center justify-between rounded-xl border border-slate-200 bg-background px-3 text-xs sm:text-sm shadow-xs hover:bg-accent/30 transition-all"
+                            className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3.5 text-xs sm:text-sm shadow-none hover:bg-slate-50 transition-all"
                           >
                             <div className="flex items-center gap-2 truncate">
                               <MapPin className="h-4 w-4 text-[#1B4B73] shrink-0" />
                               <span className={form.provincia ? "text-foreground font-medium" : "text-muted-foreground"}>
-                                {form.provincia || "Selecciona tu provincia..."}
+                                {form.provincia || `Selecciona tu ${currentCountry.regionsLabel.toLowerCase().slice(0, -1) || "ubicación"}...`}
                               </span>
                             </div>
                             <Search className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
@@ -831,7 +904,7 @@ function NuevaSucursalPage() {
                                 <img src={form.logo_url} alt="logo" className="h-full w-full object-cover" />
                               ) : (
                                 <div className="flex h-full w-full items-center justify-center bg-slate-50">
-                                  <Building2 className="h-7 w-7 text-slate-300" />
+                                  <Store className="h-7 w-7 text-slate-300" />
                                 </div>
                               )}
                             </div>
@@ -884,10 +957,10 @@ function NuevaSucursalPage() {
                                   update("slug", slugify(e.target.value));
                                 }} 
                                 placeholder="bellavista" 
-                                className="h-10 text-xs sm:text-sm pl-3 pr-24 rounded-xl border-slate-200 font-mono"
+                                className="h-11 text-xs sm:text-sm pl-3.5 pr-28 sm:pr-32 rounded-xl border-slate-200 bg-white font-mono shadow-none"
                               />
                               <span className="absolute right-3 text-[11px] font-mono text-muted-foreground pointer-events-none">
-                                .klynn.com.do
+                                {currentCountry.code === "DO" ? ".klynn.com.do" : ".klynncloud.com"}
                               </span>
                             </div>
                           </Field>
@@ -911,16 +984,15 @@ function NuevaSucursalPage() {
                   variant="outline" 
                   onClick={prev} 
                   disabled={step === 1}
-                  className="h-8 px-3.5 bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 text-xs font-bold"
+                  className="h-11 px-5 bg-slate-50 border-slate-200 text-slate-700 hover:bg-slate-100 text-sm font-bold rounded-xl shadow-2xs transition-all active:scale-[0.98]"
                 >
-                  <ArrowLeft className="mr-1 h-3.5 w-3.5" /> Atrás
+                  <ArrowLeft className="mr-2 h-4 w-4" /> Atrás
                 </Button>
                 <Button 
                   onClick={next} 
-                  size="sm"
-                  className="bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-sm font-bold h-8 px-5 text-xs"
+                  className="bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-sm font-bold h-11 px-6 text-sm rounded-xl transition-all active:scale-[0.98]"
                 >
-                  {step === 2 ? "Crear sucursal" : "Continuar"} <ArrowRight className="ml-1 h-3.5 w-3.5" />
+                  {step === 2 ? "Crear sucursal" : "Continuar"} <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
               </div>
             )}
@@ -928,7 +1000,16 @@ function NuevaSucursalPage() {
         </main>
       </div>
 
-      <ProvinciaModal open={provOpen} onClose={() => setProvOpen(false)} value={form.provincia} onSelect={(p) => { update("provincia", p); setProvOpen(false); }} />
+      <RegionSelectModal 
+        open={provOpen} 
+        onClose={() => setProvOpen(false)} 
+        value={form.provincia} 
+        countryCode={currentCountry.code}
+        countryName={currentCountry.name}
+        regions={currentCountry.regions}
+        label={currentCountry.regionsLabel}
+        onSelect={(p) => { update("provincia", p); setProvOpen(false); }} 
+      />
     </div>
   );
 }
@@ -966,10 +1047,12 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
         <div className="mx-auto mb-5 max-w-sm overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm">
           <div className="flex items-center justify-between border-b border-slate-100 px-4 py-2.5">
             <div className="flex items-center gap-2">
-              <Building2 className="h-4 w-4 text-[#1B4B73]" />
+              <Store className="h-4 w-4 text-[#1B4B73]" />
               <span className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Acceso</span>
             </div>
-            <div className="font-mono text-xs font-bold text-[#1B4B73]">{tenant.slug}.klynn.com.do</div>
+            <div className="font-mono text-xs font-bold text-[#1B4B73]">
+              {tenant.slug}.{tenant.pais_codigo === 'DO' || !tenant.pais_codigo ? 'klynn.com.do' : 'klynncloud.com'}
+            </div>
           </div>
           
           <div className="grid grid-cols-2 divide-x divide-slate-100">
@@ -986,96 +1069,28 @@ function SuccessCard({ tenant, adminNombre, onEnter }: { tenant: Tenant; adminNo
           </div>
         </div>
 
-        <Button size="lg" className="h-10 w-full max-w-xs rounded-xl bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-md font-bold text-xs" onClick={onEnter}>
-          <Sparkles className="mr-1.5 h-3.5 w-3.5 text-[#F0B900]" /> Entrar a mi sucursal <ArrowRight className="ml-1 h-3.5 w-3.5" />
+        <Button size="lg" className="h-11 w-full max-w-xs rounded-xl bg-[#1B4B73] hover:bg-[#153a5b] text-white shadow-md font-bold text-sm transition-all active:scale-95" onClick={onEnter}>
+          <Sparkles className="mr-2 h-4 w-4 text-[#F0B900]" /> Entrar a mi sucursal <ArrowRight className="ml-2 h-4 w-4" />
         </Button>
       </motion.div>
     </div>
   );
 }
 
-function ProvinciaModal({ open, onClose, onSelect, value }: { open: boolean; onClose: () => void; onSelect: (p: string) => void; value: string }) {
-  const [q, setQ] = useState("");
-  const filtered = useMemo(
-    () => PROVINCIAS_RD.filter((p) => p.toLowerCase().includes(q.toLowerCase())),
-    [q]
-  );
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          className="fixed inset-0 z-50 grid place-items-center bg-slate-900/40 p-4 backdrop-blur-sm"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          onClick={onClose}
-        >
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 0.9, opacity: 0 }}
-            transition={{ type: "spring", stiffness: 280, damping: 24 }}
-            className="w-full max-w-md overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="border-b border-slate-100 bg-slate-50/70 p-4">
-              <div className="flex items-center gap-2">
-                <div className="grid h-8 w-8 place-items-center rounded-xl bg-[#1B4B73] text-[#F0B900] shadow-xs">
-                  <MapPin className="h-4 w-4" />
-                </div>
-                <div>
-                  <h2 className="font-bold text-slate-900 text-sm">Selecciona tu provincia</h2>
-                  <p className="text-xs text-muted-foreground">Busca la ubicación de tu lavandería.</p>
-                </div>
-              </div>
-              <div className="relative mt-3">
-                <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  autoFocus
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Escribe aquí..."
-                  className="pl-8.5 h-8.5 text-xs rounded-xl border-slate-200"
-                />
-              </div>
-            </div>
-            <div className="max-h-[45vh] overflow-y-auto p-1.5">
-              {filtered.length === 0 ? (
-                <div className="p-6 text-center text-xs text-muted-foreground">Sin resultados</div>
-              ) : (
-                filtered.map((p) => {
-                  const sel = p === value;
-                  return (
-                    <button
-                      key={p}
-                      type="button"
-                      onClick={() => onSelect(p)}
-                      className={`flex w-full items-center justify-between rounded-xl px-3.5 py-2 text-left text-xs transition ${
-                        sel ? "bg-sky-50 text-[#1B4B73] font-bold" : "hover:bg-slate-50 text-slate-700 font-medium"
-                      }`}
-                    >
-                      <span>{p}</span>
-                      {sel && <Check className="h-3.5 w-3.5 text-[#1B4B73]" />}
-                    </button>
-                  );
-                })
-              )}
-            </div>
-            <div className="flex justify-end border-t border-slate-100 bg-slate-50/50 px-4 py-2.5">
-              <Button variant="ghost" size="sm" className="h-7 text-xs font-semibold" onClick={onClose}>Cancelar</Button>
-            </div>
-          </motion.div>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
 
-function Field({ label, error, className = "", children }: { label: string; error?: string; className?: string; children: React.ReactNode }) {
+
+function Field({ label, error, hint, className = "", children }: { label: React.ReactNode; error?: string; hint?: string; className?: string; children: React.ReactNode }) {
   return (
     <div className={className}>
-      <Label className="mb-1 block text-xs font-semibold text-slate-700">{label}</Label>
+      <div className="mb-1.5 flex items-center justify-between">
+        {typeof label === "string" ? (
+          <Label className="block text-xs font-semibold text-slate-700">{label}</Label>
+        ) : (
+          label
+        )}
+      </div>
       {children}
+      {hint && <p className="mt-1 text-[11px] text-muted-foreground font-normal">{hint}</p>}
       {error && <div className="mt-1 flex items-center gap-1 text-[11px] text-destructive"><AlertCircle className="h-3 w-3" />{error}</div>}
     </div>
   );

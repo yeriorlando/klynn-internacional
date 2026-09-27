@@ -30,6 +30,7 @@ import { playNotificationSoundDebounced } from "@/lib/notificationSound";
 import { ClienteDialog } from "@/components/klynn/ClienteDialog";
 import { useGlobalConfig, useConversations } from "@/hooks/use-queries";
 import { sendWhatsAppMessage } from "@/lib/whatsapp";
+import { resolveInboundWhatsAppMediaServer } from "@/lib/neuroapi";
 
 function BoringAvatar({ name, size }: { name: string; size: number }) {
   const colors = ["#00686c", "#32c2b9", "#edecb3", "#fad928", "#ff9915"];
@@ -177,6 +178,7 @@ function ConversationsPage() {
   const tenant = user && user.tenant && user.tenant.id !== '__loading__' ? user.tenant : null;
   const tenantId = tenant?.id;
 
+  const { data: globalCfg } = useGlobalConfig();
   const { data: cachedConversations = [], isLoading: isQueryLoading } = useConversations(tenantId || "");
   const [conversations, setConversations] = useState<DBConversation[]>(() => cachedConversations as any);
   const [messages, setMessages] = useState<DBMessage[]>([]);
@@ -272,10 +274,15 @@ function ConversationsPage() {
   const wa = tenant?.config?.whatsapp;
   const engine = wa?.provider || globalCfg?.whatsapp_engine || "klynn_connect";
   const isKlynnConnect = engine === "klynn_connect";
+  const isNeuroAPI = engine === "neuroapi" || engine === "meta_cloud" || Boolean(wa?.neuroapi_phone_number_id);
+  const isConnected = isNeuroAPI
+    ? Boolean(wa?.neuroapi_phone_number_id || wa?.neuroapi_status === "connected")
+    : (isKlynnConnect ? Boolean(wa?.klynn_connect_status === "open" || wa?.is_connected) : Boolean(wa?.is_connected));
 
   const getProxiedUrl = (url: string, msgId?: string) => {
     if (!url) return "";
-    if (url.startsWith("data:")) return url;
+    if (url.startsWith("data:") || url.startsWith("blob:")) return url;
+    if (url.includes("catalogo/conversations")) return url;
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || "https://api.klynn.com.do";
     if (url.includes("wasenderapi.com")) {
       const apiKey = wa?.api_key || "";
@@ -284,6 +291,7 @@ function ConversationsPage() {
     if ((url.includes("mmg.whatsapp.net") || isKlynnConnect) && msgId) {
       return `${supabaseUrl}/functions/v1/klynn-connect-proxy?action=media&msg_id=${encodeURIComponent(msgId)}`;
     }
+    if (!url.startsWith("http")) return "";
     return url;
   };
 
@@ -463,6 +471,40 @@ function ConversationsPage() {
       setMessages(uniqueMessages as DBMessage[]);
       setConversations(prev => prev.map(c => c.id === convId ? { ...c, unread: 0 } : c));
 
+      // Auto-resolver imágenes / audios / docs de WhatsApp pendientes de NeuroAPI
+      const unresolvedIds = (data || [])
+        .filter(m => {
+          const c = m.content || '';
+          return (
+            c.includes('(imagen de WhatsApp)') ||
+            c.includes('(nota de voz)') ||
+            c.includes('(video de WhatsApp)') ||
+            c.includes('(documento de WhatsApp)') ||
+            (c.startsWith('[image]') && !c.includes('http')) ||
+            (c.startsWith('[audio]') && !c.includes('http')) ||
+            (c.startsWith('[video]') && !c.includes('http')) ||
+            (c.startsWith('[document]') && !c.includes('http'))
+          );
+        })
+        .map(m => m.id);
+
+      if (unresolvedIds.length > 0 && isNeuroAPI) {
+        resolveInboundWhatsAppMediaServer({ data: { messageIds: unresolvedIds, tenantId } })
+          .then((res: any) => {
+            if (res?.ok && res.resolved) {
+              setMessages(prev =>
+                prev.map(m => {
+                  if (res.resolved[m.id]?.content) {
+                    return { ...m, content: res.resolved[m.id].content };
+                  }
+                  return m;
+                })
+              );
+            }
+          })
+          .catch((err: any) => console.warn('Error resolviendo media entrante:', err));
+      }
+
       // Marking as read must not block rendering the messages.
       void supabase
         .from('conversations')
@@ -508,29 +550,61 @@ function ConversationsPage() {
       )
       .on(
         'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'messages' },
+        (payload) => {
+          const updatedMsg = payload.new as DBMessage;
+          if (updatedMsg && updatedMsg.tenant_id === tenantId && updatedMsg.conversation_id === selectedConvId) {
+            setMessages(prev => prev.map(m => m.id === updatedMsg.id ? { ...m, ...updatedMsg } : m));
+          }
+        }
+      )
+      .on(
+        'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'messages' },
         (payload) => {
           const newMsg = payload.new as DBMessage;
-            if (newMsg && newMsg.tenant_id === tenantId) {
-              const activeChatId = localStorage.getItem('klynn_active_chat_id');
-              if (newMsg.role === 'user' && newMsg.conversation_id !== selectedConvId && newMsg.conversation_id !== activeChatId) {
-                playNotificationSoundDebounced();
-              }
-              if (newMsg.conversation_id === selectedConvId) {
-                setMessages(prev => {
-                  if (prev.some(m => m.id === newMsg.id || (newMsg.wamid && m.wamid === newMsg.wamid))) return prev;
-                  return [...prev, newMsg];
-                });
-                
-                // Reset unread count immediately in DB and state for the active chat
-                supabase
-                  .from('conversations')
-                  .update({ unread: 0 })
-                  .eq('id', selectedConvId)
-                  .then();
-                setConversations(prev => prev.map(c => c.id === selectedConvId ? { ...c, unread: 0 } : c));
+          if (newMsg && newMsg.tenant_id === tenantId) {
+            const activeChatId = localStorage.getItem('klynn_active_chat_id');
+            if (newMsg.role === 'user' && newMsg.conversation_id !== selectedConvId && newMsg.conversation_id !== activeChatId) {
+              playNotificationSoundDebounced();
+            }
+            if (newMsg.conversation_id === selectedConvId) {
+              setMessages(prev => {
+                if (prev.some(m => m.id === newMsg.id || (newMsg.wamid && m.wamid === newMsg.wamid))) return prev;
+                return [...prev, newMsg];
+              });
+              
+              // Reset unread count immediately in DB and state for the active chat
+              supabase
+                .from('conversations')
+                .update({ unread: 0 })
+                .eq('id', selectedConvId)
+                .then();
+              setConversations(prev => prev.map(c => c.id === selectedConvId ? { ...c, unread: 0 } : c));
+
+              // Si es un mensaje de WhatsApp entrante no resuelto, resolverlo al instante
+              const c = newMsg.content || '';
+              if (
+                isNeuroAPI && (
+                  c.includes('(imagen de WhatsApp)') ||
+                  c.includes('(nota de voz)') ||
+                  c.includes('(video de WhatsApp)') ||
+                  c.includes('(documento de WhatsApp)') ||
+                  (c.startsWith('[image]') && !c.includes('http'))
+                )
+              ) {
+                resolveInboundWhatsAppMediaServer({ data: { messageIds: [newMsg.id], tenantId } })
+                  .then((res: any) => {
+                    if (res?.ok && res.resolved?.[newMsg.id]?.content) {
+                      setMessages(prev =>
+                        prev.map(m => m.id === newMsg.id ? { ...m, content: res.resolved[newMsg.id].content } : m)
+                      );
+                    }
+                  })
+                  .catch((err: any) => console.warn('Error resolviendo nuevo media entrante:', err));
               }
             }
+          }
         }
       )
       .subscribe();
@@ -1033,7 +1107,7 @@ function ConversationsPage() {
             </div>
 
             {/* Config Warning banner if API not ready */}
-            {!isKlynnConnect && (!wa || !wa.enabled || !wa.api_key) && (
+            {!isConnected && (!wa || !wa.enabled) && (
               <div className="bg-amber-50 border-b border-amber-200 dark:bg-amber-950/20 dark:border-amber-900/40 p-3 px-5 flex items-start gap-3 text-amber-800 dark:text-amber-400 text-xs shrink-0 select-none z-10">
                 <AlertTriangle className="h-4.5 w-4.5 shrink-0 mt-0.5" />
                 <div>
@@ -1142,68 +1216,96 @@ function ConversationsPage() {
                           {isMedia ? (
                             <div className="space-y-1 my-0.5">
                               {mediaType === 'image' && (
-                                <img 
-                                  src={getProxiedUrl(mediaUrl, msg.id)} 
-                                  alt="WhatsApp attachment" 
-                                  className="rounded-xl max-h-60 object-cover max-w-full hover:scale-[1.01] transition-transform shadow-sm cursor-pointer" 
-                                  onClick={() => setActiveMediaModalUrl(getProxiedUrl(mediaUrl, msg.id))} 
-                                  onError={(e) => {
-                                    const target = e.currentTarget;
-                                    const retries = parseInt(target.getAttribute('data-retry') || '0', 10);
-                                    if (retries < 4) {
-                                      target.setAttribute('data-retry', (retries + 1).toString());
-                                      setTimeout(() => {
-                                        const currentSrc = target.src;
-                                        target.src = '';
-                                        target.src = currentSrc;
-                                      }, 1000 * (retries + 1));
-                                    } else {
-                                      target.style.display = 'none';
-                                      const placeholder = document.createElement('div');
-                                      placeholder.className = 'flex items-center gap-2 p-3 bg-black/5 rounded-xl text-xs text-muted-foreground';
-                                      placeholder.innerHTML = '📷 <span class="opacity-75">Imagen (expirada)</span>';
-                                      target.parentNode?.insertBefore(placeholder, target);
-                                    }
-                                  }}
-                                />
+                                (!mediaUrl || (!mediaUrl.startsWith('http') && !mediaUrl.startsWith('data:'))) ? (
+                                  <div className="flex items-center gap-2.5 p-3 bg-black/5 dark:bg-white/10 rounded-xl text-xs text-muted-foreground animate-pulse">
+                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    <span>Descargando imagen de WhatsApp...</span>
+                                  </div>
+                                ) : (
+                                  <img 
+                                    src={getProxiedUrl(mediaUrl, msg.id)} 
+                                    alt="WhatsApp attachment" 
+                                    className="rounded-xl max-h-60 object-cover max-w-full hover:scale-[1.01] transition-transform shadow-sm cursor-pointer" 
+                                    onClick={() => setActiveMediaModalUrl(getProxiedUrl(mediaUrl, msg.id))} 
+                                    onError={(e) => {
+                                      const target = e.currentTarget;
+                                      const retries = parseInt(target.getAttribute('data-retry') || '0', 10);
+                                      if (retries < 4) {
+                                        target.setAttribute('data-retry', (retries + 1).toString());
+                                        setTimeout(() => {
+                                          const currentSrc = target.src;
+                                          target.src = '';
+                                          target.src = currentSrc;
+                                        }, 1000 * (retries + 1));
+                                      } else {
+                                        target.style.display = 'none';
+                                        const placeholder = document.createElement('div');
+                                        placeholder.className = 'flex items-center gap-2 p-3 bg-black/5 rounded-xl text-xs text-muted-foreground';
+                                        placeholder.innerHTML = '📷 <span class="opacity-75">Imagen (expirada)</span>';
+                                        target.parentNode?.insertBefore(placeholder, target);
+                                      }
+                                    }}
+                                  />
+                                )
                               )}
                               {mediaType === 'video' && (
-                                <video 
-                                  src={getProxiedUrl(mediaUrl, msg.id)} 
-                                  controls 
-                                  className="rounded-xl max-h-60 max-w-full shadow-sm" 
-                                  onError={(e) => {
-                                    const target = e.currentTarget;
-                                    const retries = parseInt(target.getAttribute('data-retry') || '0', 10);
-                                    if (retries < 4) {
-                                      target.setAttribute('data-retry', (retries + 1).toString());
-                                      setTimeout(() => {
-                                        const currentSrc = target.src;
-                                        target.src = '';
-                                        target.src = currentSrc;
-                                      }, 1000 * (retries + 1));
-                                    } else {
-                                      target.style.display = 'none';
-                                      const placeholder = document.createElement('div');
-                                      placeholder.className = 'flex items-center gap-2 p-3 bg-black/5 rounded-xl text-xs text-muted-foreground';
-                                      placeholder.innerHTML = '🎥 <span class="opacity-75">Video (expirado)</span>';
-                                      target.parentNode?.insertBefore(placeholder, target);
-                                    }
-                                  }}
-                                />
+                                (!mediaUrl || (!mediaUrl.startsWith('http') && !mediaUrl.startsWith('data:'))) ? (
+                                  <div className="flex items-center gap-2.5 p-3 bg-black/5 dark:bg-white/10 rounded-xl text-xs text-muted-foreground animate-pulse">
+                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    <span>Descargando video de WhatsApp...</span>
+                                  </div>
+                                ) : (
+                                  <video 
+                                    src={getProxiedUrl(mediaUrl, msg.id)} 
+                                    controls 
+                                    className="rounded-xl max-h-60 max-w-full shadow-sm" 
+                                    onError={(e) => {
+                                      const target = e.currentTarget;
+                                      const retries = parseInt(target.getAttribute('data-retry') || '0', 10);
+                                      if (retries < 4) {
+                                        target.setAttribute('data-retry', (retries + 1).toString());
+                                        setTimeout(() => {
+                                          const currentSrc = target.src;
+                                          target.src = '';
+                                          target.src = currentSrc;
+                                        }, 1000 * (retries + 1));
+                                      } else {
+                                        target.style.display = 'none';
+                                        const placeholder = document.createElement('div');
+                                        placeholder.className = 'flex items-center gap-2 p-3 bg-black/5 rounded-xl text-xs text-muted-foreground';
+                                        placeholder.innerHTML = '🎥 <span class="opacity-75">Video (expirado)</span>';
+                                        target.parentNode?.insertBefore(placeholder, target);
+                                      }
+                                    }}
+                                  />
+                                )
                               )}
                               {mediaType === 'audio' && (
-                                <audio src={getProxiedUrl(mediaUrl, msg.id)} controls className="max-w-full scale-95 origin-left" />
+                                (!mediaUrl || (!mediaUrl.startsWith('http') && !mediaUrl.startsWith('data:'))) ? (
+                                  <div className="flex items-center gap-2.5 p-3 bg-black/5 dark:bg-white/10 rounded-xl text-xs text-muted-foreground animate-pulse">
+                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    <span>Descargando nota de voz...</span>
+                                  </div>
+                                ) : (
+                                  <audio src={getProxiedUrl(mediaUrl, msg.id)} controls className="max-w-full scale-95 origin-left" />
+                                )
                               )}
                               {mediaType === 'document' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenDocument(mediaUrl, mediaFilename || 'documento.pdf')}
-                                  className="flex items-center gap-2.5 p-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 rounded-xl transition-colors text-xs font-bold max-w-full text-left cursor-pointer border border-black/5"
-                                >
-                                  <FileText className="h-5 w-5 text-primary shrink-0" />
-                                  <span className="truncate">{mediaFilename || 'Ver Documento'}</span>
-                                </button>
+                                (!mediaUrl || (!mediaUrl.startsWith('http') && !mediaUrl.startsWith('data:'))) ? (
+                                  <div className="flex items-center gap-2.5 p-3 bg-black/5 dark:bg-white/10 rounded-xl text-xs text-muted-foreground animate-pulse">
+                                    <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                                    <span>Descargando documento ({mediaFilename || 'archivo'})...</span>
+                                  </div>
+                                ) : (
+                                  <button
+                                    type="button"
+                                    onClick={() => handleOpenDocument(mediaUrl, mediaFilename || 'documento.pdf')}
+                                    className="flex items-center gap-2.5 p-2 bg-black/5 hover:bg-black/10 dark:bg-white/10 dark:hover:bg-white/15 rounded-xl transition-colors text-xs font-bold max-w-full text-left cursor-pointer border border-black/5"
+                                  >
+                                    <FileText className="h-5 w-5 text-primary shrink-0" />
+                                    <span className="truncate">{mediaFilename || 'Ver Documento'}</span>
+                                  </button>
+                                )
                               )}
                               {mediaCaption && (
                                 <p className="leading-relaxed whitespace-pre-wrap text-sm mt-1">{mediaCaption}</p>

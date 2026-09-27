@@ -977,7 +977,7 @@ function DashboardAdminPage() {
                   {filteredTenants.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="p-12 text-center text-muted-foreground">
-                        <Building2 className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
+                        <Store className="mx-auto h-12 w-12 text-muted-foreground/30 mb-3" />
                         <p className="text-base font-semibold text-foreground">No se encontraron lavanderías</p>
                         <p className="text-xs text-muted-foreground mt-1">Prueba a cambiar el filtro de búsqueda o el estado.</p>
                       </td>
@@ -1216,7 +1216,7 @@ function DashboardAdminPage() {
           <div className="grid gap-3.5 md:hidden">
             {filteredTenants.length === 0 ? (
               <Card className="p-8 text-center text-muted-foreground rounded-2xl">
-                <Building2 className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
+                <Store className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
                 <p className="font-semibold text-foreground text-sm">No se encontraron lavanderías</p>
                 <p className="text-xs text-muted-foreground mt-0.5">Prueba con otro término de búsqueda.</p>
               </Card>

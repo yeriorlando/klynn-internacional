@@ -7,7 +7,7 @@ export function extractOrderSequenceNumber(
 ): number | null {
   if (!numero || typeof numero !== "string") return null;
   const match = yearMonth
-    ? numero.match(new RegExp(`^KL-${yearMonth}-(\\d+)$`, "i"))
+    ? numero.match(new RegExp(`^(?:[A-Za-z0-9_-]+)-${yearMonth}-(\\d+)$`, "i"))
     : numero.match(/-(\d+)$/);
   if (!match) return null;
 

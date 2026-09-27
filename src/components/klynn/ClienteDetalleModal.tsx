@@ -289,7 +289,7 @@ export function ClienteDetalleModal({
   const fullName = `${cliente.nombre} ${cliente.apellido || ""}`.trim();
   const rawPhone = cliente.telefono.replace(/\D/g, "");
   const hasLocation = Boolean(cliente.direccion || cliente.sector || cliente.lat || cliente.lng);
-  const isEmpresa = cliente.tipo === "Empresa";
+  const isEmpresa = (cliente.tipo || "").toLowerCase().trim() === "empresa";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -330,7 +330,7 @@ export function ClienteDetalleModal({
                 {cliente.cedula && (
                   <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-[#1B4B73] text-white">
                     <FileText className="h-2.5 w-2.5 text-[#F0B900]" />
-                    <span>RNC: {cliente.cedula}</span>
+                    <span>{isEmpresa ? "RNC:" : "Cédula:"} {cliente.cedula}</span>
                   </span>
                 )}
               </div>

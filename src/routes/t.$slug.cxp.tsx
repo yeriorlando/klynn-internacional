@@ -67,6 +67,9 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import {
   formatRD,
+  formatMoney,
+  formatPhoneRD,
+  getActiveTenantLocalization,
   uid,
   resolveTenantId,
   saveSuplidor,
@@ -84,6 +87,7 @@ import {
   type EstadoMoraCXP,
   type EstadoFacturaCXP,
 } from "@/lib/storage";
+import { getCountry } from "@/lib/countries";
 import { supabase } from "@/lib/supabase";
 import {
   useSuplidores,
@@ -160,7 +164,16 @@ const CATEGORIAS_INSUMO: { value: CategoriaInsumo; label: string }[] = [
 
 function CuentasPorPagarPage() {
   const user = useRequireAuth();
-  const tenantId = user?.tenant?.id || "";
+  const tenant = user?.tenant;
+  const tenantId = tenant?.id || "";
+  const currentCountry = useMemo(
+    () => getCountry(tenant?.pais_codigo || tenant?.config?.pais_codigo || getActiveTenantLocalization().pais_codigo || "DO"),
+    [tenant]
+  );
+  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || currentCountry.currency.symbol;
+  const taxName = tenant?.impuesto_nombre || tenant?.config?.impuesto_nombre || currentCountry.tax.name;
+  const taxRate = tenant?.impuesto_porcentaje ?? (tenant?.config?.impuesto_porcentaje ?? (tenant?.config?.itbis_porcentaje ?? currentCountry.tax.defaultRate));
+  const formatRD = (val: number) => formatMoney(val, tenant);
   const queryClient = useQueryClient();
 
   const { data: suplidores = [], isLoading: loadingSuplidores } = useSuplidores(tenantId);
@@ -693,7 +706,11 @@ function CuentasPorPagarPage() {
       {/* Header */}
       <PageHeader
         title="Cuentas por Pagar (CXP)"
-        description="Control de compras a crédito, suplidores, facturas con NCF y pagos"
+        description={
+          currentCountry.code === "DO"
+            ? "Control de compras a crédito, suplidores, facturas con NCF y pagos"
+            : `Control de compras a crédito, suplidores, facturas fiscales (${currentCountry.doc.label}) y pagos`
+        }
       >
         <Button
           className="h-10 shrink-0 gap-2 rounded-xl border border-emerald-600 bg-emerald-600 px-4 font-bold text-white shadow-xs hover:bg-emerald-700 hover:text-white focus-visible:ring-emerald-600/30"
@@ -810,7 +827,11 @@ function CuentasPorPagarPage() {
           <div className="relative min-w-0 flex-1">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <Input
-              placeholder="Buscar suplidor, NCF o factura..."
+              placeholder={
+                currentCountry.code === "DO"
+                  ? "Buscar suplidor, NCF o factura..."
+                  : `Buscar suplidor, ${currentCountry.doc.label} o factura...`
+              }
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               className="h-11 rounded-xl bg-white pl-9 pr-9 text-sm dark:bg-slate-900"
@@ -892,7 +913,7 @@ function CuentasPorPagarPage() {
                               {f.suplidor?.nombre_comercial || "Suplidor"}
                             </div>
                             <div className="mt-1 flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-                              <span className="whitespace-nowrap tabular-nums">RNC: {f.suplidor?.rnc_cedula || "N/D"}</span>
+                              <span className="whitespace-nowrap tabular-nums">{currentCountry.doc.label}: {f.suplidor?.rnc_cedula || "N/D"}</span>
                               <span className="truncate rounded-md bg-muted px-1.5 py-0.5 font-semibold capitalize text-foreground/70">
                                 {f.categoria_gasto}
                               </span>
@@ -905,7 +926,7 @@ function CuentasPorPagarPage() {
                             </div>
                             {f.ncf && (
                               <div className="text-xs font-semibold text-primary tabular-nums">
-                                NCF: {f.ncf}
+                                {currentCountry.code === "DO" ? "NCF" : currentCountry.doc.label}: {f.ncf}
                               </div>
                             )}
                             <div className="mt-1 text-xs text-muted-foreground tabular-nums">Emitida: {formatFechaDMY(f.fecha_emision)}</div>
@@ -1036,7 +1057,7 @@ function CuentasPorPagarPage() {
                             </Badge>
                           </div>
                           <div className="text-xs text-muted-foreground flex items-center gap-2 mt-0.5">
-                            <span>RNC: {suplidor.rnc_cedula || "N/D"}</span>
+                            <span>{currentCountry.doc.label}: {suplidor.rnc_cedula || "N/D"}</span>
                             {suplidor.telefono && (
                               <>
                                 <span>•</span>
@@ -1157,7 +1178,7 @@ function CuentasPorPagarPage() {
                       <tr key={s.id} className="hover:bg-muted/20">
                         <td className="px-5 py-4">
                           <div className="font-bold text-foreground">{s.nombre_comercial}</div>
-                          <div className="mt-0.5 text-xs text-muted-foreground">RNC: {s.rnc_cedula || "N/D"}</div>
+                          <div className="mt-0.5 text-xs text-muted-foreground">{currentCountry.doc.label}: {s.rnc_cedula || "N/D"}</div>
                         </td>
                         <td className="px-5 py-4">
                           <div className="font-medium">{s.telefono || "Sin teléfono"}</div>
@@ -1209,7 +1230,7 @@ function CuentasPorPagarPage() {
                 <thead className="bg-muted/60 border-b border-slate-200 dark:border-slate-800 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Suplidor</th>
-                    <th className="py-3 px-4">Factura # &amp; NCF</th>
+                    <th className="py-3 px-4">Factura # &amp; {currentCountry.code === "DO" ? "NCF" : currentCountry.doc.label}</th>
                     <th className="py-3 px-4">Emisión / Vencimiento</th>
                     <th className="py-3 px-4 text-right">Monto Total</th>
                     <th className="py-3 px-4 text-right">Total Pagado</th>
@@ -1282,11 +1303,11 @@ function CuentasPorPagarPage() {
                 {/* Monto a abonar */}
                 <div className="space-y-1.5">
                   <Label htmlFor="monto_abono" className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                    Monto a Pagar (RD$)*
+                    Monto a Pagar ({currencySymbol})*
                   </Label>
                   <div className="relative">
                     <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
-                      RD$
+                      {currencySymbol}
                     </span>
                     <PriceInput
                       id="monto_abono"
@@ -1448,7 +1469,9 @@ function CuentasPorPagarPage() {
                   Registrar Factura a Crédito
                 </DialogTitle>
                 <DialogDescription className="text-xs text-muted-foreground truncate mt-0.5">
-                  Ingresa la factura del proveedor con su plazo de pago y NCF de República Dominicana.
+                  {currentCountry.code === "DO"
+                    ? "Ingresa la factura del proveedor con su plazo de pago y NCF de República Dominicana."
+                    : `Ingresa la factura del proveedor con su plazo de pago y comprobante fiscal (${currentCountry.doc.label}).`}
                 </DialogDescription>
               </div>
             </div>
@@ -1540,13 +1563,13 @@ function CuentasPorPagarPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="ncf_factura" className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                    NCF (Opcional)
+                    {currentCountry.code === "DO" ? "NCF (Opcional)" : `${currentCountry.doc.label} / Comprobante (Opcional)`}
                   </Label>
                   <div className="relative">
                     <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
                     <Input
                       id="ncf_factura"
-                      placeholder="Ej. B0100000042"
+                      placeholder={currentCountry.code === "DO" ? "Ej. B0100000042" : currentCountry.doc.placeholder}
                       value={facturaForm.ncf}
                       onChange={(e) => setFacturaForm((prev) => ({ ...prev, ncf: e.target.value }))}
                       className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
@@ -1569,22 +1592,22 @@ function CuentasPorPagarPage() {
                 </div>
               </div>
 
-              {/* Fila 3: Subtotal, ITBIS 18%, Total */}
+              {/* Fila 3: Subtotal, Impuesto, Total */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="subtotal" className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                    Subtotal (RD$)
+                    Subtotal ({currencySymbol})
                   </Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
-                      RD$
+                      {currencySymbol}
                     </span>
                     <PriceInput
                       id="subtotal"
                       value={facturaForm.subtotal || 0}
                       placeholder="0.00"
                       onChange={(sub) => {
-                        const itbis = +(sub * 0.18).toFixed(2);
+                        const itbis = +(sub * (taxRate / 100)).toFixed(2);
                         setFacturaForm((prev) => ({
                           ...prev,
                           subtotal: sub,
@@ -1599,11 +1622,11 @@ function CuentasPorPagarPage() {
 
                 <div className="space-y-1.5">
                   <Label htmlFor="itbis" className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                    ITBIS 18% (RD$)
+                    {taxName} {taxRate}% ({currencySymbol})
                   </Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-muted-foreground/80 pointer-events-none select-none z-10">
-                      RD$
+                      {currencySymbol}
                     </span>
                     <PriceInput
                       id="itbis"
@@ -1627,7 +1650,7 @@ function CuentasPorPagarPage() {
                   </Label>
                   <div className="relative">
                     <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-[#1B4B73] dark:text-blue-400 pointer-events-none select-none z-10">
-                      RD$
+                      {currencySymbol}
                     </span>
                     <PriceInput
                       id="total"
@@ -1716,7 +1739,7 @@ function CuentasPorPagarPage() {
                   <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
                   <Input
                     id="nom_comercial"
-                    placeholder="Ej. Distribuidora Química Dominicana"
+                    placeholder={currentCountry.code === "DO" ? "Ej. Distribuidora Química Dominicana" : "Ej. Distribuidora Química"}
                     value={suplidorForm.nombre_comercial}
                     onChange={(e) =>
                       setSuplidorForm((prev) => ({ ...prev, nombre_comercial: e.target.value }))
@@ -1730,13 +1753,13 @@ function CuentasPorPagarPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label htmlFor="rnc_suplidor" className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                    RNC o Cédula (RD)
+                    {currentCountry.code === "DO" ? "RNC o Cédula (RD)" : `${currentCountry.doc.label} (${currentCountry.code})`}
                   </Label>
                   <div className="relative">
                     <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
                     <Input
                       id="rnc_suplidor"
-                      placeholder="Ej. 131-00000-0"
+                      placeholder={currentCountry.doc.placeholder}
                       value={suplidorForm.rnc_cedula}
                       onChange={(e) =>
                         setSuplidorForm((prev) => ({ ...prev, rnc_cedula: e.target.value }))
@@ -1754,10 +1777,13 @@ function CuentasPorPagarPage() {
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
                     <Input
                       id="tel_suplidor"
-                      placeholder="809-000-0000"
+                      placeholder={currentCountry.phonePlaceholder}
                       value={suplidorForm.telefono}
                       onChange={(e) =>
-                        setSuplidorForm((prev) => ({ ...prev, telefono: e.target.value }))
+                        setSuplidorForm((prev) => ({
+                          ...prev,
+                          telefono: currentCountry.code === "DO" ? formatPhoneRD(e.target.value) : e.target.value,
+                        }))
                       }
                       className="h-10 pl-9.5 rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-100 shadow-xs focus-visible:border-[#1B4B73] focus-visible:ring-[#1B4B73]/20 text-xs sm:text-sm font-medium"
                     />

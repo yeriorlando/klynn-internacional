@@ -115,7 +115,10 @@ import {
   saveGasto,
   deleteGasto,
   formatRD,
+  formatMoney,
+  getTenantCurrencySymbol,
   formatDateRD,
+  getActiveTenantLocalization,
   uid,
   CATEGORIAS_GASTOS,
   getECFDocumentosRecibidos,
@@ -141,6 +144,7 @@ import {
   type Suplidor,
 } from "@/lib/storage";
 import { emitirECF } from "@/lib/fiscal";
+import { getCountry } from "@/lib/countries";
 import { toast } from "sonner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
@@ -658,6 +662,7 @@ function GastoActions({
 function GastosPage() {
   const user = useRequireAuth();
   const tenant = user?.tenant;
+  const currencySymbol = tenant?.moneda_simbolo || "RD$";
   const tenantId = tenant?.id || "";
   const queryClient = useQueryClient();
 
@@ -1146,6 +1151,8 @@ function GastosPage() {
                   activeTab === "caja-chica" ? cajaChicaGastos : manualGastos,
                   activeTab,
                   user?.tenant?.nombre || "Klynn",
+                  getTenantCurrencySymbol(user?.tenant),
+                  user?.tenant?.moneda_codigo || "DOP",
                 );
               }}
             >
@@ -2174,6 +2181,7 @@ function GastosPage() {
         onOpenChange={setShowCompararModal}
         gastos={gastos}
         tenantNombre={user.tenant.nombre}
+        tenant={user.tenant}
       />
 
       {/* MODAL DE CONFIRMACIÓN PARA ELIMINAR GASTO */}
@@ -2287,12 +2295,12 @@ function DMYDatePicker({
         <button
           type="button"
           className={cn(
-            "flex items-center justify-between text-left font-mono font-medium rounded-xl bg-surface border border-border/80 text-xs px-2.5 transition-colors hover:bg-muted/40 hover:border-primary cursor-pointer shadow-2xs select-none",
+            "flex items-center justify-between text-left font-sans font-medium text-slate-900 dark:text-slate-100 rounded-xl bg-surface border border-border/80 text-xs sm:text-sm px-3 h-10 transition-colors hover:bg-muted/40 hover:border-primary cursor-pointer shadow-2xs select-none",
             className,
           )}
         >
           <span className="truncate">{displayStr || "DD/MM/AAAA"}</span>
-          <Calendar className="h-3.5 w-3.5 text-muted-foreground shrink-0 ml-1.5" />
+          <Calendar className="h-4 w-4 text-muted-foreground shrink-0 ml-1.5" />
         </button>
       </PopoverTrigger>
       <PopoverContent
@@ -2361,6 +2369,7 @@ function NewGasto({
   onManage: () => void;
   onDone: () => void;
 }) {
+  const currencySymbol = tenant?.moneda_simbolo || getActiveTenantLocalization().moneda_simbolo || "RD$";
   const isElectronic = !!ecfConfig?.is_active || !!ecfConfig?.ef2_environment || !!tenant?.rnc;
   const activeCategories = useMemo(() => categories.filter((item) => item.activo), [categories]);
   const activeTemplates = useMemo(() => templates.filter((item) => item.activo), [templates]);
@@ -2460,7 +2469,7 @@ function NewGasto({
       return;
     }
     if (amount <= 0) {
-      toast.error("El monto debe ser mayor que RD$0.00.");
+      toast.error(`El monto debe ser mayor que ${formatRD(0)}.`);
       return;
     }
     if (!category) {
@@ -2733,7 +2742,7 @@ function NewGasto({
               </Label>
               <div className="relative flex h-10 items-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
                 <span className="flex items-center pl-3 pr-2 text-xs font-black text-muted-foreground border-r border-slate-200 dark:border-slate-800 select-none">
-                  RD$
+                  {currencySymbol}
                 </span>
                 <input
                   id="expense-amount"
@@ -3027,6 +3036,11 @@ function NewCompraModal({
 }) {
   const isElectronic = !!ecfConfig?.is_active || !!ecfConfig?.ef2_environment || !!tenant?.rnc;
 
+  const currentCountry = useMemo(() => {
+    const code = tenant?.pais_codigo || tenantConfig?.pais_codigo || "DO";
+    return getCountry(code);
+  }, [tenant, tenantConfig]);
+
   const [rawMonto, setRawMonto] = useState("");
   const [monto, setMonto] = useState(0);
   const [proveedorNombre, setProveedorNombre] = useState("");
@@ -3068,7 +3082,11 @@ function NewCompraModal({
       return;
     }
     if (!proveedorRnc.trim()) {
-      toast.error("Ingresa el RNC o Cédula del proveedor informal");
+      toast.error(
+        currentCountry.code === "DO"
+          ? "Ingresa el RNC o Cédula del proveedor informal"
+          : `Ingresa el ${currentCountry.doc.label} del proveedor`
+      );
       return;
     }
     if (!concepto.trim()) {
@@ -3076,7 +3094,7 @@ function NewCompraModal({
       return;
     }
     if (monto <= 0) {
-      toast.error("Ingresa un monto válido mayor a RD$0.00");
+      toast.error(`Ingresa un monto válido mayor a ${formatRD(0)}`);
       return;
     }
 
@@ -3287,15 +3305,15 @@ function NewCompraModal({
 
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                RNC o Cédula *
+                {currentCountry.code === "DO" ? "RNC o Cédula *" : `${currentCountry.doc.label} (${currentCountry.code}) *`}
               </Label>
               <div className="relative">
                 <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60 pointer-events-none z-10" />
                 <Input
-                  placeholder="Ej. 00112345678"
+                  placeholder={currentCountry.code === "DO" ? "Ej. 00112345678" : currentCountry.doc.placeholder}
                   value={proveedorRnc}
                   onChange={(e) => setProveedorRnc(e.target.value)}
-                  className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs font-mono"
+                  className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs focus-visible:ring-primary/20"
                 />
               </div>
             </div>
@@ -3321,11 +3339,11 @@ function NewCompraModal({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">
-                Monto Bruto (RD$) *
+                Monto Bruto ({tenant?.moneda_simbolo || "RD$"}) *
               </Label>
               <div className="relative flex h-10 items-center rounded-xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs focus-within:ring-2 focus-within:ring-primary/20 focus-within:border-primary transition-all">
                 <span className="flex items-center pl-3 pr-2 text-xs font-black text-muted-foreground border-r border-slate-200 dark:border-slate-800 select-none">
-                  RD$
+                  {tenant?.moneda_simbolo || "RD$"}
                 </span>
                 <input
                   type="text"
@@ -3723,12 +3741,16 @@ function CompararPeriodosModal({
   onOpenChange,
   gastos,
   tenantNombre,
+  tenant,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   gastos: Gasto[];
   tenantNombre?: string;
+  tenant?: Tenant;
 }) {
+  const currencySymbol = getTenantCurrencySymbol(tenant);
+  const formatRD = (val: number) => formatMoney(val, tenant);
   const now = useMemo(() => new Date(), []);
 
   // Lista de períodos dinámicos a comparar (A, B, y opcionalmente C y D)
@@ -4007,6 +4029,8 @@ function CompararPeriodosModal({
         diffTotalAB,
         pctTotalAB,
         insights,
+        currencySymbol,
+        currencyCode: tenant?.moneda_codigo || "DOP",
       });
       toast.success("Comparativa exportada a Excel (.xlsx) con diseño exitosamente");
     } catch (err) {

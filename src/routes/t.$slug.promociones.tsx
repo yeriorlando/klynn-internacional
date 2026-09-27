@@ -58,6 +58,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import {
   formatRD,
+  getActiveTenantLocalization,
   savePromocion,
   togglePromocionActiva,
   deletePromocion,
@@ -878,7 +879,7 @@ function PromocionesPage() {
                           <span className="text-[10.5px] text-muted-foreground block mt-0.5 leading-tight">
                             {tipoDescuento === "PORCENTAJE"
                               ? "Porcentaje a rebajar del total o de las prendas seleccionadas"
-                              : "Monto fijo en pesos (RD$) a descontar de la orden"}
+                              : `Monto fijo (${getActiveTenantLocalization().moneda_simbolo || "RD$"}) a descontar de la orden`}
                           </span>
                         </div>
 
@@ -886,7 +887,7 @@ function PromocionesPage() {
                         <div className="relative w-36 shrink-0">
                           {tipoDescuento === "MONTO_FIJO" && (
                             <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-xs font-bold text-muted-foreground">
-                              RD$
+                              {getActiveTenantLocalization().moneda_simbolo || "RD$"}
                             </span>
                           )}
                           <Input
@@ -937,7 +938,7 @@ function PromocionesPage() {
                                   : "bg-white dark:bg-slate-950 border-border/60 text-foreground hover:bg-slate-100 dark:hover:bg-slate-800"
                               }`}
                             >
-                              RD$ {val}
+                              {getActiveTenantLocalization().moneda_simbolo || "RD$"} {val}
                             </button>
                           ))
                         )}
@@ -1651,7 +1652,7 @@ function PromocionesPage() {
                             Mínimo de subtotal
                           </span>
                           <span className="text-[10px] text-muted-foreground block">
-                            Monto mínimo en pesos (RD$) para aplicar
+                            Monto mínimo ({getActiveTenantLocalization().moneda_simbolo || "RD$"}) para aplicar
                           </span>
                         </div>
                       </div>
@@ -1673,7 +1674,7 @@ function PromocionesPage() {
                         <span className="text-xs font-semibold text-foreground">Monto mínimo en orden:</span>
                         <div className="relative w-32 shrink-0">
                           <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[10px] font-bold text-muted-foreground pointer-events-none select-none">
-                            RD$
+                            {getActiveTenantLocalization().moneda_simbolo || "RD$"}
                           </span>
                           <Input
                             type="number"

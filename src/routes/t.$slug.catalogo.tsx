@@ -58,6 +58,7 @@ import {
   limpiarTodasLasMuestras,
   getTenantExclusions,
   formatRD,
+  getActiveTenantLocalization,
   formatAmountInput,
   uid,
   type CatalogoItem,
@@ -134,6 +135,9 @@ function CatalogoPage() {
   const user = useRequireAuth();
   const queryClient = useQueryClient();
   const tenantId = user?.tenant.id ?? "";
+  const tenant = user?.tenant;
+  const currencySymbol = tenant?.moneda_simbolo || "RD$";
+  const taxName = tenant?.impuesto_nombre || "ITBIS";
 
   const { data: items = [], isLoading: loadingItems } = useCatalogo(tenantId);
   const { data: servicios = [], isLoading: loadingServicios } = useServicios(tenantId);
@@ -954,6 +958,9 @@ function ItemDialog({
   serviciosList?: Servicio[];
   existingCategories?: string[];
 }) {
+  const loc = getActiveTenantLocalization();
+  const currencySymbol = loc.moneda_simbolo || "RD$";
+  const taxName = loc.impuesto_nombre || "ITBIS";
   const [activeTab, setActiveTab] = useState<"info" | "visual">("info");
   const [f, setF] = useState<Partial<CatalogoItem>>({});
   const [imgError, setImgError] = useState(false);
@@ -1434,7 +1441,7 @@ function ItemDialog({
                       <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 animate-in fade-in duration-150">
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
-                            RD$
+                            {currencySymbol}
                           </span>
                           <Input
                             id="item-base-price"
@@ -1493,7 +1500,7 @@ function ItemDialog({
                       <div className="mt-2.5 pt-2 border-t border-slate-100 dark:border-slate-700/60 animate-in fade-in duration-150">
                         <div className="relative">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
-                            RD$
+                            {currencySymbol}
                           </span>
                           <Input
                             id="item-libra-price"
@@ -1533,13 +1540,13 @@ function ItemDialog({
                     />
                   </label>
 
-                  {/* EXENTO DE ITBIS */}
+                  {/* EXENTO DE IMPUESTO */}
                   <label className="flex items-center justify-between p-3 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200/80 dark:border-slate-700/80 shadow-2xs cursor-pointer hover:border-primary/30 transition-colors">
                     <div className="flex items-center gap-2.5">
                       <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                         <Receipt className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-xs font-bold text-foreground">Exento de ITBIS (0%)</span>
+                      <span className="text-xs font-bold text-foreground">Exento de {taxName} (0%)</span>
                     </div>
                     <Switch
                       checked={!!f.is_exento}
@@ -1961,7 +1968,7 @@ function ItemDialog({
                         </span>
                         <div className="relative w-36 shrink-0">
                           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 dark:text-slate-500 pointer-events-none select-none">
-                            RD$
+                            {currencySymbol}
                           </span>
                           <Input
                             type="text"
@@ -2087,6 +2094,9 @@ function ServDialog({
   initial: Servicio | null;
   onSaved: () => void;
 }) {
+  const loc = getActiveTenantLocalization();
+  const currencySymbol = loc.moneda_simbolo || "RD$";
+  const taxName = loc.impuesto_nombre || "ITBIS";
   const [activeTab, setActiveTab] = useState<"info" | "visual">("info");
   const [f, setF] = useState<Partial<Servicio>>({});
   const [imgError, setImgError] = useState(false);
@@ -2307,7 +2317,7 @@ function ServDialog({
                     </Label>
                     <div className="relative">
                       <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
-                        RD$
+                        {currencySymbol}
                       </span>
                       <Input
                         id="service-price"
@@ -2403,7 +2413,7 @@ function ServDialog({
                       <div className="h-7 w-7 rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
                         <Receipt className="h-3.5 w-3.5" />
                       </div>
-                      <span className="text-xs font-bold text-foreground">Exento de ITBIS (0%)</span>
+                      <span className="text-xs font-bold text-foreground">Exento de {taxName} (0%)</span>
                     </div>
                     <Switch
                       checked={!!f.is_exento}
@@ -2507,7 +2517,7 @@ function ServDialog({
                       </Label>
                       <div className="relative">
                         <span className="absolute left-3 top-1/2 -translate-y-1/2 text-xs font-black text-slate-400 select-none">
-                          RD$
+                          {currencySymbol}
                         </span>
                         <Input
                           id="service-precio-adicional"

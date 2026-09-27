@@ -32,6 +32,8 @@ export interface ExportComparativaOptions {
     topIncrease?: { categoria: string; diffAB: number; pctAB: number } | null;
     topSavings?: { categoria: string; diffAB: number; pctAB: number } | null;
   } | null;
+  currencySymbol?: string;
+  currencyCode?: string;
 }
 
 const THEME_COLORS: Record<string, { headerBg: string; headerLight: string; textColor: string }> = {
@@ -67,7 +69,12 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
     breakdown,
     diffTotalAB = 0,
     pctTotalAB = 0,
+    currencySymbol = "RD$",
+    currencyCode = "DOP",
   } = options;
+
+  const excelCurrencyFormat = `"${currencySymbol} "#,##0.00`;
+  const excelDiffCurrencyFormat = `"${currencySymbol} "#,##0.00;[Red]-"${currencySymbol} "#,##0.00;"${currencySymbol} 0.00"`;
 
   const wb = XLSX.utils.book_new();
 
@@ -162,12 +169,12 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
   // Fila de Encabezados de la Tabla Principal
   const tableHeaders: string[] = ["Categoría de Gasto"];
   periodResults.forEach((p) => {
-    tableHeaders.push(`Monto ${p.id} (${p.displayLabel}) RD$`);
+    tableHeaders.push(`Monto ${p.id} (${p.displayLabel}) ${currencySymbol}`);
     tableHeaders.push(`% de ${p.id}`);
   });
 
   if (isTwoPeriods) {
-    tableHeaders.push("Diferencia (A - B) RD$");
+    tableHeaders.push(`Diferencia (A - B) ${currencySymbol}`);
     tableHeaders.push("Variación %");
     tableHeaders.push("Diagnóstico Financiero");
   }
@@ -234,7 +241,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
   // Fila de pie de notas
   aoa.push([]);
   aoa.push([
-    `* Reporte generado por Klynn Cloud POS. Todas las cifras están expresadas en Pesos Dominicanos (RD$ / DOP).`,
+    `* Reporte generado por Klynn Cloud POS. Todas las cifras están expresadas en ${currencyCode} (${currencySymbol}).`,
   ]);
 
   const numCols = tableHeaders.length;
@@ -354,7 +361,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
     });
     ["B5", "C5"].forEach((cell) => {
       ws[cell] = ws[cell] || { t: "n", v: pA.total };
-      ws[cell].z = '"RD$ "#,##0.00';
+      ws[cell].z = excelCurrencyFormat;
       ws[cell].s = {
         font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "1E3A8A" } },
         fill: { fgColor: { rgb: "EFF6FF" } },
@@ -381,7 +388,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
     });
     ["D5", "E5"].forEach((cell) => {
       ws[cell] = ws[cell] || { t: "n", v: pB.total };
-      ws[cell].z = '"RD$ "#,##0.00';
+      ws[cell].z = excelCurrencyFormat;
       ws[cell].s = {
         font: { name: "Calibri", sz: 14, bold: true, color: { rgb: "3730A3" } },
         fill: { fgColor: { rgb: "EEF2FF" } },
@@ -412,7 +419,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
     });
     ["F5", "G5", "H5"].forEach((cell) => {
       ws[cell] = ws[cell] || { t: "n", v: diffTotalAB };
-      ws[cell].z = '"RD$ "#,##0.00;[Red]-"RD$ "#,##0.00;"RD$ 0.00"';
+      ws[cell].z = excelDiffCurrencyFormat;
       ws[cell].s = {
         font: { name: "Calibri", sz: 14, bold: true, color: { rgb: netTextColor } },
         fill: { fgColor: { rgb: netBodyBg } },
@@ -531,7 +538,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
       // Monto
       const cellAmt = ws[`${colLetterAmount}${rowNum}`];
       if (cellAmt) {
-        cellAmt.z = '"RD$ "#,##0.00';
+        cellAmt.z = excelCurrencyFormat;
         cellAmt.s = {
           font: { name: "Calibri", sz: 10, color: { rgb: "0F172A" } },
           fill: { fgColor: { rgb: rowBg } },
@@ -566,7 +573,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
       // Diferencia
       const cellDiff = ws[`${colDiff}${rowNum}`];
       if (cellDiff) {
-        cellDiff.z = '"RD$ "#,##0.00;[Red]-"RD$ "#,##0.00;"RD$ 0.00"';
+        cellDiff.z = excelDiffCurrencyFormat;
         cellDiff.s = {
           font: { name: "Calibri", sz: 10, bold: true, color: { rgb: diffColor } },
           fill: { fgColor: { rgb: diffBg } },
@@ -638,7 +645,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
     const colLetterShare = getColumnLetter(totColIndex + 1);
 
     if (ws[`${colLetterAmount}${totalRow1Idx}`]) {
-      ws[`${colLetterAmount}${totalRow1Idx}`].z = '"RD$ "#,##0.00';
+      ws[`${colLetterAmount}${totalRow1Idx}`].z = excelCurrencyFormat;
     }
     if (ws[`${colLetterShare}${totalRow1Idx}`]) {
       ws[`${colLetterShare}${totalRow1Idx}`].z = '0.0%';
@@ -654,7 +661,7 @@ export function exportGastosComparativaToExcel(options: ExportComparativaOptions
 
     const cellDiff = ws[`${colDiff}${totalRow1Idx}`];
     if (cellDiff) {
-      cellDiff.z = '"RD$ "#,##0.00;[Red]-"RD$ "#,##0.00;"RD$ 0.00"';
+      cellDiff.z = excelDiffCurrencyFormat;
       cellDiff.s.font = {
         name: "Calibri",
         sz: 11,
@@ -703,6 +710,8 @@ export function exportGastosListToExcel(
   gastosList: any[],
   tabType: "manual" | "caja-chica" | string,
   tenantName: string = "Klynn Lavandería",
+  currencySymbol: string = "RD$",
+  currencyCode: string = "DOP",
 ) {
   const wb = XLSX.utils.book_new();
 
@@ -723,8 +732,8 @@ export function exportGastosListToExcel(
   const totalSum = gastosList.reduce((acc, g) => acc + (Number(g.monto) || 0), 0);
 
   const headers = isCajaChica
-    ? ["Fecha", "Categoría", "Descripción", "Método de Pago", "Monto (RD$)"]
-    : ["Fecha", "Categoría", "Descripción", "Proveedor", "Método de Pago", "Monto (RD$)"];
+    ? ["Fecha", "Categoría", "Descripción", "Método de Pago", `Monto (${currencySymbol})`]
+    : ["Fecha", "Categoría", "Descripción", "Proveedor", "Método de Pago", `Monto (${currencySymbol})`];
 
   const numCols = headers.length;
 
@@ -759,7 +768,7 @@ export function exportGastosListToExcel(
   aoa.push(totalRow);
 
   aoa.push([]);
-  aoa.push([`* Cifras expresadas en Pesos Dominicanos (RD$ / DOP). Generado desde Klynn Cloud POS.`]);
+  aoa.push([`* Cifras expresadas en ${currencyCode} (${currencySymbol}). Generado desde Klynn Cloud POS.`]);
 
   const ws = XLSX.utils.aoa_to_sheet(aoa);
 
@@ -849,7 +858,7 @@ export function exportGastosListToExcel(
 
         // Columna Monto
         if (c === numCols - 1) {
-          cell.z = '"RD$ "#,##0.00';
+          cell.z = `"${currencySymbol} "#,##0.00`;
           cell.s.font.bold = true;
         }
       }
@@ -874,7 +883,7 @@ export function exportGastosListToExcel(
         },
       };
       if (c === numCols - 1) {
-        cell.z = '"RD$ "#,##0.00';
+        cell.z = `"${currencySymbol} "#,##0.00`;
       }
     }
   }

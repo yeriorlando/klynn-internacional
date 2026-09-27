@@ -6,10 +6,13 @@ import {
   CreditCard, Calendar, Layers, Laptop, ShieldCheck, Search, Filter, CheckCircle2,
   AlertCircle, Clock, MessageSquare, Truck, FileText, Zap, Crown, Rocket, Sparkles, CheckSquare, X,
   Wrench, ArrowLeft, ArrowRight, Ticket, Copy, Send, MessageCircle, Lock, WifiOff, Boxes,
-  Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2, Calculator
+  Server, HardDrive, Database, ArrowUpRight, Activity, Globe, FlaskConical, FileCheck2, Calculator,
+  Megaphone, Eye, EyeOff, Loader2
 } from "lucide-react";
 import { Logo } from "@/components/klynn/Logo";
 import { HistorialPagosModal } from "@/components/klynn/HistorialPagosModal";
+import { ComunicadosModal } from "@/components/klynn/ComunicadosModal";
+import { AdminCountryFilterSelect } from "@/components/klynn/AdminCountryFilterSelect";
 import { Receipt } from "lucide-react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { GlobalPageLoader } from "@/components/klynn/GlobalPageLoader";
@@ -63,9 +66,15 @@ import {
   createInvitacion,
   deleteInvitacion,
   generateInvitationCode,
+  getAllCountryPlans,
+  getCountryPlans,
+  saveCountryPlans,
+  formatCurrencyByCountry,
+  DEFAULT_COUNTRY_PLANS,
 
   type Plan, type PlanId, type Tenant, type GlobalConfig, type LicenciaLocal, type BankDetails, type InvitacionCodigo
 } from "@/lib/storage";
+import { COUNTRIES, getCountry } from "@/lib/countries";
 import { supabase } from "@/lib/supabase";
 import { getEF2Client, EF2_DEFAULT_TEST_USERNAME, EF2_DEFAULT_TEST_TOKEN, EF2_DEFAULT_TEST_RNC, EF2_DEFAULT_TEST_EMPRESA } from "@/lib/fiscal";
 import {
@@ -159,6 +168,10 @@ function AdminPage() {
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [countryFilter, setCountryFilter] = useState<string>("all");
+  const [adminPlanCountry, setAdminPlanCountry] = useState<string>("DO");
+  const [editingPlanCountry, setEditingPlanCountry] = useState<string>("DO");
+  const [allCountryPlans, setAllCountryPlans] = useState<Record<string, Plan[]>>(DEFAULT_COUNTRY_PLANS);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [selectedTenantIds, setSelectedTenantIds] = useState<string[]>([]);
   const [isDeletingBatch, setIsDeletingBatch] = useState(false);
@@ -175,6 +188,13 @@ function AdminPage() {
 
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
   const [tenantForInvoices, setTenantForInvoices] = useState<Tenant | null>(null);
+  const [showComunicadosModal, setShowComunicadosModal] = useState(false);
+  const [comunicadoTargetTenantId, setComunicadoTargetTenantId] = useState<string | null>(null);
+
+  function openComunicadosModal(tenantId?: string | null) {
+    setComunicadoTargetTenantId(tenantId || null);
+    setShowComunicadosModal(true);
+  }
   const [openEditModal, setOpenEditModal] = useState(false);
   const [editStep, setEditStep] = useState<1 | 2>(1);
   const [newEmail, setNewEmail] = useState("");
@@ -377,7 +397,10 @@ function AdminPage() {
       (statusFilter === "SUSPENDIDO" && t.estado === "SUSPENDIDO") ||
       (statusFilter === "INACTIVO" && isTenantAbandoned(t));
 
-    return matchesQuery && matchesStatus;
+    const tenantCountry = (t.pais_codigo || "DO").toUpperCase();
+    const matchesCountry = countryFilter === "all" || tenantCountry === countryFilter.toUpperCase();
+
+    return matchesQuery && matchesStatus && matchesCountry;
   });
 
   async function handleBatchDelete() {
@@ -450,17 +473,19 @@ function AdminPage() {
 
   useEffect(() => {
     async function load() {
-      const [t, p, cfg, lics, invs, ecfRes] = await Promise.all([
+      const [t, p, cfg, lics, invs, ecfRes, acp] = await Promise.all([
         getTenants(),
         getPlans(),
         getGlobalConfig(),
         getLicenciasLocales(),
         getInvitaciones(),
         supabase.from('ecf_config').select('id,tenant_id,rnc_emisor,razon_social,nombre_comercial,ambiente,is_active,proveedor_ecf,ef2_username,ef2_environment,ef2_credentials_owner,pronesoft_environment,pronesoft_tenant_id,created_at,updated_at'),
+        getAllCountryPlans(),
       ]);
       setTenants(t);
       setPlans(p);
       setGlobalConfig(cfg);
+      if (acp) setAllCountryPlans(acp);
       if (cfg.standby_sync_frequency) {
         setSelectedStandbyFreq(cfg.standby_sync_frequency);
       }
@@ -566,8 +591,10 @@ function AdminPage() {
     t.email?.toLowerCase().includes('demo@klynn') || 
     t.nombre?.toLowerCase().includes('reynita');
 
-  function getTenantSaaSStats(t: Tenant, plansList: Plan[]) {
-    const plan = plansList.find((p) => p.id === t.plan_id);
+  function getTenantSaaSStats(t: Tenant, plansList: Plan[], countryPlansMap?: Record<string, Plan[]>) {
+    const tCountry = (t.pais_codigo || "DO").toUpperCase();
+    const localizedPlans = countryPlansMap?.[tCountry] || DEFAULT_COUNTRY_PLANS[tCountry] || plansList;
+    const plan = localizedPlans.find((p) => p.id === t.plan_id) || plansList.find((p) => p.id === t.plan_id);
     const monthlyPrice = plan?.precio_mensual || 0;
     const isDemo = isDemoTenant(t);
 
@@ -577,6 +604,9 @@ function AdminPage() {
         months: 0,
         totalEarned: 0,
         planPrice: monthlyPrice,
+        countryCode: tCountry,
+        currencySymbol: plan?.moneda_simbolo || getCountry(tCountry).currency.symbol,
+        currencyCode: plan?.moneda_codigo || getCountry(tCountry).currency.code,
         isDemo
       };
     }
@@ -591,6 +621,9 @@ function AdminPage() {
         months: 3,
         totalEarned: 6500, // 2 meses a RD$2,000 + 1 mes a RD$2,500
         planPrice: 2500,
+        countryCode: tCountry,
+        currencySymbol: "RD$",
+        currencyCode: "DOP",
         isDemo: false
       };
     }
@@ -622,27 +655,113 @@ function AdminPage() {
       months,
       totalEarned: months * monthlyPrice,
       planPrice: monthlyPrice,
+      countryCode: tCountry,
+      currencySymbol: plan?.moneda_simbolo || getCountry(tCountry).currency.symbol,
+      currencyCode: plan?.moneda_codigo || getCountry(tCountry).currency.code,
       isDemo: false
     };
   }
 
-  const activeTenants = tenants.filter((t) => t.estado === 'ACTIVO' && !isDemoTenant(t));
-  const trialTenants = tenants.filter((t) => t.estado === 'TRIAL');
+  const countryEarningsBreakdown = useMemo(() => {
+    const map: Record<string, {
+      countryCode: string;
+      countryName: string;
+      currencySymbol: string;
+      currencyCode: string;
+      totalTenants: number;
+      activeTenants: number;
+      trialTenants: number;
+      mrr: number;
+      totalEarned: number;
+      totalOrdersFacturadas: number;
+    }> = {};
+
+    tenants.forEach((t) => {
+      const cCode = (t.pais_codigo || "DO").toUpperCase();
+      if (!map[cCode]) {
+        const c = getCountry(cCode);
+        map[cCode] = {
+          countryCode: cCode,
+          countryName: c.name,
+          currencySymbol: c.currency.symbol,
+          currencyCode: c.currency.code,
+          totalTenants: 0,
+          activeTenants: 0,
+          trialTenants: 0,
+          mrr: 0,
+          totalEarned: 0,
+          totalOrdersFacturadas: 0,
+        };
+      }
+      map[cCode].totalTenants++;
+      if (t.estado === "ACTIVO" && !isDemoTenant(t)) {
+        map[cCode].activeTenants++;
+        const stats = getTenantSaaSStats(t, plans, allCountryPlans);
+        map[cCode].mrr += stats.mrr;
+        map[cCode].totalEarned += stats.totalEarned;
+      } else if (t.estado === "TRIAL") {
+        map[cCode].trialTenants++;
+      }
+      map[cCode].totalOrdersFacturadas += (ordenesByTenant[t.id]?.total || 0);
+    });
+
+    return map;
+  }, [tenants, plans, allCountryPlans, ordenesByTenant]);
+
+  const availableCountries = useMemo(() => {
+    return COUNTRIES.map((c) => c.code);
+  }, []);
+
+  const activeTenants = tenants.filter((t) => {
+    const isAct = t.estado === 'ACTIVO' && !isDemoTenant(t);
+    const matchesC = countryFilter === "all" || (t.pais_codigo || "DO").toUpperCase() === countryFilter.toUpperCase();
+    return isAct && matchesC;
+  });
+  const trialTenants = tenants.filter((t) => {
+    const isTr = t.estado === 'TRIAL';
+    const matchesC = countryFilter === "all" || (t.pais_codigo || "DO").toUpperCase() === countryFilter.toUpperCase();
+    return isTr && matchesC;
+  });
+
+  const displayedTenantsTotal = countryFilter === "all"
+    ? tenants.length
+    : tenants.filter((t) => (t.pais_codigo || "DO").toUpperCase() === countryFilter.toUpperCase()).length;
 
   // MRR Estimado: Solo lavanderías con suscripción ACTIVA reales (excluye demos)
   const mrrEstimado = activeTenants.reduce((s, t) => {
-    const stats = getTenantSaaSStats(t, plans);
+    const stats = getTenantSaaSStats(t, plans, allCountryPlans);
     return s + stats.mrr;
   }, 0);
 
   // Ganancias Totales SaaS acumuladas a lo largo del tiempo
   const totalSaaSGenerado = activeTenants.reduce((s, t) => {
-    const stats = getTenantSaaSStats(t, plans);
+    const stats = getTenantSaaSStats(t, plans, allCountryPlans);
     return s + stats.totalEarned;
   }, 0);
 
-  // Total facturado por todas las lavanderías en la plataforma
-  const totalFacturadoPlataforma = Object.values(ordenesByTenant).reduce((s, o) => s + (o.total || 0), 0);
+  // Total facturado por todas las lavanderías en la plataforma (filtrado por país si aplica)
+  const totalFacturadoPlataforma = Object.entries(ordenesByTenant).reduce((s, [tId, o]) => {
+    const ten = tenants.find((x) => x.id === tId);
+    if (countryFilter !== "all" && (ten?.pais_codigo || "DO").toUpperCase() !== countryFilter.toUpperCase()) {
+      return s;
+    }
+    return s + (o.total || 0);
+  }, 0);
+
+  const displayedOrdersCount = Object.entries(ordenesByTenant).reduce((s, [tId, o]) => {
+    const ten = tenants.find((x) => x.id === tId);
+    if (countryFilter !== "all" && (ten?.pais_codigo || "DO").toUpperCase() !== countryFilter.toUpperCase()) {
+      return s;
+    }
+    return s + (o.count || 0);
+  }, 0);
+
+  const formatKPIPrice = (amount: number) => {
+    if (countryFilter !== "all") {
+      return formatCurrencyByCountry(amount, countryFilter);
+    }
+    return formatRD(amount);
+  };
 
   async function openEditTenant(t: Tenant) {
     setEditingTenant(t);
@@ -938,21 +1057,23 @@ function AdminPage() {
         <div className="mt-5 sm:mt-6 grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
           <KPI 
             title="MRR Estimado" 
-            value={formatRD(mrrEstimado)} 
-            sub={`${activeTenants.length} ${activeTenants.length === 1 ? 'lavandería activa' : 'lavanderías activas'}`} 
+            value={formatKPIPrice(mrrEstimado)} 
+            sub={countryFilter !== "all" 
+              ? `${activeTenants.length} activas en ${getCountry(countryFilter).name}` 
+              : `${activeTenants.length} ${activeTenants.length === 1 ? 'lavandería activa' : 'lavanderías activas'}`} 
             icon={TrendingUp} 
             variant="primary" 
           />
           <KPI 
             title="Ganancias SaaS" 
-            value={formatRD(totalSaaSGenerado)} 
-            sub="Cobrado acumulado" 
+            value={formatKPIPrice(totalSaaSGenerado)} 
+            sub={countryFilter !== "all" ? `Cobrado en ${getCountry(countryFilter).currency.code}` : "Cobrado acumulado"} 
             icon={CreditCard} 
             variant="emerald" 
           />
           <KPI 
             title="Lavanderías" 
-            value={`${activeTenants.length} / ${tenants.length}`} 
+            value={`${activeTenants.length} / ${displayedTenantsTotal}`} 
             sub={`${activeTenants.length} Activas • ${trialTenants.length} Pruebas`} 
             icon={Building2} 
             variant="amber" 
@@ -971,7 +1092,7 @@ function AdminPage() {
               </div>
               <div className="mt-1.5 sm:mt-2 font-display font-black tracking-tight text-foreground text-xl sm:text-2xl lg:text-3xl flex items-baseline gap-1.5">
                 <span>{uniqueOnlineTenantsCount}</span>
-                <span className="text-xs sm:text-sm font-semibold text-muted-foreground">/ {tenants.length}</span>
+                <span className="text-xs sm:text-sm font-semibold text-muted-foreground">/ {displayedTenantsTotal}</span>
               </div>
               <div className="mt-0.5 sm:mt-1 text-[11px] sm:text-xs font-semibold truncate text-emerald-800 dark:text-emerald-300 flex items-center justify-between">
                 <span>{onlineSessions.length} {onlineSessions.length === 1 ? 'terminal activa' : 'terminales activas'}</span>
@@ -981,15 +1102,68 @@ function AdminPage() {
           </div>
           <KPI 
             title="Órdenes Totales" 
-            value={totalOrdenes.toLocaleString("es-DO")} 
+            value={displayedOrdersCount.toLocaleString(countryFilter === "DO" ? "es-DO" : "es")} 
             sub={
               <span>
-                Facturación: <strong className="font-black text-indigo-950 dark:text-indigo-100">{formatRD(totalFacturadoPlataforma)}</strong>
+                Facturación: <strong className="font-black text-indigo-950 dark:text-indigo-100">{formatKPIPrice(totalFacturadoPlataforma)}</strong>
               </span>
             } 
             icon={Package} 
             variant="indigo" 
           />
+        </div>
+
+        {/* DESGLOSE Y ACCESO RÁPIDO DE GANANCIAS POR PAÍS */}
+        <div className="mt-3.5 bg-surface rounded-2xl border border-border/60 p-3 sm:px-4 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2 shrink-0">
+            <Globe className="h-4 w-4 text-primary" />
+            <span className="text-xs font-bold text-foreground">Ganancias por País:</span>
+            {countryFilter !== "all" && (
+              <Badge variant="outline" className="text-[10px] font-bold text-primary bg-primary/10 border-primary/20">
+                Filtro activo: {getCountry(countryFilter).name}
+              </Badge>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            <button
+              type="button"
+              onClick={() => setCountryFilter("all")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all cursor-pointer flex items-center gap-1.5 ${
+                countryFilter === "all" ? "bg-primary text-white shadow-xs" : "bg-muted/60 text-muted-foreground hover:text-foreground hover:bg-muted"
+              }`}
+            >
+              <span>Todos los países</span>
+            </button>
+            {Object.values(countryEarningsBreakdown).map((cb) => {
+              const isSelected = countryFilter === cb.countryCode;
+              return (
+                <button
+                  key={cb.countryCode}
+                  type="button"
+                  onClick={() => setCountryFilter(isSelected ? "all" : cb.countryCode)}
+                  className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-bold border transition-all cursor-pointer ${
+                    isSelected
+                      ? "bg-[#1B4B73] text-white border-[#1B4B73] shadow-xs"
+                      : "bg-surface hover:bg-muted/60 border-border/80 text-foreground"
+                  }`}
+                  title={`Ver lavanderías y métricas de ${cb.countryName}`}
+                >
+                  <img
+                    src={`https://flagcdn.com/w40/${cb.countryCode.toLowerCase()}.png`}
+                    alt={cb.countryName}
+                    className="w-4 h-2.5 object-cover rounded-xs shrink-0 shadow-2xs"
+                  />
+                  <span>{cb.countryCode}:</span>
+                  <span className={isSelected ? "text-white font-black" : "text-emerald-600 dark:text-emerald-400 font-black"}>
+                    MRR {formatCurrencyByCountry(cb.mrr, cb.countryCode)}
+                  </span>
+                  <span className="text-[10px] opacity-75 font-normal">
+                    ({cb.activeTenants} act.)
+                  </span>
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <Tabs defaultValue="tenants" className="mt-6 sm:mt-8">
@@ -1053,41 +1227,62 @@ function AdminPage() {
 
           <TabsContent value="tenants" className="space-y-4 mt-6">
             {/* Barra superior de herramientas y filtros */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/50 shadow-xs">
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Buscar por nombre, correo, RNC o slug..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10 h-10 rounded-xl bg-background border-border/80 text-sm focus-visible:ring-primary/20"
+            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-3 bg-surface p-3.5 sm:p-4 rounded-2xl border border-border/50 shadow-xs">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 flex-1 max-w-3xl">
+                {/* Buscador */}
+                <div className="relative flex-1 min-w-[200px]">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Buscar por nombre, correo, RNC o slug..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10 h-10 rounded-xl bg-background border-border/80 text-sm focus-visible:ring-primary/20"
+                  />
+                </div>
+
+                {/* Desplegable de países (Estilo /registro CountrySelect) */}
+                <AdminCountryFilterSelect
+                  value={countryFilter}
+                  onChange={setCountryFilter}
+                  tenants={tenants}
                 />
+
+                {/* Botón de Comunicados (mismo diseño que las pestañas) */}
+                <button
+                  type="button"
+                  onClick={() => openComunicadosModal(null)}
+                  className="flex items-center justify-center gap-2 sm:gap-2.5 h-10 px-3.5 sm:px-4 rounded-xl font-bold text-xs sm:text-sm bg-surface border border-border/80 text-foreground shadow-sm transition-all hover:bg-muted/60 hover:border-border active:scale-[0.98] cursor-pointer shrink-0 whitespace-nowrap"
+                  title="Emitir comunicado en tiempo real a las lavanderías"
+                >
+                  <Megaphone className="h-4 w-4 shrink-0 text-amber-500 dark:text-amber-400" />
+                  <span className="hidden sm:inline">Comunicados</span>
+                  <span className="sm:hidden">Avisos</span>
+                </button>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-xl p-1 shrink-0 overflow-x-auto">
-                  <button
-                    type="button"
-                    onClick={() => setStatusFilter("all")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "all" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    Todas ({tenants.length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStatusFilter("ACTIVO")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "ACTIVO" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    Activas ({tenants.filter(t => t.estado === "ACTIVO").length})
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setStatusFilter("TRIAL")}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "TRIAL" ? "bg-amber-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
-                  >
-                    Pruebas ({tenants.filter(t => t.estado === "TRIAL").length})
-                  </button>
-                </div>
+              {/* Filtro de estado */}
+              <div className="flex items-center gap-1 bg-muted/50 border border-border/60 rounded-xl p-1 shrink-0 overflow-x-auto w-fit">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("all")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "all" ? "bg-primary text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Todas ({tenants.filter(t => countryFilter === "all" || (t.pais_codigo || "DO").toUpperCase() === countryFilter.toUpperCase()).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("ACTIVO")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "ACTIVO" ? "bg-emerald-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Activas ({tenants.filter(t => t.estado === "ACTIVO" && (countryFilter === "all" || (t.pais_codigo || "DO").toUpperCase() === countryFilter.toUpperCase())).length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter("TRIAL")}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${statusFilter === "TRIAL" ? "bg-amber-600 text-white shadow-xs" : "text-muted-foreground hover:text-foreground"}`}
+                >
+                  Pruebas ({tenants.filter(t => t.estado === "TRIAL" && (countryFilter === "all" || (t.pais_codigo || "DO").toUpperCase() === countryFilter.toUpperCase())).length})
+                </button>
               </div>
             </div>
 
@@ -1279,6 +1474,17 @@ function AdminPage() {
                                     <span className="inline-flex items-center gap-1 text-[9.5px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-1.5 py-0.2 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
                                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
                                       {getTenantBranchName(t)}
+                                    </span>
+                                    <span
+                                      className="inline-flex items-center gap-1 text-[9.5px] font-bold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded-md border border-slate-200/80 dark:border-slate-700/80 shadow-2xs select-none"
+                                      title={getCountry(t.pais_codigo).name}
+                                    >
+                                      <img 
+                                        src={`https://flagcdn.com/w40/${(t.pais_codigo || "do").toLowerCase()}.png`} 
+                                        alt={t.pais_codigo || "DO"} 
+                                        className="h-2.5 w-2.5 rounded-full object-cover shrink-0" 
+                                      />
+                                      <span>{t.pais_codigo || "DO"}</span>
                                     </span>
                                     {onlineTenantIds.has(t.id) && (
                                       <span className="inline-flex items-center gap-1 text-[9.5px] font-black text-emerald-800 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-950/70 px-1.5 py-0.2 rounded-md border border-emerald-300 dark:border-emerald-700 shadow-2xs">
@@ -1491,23 +1697,23 @@ function AdminPage() {
 
                             <td className="px-2.5 py-2.5 text-center whitespace-nowrap bg-amber-500/[0.015] border-r border-border/20">
                               <div className="font-bold text-foreground text-xs tracking-tight" title="Total procesado en órdenes por esta lavandería">
-                                {formatRD(tenantOrds.total)}
+                                {formatCurrencyByCountry(tenantOrds.total, t.pais_codigo || "DO")}
                               </div>
                               {saasStats.isDemo ? (
                                 <div className="mt-0.5 inline-flex items-center px-1.5 py-0.2 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-[9.5px] font-bold border border-slate-200 dark:border-slate-700 shadow-2xs">
-                                  Demo Propia (RD$0)
+                                  Demo Propia ({formatCurrencyByCountry(0, t.pais_codigo || "DO")})
                                 </div>
                               ) : t.estado === "ACTIVO" && saasStats.totalEarned > 0 ? (
                                 <div 
                                   className="mt-0.5 inline-flex items-center gap-0.5 px-1.5 py-0.2 rounded-md bg-emerald-50 text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300 text-[9.5px] font-bold border border-emerald-200/70 dark:border-emerald-800 shadow-2xs" 
-                                  title={`Plan SaaS: ${saasStats.months} ${saasStats.months === 1 ? 'mes cobrado' : 'meses cobrados'} (${formatRD(saasStats.planPrice)}/mes)`}
+                                  title={`Plan SaaS: ${saasStats.months} ${saasStats.months === 1 ? 'mes cobrado' : 'meses cobrados'} (${formatCurrencyByCountry(saasStats.planPrice, t.pais_codigo || "DO")}/mes)`}
                                 >
-                                  <span>SaaS: {formatRD(saasStats.totalEarned)}</span>
+                                  <span>SaaS: {formatCurrencyByCountry(saasStats.totalEarned, t.pais_codigo || "DO")}</span>
                                   <span className="text-[9px] font-semibold text-emerald-600/80 dark:text-emerald-400/80">({saasStats.months}m)</span>
                                 </div>
                               ) : (
                                 <div className="mt-0.5 text-[9.5px] text-muted-foreground/60 font-medium italic">
-                                  Prueba (RD$0)
+                                  Prueba ({formatCurrencyByCountry(0, t.pais_codigo || "DO")})
                                 </div>
                               )}
                             </td>
@@ -1560,6 +1766,16 @@ function AdminPage() {
                                           <Pencil className="h-3.5 w-3.5" />
                                         </div>
                                         <span>Editar configuración</span>
+                                      </DropdownMenuItem>
+
+                                      <DropdownMenuItem
+                                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-foreground hover:bg-sky-500/10 hover:text-sky-700 dark:hover:text-sky-400 transition-all cursor-pointer"
+                                        onClick={() => openComunicadosModal(t.id)}
+                                      >
+                                        <div className="h-6 w-6 rounded-lg bg-sky-100 dark:bg-sky-950/60 text-[#1B4B73] dark:text-sky-400 flex items-center justify-center shrink-0 shadow-2xs">
+                                          <Megaphone className="h-3.5 w-3.5" />
+                                        </div>
+                                        <span>Enviar comunicado</span>
                                       </DropdownMenuItem>
 
                                       <div className="border-t border-border/50 my-1" />
@@ -1743,15 +1959,15 @@ function AdminPage() {
                         <div className="bg-amber-500/[0.04] p-2.5 rounded-xl border border-amber-500/10 flex flex-col justify-between">
                           <div>
                             <span className="text-[10px] font-bold uppercase text-amber-600 dark:text-amber-400 block mb-0.5">Facturación</span>
-                            <div className="font-bold text-foreground text-xs">{formatRD(tenantOrds.total)} ({tenantOrds.count} ord)</div>
+                            <div className="font-bold text-foreground text-xs">{formatCurrencyByCountry(tenantOrds.total, t.pais_codigo || "DO")} ({tenantOrds.count} ord)</div>
                           </div>
                           <div className="mt-1">
                             {saasStats.isDemo ? (
-                              <span className="inline-block text-[9.5px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">Demo (RD$0)</span>
+                              <span className="inline-block text-[9.5px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.5 rounded">Demo ({formatCurrencyByCountry(0, t.pais_codigo || "DO")})</span>
                             ) : t.estado === "ACTIVO" && saasStats.totalEarned > 0 ? (
-                              <span className="inline-block text-[9.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">SaaS: {formatRD(saasStats.totalEarned)} ({saasStats.months}m)</span>
+                              <span className="inline-block text-[9.5px] font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-1.5 py-0.5 rounded">SaaS: {formatCurrencyByCountry(saasStats.totalEarned, t.pais_codigo || "DO")} ({saasStats.months}m)</span>
                             ) : (
-                              <span className="text-[9.5px] text-muted-foreground/60 italic">Prueba (RD$0)</span>
+                              <span className="text-[9.5px] text-muted-foreground/60 italic">Prueba ({formatCurrencyByCountry(0, t.pais_codigo || "DO")})</span>
                             )}
                           </div>
                         </div>
@@ -1786,6 +2002,20 @@ function AdminPage() {
                         >
                           <Receipt className="h-3.5 w-3.5" />
                           <span>Facturas</span>
+                        </Button>
+
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openComunicadosModal(t.id);
+                          }}
+                          className="h-8 px-2.5 rounded-xl border border-sky-200 dark:border-sky-800 bg-sky-50/70 dark:bg-sky-950/50 text-[#1B4B73] dark:text-sky-300 font-bold text-xs gap-1 cursor-pointer shadow-2xs"
+                          title="Enviar comunicado a esta lavandería"
+                        >
+                          <Megaphone className="h-3.5 w-3.5 text-[#F0B900]" />
+                          <span>Aviso</span>
                         </Button>
 
                         <Button
@@ -1828,6 +2058,13 @@ function AdminPage() {
                 isAdmin={true}
               />
             )}
+
+            <ComunicadosModal
+              open={showComunicadosModal}
+              onOpenChange={setShowComunicadosModal}
+              tenants={tenants}
+              initialTenantId={comunicadoTargetTenantId}
+            />
 
             <AlertDialog open={!!tenantToDelete} onOpenChange={(open) => !open && setTenantToDelete(null)}>
               <AlertDialogContent className="rounded-2xl border border-border/80 shadow-2xl max-w-md">
@@ -1961,277 +2198,261 @@ function AdminPage() {
               </div>
             </div>
 
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm text-muted-foreground">{plans.length} planes configurados</p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setOpenBank(true)} className="rounded-lg h-9 px-5 border-primary/20 text-primary hover:bg-primary/5">
-                  <CreditCard className="mr-1.5 h-4 w-4" /> Metodos de Pago
-                </Button>
-                <Button onClick={() => { setEditingPlan(null); setOpenPlan(true); }} className="bg-gradient-primary text-white rounded-lg shadow-md h-9 px-5">
-                  <Plus className="mr-1.5 h-4 w-4" /> Nuevo plan
-                </Button>
-              </div>
-            </div>
-
-            {/* 3 COLUMNAS DE PLANES PRINCIPALES */}
-            <div className="grid gap-6 md:grid-cols-3 items-stretch pt-3">
-              {plans.filter(p => !p.es_especial).map((p) => (
-                <div
-                  key={p.id}
-                  style={{
-                    borderColor: p.destacado ? '#F0B900' : undefined,
-                    borderWidth: p.destacado ? '2.5px' : '1.5px',
-                    borderStyle: 'solid',
-                  }}
-                  className={`plan-card relative rounded-3xl p-6 flex flex-col transition-all duration-300 ${
-                    p.destacado
-                      ? "plan-card--featured shadow-lg shadow-[#F0B900]/20"
-                      : "shadow-sm hover:shadow-xl bg-card border-border/80"
-                  }`}
-                >
-                  {p.destacado && (
-                    <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 font-sans font-extrabold text-[11px] tracking-wider uppercase px-4 py-1 bg-[#F0B900] text-[#133857] rounded-full shadow-md whitespace-nowrap z-10">
-                      POPULAR
-                    </div>
-                  )}
-
-                  <div className="space-y-0.5">
-                    <div className="font-display text-xl font-bold text-foreground leading-none">{p.nombre}</div>
-                    <div className="text-3xl font-black text-primary leading-tight">
-                      {formatRD(p.precio_mensual)}<span className="text-xs font-normal text-muted-foreground">/mes</span>
-                    </div>
-                    {p.precio_anual && (
-                      <div className="text-xs text-muted-foreground font-medium">o {formatRD(p.precio_anual)}/año</div>
-                    )}
-                  </div>
-
-                  <div className="mt-3.5 space-y-2 text-xs font-semibold flex-1">
-                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                      <Users className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
-                      <span>{p.limite_empleados} Empleados</span>
-                    </div>
-                    <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
-                      <Package className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
-                      <span>{p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes/mes ilimitadas"}</span>
-                    </div>
-                    {p.modulos?.whatsapp && (
-                      <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
-                        <MessageSquare className="h-4 w-4 text-blue-500 shrink-0" />
-                        <span>{p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp` : "Mensajes WhatsApp Ilimitados"}</span>
-                      </div>
-                    )}
-                    <div className="border-t border-border pt-2.5 mt-2.5 text-left">
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
-                        Módulos Habilitados
-                      </div>
-                      <div className="space-y-1.5">
-                        {[
-                          { key: "procesos", label: "Tablero de Procesos" },
-                          { key: "estanteria", label: "Estantería virtual" },
-                          { key: "promociones", label: "Promociones y Cupones" },
-                          { key: "logistica", label: "Envío a domicilio" },
-                          { key: "pos_offline", label: "Modo Offline" },
-                          { key: "nomina", label: "Nómina y TSS / ISR" },
-                          { key: "cxp", label: "Cuentas por Pagar (CxP)" },
-                        ].map(({ key, label }) => {
-                          const v = !!p.modulos?.[key as keyof typeof p.modulos];
-                          return (
-                            <div 
-                              key={key} 
-                              className={`flex items-center gap-2 text-xs font-semibold ${
-                                v 
-                                  ? "text-green-700 dark:text-green-400" 
-                                  : "text-slate-400 line-through opacity-70"
-                              }`}
-                            >
-                              {v ? (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <path d="m9 12 2 2 4-4" />
-                                </svg>
-                              ) : (
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-350 shrink-0">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <path d="m15 9-6 6" />
-                                  <path d="m9 9 6 6" />
-                                </svg>
-                              )}
-                              <span>{label}</span>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2.5 pt-2 border-t border-border/60 mb-2">
-                        Complementos Opcionales
-                      </div>
-                      <div className="space-y-1.5">
-                        {[
-                          { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
-                          { key: "whatsapp", label: "Mensajería WhatsApp" },
-                          { key: "multisucursal", label: "Sucursal Adicional" },
-                        ].map(({ key, label }) => (
-                          <div 
-                            key={key} 
-                            className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300"
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0">
-                              <circle cx="12" cy="12" r="10" />
-                              <path d="M12 8v8" />
-                              <path d="M8 12h8" />
-                            </svg>
-                            <span>{label}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="mt-auto pt-4 flex gap-2">
-                    <Button size="sm" variant="outline" className="flex-1 cursor-pointer" onClick={() => { setEditingPlan(p); setOpenPlan(true); }}>
-                      <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      title="Mover a Plan Especial (barra inferior)"
-                      className="cursor-pointer px-2 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/50"
-                      onClick={async () => {
-                        await savePlan({ ...p, es_especial: true, titulo_especial: p.titulo_especial || "Plan especial" });
-                        toast.success(`Plan "${p.nombre}" fijado como Plan Especial inferior`);
-                        setTick((r) => r + 1);
-                      }}
-                    >
-                      <Sparkles className="h-3.5 w-3.5" />
-                    </Button>
-                    <Button size="sm" variant="outline" className="cursor-pointer" onClick={async () => {
-                      if (confirm(`¿Eliminar plan ${p.nombre}?`)) {
-                        await deletePlan(p.id);
-                        setTick((r) => r + 1);
-                      }
-                    }}>
-                      <Trash2 className="h-3.5 w-3.5 text-destructive" />
-                    </Button>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {/* SECCIÓN DE PLANES ESPECIALES (BARRA SUTIL INFERIOR) */}
-            {plans.filter(p => !!p.es_especial).length > 0 && (
-              <div className="mt-8 space-y-4">
-                <div className="flex items-center justify-between">
+            {/* SELECTOR DE PAÍSES PARA CONFIGURACIÓN DE PLANES */}
+            <div className="bg-card/70 backdrop-blur-md rounded-2xl border border-border/80 p-4 shadow-xs space-y-3 mb-6">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
                   <div className="flex items-center gap-2">
-                    <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400" />
-                    <h3 className="font-display text-base font-bold text-foreground">Planes Especiales (Barra inferior sutil)</h3>
-                    <Badge variant="outline" className="text-[10px] font-bold text-sky-700 bg-sky-50 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300">
-                      {plans.filter(p => !!p.es_especial).length} plan{plans.filter(p => !!p.es_especial).length > 1 ? "es" : ""}
-                    </Badge>
+                    <Globe className="h-5 w-5 text-primary" />
+                    <h3 className="font-display text-base font-bold text-foreground">
+                      Planes por País y Moneda Local
+                    </h3>
+                    {(() => {
+                      const curCountry = getCountry(adminPlanCountry || "DO");
+                      return (
+                        <Badge variant="outline" className="font-mono text-xs font-bold text-primary border-primary/30 bg-primary/5 gap-1.5 py-0.5">
+                          <img
+                            src={`https://flagcdn.com/w40/${curCountry.code.toLowerCase()}.png`}
+                            alt={curCountry.name}
+                            className="w-4 h-2.5 object-cover rounded-2xs shadow-2xs shrink-0"
+                          />
+                          <span>{curCountry.currency.code} ({curCountry.currency.symbol})</span>
+                        </Badge>
+                      );
+                    })()}
                   </div>
-                  <p className="text-xs text-muted-foreground hidden sm:block">
-                    Se muestran sutilmente debajo de las 3 columnas sin alterar la cuadrícula superior
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    Personaliza planes, precios en moneda local, límites de órdenes y enlaces Polar específicos para cada país.
                   </p>
                 </div>
 
-                {plans.filter(p => !!p.es_especial).map((p) => {
-                  const specialLabel = p.titulo_especial?.trim() || "Plan especial";
+                {/* Dropdown para seleccionar cualquier país del catálogo */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <Select value={adminPlanCountry} onValueChange={(val) => setAdminPlanCountry(val)}>
+                    <SelectTrigger className="w-[210px] h-9 rounded-xl bg-background border-border/80 text-xs font-bold">
+                      <SelectValue placeholder="Seleccionar país..." />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      {COUNTRIES.map((c) => (
+                        <SelectItem key={c.code} value={c.code} className="text-xs cursor-pointer">
+                          <img
+                            src={`https://flagcdn.com/w40/${c.code.toLowerCase()}.png`}
+                            alt={c.name}
+                            className="w-4 h-2.5 object-cover rounded-2xs inline-block mr-1.5 shadow-2xs"
+                          />
+                          {c.name} ({c.currency.code})
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Pills de países soportados (exclusivamente los 13 países de Klynn) */}
+              <div className="flex flex-wrap gap-1.5 pt-1 border-t border-border/50">
+                {COUNTRIES.map((c) => {
+                  const isSelected = adminPlanCountry === c.code;
                   return (
-                    <div
-                      key={p.id}
-                      className="relative rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 bg-gradient-to-r from-slate-50/90 via-card to-sky-50/30 dark:from-slate-900/70 dark:via-slate-900/50 dark:to-sky-950/20 shadow-xs hover:shadow-sm transition-all"
+                    <button
+                      key={c.code}
+                      type="button"
+                      onClick={() => setAdminPlanCountry(c.code)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                        isSelected
+                          ? "bg-primary text-white shadow-xs scale-[1.02]"
+                          : "bg-surface hover:bg-surface-elevated text-muted-foreground hover:text-foreground border border-border/60"
+                      }`}
                     >
-                      {/* FILA SUPERIOR: INFORMACIÓN, LÍMITES Y ACCIONES */}
-                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-border/60">
-                        
-                        {/* Izquierda: Indicador, Nombre y Precio */}
-                        <div className="min-w-[200px]">
-                          <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 mb-1">
-                            <Sparkles className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
-                            <span>{specialLabel}</span>
+                      <img
+                        src={`https://flagcdn.com/w40/${c.code.toLowerCase()}.png`}
+                        alt={c.name}
+                        className="w-4.5 h-3 object-cover rounded-xs shadow-2xs shrink-0"
+                        loading="lazy"
+                      />
+                      <span>{c.name}</span>
+                      <span className={`text-[10px] font-mono px-1 rounded ${isSelected ? "bg-white/20 text-white" : "bg-muted text-muted-foreground"}`}>
+                        {c.currency.symbol}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {(() => {
+              const activeCountryCode = (adminPlanCountry || "DO").toUpperCase();
+              const activeCountryInfo = COUNTRIES.find((c) => c.code === activeCountryCode) || COUNTRIES[0];
+              const storedCountryPlans = allCountryPlans[activeCountryCode];
+              const currentCountryPlans = (Array.isArray(storedCountryPlans) && storedCountryPlans.length > 0)
+                ? storedCountryPlans
+                : (DEFAULT_COUNTRY_PLANS[activeCountryCode] || (activeCountryCode === "DO" ? plans : []));
+
+              const handleResetCountryDefaults = async (countryCode: string) => {
+                const defaults = DEFAULT_COUNTRY_PLANS[countryCode] || DEFAULT_COUNTRY_PLANS["DO"];
+                if (confirm(`¿Restablecer los planes de ${activeCountryInfo.name} a los valores sugeridos por defecto?`)) {
+                  await saveCountryPlans(countryCode, defaults);
+                  if (countryCode === "DO") {
+                    for (const p of defaults) {
+                      await savePlan(p);
+                    }
+                  }
+                  const reloaded = await getAllCountryPlans();
+                  setAllCountryPlans(reloaded);
+                  setTick((r) => r + 1);
+                  toast.success(`Planes de ${activeCountryInfo.name} restablecidos a los valores por defecto`);
+                }
+              };
+
+              const handleToggleSpecialPlan = async (p: Plan, makeSpecial: boolean) => {
+                const updatedPlan: Plan = {
+                  ...p,
+                  es_especial: makeSpecial,
+                  titulo_especial: makeSpecial ? (p.titulo_especial || "Plan especial") : p.titulo_especial,
+                };
+                const updatedList = currentCountryPlans.map((item) => (item.id === p.id ? updatedPlan : item));
+                await saveCountryPlans(activeCountryCode, updatedList);
+                if (activeCountryCode === "DO") {
+                  await savePlan(updatedPlan);
+                }
+                const reloaded = await getAllCountryPlans();
+                setAllCountryPlans(reloaded);
+                setTick((r) => r + 1);
+                toast.success(makeSpecial ? `Plan "${p.nombre}" fijado como Plan Especial inferior` : `Plan "${p.nombre}" movido a las 3 columnas principales`);
+              };
+
+              const handleDeleteCountryPlan = async (p: Plan) => {
+                if (confirm(`¿Eliminar plan ${p.nombre} de ${activeCountryInfo.name}?`)) {
+                  const updatedList = currentCountryPlans.filter((item) => item.id !== p.id);
+                  await saveCountryPlans(activeCountryCode, updatedList);
+                  if (activeCountryCode === "DO") {
+                    await deletePlan(p.id);
+                  }
+                  const reloaded = await getAllCountryPlans();
+                  setAllCountryPlans(reloaded);
+                  setTick((r) => r + 1);
+                  toast.success(`Plan "${p.nombre}" eliminado`);
+                }
+              };
+
+              return (
+                <>
+                  <div className="mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-muted-foreground">
+                        <strong className="text-foreground">{currentCountryPlans.length} planes</strong> configurados para{" "}
+                        <span className="font-semibold text-foreground">{activeCountryInfo.flag} {activeCountryInfo.name}</span>
+                      </p>
+                      {DEFAULT_COUNTRY_PLANS[activeCountryCode] && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleResetCountryDefaults(activeCountryCode)}
+                          className="h-7 px-2 text-[11px] text-muted-foreground hover:text-primary gap-1 cursor-pointer"
+                          title="Restablecer planes sugeridos para este país"
+                        >
+                          <RefreshCw className="h-3 w-3" /> Restaurar sugeridos
+                        </Button>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button variant="outline" onClick={() => setOpenBank(true)} className="rounded-lg h-9 px-4 sm:px-5 border-primary/20 text-primary hover:bg-primary/5">
+                        <CreditCard className="mr-1.5 h-4 w-4" /> Métodos de Pago
+                      </Button>
+                      <Button
+                        onClick={() => {
+                          setEditingPlan(null);
+                          setEditingPlanCountry(activeCountryCode);
+                          setOpenPlan(true);
+                        }}
+                        className="bg-gradient-primary text-white rounded-lg shadow-md h-9 px-4 sm:px-5 cursor-pointer"
+                      >
+                        <Plus className="mr-1.5 h-4 w-4" /> Nuevo plan para {activeCountryInfo.code}
+                      </Button>
+                    </div>
+                  </div>
+
+                  {/* 3 COLUMNAS DE PLANES PRINCIPALES */}
+                  <div className="grid gap-6 md:grid-cols-3 items-stretch pt-3">
+                    {currentCountryPlans.filter(p => !p.es_especial).map((p) => (
+                      <div
+                        key={p.id}
+                        style={{
+                          borderColor: p.destacado ? '#F0B900' : undefined,
+                          borderWidth: p.destacado ? '2.5px' : '1.5px',
+                          borderStyle: 'solid',
+                        }}
+                        className={`plan-card relative rounded-3xl p-6 flex flex-col transition-all duration-300 ${
+                          p.destacado
+                            ? "plan-card--featured shadow-lg shadow-[#F0B900]/20"
+                            : "shadow-sm hover:shadow-xl bg-card border-border/80"
+                        }`}
+                      >
+                        {p.destacado && (
+                          <div className="absolute -top-3.5 left-1/2 -translate-x-1/2 font-sans font-extrabold text-[11px] tracking-wider uppercase px-4 py-1 bg-[#F0B900] text-[#133857] rounded-full shadow-md whitespace-nowrap z-10">
+                            POPULAR
                           </div>
-                          <div className="font-display text-xl font-bold text-foreground leading-tight">{p.nombre}</div>
-                          <div className="mt-0.5 text-2xl font-black text-primary leading-tight">
-                            {formatRD(p.precio_mensual)}<span className="text-[11px] font-medium text-muted-foreground">/mes</span>
+                        )}
+
+                        <div className="space-y-0.5">
+                          <div className="font-display text-xl font-bold text-foreground leading-none">{p.nombre}</div>
+                          <div className="text-3xl font-black text-primary leading-tight">
+                            {formatCurrencyByCountry(p.precio_mensual, activeCountryCode)}
+                            <span className="text-xs font-normal text-muted-foreground">/mes</span>
                           </div>
-                          {p.precio_anual && (
-                            <div className="text-[10.5px] text-muted-foreground font-medium">o {formatRD(p.precio_anual)}/año</div>
+                          {p.precio_anual ? (
+                            <div className="text-xs text-muted-foreground font-medium">
+                              o {formatCurrencyByCountry(p.precio_anual, activeCountryCode)}/año
+                            </div>
+                          ) : null}
+                        </div>
+
+                        <div className="mt-3.5 space-y-2 text-xs font-semibold flex-1">
+                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                            <Users className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+                            <span>{p.limite_empleados} Empleados</span>
+                          </div>
+                          <div className="flex items-center gap-2 text-slate-700 dark:text-slate-200">
+                            <Package className="h-4 w-4 text-slate-500 dark:text-slate-400 shrink-0" />
+                            <span>
+                              {p.limite_ordenes_mes
+                                ? `${p.limite_ordenes_mes.toLocaleString(activeCountryCode === "DO" ? "es-DO" : "es")} Órdenes/mes`
+                                : "Órdenes/mes ilimitadas"}
+                            </span>
+                          </div>
+                          {p.modulos?.whatsapp && (
+                            <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400">
+                              <MessageSquare className="h-4 w-4 text-blue-500 shrink-0" />
+                              <span>{p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} Mensajes WhatsApp` : "Mensajes WhatsApp Ilimitados"}</span>
+                            </div>
                           )}
-                        </div>
 
-                        {/* Centro: Límites Clave */}
-                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-2 lg:py-0 border-y lg:border-y-0 lg:border-x border-border/60 lg:px-5 flex-1">
-                          <div className="space-y-0.5">
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                              <Users className="h-3 w-3 text-slate-500 shrink-0" />
-                              <span>Equipo</span>
-                            </div>
-                            <div className="text-xs font-bold text-foreground">
-                              {p.limite_empleados} {p.limite_empleados === 1 ? "Empleado" : "Empleados"}
+                          {/* ESTADO CHECKOUT POLAR */}
+                          <div className="pt-2 border-t border-border/50">
+                            <div className="flex items-center justify-between text-[11px]">
+                              <span className="text-muted-foreground flex items-center gap-1 font-medium">
+                                <CreditCard className="h-3 w-3 text-primary" /> Polar Checkout
+                              </span>
+                              {p.polar_product_monthly_url ? (
+                                <a
+                                  href={p.polar_product_monthly_url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-0.5"
+                                >
+                                  <CheckCircle2 className="h-3 w-3" /> Enlazado
+                                  <ExternalLink className="h-2.5 w-2.5" />
+                                </a>
+                              ) : (
+                                <span className="text-[10px] text-muted-foreground italic">Sin enlace</span>
+                              )}
                             </div>
                           </div>
 
-                          <div className="space-y-0.5">
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                              <Package className="h-3 w-3 text-slate-500 shrink-0" />
-                              <span>Facturación</span>
+                          <div className="border-t border-border pt-2.5 mt-2.5 text-left">
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-2">
+                              Módulos Habilitados
                             </div>
-                            <div className="text-xs font-bold text-foreground">
-                              {p.limite_ordenes_mes ? `${p.limite_ordenes_mes.toLocaleString("es-DO")} Órdenes/mes` : "Órdenes ilimitadas"}
-                            </div>
-                          </div>
-
-                          <div className="space-y-0.5">
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
-                              <MessageSquare className="h-3 w-3 text-blue-500 shrink-0" />
-                              <span>WhatsApp</span>
-                            </div>
-                            <div className="text-xs font-bold text-foreground">
-                              {p.modulos?.whatsapp
-                                ? (p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} msgs/mes` : "Ilimitados")
-                                : "No incluido"}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Derecha: Acciones de Administración */}
-                        <div className="flex items-center gap-2 shrink-0">
-                          <Button size="sm" variant="outline" className="h-8 px-3 text-xs cursor-pointer" onClick={() => { setEditingPlan(p); setOpenPlan(true); }}>
-                            <Pencil className="mr-1 h-3 w-3" /> Editar
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            title="Mover a 3 columnas principales"
-                            className="h-8 px-3 text-xs cursor-pointer text-slate-600 hover:text-slate-900"
-                            onClick={async () => {
-                              await savePlan({ ...p, es_especial: false });
-                              toast.success(`Plan "${p.nombre}" movido a las 3 columnas principales`);
-                              setTick((r) => r + 1);
-                            }}
-                          >
-                            Mover a columnas
-                          </Button>
-                          <Button size="sm" variant="outline" className="h-8 px-2.5 cursor-pointer" onClick={async () => {
-                            if (confirm(`¿Eliminar plan ${p.nombre}?`)) {
-                              await deletePlan(p.id);
-                              setTick((r) => r + 1);
-                            }
-                          }}>
-                            <Trash2 className="h-3 w-3 text-destructive" />
-                          </Button>
-                        </div>
-
-                      </div>
-
-                      {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
-                        
-                        {/* Desglose de Módulos Habilitados y Complementos */}
-                        <div className="space-y-3">
-                          <div>
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                              MÓDULOS HABILITADOS
-                            </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            <div className="space-y-1.5">
                               {[
                                 { key: "procesos", label: "Tablero de Procesos" },
                                 { key: "estanteria", label: "Estantería virtual" },
@@ -2245,19 +2466,19 @@ function AdminPage() {
                                 return (
                                   <div 
                                     key={key} 
-                                    className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                    className={`flex items-center gap-2 text-xs font-semibold ${
                                       v 
                                         ? "text-green-700 dark:text-green-400" 
                                         : "text-slate-400 line-through opacity-70"
                                     }`}
                                   >
                                     {v ? (
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-green-700 shrink-0">
                                         <circle cx="12" cy="12" r="10" />
                                         <path d="m9 12 2 2 4-4" />
                                       </svg>
                                     ) : (
-                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-slate-350 shrink-0">
                                         <circle cx="12" cy="12" r="10" />
                                         <path d="m15 9-6 6" />
                                         <path d="m9 9 6 6" />
@@ -2268,23 +2489,21 @@ function AdminPage() {
                                 );
                               })}
                             </div>
-                          </div>
 
-                          <div className="pt-2 border-t border-border/40">
-                            <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                              COMPLEMENTOS OPCIONALES
+                            <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mt-2.5 pt-2 border-t border-border/60 mb-2">
+                              Complementos Opcionales
                             </div>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                            <div className="space-y-1.5">
                               {[
-                                { key: "facturacion_fiscal", label: "Facturación Electrónica e-CF" },
+                                { key: "facturacion_fiscal", label: "Facturación Fiscal" },
                                 { key: "whatsapp", label: "Mensajería WhatsApp" },
                                 { key: "multisucursal", label: "Sucursal Adicional" },
                               ].map(({ key, label }) => (
                                 <div 
                                   key={key} 
-                                  className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300"
+                                  className="flex items-center gap-2 text-xs font-semibold text-slate-700 dark:text-slate-300"
                                 >
-                                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0">
+                                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-4 w-4 text-sky-600 dark:text-sky-400 shrink-0">
                                     <circle cx="12" cy="12" r="10" />
                                     <path d="M12 8v8" />
                                     <path d="M8 12h8" />
@@ -2296,36 +2515,264 @@ function AdminPage() {
                           </div>
                         </div>
 
-                        {/* Características Generales */}
-                        <div className="border-t md:border-t-0 md:border-l border-border/50 md:pl-5 pt-3 md:pt-0">
-                          <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
-                            CARACTERÍSTICAS INCLUIDAS
-                          </div>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
-                            {[
-                              "Clientes ilimitados",
-                              "Generación de reportes",
-                              "Actualizaciones de software",
-                              "Cuentas x cobrar",
-                              "Impresión A4/80mm"
-                            ].map((feat) => (
-                              <div key={feat} className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-400 shrink-0">
-                                  <circle cx="12" cy="12" r="10" />
-                                  <path d="m9 12 2 2 4-4" />
-                                </svg>
-                                <span>{feat}</span>
-                              </div>
-                            ))}
-                          </div>
+                        <div className="mt-auto pt-4 flex gap-2">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="flex-1 cursor-pointer"
+                            onClick={() => {
+                              setEditingPlan(p);
+                              setEditingPlanCountry(activeCountryCode);
+                              setOpenPlan(true);
+                            }}
+                          >
+                            <Pencil className="mr-1 h-3.5 w-3.5" /> Editar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            title="Mover a Plan Especial (barra inferior)"
+                            className="cursor-pointer px-2 text-sky-600 hover:text-sky-700 hover:bg-sky-50 dark:hover:bg-sky-950/50"
+                            onClick={() => handleToggleSpecialPlan(p, true)}
+                          >
+                            <Sparkles className="h-3.5 w-3.5" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="cursor-pointer"
+                            onClick={() => handleDeleteCountryPlan(p)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5 text-destructive" />
+                          </Button>
                         </div>
-
                       </div>
+                    ))}
+                  </div>
+
+                  {/* SECCIÓN DE PLANES ESPECIALES (BARRA SUTIL INFERIOR) */}
+                  {currentCountryPlans.filter(p => !!p.es_especial).length > 0 && (
+                    <div className="mt-8 space-y-4">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Sparkles className="h-4 w-4 text-sky-600 dark:text-sky-400" />
+                          <h3 className="font-display text-base font-bold text-foreground">Planes Especiales ({activeCountryInfo.flag} {activeCountryInfo.name})</h3>
+                          <Badge variant="outline" className="text-[10px] font-bold text-sky-700 bg-sky-50 border-sky-200 dark:bg-sky-950/50 dark:text-sky-300">
+                            {currentCountryPlans.filter(p => !!p.es_especial).length} plan{currentCountryPlans.filter(p => !!p.es_especial).length > 1 ? "es" : ""}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground hidden sm:block">
+                          Se muestran sutilmente debajo de las 3 columnas sin alterar la cuadrícula superior
+                        </p>
+                      </div>
+
+                      {currentCountryPlans.filter(p => !!p.es_especial).map((p) => {
+                        const specialLabel = p.titulo_especial?.trim() || "Plan especial";
+                        return (
+                          <div
+                            key={p.id}
+                            className="relative rounded-2xl p-4 sm:p-5 border border-slate-200/90 dark:border-slate-800 bg-gradient-to-r from-slate-50/90 via-card to-sky-50/30 dark:from-slate-900/70 dark:via-slate-900/50 dark:to-sky-950/20 shadow-xs hover:shadow-sm transition-all"
+                          >
+                            {/* FILA SUPERIOR: INFORMACIÓN, LÍMITES Y ACCIONES */}
+                            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-3.5 border-b border-border/60">
+                              
+                              {/* Izquierda: Indicador, Nombre y Precio */}
+                              <div className="min-w-[200px]">
+                                <div className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-extrabold uppercase tracking-wider bg-sky-500/10 text-sky-700 dark:text-sky-400 border border-sky-500/20 mb-1">
+                                  <Sparkles className="h-3 w-3 text-sky-600 dark:text-sky-400 shrink-0" />
+                                  <span>{specialLabel}</span>
+                                </div>
+                                <div className="font-display text-xl font-bold text-foreground leading-tight">{p.nombre}</div>
+                                <div className="mt-0.5 text-2xl font-black text-primary leading-tight">
+                                  {formatCurrencyByCountry(p.precio_mensual, activeCountryCode)}
+                                  <span className="text-[11px] font-medium text-muted-foreground">/mes</span>
+                                </div>
+                                {p.precio_anual ? (
+                                  <div className="text-[10.5px] text-muted-foreground font-medium">
+                                    o {formatCurrencyByCountry(p.precio_anual, activeCountryCode)}/año
+                                  </div>
+                                ) : null}
+                              </div>
+
+                              {/* Centro: Límites Clave */}
+                              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 py-2 lg:py-0 border-y lg:border-y-0 lg:border-x border-border/60 lg:px-5 flex-1">
+                                <div className="space-y-0.5">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                    <Users className="h-3 w-3 text-slate-500 shrink-0" />
+                                    <span>Equipo</span>
+                                  </div>
+                                  <div className="text-xs font-bold text-foreground">
+                                    {p.limite_empleados} {p.limite_empleados === 1 ? "Empleado" : "Empleados"}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-0.5">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                    <Package className="h-3 w-3 text-slate-500 shrink-0" />
+                                    <span>Facturación</span>
+                                  </div>
+                                  <div className="text-xs font-bold text-foreground">
+                                    {p.limite_ordenes_mes
+                                      ? `${p.limite_ordenes_mes.toLocaleString(activeCountryCode === "DO" ? "es-DO" : "es")} Órdenes/mes`
+                                      : "Órdenes ilimitadas"}
+                                  </div>
+                                </div>
+
+                                <div className="space-y-0.5">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 flex items-center gap-1">
+                                    <MessageSquare className="h-3 w-3 text-blue-500 shrink-0" />
+                                    <span>WhatsApp</span>
+                                  </div>
+                                  <div className="text-xs font-bold text-foreground">
+                                    {p.modulos?.whatsapp
+                                      ? (p.limite_whatsapp_mes ? `${p.limite_whatsapp_mes.toLocaleString()} msgs/mes` : "Ilimitados")
+                                      : "No incluido"}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Derecha: Acciones de Administración */}
+                              <div className="flex items-center gap-2 shrink-0">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-3 text-xs cursor-pointer"
+                                  onClick={() => {
+                                    setEditingPlan(p);
+                                    setEditingPlanCountry(activeCountryCode);
+                                    setOpenPlan(true);
+                                  }}
+                                >
+                                  <Pencil className="mr-1 h-3 w-3" /> Editar
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  title="Mover a 3 columnas principales"
+                                  className="h-8 px-3 text-xs cursor-pointer text-slate-600 hover:text-slate-900"
+                                  onClick={() => handleToggleSpecialPlan(p, false)}
+                                >
+                                  Mover a columnas
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="h-8 px-2.5 cursor-pointer"
+                                  onClick={() => handleDeleteCountryPlan(p)}
+                                >
+                                  <Trash2 className="h-3 w-3 text-destructive" />
+                                </Button>
+                              </div>
+
+                            </div>
+
+                            {/* FILA INFERIOR: MÓDULOS HABILITADOS Y CARACTERÍSTICAS GENERALES */}
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 lg:gap-6 pt-3.5">
+                              
+                              {/* Desglose de Módulos Habilitados y Complementos */}
+                              <div className="space-y-3">
+                                <div>
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                                    MÓDULOS HABILITADOS
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                                    {[
+                                      { key: "procesos", label: "Tablero de Procesos" },
+                                      { key: "estanteria", label: "Estantería virtual" },
+                                      { key: "promociones", label: "Promociones y Cupones" },
+                                      { key: "logistica", label: "Envío a domicilio" },
+                                      { key: "pos_offline", label: "Modo Offline" },
+                                      { key: "nomina", label: "Nómina y TSS / ISR" },
+                                      { key: "cxp", label: "Cuentas por Pagar (CxP)" },
+                                    ].map(({ key, label }) => {
+                                      const v = !!p.modulos?.[key as keyof typeof p.modulos];
+                                      return (
+                                        <div 
+                                          key={key} 
+                                          className={`flex items-center gap-1.5 text-[11px] font-semibold ${
+                                            v 
+                                              ? "text-green-700 dark:text-green-400" 
+                                              : "text-slate-400 line-through opacity-70"
+                                          }`}
+                                        >
+                                          {v ? (
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-green-700 shrink-0">
+                                              <circle cx="12" cy="12" r="10" />
+                                              <path d="m9 12 2 2 4-4" />
+                                            </svg>
+                                          ) : (
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-350 shrink-0">
+                                              <circle cx="12" cy="12" r="10" />
+                                              <path d="m15 9-6 6" />
+                                              <path d="m9 9 6 6" />
+                                            </svg>
+                                          )}
+                                          <span>{label}</span>
+                                        </div>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+
+                                <div className="pt-2 border-t border-border/40">
+                                  <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                                    COMPLEMENTOS OPCIONALES
+                                  </div>
+                                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                                    {[
+                                      { key: "facturacion_fiscal", label: "Facturación Fiscal" },
+                                      { key: "whatsapp", label: "Mensajería WhatsApp" },
+                                      { key: "multisucursal", label: "Sucursal Adicional" },
+                                    ].map(({ key, label }) => (
+                                      <div 
+                                        key={key} 
+                                        className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-700 dark:text-slate-300"
+                                      >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-sky-600 dark:text-sky-400 shrink-0">
+                                          <circle cx="12" cy="12" r="10" />
+                                          <path d="M12 8v8" />
+                                          <path d="M8 12h8" />
+                                        </svg>
+                                        <span>{label}</span>
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              </div>
+
+                              {/* Características Generales */}
+                              <div className="border-t md:border-t-0 md:border-l border-border/50 md:pl-5 pt-3 md:pt-0">
+                                <div className="text-[9px] font-bold uppercase tracking-wider text-slate-400 mb-1.5">
+                                  CARACTERÍSTICAS INCLUIDAS
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-3 gap-y-1.5">
+                                  {[
+                                    "Clientes ilimitados",
+                                    "Generación de reportes",
+                                    "Actualizaciones de software",
+                                    "Cuentas x cobrar",
+                                    "Impresión A4/80mm"
+                                  ].map((feat) => (
+                                    <div key={feat} className="flex items-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                                      <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="h-3.5 w-3.5 text-slate-400 shrink-0">
+                                        <circle cx="12" cy="12" r="10" />
+                                        <path d="m9 12 2 2 4-4" />
+                                      </svg>
+                                      <span>{feat}</span>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+
+                            </div>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </div>
-            )}
+                  )}
+                </>
+              );
+            })()}
           </TabsContent>
 
           <TabsContent value="licencias" className="mt-6 sm:mt-8 space-y-6">
@@ -3047,11 +3494,17 @@ function AdminPage() {
                         ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/70 dark:text-emerald-300 border-emerald-300'
                         : ((globalConfig.whatsapp_engine as string) === 'meta_cloud'
                           ? 'bg-blue-50 text-blue-700 dark:bg-blue-950/70 dark:text-blue-300 border-blue-300'
-                          : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300')
+                          : ((globalConfig.whatsapp_engine as string) === 'neuroapi'
+                            ? 'bg-purple-50 text-purple-700 dark:bg-purple-950/70 dark:text-purple-300 border-purple-300'
+                            : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300 border-slate-300'))
                     }`}>
                       {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
                         ? "⚡ Klynn Connect"
-                        : ((globalConfig.whatsapp_engine as string) === 'meta_cloud' ? "🌐 Meta Cloud" : "☁️ WASender")}
+                        : ((globalConfig.whatsapp_engine as string) === 'meta_cloud'
+                          ? "🌐 Meta Cloud"
+                          : ((globalConfig.whatsapp_engine as string) === 'neuroapi'
+                            ? "✨ Meta Coexistencia"
+                            : "☁️ WASender"))}
                     </Badge>
                   </div>
 
@@ -3060,17 +3513,17 @@ function AdminPage() {
                       Motor WhatsApp Plataforma
                     </h3>
                     <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
-                      {(globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
-                        ? "Conexión nativa con código QR en wa.klynn.com.do para envío de tickets, recibos y avisos automáticos sin costo por mensaje."
-                        : ((globalConfig.whatsapp_engine as string) === 'meta_cloud'
-                          ? "API Oficial de Meta WhatsApp Cloud con 0% riesgo de baneo, conexión en 1 clic y facturación directa con Meta."
-                          : "Envío mediante API en la nube con API Key e ID de instancia personalizada.")}
+                      {(globalConfig.whatsapp_engine === 'neuroapi' || (globalConfig.whatsapp_engine as string) === 'meta_cloud')
+                        ? "API Oficial de Meta con Coexistencia Móvil y Web mediante Connect Sessions de NeuroAPI (sin perder el acceso en tu celular)."
+                        : (globalConfig.whatsapp_engine === 'wasender'
+                          ? "Envío mediante API en la nube con API Key e ID de instancia personalizada."
+                          : "Conexión nativa con código QR en wa.klynn.com.do para envío de tickets, recibos y avisos automáticos sin costo por mensaje.")}
                     </p>
                   </div>
                 </div>
 
                 <div className="pt-4 mt-4 border-t border-border/50 space-y-2.5">
-                  <div className="grid grid-cols-3 gap-1 p-1 bg-muted/60 rounded-xl border border-border/50">
+                  <div className="grid grid-cols-3 gap-1.5 p-1 bg-muted/60 rounded-xl border border-border/50">
                     <button
                       type="button"
                       onClick={async () => {
@@ -3080,30 +3533,30 @@ function AdminPage() {
                         await saveGlobalConfig(updated);
                         toast.success("⚡ Klynn Connect activado como motor WhatsApp");
                       }}
-                      className={`text-[10px] font-bold py-1.5 px-1 rounded-lg transition-all cursor-pointer text-center ${
+                      className={`text-[11px] font-bold py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center ${
                         (globalConfig.whatsapp_engine || 'klynn_connect') === 'klynn_connect'
                           ? 'bg-emerald-600 text-white shadow-xs'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      ⚡ Klynn
+                      ⚡ Klynn QR
                     </button>
                     <button
                       type="button"
                       onClick={async () => {
-                        if (globalConfig.whatsapp_engine === 'meta_cloud') return;
-                        const updated = { ...globalConfig, whatsapp_engine: 'meta_cloud' as const };
+                        if (globalConfig.whatsapp_engine === 'neuroapi') return;
+                        const updated = { ...globalConfig, whatsapp_engine: 'neuroapi' as const };
                         setGlobalConfig(updated);
                         await saveGlobalConfig(updated);
-                        toast.success("🌐 Meta Cloud API activado como motor WhatsApp");
+                        toast.success("✨ Meta Oficial (Coexistencia) activado");
                       }}
-                      className={`text-[10px] font-bold py-1.5 px-1 rounded-lg transition-all cursor-pointer text-center ${
-                        globalConfig.whatsapp_engine === 'meta_cloud'
-                          ? 'bg-blue-600 text-white shadow-xs'
+                      className={`text-[11px] font-bold py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center ${
+                        globalConfig.whatsapp_engine === 'neuroapi' || (globalConfig.whatsapp_engine as string) === 'meta_cloud'
+                          ? 'bg-purple-600 text-white shadow-xs'
                           : 'text-muted-foreground hover:text-foreground'
                       }`}
                     >
-                      🌐 Meta
+                      ✨ Meta Oficial
                     </button>
                     <button
                       type="button"
@@ -3114,7 +3567,7 @@ function AdminPage() {
                         await saveGlobalConfig(updated);
                         toast.success("☁️ WASenderAPI activado como motor WhatsApp");
                       }}
-                      className={`text-[10px] font-bold py-1.5 px-1 rounded-lg transition-all cursor-pointer text-center ${
+                      className={`text-[11px] font-bold py-2 px-1.5 rounded-lg transition-all cursor-pointer text-center ${
                         globalConfig.whatsapp_engine === 'wasender'
                           ? 'bg-slate-700 text-white shadow-xs'
                           : 'text-muted-foreground hover:text-foreground'
@@ -3129,10 +3582,10 @@ function AdminPage() {
                     variant="outline"
                     size="sm"
                     onClick={() => setOpenMetaConfig(true)}
-                    className="w-full text-[11px] h-8 rounded-xl font-bold border-border/80 hover:bg-muted/80 flex items-center justify-center gap-1.5 cursor-pointer"
+                    className="w-full text-[11px] h-8.5 rounded-xl font-bold border-purple-200 dark:border-purple-800/60 bg-purple-50/50 dark:bg-purple-950/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100/60 flex items-center justify-center gap-1.5 cursor-pointer transition-all"
                   >
-                    <Globe className="h-3.5 w-3.5 text-blue-600" />
-                    <span>Configurar Meta App ID</span>
+                    <Sparkles className="h-3.5 w-3.5 text-purple-600 dark:text-purple-400" />
+                    <span>Configurar API Key Meta (NeuroAPI)</span>
                   </Button>
                 </div>
               </Card>
@@ -4075,7 +4528,19 @@ function AdminPage() {
           navigate({ to: `/t/${t.slug}/nueva-orden` });
         }} 
       />
-      <PlanDialog open={openPlan} onOpenChange={setOpenPlan} initial={editingPlan} onSaved={() => { setTick((r) => r + 1); setOpenPlan(false); }} />
+      <PlanDialog 
+        open={openPlan} 
+        onOpenChange={setOpenPlan} 
+        initial={editingPlan} 
+        countryCode={editingPlanCountry || adminPlanCountry || "DO"}
+        allCountryPlans={allCountryPlans}
+        onSaved={async () => { 
+          const reloaded = await getAllCountryPlans();
+          setAllCountryPlans(reloaded);
+          setTick((r) => r + 1); 
+          setOpenPlan(false); 
+        }} 
+      />
       <BankDetailsDialog open={openBank} onOpenChange={setOpenBank} config={globalConfig} onSaved={() => { setTick((r) => r + 1); setOpenBank(false); }} />
       <MetaConfigDialog open={openMetaConfig} onOpenChange={setOpenMetaConfig} config={globalConfig} onSaved={() => { setTick((r) => r + 1); setOpenMetaConfig(false); }} />
       <LicenciaDialog open={openLicenciaModal} onOpenChange={setOpenLicenciaModal} initial={editingLicencia} onSaved={() => { setTick(r => r + 1); setOpenLicenciaModal(false); }} />
@@ -4474,11 +4939,21 @@ function OnlineMonitorDialog({
   );
 }
 
-function PlanDialog({ open, onOpenChange, initial, onSaved }: {
-  open: boolean; onOpenChange: (o: boolean) => void; initial: Plan | null; onSaved: () => void;
+function PlanDialog({ open, onOpenChange, initial, onSaved, countryCode = "DO", allCountryPlans }: {
+  open: boolean;
+  onOpenChange: (o: boolean) => void;
+  initial: Plan | null;
+  onSaved: () => void;
+  countryCode?: string;
+  allCountryPlans?: Record<string, Plan[]>;
 }) {
   const [step, setStep] = useState<1 | 2>(1);
   const [f, setF] = useState<Partial<Plan>>({});
+
+  const cCode = (countryCode || "DO").toUpperCase();
+  const country = COUNTRIES.find((c) => c.code === cCode) || COUNTRIES[0];
+  const currencySymbol = country.currency?.symbol || "RD$";
+  const currencyCode = country.currency?.code || "DOP";
 
   useEffect(() => {
     if (open) {
@@ -4522,9 +4997,24 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
       precio_sucursal_adicional: Number(f.precio_sucursal_adicional) || 0,
       polar_sucursal_url: f.polar_sucursal_url?.trim() || undefined,
       limite_sucursales_adicionales: Number(f.limite_sucursales_adicionales) || 0,
+      pais_codigo: country.code,
+      moneda_simbolo: currencySymbol,
+      moneda_codigo: currencyCode,
     };
-    await savePlan(plan);
-    toast.success("Plan guardado correctamente");
+
+    const currentList = allCountryPlans?.[cCode] || DEFAULT_COUNTRY_PLANS[cCode] || [];
+    const exists = currentList.some((p) => p.id === plan.id);
+    const updatedList = exists
+      ? currentList.map((p) => (p.id === plan.id ? plan : p))
+      : [...currentList, plan];
+
+    await saveCountryPlans(cCode, updatedList);
+
+    if (cCode === "DO") {
+      await savePlan(plan);
+    }
+
+    toast.success(`Plan guardado para ${country.flag} ${country.name}`);
     onSaved();
   }
 
@@ -4533,7 +5023,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
 
   const moduleItems: { key: keyof Plan["modulos"]; label: string; desc: string; icon: any; colorClass: string; bgClass: string }[] = [
     { key: "whatsapp", label: "WhatsApp Cloud", desc: "Mensajes y alertas automáticas", icon: MessageSquare, colorClass: "text-emerald-600 dark:text-emerald-400", bgClass: "bg-emerald-500/10" },
-    { key: "facturacion_fiscal", label: "Facturación e-CF", desc: "Comprobantes DGII en línea", icon: FileText, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
+    { key: "facturacion_fiscal", label: "Facturación Fiscal", desc: "Comprobantes fiscales según país", icon: FileText, colorClass: "text-blue-600 dark:text-blue-400", bgClass: "bg-blue-500/10" },
     { key: "multisucursal", label: "Multisucursal", desc: "Gestión de múltiples sedes", icon: Building2, colorClass: "text-purple-600 dark:text-purple-400", bgClass: "bg-purple-500/10" },
     { key: "pos_offline", label: "Modo Offline", desc: "Punto de Venta y cobros sin internet", icon: WifiOff, colorClass: "text-rose-600 dark:text-rose-400", bgClass: "bg-rose-500/10" },
     { key: "logistica", label: "Envío a Domicilio", desc: "Ruteo y choferes", icon: Truck, colorClass: "text-amber-600 dark:text-amber-400", bgClass: "bg-amber-500/10" },
@@ -4551,16 +5041,30 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
         <div className="bg-slate-50/70 dark:bg-slate-900/60 p-3 sm:px-4 sm:pt-3 sm:pb-2.5 relative border-b border-slate-100 dark:border-slate-800/60">
           <div className="flex items-center justify-between mb-2 pr-10">
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-2xs">
-                {step === 1 ? <Crown className="h-4 w-4" /> : <Sparkles className="h-4 w-4" />}
+              <div className="h-8 w-8 rounded-xl bg-primary/10 text-primary flex items-center justify-center border border-primary/15 shadow-2xs overflow-hidden">
+                <img
+                  src={`https://flagcdn.com/w80/${country.code.toLowerCase()}.png`}
+                  alt={country.name}
+                  className="w-6 h-4 object-cover rounded shadow-2xs"
+                />
               </div>
               <div>
-                <DialogTitle className="text-sm sm:text-base font-display font-bold text-foreground">
-                  {initial ? `Editar plan "${f.nombre || ""}"` : "Crear nuevo plan"}
-                </DialogTitle>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <DialogTitle className="text-sm sm:text-base font-display font-bold text-foreground">
+                    {initial ? `Editar plan "${f.nombre || ""}"` : "Crear nuevo plan"}
+                  </DialogTitle>
+                  <Badge variant="outline" className="text-[10px] font-bold py-0 h-4 border-primary/30 text-primary bg-primary/5 gap-1">
+                    <img
+                      src={`https://flagcdn.com/w40/${country.code.toLowerCase()}.png`}
+                      alt={country.name}
+                      className="w-3.5 h-2.5 object-cover rounded-2xs inline-block shadow-2xs"
+                    />
+                    <span>{country.name} ({currencySymbol})</span>
+                  </Badge>
+                </div>
                 <p className="text-[11px] text-muted-foreground">
                   {step === 1
-                    ? "Paso 1: Información básica, precios y capacidades"
+                    ? `Paso 1: Información, precios en ${currencySymbol} y capacidades`
                     : "Paso 2: Módulos habilitados y pasarelas Polar"}
                 </p>
               </div>
@@ -4572,7 +5076,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
             <button
               type="button"
               onClick={() => setStep(1)}
-              className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 step === 1
                   ? "bg-primary text-white shadow-xs font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -4596,7 +5100,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                 if (!f.nombre?.trim()) { toast.error("Nombre del plan requerido"); return; }
                 setStep(2);
               }}
-              className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold transition-all ${
+              className={`flex items-center justify-center gap-1.5 py-1 px-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                 step === 2
                   ? "bg-primary text-white shadow-xs font-bold"
                   : "text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white"
@@ -4650,7 +5154,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
               <div className="grid gap-2 sm:grid-cols-2">
                 <div className="space-y-0.5">
                   <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Precio Mensual (RD$) *
+                    Precio Mensual ({currencySymbol} {currencyCode}) *
                   </Label>
                   <Input
                     type="text"
@@ -4663,14 +5167,14 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                 </div>
                 <div className="space-y-0.5">
                   <Label className="text-[9.5px] font-bold uppercase tracking-wider text-muted-foreground">
-                    Precio Anual (RD$)
+                    Precio Anual ({currencySymbol} {currencyCode})
                   </Label>
                   <Input
                     type="text"
                     inputMode="numeric"
                     value={f.precio_anual ? Number(f.precio_anual).toLocaleString("en-US") : ""}
                     onChange={(e) => handlePriceInput("precio_anual", e.target.value)}
-                    placeholder="Opcional (ej. 25,000)"
+                    placeholder="Opcional"
                     className="h-8 rounded-lg bg-surface border-border/60 text-xs font-semibold"
                   />
                 </div>
@@ -4779,13 +5283,13 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-0.5">
-                    <Label className="text-[9.5px] font-medium text-muted-foreground">Precio Sucursal Extra (RD$)</Label>
+                    <Label className="text-[9.5px] font-medium text-muted-foreground">Precio Sucursal Extra ({currencySymbol} {currencyCode})</Label>
                     <Input
                       type="text"
                       inputMode="numeric"
                       value={f.precio_sucursal_adicional ? Number(f.precio_sucursal_adicional).toLocaleString("en-US") : ""}
                       onChange={(e) => handlePriceInput("precio_sucursal_adicional", e.target.value)}
-                      placeholder="1,200"
+                      placeholder="0"
                       className="h-7.5 rounded-lg text-xs"
                     />
                   </div>
@@ -4802,7 +5306,7 @@ function PlanDialog({ open, onOpenChange, initial, onSaved }: {
                 </div>
                 <div className="space-y-0.5">
                   <Label className="text-[9.5px] font-medium text-muted-foreground flex items-center gap-1">
-                    <ExternalLink className="h-3 w-3 text-primary" /> Polar Sucursal Checkout Link
+                    <ExternalLink className="h-3 w-3 text-primary" /> Polar Sucursal Checkout Link ({country.code})
                   </Label>
                   <Input
                     value={f.polar_sucursal_url || ""}
@@ -5008,16 +5512,14 @@ function BankDetailsDialog({ open, onOpenChange, config, onSaved }: {
 function MetaConfigDialog({ open, onOpenChange, config, onSaved }: {
   open: boolean; onOpenChange: (o: boolean) => void; config: GlobalConfig; onSaved: () => void;
 }) {
-  const [appId, setAppId] = useState(config.meta_app_id || "");
-  const [configId, setConfigId] = useState(config.meta_config_id || "");
-  const [appSecret, setAppSecret] = useState(config.meta_app_secret || "");
+  const [neuroApiKey, setNeuroApiKey] = useState(config.neuroapi_master_api_key || "");
+  const [showKey, setShowKey] = useState(false);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (open) {
-      setAppId(config.meta_app_id || "");
-      setConfigId(config.meta_config_id || "");
-      setAppSecret(config.meta_app_secret || "");
+      setNeuroApiKey(config.neuroapi_master_api_key || "");
+      setShowKey(false);
     }
   }, [open, config]);
 
@@ -5026,15 +5528,14 @@ function MetaConfigDialog({ open, onOpenChange, config, onSaved }: {
     try {
       const next = { 
         ...config, 
-        meta_app_id: appId.trim(), 
-        meta_config_id: configId.trim(),
-        meta_app_secret: appSecret.trim()
+        neuroapi_master_api_key: neuroApiKey.trim(),
+        neuroapi_enabled: true,
       };
       await saveGlobalConfig(next);
-      toast.success("Credenciales de Meta App guardadas con éxito");
+      toast.success("✨ API Key de NeuroAPI guardada con éxito");
       onSaved();
     } catch (e: any) {
-      toast.error(e.message || "Error al guardar configuración de Meta");
+      toast.error(e.message || "Error al guardar configuración de NeuroAPI");
     } finally {
       setSaving(false);
     }
@@ -5045,46 +5546,57 @@ function MetaConfigDialog({ open, onOpenChange, config, onSaved }: {
       <DialogContent className="sm:max-w-md rounded-2xl border-none shadow-card">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
-            <Globe className="h-5 w-5 text-blue-600" /> WhatsApp Meta Cloud API
+            <Sparkles className="h-5 w-5 text-purple-600 dark:text-purple-400" />
+            <span>Configuración WhatsApp Meta (NeuroAPI)</span>
           </DialogTitle>
-          <p className="text-xs text-muted-foreground">
-            Configuración global de tu aplicación de Meta para habilitar el botón "Conectar con Facebook" (Embedded Signup) en todas las lavanderías.
-          </p>
+          <DialogDescription className="text-xs text-muted-foreground leading-relaxed">
+            Ingresa tu API Key Maestra de NeuroAPI (neurochat.com.ec). Klynn la utilizará como Meta Tech Provider para que todas las lavanderías conecten su WhatsApp Business oficial con Coexistencia Móvil en 1 clic.
+          </DialogDescription>
         </DialogHeader>
-        <div className="grid gap-4 py-4">
-          <div className="space-y-2">
-            <Label className="text-xs font-bold">Meta App ID</Label>
-            <Input 
-              value={appId} 
-              onChange={(e) => setAppId(e.target.value)} 
-              placeholder="Ej: 145982019482019" 
-              className="rounded-xl h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white" 
-            />
-            <p className="text-[11px] text-muted-foreground">ID de la aplicación en developers.facebook.com</p>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-bold">Clave Secreta de la App (App Secret)</Label>
-            <Input 
-              type="password"
-              value={appSecret} 
-              onChange={(e) => setAppSecret(e.target.value)} 
-              placeholder="Ej: a94f8e7b..." 
-              className="rounded-xl h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white" 
-            />
-            <p className="text-[11px] text-muted-foreground">Clave secreta en Configuración básica de tu app (se usa para intercambiar el token de acceso)</p>
-          </div>
-          <div className="space-y-2">
-            <Label className="text-xs font-bold">Configuration ID (Embedded Signup)</Label>
-            <Input 
-              value={configId} 
-              onChange={(e) => setConfigId(e.target.value)} 
-              placeholder="Ej: 928374910293847" 
-              className="rounded-xl h-11 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white" 
-            />
-            <p className="text-[11px] text-muted-foreground">ID de la configuración de inicio de sesión de Facebook para empresas.</p>
+
+        <div className="grid gap-4 py-3">
+          <div className="p-4 rounded-xl bg-purple-500/10 border border-purple-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs font-bold text-foreground flex items-center gap-1.5">
+                <Key className="h-3.5 w-3.5 text-purple-600" />
+                API Key Maestra (x-api-key)
+              </Label>
+              {neuroApiKey.trim() ? (
+                <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 border-emerald-300 text-[10px] font-bold">
+                  ✓ Configurada
+                </Badge>
+              ) : (
+                <Badge variant="outline" className="bg-amber-50 text-amber-800 dark:bg-amber-950/60 dark:text-amber-300 border-amber-300 text-[10px] font-bold">
+                  Requerida
+                </Badge>
+              )}
+            </div>
+
+            <div className="relative">
+              <Input 
+                type={showKey ? "text" : "password"}
+                value={neuroApiKey} 
+                onChange={(e) => setNeuroApiKey(e.target.value)} 
+                placeholder="x-api-key generada en neurochat.com.ec" 
+                className="rounded-xl h-10 pr-10 bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 shadow-xs focus:bg-white text-xs font-mono" 
+              />
+              <button
+                type="button"
+                onClick={() => setShowKey(!showKey)}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground cursor-pointer p-1"
+                title={showKey ? "Ocultar" : "Mostrar"}
+              >
+                {showKey ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+
+            <div className="p-2.5 rounded-lg bg-background/80 border border-purple-200/50 dark:border-purple-900/50 text-[11px] text-muted-foreground leading-relaxed">
+              💡 <strong>Meta Tech Provider:</strong> NeuroAPI gestiona directamente los servidores y la aprobación ante Meta. <strong>No necesitas crear apps en Facebook Developers, ni gestionar tokens ni App IDs</strong>.
+            </div>
           </div>
         </div>
-        <DialogFooter>
+
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button
             type="button"
             onClick={() => onOpenChange(false)}
@@ -5096,9 +5608,19 @@ function MetaConfigDialog({ open, onOpenChange, config, onSaved }: {
           <Button 
             onClick={submit} 
             disabled={saving}
-            className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-md cursor-pointer"
+            className="bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-md cursor-pointer flex items-center gap-1.5"
           >
-            {saving ? "Guardando..." : "Guardar Meta App"}
+            {saving ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Guardando...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                <span>Guardar API Key</span>
+              </>
+            )}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -1,9 +1,11 @@
+export { WhatsAppToastIcon, WhatsAppLoadingIcon, toastWhatsAppSuccess, toastWhatsAppLoading } from "@/components/klynn/WhatsAppManualToast";
 import type { Tenant, Cliente, Orden, ECFSequence } from "@/lib/storage";
 import { formatRD, DEFAULT_CONFIG, getServicios, getTenantPlan, incrementWhatsAppCount, saveOrden, getGlobalConfig, getTenantById, NCF_NOMBRES } from "@/lib/storage";
+import { sendNeuroAPIMessageServer } from "@/lib/neuroapi";
 
 type Evento = "creada" | "lista" | "en_camino" | "entregada" | "sin_retirar";
 
-export type WhatsAppProvider = "klynn_connect" | "meta_cloud" | "wasender";
+export type WhatsAppProvider = "klynn_connect" | "meta_cloud" | "wasender" | "neuroapi";
 
 export type WhatsAppSendRequest = {
   text?: string;
@@ -87,6 +89,21 @@ export function removerIconosWhatsApp(texto: string): string {
  * El tenant puede tener su propio proveedor (ej. Meta Cloud API Oficial)
  * o seguir la selección global de /admin (Klynn Connect / WASender).
  */
+
+export function isWhatsAppAutomatedActive(waConfig?: any | null): boolean {
+  if (!waConfig?.enabled) return false;
+  if (waConfig.provider === "neuroapi" || waConfig.neuroapi_phone_number_id) {
+    return Boolean(waConfig.neuroapi_phone_number_id || waConfig.neuroapi_status === "connected");
+  }
+  if (waConfig.provider === "meta_cloud" || waConfig.meta_phone_number_id) {
+    return Boolean(waConfig.meta_phone_number_id && waConfig.meta_access_token);
+  }
+  if (waConfig.provider === "wasender") {
+    return Boolean(waConfig.instance && waConfig.api_key);
+  }
+  return Boolean(waConfig.instance || waConfig.klynn_connect_status === "open");
+}
+
 export async function sendWhatsAppMessage(
   tenant: Tenant,
   destPhone: string,
@@ -199,6 +216,40 @@ export async function sendWhatsAppMessage(
         provider,
         messageId: data.messageId || data.messages?.[0]?.id || data.id,
         data,
+      };
+    }
+
+    if (provider === "neuroapi") {
+      const fromPhoneNumberId = wa.neuroapi_phone_number_id;
+      const res = await sendNeuroAPIMessageServer({
+        data: {
+          tenantId: tenant.id,
+          to: phone,
+          text: cleanText,
+          mediaUrl: request.mediaUrl,
+          mediaType: request.mediaType,
+          fileName: request.fileName,
+          caption: cleanCaption || cleanText || "",
+          fromPhoneNumberId,
+          customApiKey: wa.neuroapi_api_key,
+        },
+      });
+
+      if (!res.ok) {
+        return {
+          ok: false,
+          provider,
+          reason: res.error || "Error al enviar mensaje por NeuroAPI",
+          data: res.raw,
+        };
+      }
+
+      return {
+        ok: true,
+        provider,
+        messageId: res.messageId,
+        mediaUrl: res.mediaUrl || request.mediaUrl,
+        data: res.raw,
       };
     }
 
@@ -332,7 +383,7 @@ export async function construirMensajeWhatsAppPredeterminado(
         const desc = cleanItemDesc(it.descripcion);
         const qty = it.cantidad || 1;
         const pu = it.precio_unitario || 0;
-        return `${desc} x${qty}\n${qty} × ${formatRD(pu).replace("DOP", "RD$")} = ${formatRD(pu * qty).replace("DOP", "RD$")}`;
+        return `${desc} x${qty}\n${qty} × ${formatRD(pu, tenant)} = ${formatRD(pu * qty, tenant)}`;
       }).join("\n\n")
     : (evento === "lista" || evento === "sin_retirar")
     ? (orden.items || []).map(it => `↳ ${cleanItemDesc(it.descripcion)} x${it.cantidad || 1}`).join("\n")
@@ -345,7 +396,7 @@ export async function construirMensajeWhatsAppPredeterminado(
       ? orden.servicios_precios[sName]
       : (srv && srv.precio > 0 ? srv.precio : 0);
     if (customPrice > 0) {
-      const pStr = formatRD(customPrice).replace("DOP", "RD$");
+      const pStr = formatRD(customPrice, tenant);
       return `${sName}\n1 × ${pStr} = ${pStr}`;
     }
     return sName;
@@ -394,7 +445,7 @@ export async function construirMensajeWhatsAppPredeterminado(
 
   const tieneDescuento = Boolean(orden.descuento && orden.descuento > 0);
   const promoNombre = orden.promocion_nombre || "Descuento especial";
-  const descMonto = tieneDescuento ? formatRD(orden.descuento).replace("DOP", "RD$") : "RD$0.00";
+  const descMonto = tieneDescuento ? formatRD(orden.descuento, tenant) : formatRD(0, tenant);
   const promoLinea = tieneDescuento ? `*Promo (${promoNombre}):* -${descMonto}\n` : "";
   const promoAhorro = tieneDescuento ? `\n*¡Te ahorraste ${descMonto} en esta orden!*` : "";
 
@@ -429,19 +480,19 @@ export async function construirMensajeWhatsAppPredeterminado(
     tipo_documento: tipoDoc,
     servicios: serviciosStr,
     detalle: detalleStr || "Ninguno",
-    subtotal: formatRD(orden.subtotal || 0).replace("DOP", "RD$"),
+    subtotal: formatRD(orden.subtotal || 0, tenant),
     descuento: descMonto,
     promocion: promoNombre,
     promocion_linea: promoLinea,
     promocion_ahorro: promoAhorro,
-    itbis: formatRD(orden.itbis || 0).replace("DOP", "RD$"),
-    total: formatRD(orden.total || 0).replace("DOP", "RD$"),
+    itbis: formatRD(orden.itbis || 0, tenant),
+    total: formatRD(orden.total || 0, tenant),
     metodo_pago: orden.metodo_pago || "EFECTIVO",
-    pagado: formatRD(orden.pagado || 0).replace("DOP", "RD$"),
-    saldo: formatRD(orden.saldo || 0).replace("DOP", "RD$"),
+    pagado: formatRD(orden.pagado || 0, tenant),
+    saldo: formatRD(orden.saldo || 0, tenant),
     vuelto: (pagoRecibido && pagoRecibido > (orden.total || 0)) 
-      ? formatRD(pagoRecibido - (orden.total || 0)).replace("DOP", "RD$") 
-      : "RD$0.00",
+      ? formatRD(pagoRecibido - (orden.total || 0), tenant) 
+      : formatRD(0, tenant),
     entrega: orden.es_urgente 
       ? `${humanizeDate(orden.fecha_entrega, true)} (${tenant.config?.tiempo_entrega_urgente || 3} HORAS)`
       : humanizeDate(orden.fecha_entrega, false),

@@ -1,5 +1,5 @@
 import type { Orden, Tenant, Empleado, Cliente, Servicio } from "@/lib/storage";
-import { formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled } from "@/lib/storage";
+import { formatMoney, formatRD, formatNumber, formatDateTimeRD, formatDateRD, NCF_NOMBRES, isModuleEnabled } from "@/lib/storage";
 import { formatEcfStatus } from "@/lib/fiscal";
 import { QRCodeSVG } from "qrcode.react";
 import {
@@ -399,13 +399,15 @@ export function Ticket({
         ) : (
           <div className="flex flex-col items-center">
             <div className="text-2xl font-bold tracking-tight">{tenant.nombre || "Klynn"}</div>
-            <div className="text-[10px] text-black/80 font-medium italic">tu lavandería, simplificada</div>
+            {Boolean((tenant as any).eslogan?.trim()) && (tenant as any).eslogan !== "tu lavandería, simplificada" && (
+              <div className="text-[10px] text-black/80 font-medium italic">{(tenant as any).eslogan}</div>
+            )}
           </div>
         )}
         {(cfg?.ticket_mostrar_rnc ?? true) && (tenant.rnc || (cfg as any)?.rnc_emisor) && (
-          <div className="text-[10px]"><b>RNC:</b> <span className="font-semibold tabular-nums">{tenant.rnc || (cfg as any)?.rnc_emisor}</span></div>
+          <div className="text-[10px]"><b>{tenant.documento_fiscal_label || "RNC"}:</b> <span className="font-semibold tabular-nums">{tenant.rnc || (cfg as any)?.rnc_emisor}</span></div>
         )}
-        {tenant.telefono && <div className="text-[10px]"><b>Tel:</b> <span className="font-semibold tabular-nums">{formatPhoneDO(tenant.telefono)}</span></div>}
+        {tenant.telefono && <div className="text-[10px]"><b>Tel:</b> <span className="font-semibold tabular-nums">{tenant.pais_codigo && tenant.pais_codigo !== "DO" ? tenant.telefono : formatPhoneDO(tenant.telefono)}</span></div>}
         {tenant.direccion && <div className="text-[9.5px] leading-tight font-semibold text-black/80">{tenant.direccion}</div>}
       </div>
 
@@ -671,7 +673,7 @@ export function Ticket({
                     {mostrarColumnaItbis && (
                       <div className="w-[20%] text-right flex items-center justify-end gap-0.5">
                         <BadgePercent className="h-3 w-3 shrink-0" />
-                        <span>ITBIS</span>
+                        <span>{tenant.impuesto_nombre || "ITBIS"}</span>
                       </div>
                     )}
                     <div className={`${mostrarColumnaItbis ? "w-[28%]" : "w-[26%]"} text-right pr-3 flex items-center justify-end gap-0.5`}>
@@ -750,16 +752,18 @@ export function Ticket({
             <Calculator className="h-3.5 w-3.5 shrink-0 text-black" />
             <span>Subtotal</span>
           </div>
-          <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.subtotal).replace("DOP", "RD$")}</span>
+          <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatMoney(orden.subtotal, tenant)}</span>
         </div>
 
         {orden.itbis > 0 && (
           <div className="flex justify-between items-center gap-2">
             <div className="flex items-center gap-1.5 font-semibold shrink-0">
               <Landmark className="h-3.5 w-3.5 shrink-0 text-black" />
-              <span>ITBIS {cfg?.itbis_porcentaje ?? 18}%</span>
+              <span>{tenant.impuesto_nombre || "ITBIS"} {cfg?.itbis_porcentaje ?? 18}%</span>
             </div>
-            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.itbis).replace("DOP", "RD$")}</span>
+            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">
+              {formatMoney(orden.itbis, tenant)}
+            </span>
           </div>
         )}
 
@@ -769,7 +773,7 @@ export function Ticket({
               <Percent className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>{orden.promocion_nombre ? `Promo (${orden.promocion_nombre})` : "Descuento"}</span>
             </div>
-            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">-{formatRD(orden.descuento).replace("DOP", "RD$")}</span>
+            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">-{formatMoney(orden.descuento, tenant)}</span>
           </div>
         )}
 
@@ -779,7 +783,7 @@ export function Ticket({
               <Truck className="h-3.5 w-3.5 shrink-0 text-black" />
               <span>Envío a domicilio</span>
             </div>
-            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.costo_envio).replace("DOP", "RD$")}</span>
+            <span className="font-semibold tabular-nums tracking-tight whitespace-nowrap">{formatMoney(orden.costo_envio, tenant)}</span>
           </div>
         )}
 
@@ -790,12 +794,12 @@ export function Ticket({
             <CircleDollarSign className="h-4 w-4 shrink-0 text-black" />
             <span>TOTAL</span>
           </div>
-          <span className="font-black text-[14.5px] tabular-nums tracking-tight whitespace-nowrap">{formatRD(orden.total).replace("DOP", "RD$")}</span>
+          <span className="font-black text-[14.5px] tabular-nums tracking-tight whitespace-nowrap">{formatMoney(orden.total, tenant)}</span>
         </div>
 
         {orden.descuento > 0 && (
           <div className="mt-1.5 py-1 px-2 border border-dashed border-black rounded text-center text-[10.5px] font-bold leading-tight">
-            ¡Te ahorraste {formatRD(orden.descuento).replace("DOP", "RD$")} en esta orden!
+            ¡Te ahorraste {formatMoney(orden.descuento, tenant)} en esta orden!
           </div>
         )}
       </div>
@@ -827,7 +831,7 @@ export function Ticket({
             {orden.pagos_detalle.map((pd, pidx) => (
               <div key={pidx} className="flex justify-between font-medium">
                 <span>• {pd.metodo}{pd.referencia ? ` (${pd.referencia})` : ""}:</span>
-                <span className="font-semibold tabular-nums">{formatRD(pd.monto)}</span>
+                <span className="font-semibold tabular-nums">{formatMoney(pd.monto, tenant)}</span>
               </div>
             ))}
           </div>
@@ -855,26 +859,26 @@ export function Ticket({
           <>
             {orden.saldo === 0 && (pagoRecibido < orden.total || orden.pagado > pagoRecibido) ? (
               <>
-                <Row k="Saldo pendiente" v="RD$0.00" icon={Hourglass} bold />
-                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} icon={ArrowRightLeft} boldValue />}
+                <Row k="Saldo pendiente" v={formatMoney(0, tenant)} icon={Hourglass} bold />
+                {vuelto > 0 && <Row k="Cambio" v={formatMoney(vuelto, tenant)} icon={ArrowRightLeft} boldValue />}
               </>
             ) : pagoRecibido < (orden.saldo + pagoRecibido) && pagoRecibido > 0 ? (
               <>
-                <Row k="Abonado" v={formatRD(pagoRecibido).replace("DOP", "RD$")} icon={Wallet} bold />
-                <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} icon={Hourglass} bold />
+                <Row k="Abonado" v={formatMoney(pagoRecibido, tenant)} icon={Wallet} bold />
+                <Row k="Saldo restante" v={formatMoney(orden.saldo, tenant)} icon={Hourglass} bold />
               </>
             ) : (
               <>
-                <Row k="Recibido" v={formatRD(pagoRecibido).replace("DOP", "RD$")} icon={Coins} />
-                {vuelto > 0 && <Row k="Cambio" v={formatRD(vuelto).replace("DOP", "RD$")} icon={ArrowRightLeft} boldValue />}
+                <Row k="Recibido" v={formatMoney(pagoRecibido, tenant)} icon={Coins} />
+                {vuelto > 0 && <Row k="Cambio" v={formatMoney(vuelto, tenant)} icon={ArrowRightLeft} boldValue />}
               </>
             )}
           </>
         ) : (
           orden.saldo > 0 && orden.pagado > 0 && (
             <>
-              <Row k="Abonado" v={formatRD(orden.pagado).replace("DOP", "RD$")} icon={Wallet} bold />
-              <Row k="Saldo restante" v={formatRD(orden.saldo).replace("DOP", "RD$")} icon={Hourglass} bold />
+              <Row k="Abonado" v={formatMoney(orden.pagado, tenant)} icon={Wallet} bold />
+              <Row k="Saldo restante" v={formatMoney(orden.saldo, tenant)} icon={Hourglass} bold />
             </>
           )
         )}

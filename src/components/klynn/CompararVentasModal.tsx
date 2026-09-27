@@ -32,7 +32,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Orden } from "@/lib/storage";
+import { Orden, Tenant, formatMoney, getTenantCurrencySymbol, getTenantTaxName } from "@/lib/storage";
 import { 
   exportVentasComparativaToExcel, 
   PeriodResultVentasExport 
@@ -101,11 +101,8 @@ const PERIOD_THEMES: Record<string, {
   },
 };
 
-function formatRD(amount: number): string {
-  return `RD$ ${Number(amount || 0).toLocaleString("es-DO", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
+function formatRD(amount: number, tenant?: Partial<Tenant> | null): string {
+  return formatMoney(amount, tenant);
 }
 
 function formatDateISO(d: Date): string {
@@ -145,6 +142,7 @@ interface CompararVentasModalProps {
   onOpenChange: (open: boolean) => void;
   ordenes: Orden[];
   tenantNombre?: string;
+  tenant?: Tenant;
 }
 
 export function CompararVentasModal({
@@ -152,7 +150,13 @@ export function CompararVentasModal({
   onOpenChange,
   ordenes,
   tenantNombre = "Klynn",
+  tenant,
 }: CompararVentasModalProps) {
+  const currencySymbol = getTenantCurrencySymbol(tenant);
+  const taxName = getTenantTaxName(tenant);
+  const taxRate = tenant?.impuesto_porcentaje ?? (tenant?.pais_codigo && tenant.pais_codigo !== "DO" ? 16 : 18);
+  const formatRD = (amount: number) => formatMoney(amount, tenant);
+
   const now = useMemo(() => new Date(), []);
   const todayStr = useMemo(() => formatDateISO(now), [now]);
 
@@ -390,6 +394,8 @@ export function CompararVentasModal({
         modeLabel,
         periods,
         periodResults,
+        currencySymbol,
+        currencyCode: tenant?.moneda_codigo || "DOP",
       });
 
       toast.success("Comparativa de ventas exportada a Excel (.xlsx) con diseño 📊");
@@ -834,7 +840,7 @@ export function CompararVentasModal({
                   </tr>
 
                   <tr className="hover:bg-muted/20">
-                    <td className="py-1 px-2.5 text-muted-foreground">ITBIS Recaudado (18%)</td>
+                    <td className="py-1 px-2.5 text-muted-foreground">{taxName} Recaudado ({taxRate}%)</td>
                     {periodResults.map((p) => (
                       <td key={p.id} className="py-1 px-2.5 text-right font-bold text-foreground">
                         {formatRD(p.itbis)}

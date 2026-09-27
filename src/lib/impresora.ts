@@ -439,11 +439,13 @@ export function encodeEscPos(
 
   // DATOS COMERCIALES
   if (!esProduccion) {
-    writeLine(tenant.rnc ? `RNC: ${tenant.rnc}` : "Sin RNC Configurado");
+    if (tenant.rnc) {
+      writeLine(`${tenant.documento_fiscal_label || "RNC"}: ${tenant.rnc}`);
+    }
     if (tenant.direccion) {
       writeLine(tenant.direccion);
     }
-    writeLine(`Tel: ${formatPhoneDO(tenant.telefono)}`);
+    writeLine(`Tel: ${tenant.pais_codigo && tenant.pais_codigo !== "DO" ? tenant.telefono : formatPhoneDO(tenant.telefono)}`);
     writeLine("-".repeat(columns));
   }
 
@@ -618,6 +620,7 @@ export function encodeEscPos(
     writeLine("-".repeat(columns));
 
     // Renderizar prendas del ticket
+    const currSym = tenant.moneda_simbolo || "RD$";
     const itemsSueltos = orden.items.filter(it => !it.descripcion.startsWith("↳"));
     const itemsDesglosados = orden.items.filter(it => it.descripcion.startsWith("↳"));
 
@@ -628,7 +631,7 @@ export function encodeEscPos(
         const srv = serviciosList.find((x) => x.nombre === sName);
         const p = orden.servicios_precios?.[sName] !== undefined ? orden.servicios_precios[sName] : (srv ? srv.precio : 0);
         if (p > 0) {
-          writeLine(formatRow(`${sName}`, `RD$${p.toFixed(2)}`, columns));
+          writeLine(formatRow(`${sName}`, `${currSym}${p.toFixed(2)}`, columns));
         } else {
           writeLine(cleanText(`[ ${sName.toUpperCase()} ]`));
         }
@@ -638,7 +641,7 @@ export function encodeEscPos(
         );
         misPrendas.forEach(it => {
           const sub = it.cantidad * it.precio_unitario;
-          const subStr = sub > 0 ? `RD$${sub.toFixed(2)}` : "---";
+          const subStr = sub > 0 ? `${currSym}${sub.toFixed(2)}` : "---";
           const desc = it.descripcion.replace(/^↳\s*/, "");
           writeLine(formatRow(`  ${it.cantidad}x ${desc}`, subStr, columns));
           if (it.color) {
@@ -652,7 +655,7 @@ export function encodeEscPos(
     itemsSueltos.forEach((it) => {
       const cantDesc = `${it.cantidad}x ${it.descripcion}`;
       const sub = it.cantidad * it.precio_unitario;
-      const subStr = `RD$${sub.toFixed(2)}`;
+      const subStr = `${currSym}${sub.toFixed(2)}`;
       if (cantDesc.length + subStr.length + 1 > columns) {
         writeLine(cleanText(cantDesc));
         writeLine(formatRow("", subStr, columns));
@@ -666,22 +669,23 @@ export function encodeEscPos(
     writeLine("=".repeat(columns));
 
     // TOTALES
-    writeLine(formatRow("Subtotal:", `RD$${orden.subtotal.toFixed(2)}`, columns));
+    writeLine(formatRow("Subtotal:", `${currSym}${orden.subtotal.toFixed(2)}`, columns));
     if (orden.descuento && orden.descuento > 0) {
       const promoLabel = orden.promocion_nombre ? `Promo (${orden.promocion_nombre}):` : "Descuento:";
-      writeLine(formatRow(promoLabel, `-RD$${orden.descuento.toFixed(2)}`, columns));
+      writeLine(formatRow(promoLabel, `-${currSym}${orden.descuento.toFixed(2)}`, columns));
     }
     if (orden.itbis && orden.itbis > 0) {
-      writeLine(formatRow(`ITBIS (${config.itbis_porcentaje ?? 18}%):`, `RD$${orden.itbis.toFixed(2)}`, columns));
+      const taxName = tenant.impuesto_nombre || "ITBIS";
+      writeLine(formatRow(`${taxName} (${config.itbis_porcentaje ?? 18}%):`, `${currSym}${orden.itbis.toFixed(2)}`, columns));
     }
     if (perfil !== "basica") {
       bytes.push(...BOLD_ON);
       bytes.push(...FONT_DOUBLE);
-      writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns / 2));
+      writeLine(formatRow("TOTAL:", `${currSym}${orden.total.toFixed(2)}`, columns / 2));
       bytes.push(...FONT_NORMAL);
       bytes.push(...BOLD_OFF);
     } else {
-      writeLine(formatRow("TOTAL:", `RD$${orden.total.toFixed(2)}`, columns));
+      writeLine(formatRow("TOTAL:", `${currSym}${orden.total.toFixed(2)}`, columns));
     }
 
     // Mensaje de ahorro por promoción
@@ -689,7 +693,7 @@ export function encodeEscPos(
       writeLine("-".repeat(columns));
       bytes.push(...ALIGN_CENTER);
       bytes.push(...BOLD_ON);
-      const ahorroTexto = `¡TE AHORRASTE RD$${orden.descuento.toFixed(2)} EN ESTA ORDEN!`;
+      const ahorroTexto = `¡TE AHORRASTE ${currSym}${orden.descuento.toFixed(2)} EN ESTA ORDEN!`;
       writeLine(cleanText(ahorroTexto));
       bytes.push(...BOLD_OFF);
       bytes.push(...ALIGN_LEFT);
@@ -701,13 +705,13 @@ export function encodeEscPos(
     writeLine(formatRow("Metodo pago:", metodoLabel, columns));
     writeLine(formatRow("Estado factura:", orden.saldo === 0 ? "PAGADA" : "PENDIENTE DE PAGO", columns));
     if (orden.pagado > 0 && orden.saldo > 0) {
-      writeLine(formatRow("Monto Pagado:", `RD$${orden.pagado.toFixed(2)}`, columns));
-      writeLine(formatRow("Saldo Pendiente:", `RD$${orden.saldo.toFixed(2)}`, columns));
+      writeLine(formatRow("Monto Pagado:", `${currSym}${orden.pagado.toFixed(2)}`, columns));
+      writeLine(formatRow("Saldo Pendiente:", `${currSym}${orden.saldo.toFixed(2)}`, columns));
     }
     if (pagoRecibido !== undefined && pagoRecibido > orden.pagado) {
       const cambio = pagoRecibido - orden.pagado;
-      writeLine(formatRow("Efectivo recibido:", `RD$${pagoRecibido.toFixed(2)}`, columns));
-      writeLine(formatRow("Cambio:", `RD$${cambio.toFixed(2)}`, columns));
+      writeLine(formatRow("Efectivo recibido:", `${currSym}${pagoRecibido.toFixed(2)}`, columns));
+      writeLine(formatRow("Cambio:", `${currSym}${cambio.toFixed(2)}`, columns));
     }
     writeLine("-".repeat(columns));
 
@@ -1145,15 +1149,17 @@ export function encodeCuadreEscPos(
   writeLine("-".repeat(columns));
 
   // [1] VENTAS
+  const currSym = tenant.moneda_simbolo || "RD$";
+  const taxName = tenant.impuesto_nombre || "ITBIS";
   if (perfil !== "basica") bytes.push(...BOLD_ON);
   writeLine("[1] RESUMEN DE VENTAS");
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("-".repeat(columns));
-  writeLine(formatRow("Ventas Contado:", `RD$${ventasContado.toFixed(2)}`, columns));
-  writeLine(formatRow("Ventas Credito:", `RD$${ventasCredito.toFixed(2)}`, columns));
+  writeLine(formatRow("Ventas Contado:", `${currSym}${ventasContado.toFixed(2)}`, columns));
+  writeLine(formatRow("Ventas Credito:", `${currSym}${ventasCredito.toFixed(2)}`, columns));
   writeLine("-".repeat(columns));
   if (perfil !== "basica") bytes.push(...BOLD_ON);
-  writeLine(formatRow("TOTAL FACTURADO:", `RD$${totalFacturado.toFixed(2)}`, columns));
+  writeLine(formatRow("TOTAL FACTURADO:", `${currSym}${totalFacturado.toFixed(2)}`, columns));
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("=".repeat(columns));
 
@@ -1162,24 +1168,24 @@ export function encodeCuadreEscPos(
   writeLine("[2] MOVIMIENTOS DE CAJA");
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("-".repeat(columns));
-  writeLine(formatRow("(+) Ventas Efectivo:", `RD$${cash.toFixed(2)}`, columns));
-  writeLine(formatRow("(+) Tarjeta:", `RD$${card.toFixed(2)}`, columns));
-  writeLine(formatRow("(+) Transferencia:", `RD$${transfer.toFixed(2)}`, columns));
-  writeLine(formatRow("(+) Abonos Credito:", `RD$${abonosCredito.toFixed(2)}`, columns));
-  writeLine(formatRow("(+) Fondo Inicial:", `RD$${montoInicial.toFixed(2)}`, columns));
+  writeLine(formatRow("(+) Ventas Efectivo:", `${currSym}${cash.toFixed(2)}`, columns));
+  writeLine(formatRow("(+) Tarjeta:", `${currSym}${card.toFixed(2)}`, columns));
+  writeLine(formatRow("(+) Transferencia:", `${currSym}${transfer.toFixed(2)}`, columns));
+  writeLine(formatRow("(+) Abonos Credito:", `${currSym}${abonosCredito.toFixed(2)}`, columns));
+  writeLine(formatRow("(+) Fondo Inicial:", `${currSym}${montoInicial.toFixed(2)}`, columns));
   if (manualIngresos > 0) {
-    writeLine(formatRow("(+) Otros Ingresos:", `RD$${manualIngresos.toFixed(2)}`, columns));
+    writeLine(formatRow("(+) Otros Ingresos:", `${currSym}${manualIngresos.toFixed(2)}`, columns));
   }
   if (manualEgresos > 0) {
-    writeLine(formatRow("(-) Egresos/Retiros:", `RD$${manualEgresos.toFixed(2)}`, columns));
+    writeLine(formatRow("(-) Egresos/Retiros:", `${currSym}${manualEgresos.toFixed(2)}`, columns));
   }
   if (anulado > 0) {
-    writeLine(formatRow("(-) Anulaciones:", `RD$${anulado.toFixed(2)}`, columns));
+    writeLine(formatRow("(-) Anulaciones:", `${currSym}${anulado.toFixed(2)}`, columns));
   }
   writeLine("-".repeat(columns));
   if (perfil !== "basica") bytes.push(...BOLD_ON);
-  writeLine(formatRow("TOTAL EFECTIVO EN CAJA:", `RD$${realTotalEfectivo.toFixed(2)}`, columns));
-  writeLine(formatRow("TOTAL RECAUDADO:", `RD$${totalDineroRecaudado.toFixed(2)}`, columns));
+  writeLine(formatRow("TOTAL EFECTIVO EN CAJA:", `${currSym}${realTotalEfectivo.toFixed(2)}`, columns));
+  writeLine(formatRow("TOTAL RECAUDADO:", `${currSym}${totalDineroRecaudado.toFixed(2)}`, columns));
   if (perfil !== "basica") bytes.push(...BOLD_OFF);
   writeLine("=".repeat(columns));
 
@@ -1193,7 +1199,7 @@ export function encodeCuadreEscPos(
     const status = isAnulada ? "ANUL" : (o.metodo_pago === "CREDITO" ? "CRE" : o.metodo_pago === "PAGO_AL_RETIRAR" ? "PAR" : o.metodo_pago?.substring(0,3));
     const leftText = `#${o.numero} `;
     const boldText = `(${status})`;
-    const rightText = `RD$${o.total.toFixed(2)}`;
+    const rightText = `${currSym}${o.total.toFixed(2)}`;
     const spacesCount = columns - leftText.length - boldText.length - rightText.length;
     const spaces = spacesCount > 0 ? " ".repeat(spacesCount) : " ";
 
@@ -1217,7 +1223,7 @@ export function encodeCuadreEscPos(
       const isNegative = ["EGRESO", "RETIRO", "GASTO_CAJA_CHICA"].includes(m.tipo);
       const sign = isNegative ? "-" : "+";
       const concept = m.concepto;
-      const amountStr = `${sign}RD$${m.monto.toFixed(2)}`;
+      const amountStr = `${sign}${currSym}${m.monto.toFixed(2)}`;
       
       if (concept.length + amountStr.length + 1 > columns) {
         writeLine(cleanText(concept));
@@ -1236,9 +1242,9 @@ export function encodeCuadreEscPos(
   writeLine("-".repeat(columns));
   writeLine(formatRow("Órdenes Procesadas:", String(ventasRealizadas), columns));
   writeLine(formatRow("Devoluciones / Anulaciones:", String(devCount), columns));
-  writeLine(formatRow("Descuentos Aplicados:", `RD$${montoDescontado.toFixed(2)}`, columns));
-  writeLine(formatRow(`ITBIS Recaudado (${config.itbis_porcentaje ?? 18}%):`, `RD$${itbisRecaudado.toFixed(2)}`, columns));
-  writeLine(formatRow("TOTAL RECAUDADO:", `RD$${totalDineroRecaudado.toFixed(2)}`, columns));
+  writeLine(formatRow("Descuentos Aplicados:", `${currSym}${montoDescontado.toFixed(2)}`, columns));
+  writeLine(formatRow(`${taxName} Recaudado (${config.itbis_porcentaje ?? 18}%):`, `${currSym}${itbisRecaudado.toFixed(2)}`, columns));
+  writeLine(formatRow("TOTAL RECAUDADO:", `${currSym}${totalDineroRecaudado.toFixed(2)}`, columns));
   writeLine("-".repeat(columns));
 
   // Firmas

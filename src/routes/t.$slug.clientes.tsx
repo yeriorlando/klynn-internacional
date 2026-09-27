@@ -99,8 +99,8 @@ function ClientesPage() {
 
   // Cálculos para KPIs globales
   const totalClientes = clientes.length;
-  const empresasCount = useMemo(() => clientes.filter((c) => c.tipo === "Empresa").length, [clientes]);
-  const personasCount = useMemo(() => clientes.filter((c) => c.tipo !== "Empresa").length, [clientes]);
+  const empresasCount = useMemo(() => clientes.filter((c) => (c.tipo || "").toLowerCase().trim() === "empresa").length, [clientes]);
+  const personasCount = useMemo(() => clientes.filter((c) => (c.tipo || "").toLowerCase().trim() !== "empresa").length, [clientes]);
   const clientesConDeuda = useMemo(() => clientes.filter((c) => deudaCliente(c.id) > 0), [clientes, ordenes]);
   const clientesConCredito = useMemo(() => clientes.filter((c) => (c.limite_credito || 0) > 0), [clientes]);
   const totalDeudaGlobal = useMemo(() => clientes.reduce((sum, c) => sum + deudaCliente(c.id), 0), [clientes, ordenes]);
@@ -135,8 +135,8 @@ function ClientesPage() {
         if (clientSector !== sectorFilter) return false;
       }
 
-      if (filterType === "empresa") return c.tipo === "Empresa";
-      if (filterType === "persona") return c.tipo !== "Empresa";
+      if (filterType === "empresa") return (c.tipo || "").toLowerCase().trim() === "empresa";
+      if (filterType === "persona") return (c.tipo || "").toLowerCase().trim() !== "empresa";
       if (filterType === "deuda") return deudaCliente(c.id) > 0;
       if (filterType === "credito") return (c.limite_credito || 0) > 0;
 
@@ -452,7 +452,7 @@ function ClientesPage() {
         {filteredList.map((c) => {
           const deuda = deudaCliente(c.id);
           const total = totalGastado(c.id);
-          const isEmpresa = c.tipo === "Empresa";
+          const isEmpresa = (c.tipo || "").toLowerCase().trim() === "empresa";
           const rawPhone = c.telefono.replace(/\D/g, "");
 
           return (
@@ -499,7 +499,7 @@ function ClientesPage() {
                         {c.cedula ? (
                           <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[10px] font-mono font-bold bg-[#1B4B73] text-white border border-[#1B4B73] shadow-xs">
                             <FileText className="h-2.5 w-2.5 text-[#F0B900] shrink-0" />
-                            <span>RNC: <strong className="font-black text-[#F0B900]">{c.cedula}</strong></span>
+                            <span>{isEmpresa ? "RNC:" : "Cédula:"} <strong className="font-black text-[#F0B900]">{c.cedula}</strong></span>
                           </span>
                         ) : isEmpresa ? (
                           <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-lg text-[10px] font-medium bg-[#1B4B73]/10 text-[#1B4B73] dark:text-[#F0B900] border border-[#1B4B73]/20">

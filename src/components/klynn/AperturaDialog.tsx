@@ -15,6 +15,7 @@ import {
   uid,
   formatAmountInput,
   parseAmount,
+  getActiveTenantLocalization,
 } from "@/lib/storage";
 import { toast } from "sonner";
 
@@ -129,6 +130,7 @@ export function AperturaDialog({
   const [montoStr, setMontoStr] = useState<string>("");
   const [turno, setTurno] = useState<"Mañana" | "Tarde" | "Noche">("Mañana");
   const [loading, setLoading] = useState(false);
+  const currencySymbol = getActiveTenantLocalization().moneda_simbolo || "RD$";
 
   async function submit() {
     const monto = parseAmount(montoStr);
@@ -238,7 +240,7 @@ export function AperturaDialog({
 
             <div className="flex items-center justify-center gap-1.5 py-1">
               <span className="font-display text-2xl font-bold text-slate-400 select-none">
-                RD$
+                {currencySymbol}
               </span>
               <input
                 type="text"
@@ -255,10 +257,10 @@ export function AperturaDialog({
             {/* Presets Rápidos con separación de miles */}
             <div className="flex items-center justify-center gap-1.5 pt-2 border-t border-slate-100 dark:border-slate-800 mt-1 flex-wrap">
               {[
-                { label: "RD$ 500", val: "500" },
-                { label: "RD$ 1,000", val: "1,000" },
-                { label: "RD$ 2,000", val: "2,000" },
-                { label: "RD$ 3,000", val: "3,000" },
+                { label: `${currencySymbol} 500`, val: "500" },
+                { label: `${currencySymbol} 1,000`, val: "1,000" },
+                { label: `${currencySymbol} 2,000`, val: "2,000" },
+                { label: `${currencySymbol} 3,000`, val: "3,000" },
               ].map((p) => {
                 const isSelected = parseAmount(montoStr) === parseAmount(p.val) && montoStr !== "";
                 return (

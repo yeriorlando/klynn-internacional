@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { UserPlus, Phone, Mail, MapPin, Trash2, Search, Loader2, CreditCard, Coins, Check, AlertTriangle, FileText, Building2, User, ArrowRight, ArrowLeft, Building, Truck, Percent } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -20,11 +20,12 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
-import { saveCliente, deleteCliente, formatPhoneRD, uid, type Cliente, saveOrden, saveMovimiento, formatRD, formatAmountInput, parseAmount, type Orden, type MetodoPago } from "@/lib/storage";
+import { saveCliente, deleteCliente, formatPhoneRD, uid, type Cliente, saveOrden, saveMovimiento, formatRD, formatMoney, formatAmountInput, parseAmount, type Orden, type MetodoPago } from "@/lib/storage";
 import { toast } from "sonner";
 import { consultarRNC } from "@/lib/fiscal";
+import { getCountry } from "@/lib/countries";
 import { useRequireAuth } from "@/lib/useRequireAuth";
-import { useOrdenes, useCajaAbierta, useECFSequences } from "@/hooks/use-queries";
+import { useOrdenes, useCajaAbierta } from "@/hooks/use-queries";
 import { AddressAutocomplete } from "./logistica/AddressAutocomplete";
 
 interface ClienteDialogProps {
@@ -40,33 +41,15 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
   const queryClient = useQueryClient();
   const user = useRequireAuth();
   
+  const currentCountry = useMemo(() => {
+    const code = tenant?.pais_codigo || tenant?.config?.pais_codigo || "DO";
+    return getCountry(code);
+  }, [tenant]);
+
+  const formatCurrency = (val: number) => formatMoney(val, tenant);
+  
   const { data: allOrders = [] } = useOrdenes(tenant.id);
   const { data: cajaAbierta } = useCajaAbierta(tenant.id);
-  const { data: ecfSequences = [] } = useECFSequences(tenant.id);
-
-  const sequenceAvailable = (type: string) =>
-    ecfSequences.some((sequence: any) => {
-      const normalized = String(sequence.tipo_ecf || "").toUpperCase();
-      const matches = normalized === type || normalized === type.replace("E", "");
-      const current = Number(sequence.valor_actual ?? sequence.secuencia_actual ?? 0);
-      const last = Number(sequence.valor_final ?? sequence.hasta ?? 0);
-      return matches && sequence.is_active !== false && (last === 0 || current < last);
-    });
-
-  const hasElectronicRanges = ecfSequences.some((sequence: any) =>
-    String(sequence.tipo_ecf || "").toUpperCase().startsWith("E"),
-  );
-  // Con rangos EF2 sincronizados, una empresa solo se puede elegir si E31
-  // está activa y disponible. Antes de la primera sincronización se conserva
-  // el comportamiento fiscal ya existente para no bloquear la configuración.
-  const isFiscalActive = !!(
-    tenant.config?.ncf_facturacion_activa ||
-    tenant.config?.modo_facturacion === "tradicional" ||
-    tenant.config?.modo_facturacion === "electronica"
-  );
-  const canSelectCompany = isFiscalActive &&
-    (!hasElectronicRanges || sequenceAvailable("E31") || sequenceAvailable("B01"));
-  const canSelectConsumer = !hasElectronicRanges || sequenceAvailable("E32");
 
   const [montoPago, setMontoPago] = useState<string>("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("EFECTIVO");
@@ -141,7 +124,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
       return;
     }
     if (monto > outstandingDebt) {
-      toast.error(`El monto no puede exceder la deuda de RD$ ${formatRD(outstandingDebt)}`);
+      toast.error(`El monto no puede exceder la deuda de ${formatCurrency(outstandingDebt)}`);
       return;
     }
     if (!cajaAbierta) {
@@ -233,8 +216,9 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
       toast.error(isEmpresa ? "Nombre de empresa requerido" : "Nombre y apellido requeridos"); 
       return; 
     }
-    if (phoneDigits.length > 0 && phoneDigits.length < 10) {
-      toast.error("El teléfono debe tener al menos 10 dígitos");
+    const minPhoneDigits = currentCountry.code === "DO" ? 10 : 8;
+    if (phoneDigits.length > 0 && phoneDigits.length < minPhoneDigits) {
+      toast.error(`El teléfono debe tener al menos ${minPhoneDigits} dígitos`);
       return;
     }
     setStep(2);
@@ -247,8 +231,9 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
       toast.error(isEmpresa ? "Nombre de empresa requerido" : "Nombre y apellido requeridos"); 
       return; 
     }
-    if (phoneDigits.length > 0 && phoneDigits.length < 10) {
-      toast.error("El teléfono debe tener al menos 10 dígitos");
+    const minPhoneDigits = currentCountry.code === "DO" ? 10 : 8;
+    if (phoneDigits.length > 0 && phoneDigits.length < minPhoneDigits) {
+      toast.error(`El teléfono debe tener al menos ${minPhoneDigits} dígitos`);
       return;
     }
     const cleanedDir = String(f.direccion || "").trim().replace(/\s+/g, " ");
@@ -387,22 +372,34 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                 <div className="space-y-1.5">
                   <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Tipo de Cliente</Label>
                   <Select value={f.tipo} onValueChange={(v) => setF({ ...f, tipo: v as Cliente["tipo"] })}>
-                    <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"><SelectValue /></SelectTrigger>
+                    <SelectTrigger className="h-10 rounded-xl text-xs sm:text-sm font-bold bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs">
+                      <SelectValue>
+                        {f.tipo === "Empresa" ? (
+                          <span className="flex items-center gap-2 font-bold text-foreground">
+                            <Building2 className="h-4 w-4 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                            <span className="font-bold">Empresa (Corporativo)</span>
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-2 font-bold text-foreground">
+                            <User className="h-4 w-4 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                            <span className="font-bold">Consumidor Final (Persona)</span>
+                          </span>
+                        )}
+                      </SelectValue>
+                    </SelectTrigger>
                     <SelectContent position="popper" side="bottom" align="start" className="w-[var(--radix-select-trigger-width)] bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg">
-                      <SelectItem value="Consumidor Final" disabled={!canSelectConsumer}>
-                        <span className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-teal-600" />
-                          <span>{canSelectConsumer ? "Consumidor Final" : "Consumidor Final — requiere secuencia E32 activa"}</span>
+                      <SelectItem value="Consumidor Final" className="cursor-pointer font-bold py-2">
+                        <span className="flex items-center gap-2 font-bold text-foreground">
+                          <User className="h-4 w-4 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                          <span className="font-bold">Consumidor Final (Persona)</span>
                         </span>
                       </SelectItem>
-                      {tenant.config?.ncf_facturacion_activa && (
-                        <SelectItem value="Empresa" disabled={!canSelectCompany}>
-                          <span className="flex items-center gap-2">
-                            <Building2 className="h-4 w-4 text-purple-600" />
-                            <span>{canSelectCompany ? "Empresa" : "Empresa — requiere secuencia E31 activa"}</span>
-                          </span>
-                        </SelectItem>
-                      )}
+                      <SelectItem value="Empresa" className="cursor-pointer font-bold py-2">
+                        <span className="flex items-center gap-2 font-bold text-foreground">
+                          <Building2 className="h-4 w-4 text-[#1B4B73] dark:text-sky-400 shrink-0" />
+                          <span className="font-bold">Empresa (Corporativo)</span>
+                        </span>
+                      </SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -414,8 +411,8 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                     <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
                     <Input 
                       value={f.telefono} 
-                      onChange={(e) => setF({ ...f, telefono: formatPhoneRD(e.target.value) })} 
-                      placeholder="809-000-0000" 
+                      onChange={(e) => setF({ ...f, telefono: currentCountry.code === "DO" ? formatPhoneRD(e.target.value) : e.target.value })} 
+                      placeholder={currentCountry.phonePlaceholder} 
                       className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
                     />
                   </div>
@@ -429,22 +426,22 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                     <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">Nombre de la Empresa *</Label>
                     <div className="relative">
                       <Building2 className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder="Ej. Inversiones Dominicana" className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
+                      <Input value={f.nombre} onChange={(e) => setF({ ...f, nombre: e.target.value })} placeholder={currentCountry.code === "DO" ? "Ej. Inversiones Dominicana" : "Ej. Inversiones Globales"} className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs" />
                     </div>
                   </div>
-                  {tenant.config?.ncf_facturacion_activa ? (
-                    <div className="space-y-1.5">
-                      <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">RNC de la Empresa</Label>
-                      <div className="flex gap-2">
-                        <div className="relative flex-1">
-                          <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
-                          <Input 
-                            value={f.cedula} 
-                            onChange={(e) => setF({ ...f, cedula: e.target.value })} 
-                            placeholder="131-12345-6"
-                            className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
-                          />
-                        </div>
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">{currentCountry.doc.label} de la Empresa</Label>
+                    <div className="flex gap-2">
+                      <div className="relative flex-1">
+                        <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                        <Input 
+                          value={f.cedula || ""} 
+                          onChange={(e) => setF({ ...f, cedula: e.target.value })} 
+                          placeholder={currentCountry.doc.placeholder}
+                          className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
+                        />
+                      </div>
+                      {currentCountry.code === "DO" && (
                         <Button
                           type="button"
                           variant="outline"
@@ -459,11 +456,9 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                           )}
                           <span>Buscar</span>
                         </Button>
-                      </div>
+                      )}
                     </div>
-                  ) : (
-                    <div />
-                  )}
+                  </div>
                 </div>
               ) : (
                 <div className="grid gap-3 grid-cols-2 animate-in fade-in duration-150">
@@ -530,7 +525,7 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                 </div>
               </div>
 
-              {/* Línea de Crédito */}
+              {/* Línea de Crédito & Cédula Personal */}
               <div className="grid gap-3 grid-cols-2">
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
@@ -555,6 +550,23 @@ export function ClienteDialog({ open, onOpenChange, cliente, tenant, onDone, sec
                     </div>
                   )}
                 </div>
+
+                {f.tipo !== "Empresa" ? (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs font-bold text-slate-600 dark:text-slate-400">{currentCountry.doc.label} (Opcional)</Label>
+                    <div className="relative">
+                      <FileText className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground/60" />
+                      <Input 
+                        value={f.cedula || ""} 
+                        onChange={(e) => setF({ ...f, cedula: e.target.value })} 
+                        placeholder={currentCountry.doc.placeholder}
+                        className="h-10 pl-9.5 rounded-xl text-xs sm:text-sm font-medium w-full bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-xs"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <div />
+                )}
               </div>
 
               {/* Step 1 Footer */}

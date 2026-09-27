@@ -1,3 +1,4 @@
+import { toastWhatsAppSuccess } from "@/components/klynn/WhatsAppManualToast";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo, useState, useEffect } from "react";
 import { useRequireAuth } from "@/lib/useRequireAuth";
@@ -278,7 +279,7 @@ function DashboardPage() {
           );
           notificarWhatsApp(tenant, cli, { ...o, estado }, estado === "LISTA" ? "lista" : "entregada").then(
             (r) => {
-              if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+              if (r.ok) toastWhatsAppSuccess("WhatsApp enviado al cliente");
             },
           );
         }
@@ -330,7 +331,7 @@ function DashboardPage() {
       const cli = clientes.find((c) => c.id === conveyorOrden.cliente_id);
       if (cli) {
         notificarWhatsApp(tenant, cli, ordenActualizada, "lista").then((r) => {
-          if (r.ok) toast.success("WhatsApp enviado al cliente ✅");
+          if (r.ok) toastWhatsAppSuccess("WhatsApp enviado al cliente");
         });
       }
       toast.success("Orden marcada como Lista ✓");
@@ -783,7 +784,7 @@ function DashboardPage() {
         {/* Caja */}
         <Card id="tour-caja-turno" className="p-6">
           <div className="mb-4 flex items-center justify-between">
-            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <div className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-display">
               Caja del turno
             </div>
             <Wallet className="h-4 w-4 text-muted-foreground" />
@@ -792,7 +793,7 @@ function DashboardPage() {
             <>
               <div className="font-display text-3xl font-black tracking-tight">{formatRD(efectivo)}</div>
               <div className="mt-1.5 flex items-center">
-                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/80 shadow-2xs">
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/80 shadow-2xs font-display">
                   <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
                   <Clock className="h-3 w-3 text-emerald-600 dark:text-emerald-400 shrink-0" />
                   Abierta: {formatDateTimeRD(caja.abierta_en)}
@@ -1229,6 +1230,7 @@ function DashboardPage() {
         onOpenChange={setShowCompararVentasModal}
         ordenes={ordenes}
         tenantNombre={user?.tenant?.nombre || "Klynn Lavandería"}
+        tenant={tenant}
       />
     </div>
   );
@@ -1292,9 +1294,9 @@ function KPI({
 
 function Row({ k, v, bold = false }: { k: string; v: string; bold?: boolean }) {
   return (
-    <div className="flex justify-between">
-      <span className="text-muted-foreground">{k}</span>
-      <span className={bold ? "font-bold text-foreground font-mono" : "font-medium"}>{v}</span>
+    <div className="flex justify-between items-center">
+      <span className="text-muted-foreground font-sans text-xs">{k}</span>
+      <span className={`font-display text-xs ${bold ? "font-bold text-foreground" : "font-semibold text-slate-700 dark:text-slate-300"}`}>{v}</span>
     </div>
   );
 }

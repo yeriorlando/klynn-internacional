@@ -46,6 +46,7 @@ import {
   saveOrden,
 } from "./storage";
 import { supabase } from "@/lib/supabase";
+import { consultarRNCServer } from "./server-auth";
 import type { Orden, Cliente, TenantConfig, Tenant, ECFDocument, ECFConfig, ECFSequence } from "./storage";
 import { toast } from "sonner";
 
@@ -507,8 +508,8 @@ export interface DGIIContribuyente {
 }
 
 /**
- * Valida el formato de RNC/cédula. EF2 no publica un endpoint de consulta de
- * contribuyentes, por lo que Klynn no inventa ni sustituye la razón social.
+ * Consulta la información oficial de un RNC/Cédula en el servicio DGII de Pronesoft.
+ * Endpoint público: https://dgii-rnc.pronesoft.com/get/{rnc}
  */
 export async function consultarRNC(
   rncInput: string,
@@ -518,8 +519,48 @@ export async function consultarRNC(
   if (ambiente === "pruebas" && cleanRnc === "132596161") {
     return { rnc: cleanRnc, name: "2BUY ELECTRONICS AND SERVICES SRL", status: "PRUEBAS EF2" };
   }
-  if (cleanRnc.length !== 9 && cleanRnc.length !== 11) return null;
-  return { rnc: cleanRnc, name: "", status: "FORMATO VÁLIDO" };
+  if (!cleanRnc || (cleanRnc.length !== 9 && cleanRnc.length !== 11)) return null;
+
+  // 1. Intento directo con el endpoint oficial https://dgii-rnc.pronesoft.com/get/{id}
+  try {
+    const res = await fetch(`https://dgii-rnc.pronesoft.com/get/${cleanRnc}`, {
+      headers: {
+        "Content-Type": "application/json",
+      },
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data && data.name) {
+        return data as DGIIContribuyente;
+      }
+    }
+  } catch (err) {
+    // Si falla directo en el cliente (ej: CORS), procedemos al fallback seguro por servidor
+  }
+
+  // 2. Fallback vía función de servidor (Node/Nitro sin restricciones CORS)
+  try {
+    const serverResult = await consultarRNCServer({ data: { rnc: cleanRnc } });
+    if (serverResult && (serverResult as any).name) {
+      return serverResult as DGIIContribuyente;
+    }
+  } catch (serverErr) {
+    // Silencioso
+  }
+
+  // 3. Fallback adicional vía Edge Function pronesoft-proxy si estuviera disponible
+  try {
+    const { data, error } = await supabase.functions.invoke("pronesoft-proxy", {
+      body: { action: "get-rnc", payload: { rnc: cleanRnc } },
+    });
+    if (!error && data && data.name) {
+      return data as DGIIContribuyente;
+    }
+  } catch {
+    // Silencioso
+  }
+
+  return null;
 }
 
 /**

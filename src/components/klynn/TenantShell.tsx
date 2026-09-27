@@ -57,7 +57,12 @@ import {
   Lock,
   Building2,
   DollarSign,
+  Rocket,
+  Megaphone,
+  Lightbulb,
+  ShieldAlert,
 } from "lucide-react";
+import { showAdminBroadcastToast } from "@/components/klynn/AdminBroadcastToast";
 import { useRequireAuth } from "@/lib/useRequireAuth";
 import { BrandStyle } from "@/components/klynn/BrandStyle";
 import { Logo } from "@/components/klynn/Logo";
@@ -97,6 +102,7 @@ import {
   marcarTodasNotificacionesLeidas,
   type Notificacion,
 } from "@/lib/storage";
+import { getCountry } from "@/lib/countries";
 import { Toaster, toast } from "sonner";
 import { motion } from "framer-motion";
 import { CloudSync } from "@/components/klynn/CloudSync";
@@ -431,7 +437,8 @@ export function TenantShell() {
       setHasLogistica(isModuleEnabled(user.tenant, "logistica", plan));
       setHasWhatsApp(isModuleEnabled(user.tenant, "whatsapp", plan));
       setHasProcesos(isModuleEnabled(user.tenant, "procesos", plan));
-      setHasFiscal(isModuleEnabled(user.tenant, "facturacion_fiscal", plan));
+      const isDOTenant = (user.tenant.pais_codigo || "DO") === "DO";
+      setHasFiscal(isDOTenant && isModuleEnabled(user.tenant, "facturacion_fiscal", plan));
       setHasEstanteria(isModuleEnabled(user.tenant, "estanteria", plan));
       setHasPromociones(isModuleEnabled(user.tenant, "promociones", plan));
       setHasNomina(isModuleEnabled(user.tenant, "nomina", plan));
@@ -558,6 +565,40 @@ export function TenantShell() {
       const shouldShowToast = now - lastTime > 6000;
       if (shouldShowToast) {
         lastToastOrderRef.current.set(dedupeKey, now);
+      }
+
+      const normTipo = String(row.tipo || "").toUpperCase();
+
+      // Caso Comunicado / Aviso Administrativo (Klynn Central)
+      if (normTipo.startsWith("ADMIN_") || normTipo === "BROADCAST") {
+        playNotificationSoundDebounced();
+        if (shouldShowToast) {
+          showAdminBroadcastToast({
+            titulo: row.titulo,
+            mensaje: row.mensaje,
+            tipo: row.tipo,
+            link: row.link,
+          });
+        }
+
+        // Agregar inmediatamente al estado de la campanita para que no dependa de retraso de red
+        setNotificaciones((prev) => {
+          if (row.id && prev.some((x) => x.id === row.id)) return prev;
+          const newEntry: Notificacion = {
+            id: row.id || (typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `notif-${Date.now()}`),
+            tenant_id: row.tenant_id || tenantId,
+            titulo: row.titulo,
+            mensaje: row.mensaje,
+            tipo: row.tipo || "ADMIN_ANUNCIO",
+            leida: false,
+            link: row.link || null,
+            created_at: row.created_at || new Date().toISOString(),
+          };
+          return [newEntry, ...prev];
+        });
+
+        loadNotificaciones();
+        return;
       }
 
       const titulo = (row.titulo || "").toLowerCase();
@@ -995,13 +1036,12 @@ export function TenantShell() {
     const slug = tenant?.slug || (typeof window !== "undefined" ? window.location.pathname.match(/^\/t\/([^/]+)/)?.[1] : null);
     setIsLoggingOut(true);
     await logout();
-    setTimeout(() => {
-      if (slug && slug !== "admin") {
-        navigate({ to: "/t/$slug/login", params: { slug } });
-      } else {
-        navigate({ to: "/login" });
-      }
-    }, 450);
+    const targetUrl = slug && slug !== "admin" ? `/t/${slug}/login` : "/login";
+    if (typeof window !== "undefined") {
+      window.location.replace(targetUrl);
+    } else {
+      navigate({ to: targetUrl as any });
+    }
   }
 
   const isActive = (to: string, exact?: boolean) => {
@@ -1026,7 +1066,15 @@ export function TenantShell() {
       }
     }
 
-    if (n.link) navigate({ to: `/t/${tenant.slug}${n.link}` });
+    if (n.link) {
+      if (n.link.startsWith("http://") || n.link.startsWith("https://")) {
+        window.open(n.link, "_blank");
+      } else if (n.link.startsWith("/t/")) {
+        navigate({ to: n.link });
+      } else {
+        navigate({ to: `/t/${tenant.slug}${n.link.startsWith("/") ? "" : "/"}${n.link}` });
+      }
+    }
   };
 
   const handleMarcarLeida = async (id: string) => {
@@ -1574,6 +1622,21 @@ export function TenantShell() {
 
           <ThemeSwitch />
 
+          {/* Bandera Circular del País de la Lavandería */}
+          {user?.tenant && (
+            <div
+              className="relative flex h-7.5 w-7.5 shrink-0 items-center justify-center overflow-hidden rounded-full border border-slate-200/90 dark:border-slate-700 bg-white dark:bg-slate-900 shadow-2xs ring-2 ring-slate-100 dark:ring-slate-800 transition-all hover:scale-110 select-none cursor-default"
+              title={`${getCountry(user.tenant.pais_codigo || "DO").name} (${user.tenant.pais_codigo || "DO"}) · ${user.tenant.moneda_simbolo || getCountry(user.tenant.pais_codigo || "DO").currency.symbol} (${user.tenant.moneda_codigo || getCountry(user.tenant.pais_codigo || "DO").currency.code})`}
+            >
+              <img
+                src={`https://flagcdn.com/w80/${(user.tenant.pais_codigo || "do").toLowerCase()}.png`}
+                alt={getCountry(user.tenant.pais_codigo || "DO").name}
+                className="h-full w-full object-cover scale-110 rounded-full"
+                loading="lazy"
+              />
+            </div>
+          )}
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <button
@@ -1680,6 +1743,68 @@ export function TenantShell() {
                     const cleanMessage = n.mensaje.replace(emojiRegex, "").trim();
 
                     const getCardStyle = () => {
+                      const normTipo = (n.tipo || "").toUpperCase();
+                      if (normTipo.startsWith("ADMIN_") || normTipo === "BROADCAST") {
+                        if (normTipo === "ADMIN_NOVEDAD") {
+                          return {
+                            card: isUnread
+                              ? "bg-purple-50/80 dark:bg-purple-950/35 border-purple-200/80 dark:border-purple-800/50 hover:bg-purple-100/70"
+                              : "bg-purple-50/30 dark:bg-purple-950/15 border-purple-100/60 dark:border-purple-900/30 hover:bg-purple-50/60",
+                            iconBg: "bg-purple-100 text-purple-700 dark:bg-purple-900/60 dark:text-purple-300 ring-1 ring-purple-200/60",
+                            dot: "bg-purple-500",
+                            Icon: Rocket,
+                          };
+                        }
+                        if (normTipo === "ADMIN_TIP") {
+                          return {
+                            card: isUnread
+                              ? "bg-emerald-50/80 dark:bg-emerald-950/35 border-emerald-200/80 dark:border-emerald-800/50 hover:bg-emerald-100/70"
+                              : "bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-100/60 dark:border-emerald-900/30 hover:bg-emerald-50/60",
+                            iconBg: "bg-emerald-100 text-emerald-700 dark:bg-emerald-900/60 dark:text-emerald-300 ring-1 ring-emerald-200/60",
+                            dot: "bg-emerald-500",
+                            Icon: Lightbulb,
+                          };
+                        }
+                        if (normTipo === "ADMIN_MANTENIMIENTO") {
+                          return {
+                            card: isUnread
+                              ? "bg-amber-50/80 dark:bg-amber-950/35 border-amber-200/80 dark:border-amber-800/50 hover:bg-amber-100/70"
+                              : "bg-amber-50/30 dark:bg-amber-950/15 border-amber-100/60 dark:border-amber-900/30 hover:bg-amber-50/60",
+                            iconBg: "bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300 ring-1 ring-amber-200/60",
+                            dot: "bg-amber-500",
+                            Icon: Wrench,
+                          };
+                        }
+                        if (normTipo === "ADMIN_FACTURACION") {
+                          return {
+                            card: isUnread
+                              ? "bg-indigo-50/80 dark:bg-indigo-950/35 border-indigo-200/80 dark:border-indigo-800/50 hover:bg-indigo-100/70"
+                              : "bg-indigo-50/30 dark:bg-indigo-950/15 border-indigo-100/60 dark:border-indigo-900/30 hover:bg-indigo-50/60",
+                            iconBg: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/60 dark:text-indigo-300 ring-1 ring-indigo-200/60",
+                            dot: "bg-indigo-500",
+                            Icon: CreditCard,
+                          };
+                        }
+                        if (normTipo === "ADMIN_URGENTE") {
+                          return {
+                            card: isUnread
+                              ? "bg-rose-50/80 dark:bg-rose-950/35 border-rose-200/80 dark:border-rose-800/50 hover:bg-rose-100/70"
+                              : "bg-rose-50/30 dark:bg-rose-950/15 border-rose-100/60 dark:border-rose-900/30 hover:bg-rose-50/60",
+                            iconBg: "bg-rose-100 text-rose-700 dark:bg-rose-900/60 dark:text-rose-300 ring-1 ring-rose-200/60",
+                            dot: "bg-rose-500",
+                            Icon: ShieldAlert,
+                          };
+                        }
+                        return {
+                          card: isUnread
+                            ? "bg-sky-50/80 dark:bg-sky-950/35 border-sky-200/80 dark:border-sky-800/50 hover:bg-sky-100/70"
+                            : "bg-sky-50/30 dark:bg-sky-950/15 border-sky-100/60 dark:border-sky-900/30 hover:bg-sky-50/60",
+                          iconBg: "bg-sky-100 text-sky-700 dark:bg-sky-900/60 dark:text-sky-300 ring-1 ring-sky-200/60",
+                          dot: "bg-sky-500",
+                          Icon: Megaphone,
+                        };
+                      }
+
                       const t = (cleanTitle + " " + cleanMessage).toLowerCase();
                       if (
                         t.includes("entregad") ||
@@ -2256,7 +2381,7 @@ function SidebarContent({
               )}
             </div>
 
-            <div className="mt-1 flex items-center gap-1.5">
+            <div className="mt-1 flex items-center gap-1.5 flex-wrap">
               <span className="inline-flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2 py-0.5 rounded-md border border-emerald-200/60 dark:border-emerald-800/60 shadow-2xs">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {getTenantBranchName(tenant)}
@@ -2292,9 +2417,9 @@ function SidebarContent({
                     </div>
                     <div className="min-w-0 flex-1">
                       <div className="truncate text-xs font-bold">{t.nombre}</div>
-                      <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1">
+                      <div className="truncate text-[10px] text-muted-foreground font-medium flex items-center gap-1.5">
                         <span className="h-1 w-1 rounded-full bg-emerald-500 shrink-0" />
-                        {getTenantBranchName(t)}
+                        <span className="truncate">{getTenantBranchName(t)}</span>
                       </div>
                     </div>
                     {t.id === tenant.id && <Check className="h-3.5 w-3.5 text-primary shrink-0" />}
